@@ -5,3 +5,4 @@ dist/
 corpus-report.json
 test-results/
 .superpowers/
+*.tsbuildinfo
