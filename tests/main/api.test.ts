@@ -1,9 +1,15 @@
-import { describe, it, expect, beforeEach } from 'vitest';
+import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { createApi, type ApiDeps, type DevDb } from '../../src/main/api';
 import { openStore, type SecretBox } from '../../src/main/store/store';
 import { forkDb } from '../helpers/fixtures';
 import { FakeWorldDb } from '../helpers/fake-world-db';
 import type { QuestAggregate } from '@core/model/aggregate';
+
+const gate = vi.hoisted(() => ({ throwWith: null as Error | null }));
+vi.mock('../../src/core/roundtrip/verify', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../../src/core/roundtrip/verify')>();
+  return { ...actual, verifyRoundTrip: (...a: Parameters<typeof actual.verifyRoundTrip>) => { if (gate.throwWith) throw gate.throwWith; return actual.verifyRoundTrip(...a); } };
+});
 
 const box: SecretBox = { encrypt: (s) => Uint8Array.from(Buffer.from(s)), decrypt: (b) => Buffer.from(b).toString() };
 const profile = { name: 'w', role: 'world' as const, host: 'h', port: 3306, user: 'u', database: 'd', password: 'p' };
@@ -28,7 +34,7 @@ function makeApi(overrides: Partial<ApiDeps> = {}) {
   };
   return { api: createApi(deps), store };
 }
-beforeEach(() => { db = seed(); files = new Map(); executed = []; devOpened = 0; });
+beforeEach(() => { gate.throwWith = null; db = seed(); files = new Map(); executed = []; devOpened = 0; });
 const ok = <T>(r: { ok: boolean; value?: T; error?: any }): T => { if (!r.ok) throw new Error(JSON.stringify(r.error)); return r.value as T; };
 
 async function connected() {
@@ -260,5 +266,57 @@ describe('apply to dev DB', () => {
     expect(executed).toHaveLength(1);
     expect(executed[0].some((s) => s.startsWith('INSERT INTO `quest_template`'))).toBe(true);
     expect(executed[0].length).toBe(r.statements);
+  });
+});
+
+describe('round-trip gate throws', () => {
+  it('opens the quest as unsafe, stores that fidelity and refuses export', async () => {
+    const { api, store } = await connected();
+    gate.throwWith = new Error('patch failed to apply');
+    const expected = { ok: false, differences: [{ table: '(patch)', key: 'patch failed to apply', column: null, before: undefined, after: undefined }] };
+    const r = ok(await api.openQuest(60001));
+    expect(r.fidelity).toEqual(expected);
+    const d = store.drafts.get(store.projects.ensureDefault('C:\out').id, 60001)!;
+    expect(d.fidelity).toEqual(expected);
+    expect(await api.exportQuest(60001)).toMatchObject({ ok: false, error: { code: 'FIDELITY' } });
+  });
+});
+
+describe('blocking drift', () => {
+  it('refuses open, new, export and apply with a message naming the missing table', async () => {
+    const { api } = await connected();
+    ok(await api.saveProfile({ ...profile, name: 'dev', role: 'dev' }));
+    ok(await api.openQuest(60001));
+    const { api: bad } = makeApi();
+    db.dropTable('quest_offer_reward');
+    ok(await bad.connect(ok(await bad.saveProfile(profile)).id));
+    const results = [await bad.openQuest(60001), await bad.newQuest(), await bad.exportQuest(60001), await bad.applyToDev(60001, true)];
+    for (const r of results) {
+      expect(r).toMatchObject({ ok: false, error: { code: 'BLOCKING_DRIFT' } });
+      expect((r as any).error.message).toContain('quest_offer_reward');
+    }
+  });
+});
+
+describe('profiles and testConnection', () => {
+  it('lists saved profiles without passwords', async () => {
+    const { api } = makeApi();
+    ok(await api.saveProfile(profile));
+    const list = ok(await api.listProfiles());
+    expect(list).toHaveLength(1);
+    expect(list[0]).toMatchObject({ name: 'w', role: 'world', host: 'h' });
+    expect(JSON.stringify(list)).not.toContain('"password"');
+  });
+  it('testConnection closes the db it opened and persists nothing', async () => {
+    let closed = 0;
+    const { api } = makeApi({ openWorldDb: async () => ({ close: async () => { closed++; } }) as any });
+    expect(await api.testConnection(profile)).toEqual({ ok: true, value: { ok: true } });
+    expect(closed).toBe(1);
+    expect(ok(await api.listProfiles())).toEqual([]);
+  });
+  it('testConnection maps WorldDbConnectionError to CONNECTION', async () => {
+    const { api } = makeApi({ openWorldDb: async () => { throw Object.assign(new Error('nope'), { name: 'WorldDbConnectionError' }); } });
+    expect(await api.testConnection(profile)).toMatchObject({ ok: false, error: { code: 'CONNECTION' } });
+    expect(ok(await api.listProfiles())).toEqual([]);
   });
 });
