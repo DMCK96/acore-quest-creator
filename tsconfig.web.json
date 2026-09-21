@@ -5,6 +5,9 @@
     "moduleResolution": "bundler",
     "lib": ["ES2023", "DOM", "DOM.Iterable"],
     "jsx": "react-jsx",
+    // src/core is part of this project (the renderer imports it) and core runs under
+    // plain Node, so `node:*` imports must resolve here too.
+    "types": ["node"],
     "strict": true,
     "noEmit": true,
     "composite": true,
