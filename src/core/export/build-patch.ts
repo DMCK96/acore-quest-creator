@@ -1,5 +1,5 @@
-import type { RawRow, RawValue, SchemaInfo } from '../db/types';
-import { defaultColumnValues, defaultRow } from '../import/importer';
+import type { RawRow, RawValue, SchemaInfo, Where } from '../db/types';
+import { defaultColumnValues, defaultRow, questItemIds } from '../import/importer';
 import type { QuestAggregate, Snapshot } from '../model/aggregate';
 import {
   CodecError,
@@ -90,16 +90,20 @@ export function buildPatch(input: BuildPatchInput): BuiltPatch {
   const { aggregate, snapshot, schema, registry, questGiverFixes = [] } = input;
   const readOnly = new Set(aggregate.readOnly.map((r) => r.fieldId));
 
+  const warnings: PatchWarning[] = [];
   const byTable = new Map<string, TablePatch>();
   for (const def of registry.tables) {
-    if (def.role !== 'owned') continue;
+    // Locale rows are read so nothing is lost, and written by nobody.
+    if (def.role === 'verbatim') continue;
     if (!schema.tables[def.table]) continue;
     const rows = snapshot?.tables[def.table] ?? [];
     byTable.set(
       def.table,
-      def.cardinality === 'one'
-        ? buildOneRowTable(def, rows[0], aggregate, schema, registry, readOnly)
-        : buildManyRowTable(def, rows, aggregate, schema, registry, readOnly),
+      def.role === 'linked'
+        ? buildLinkedTable(def, rows, aggregate, schema, registry, readOnly, warnings)
+        : def.cardinality === 'one'
+          ? buildOneRowTable(def, rows[0], aggregate, schema, registry, readOnly)
+          : buildManyRowTable(def, rows, aggregate, schema, registry, readOnly),
     );
   }
 
@@ -111,7 +115,6 @@ export function buildPatch(input: BuildPatchInput): BuiltPatch {
     }
   }
 
-  const warnings: PatchWarning[] = [];
   // The flag has to be set before the relations land, so a half-applied patch never offers a quest
   // from an NPC the server will refuse.
   for (const entry of [...new Set(questGiverFixes)].sort((a, b) => a - b)) {
@@ -193,19 +196,33 @@ function buildOneRowTable(
   return { deletes: [keyOf(def, base)], inserts: [base] };
 }
 
-/** A many-row table: the model rows replace the snapshot rows, matched by primary key. */
-function buildManyRowTable(
+/** How a model row of a many-row table stands against the row the snapshot holds under its key. */
+type RowStatus = 'same' | 'changed' | 'new';
+
+interface ModelRows {
+  /** The rows the table should hold, in model order. */
+  rows: { row: RawRow; status: RowStatus }[];
+  /** Snapshot rows the model no longer holds. */
+  removed: RawRow[];
+}
+
+/**
+ * The rows a many-row table should hold, each matched to its snapshot row by primary key.
+ *
+ * `undefined` means the table has no rowset field to build from, so the patch leaves it alone.
+ */
+function modelRows(
   def: TableDef,
   snapshotRows: readonly RawRow[],
   aggregate: QuestAggregate,
   schema: SchemaInfo,
   registry: Registry,
   readOnly: ReadonlySet<string>,
-): TablePatch {
+): ModelRows | undefined {
   const field = registry.fields.find((f) => f.table === def.table && f.shape === 'rowset') as
     | RowSetFieldDef
     | undefined;
-  if (!field) return EMPTY;
+  if (!field) return undefined;
 
   // Every key column has to come from the field (or its quest / fixed columns), or a row the editor
   // adds would be keyed by a default value and silently collide with the next one.
@@ -219,13 +236,10 @@ function buildManyRowTable(
 
   const snapshotByKey = new Map(snapshotRows.map((row) => [keyText(def, row), row]));
   const writable = !readOnly.has(field.id) && Object.prototype.hasOwnProperty.call(aggregate.values, field.id);
-  // Without an editable value the snapshot is the model, and every row goes back out verbatim.
-  if (!writable) {
-    return { deletes: snapshotRows.map((row) => keyOf(def, row)), inserts: [...snapshotRows] };
-  }
+  // Without an editable value the snapshot is the model, and every row is untouched by definition.
+  if (!writable) return { rows: snapshotRows.map((row) => ({ row, status: 'same' })), removed: [] };
 
-  const inserts: RawRow[] = [];
-  const keys: Key[] = [];
+  const rows: { row: RawRow; status: RowStatus }[] = [];
   const seen = new Set<string>();
   for (const value of aggregate.values[field.id] as RowSetValue) {
     const encoded: Record<string, RawValue> = { ...encodeRowSetRow(field, value) };
@@ -238,22 +252,116 @@ function buildManyRowTable(
 
     const previous = snapshotByKey.get(text);
     // The single rows are wrapped in arrays only to reach the codec's one strict equality.
-    let row: RawRow;
     if (previous === undefined) {
       // Only the defaults: the key and the quest come from `encoded`, never from the quest ID.
-      row = { ...defaultColumnValues(def.table, schema), ...encoded };
+      rows.push({ row: { ...defaultColumnValues(def.table, schema), ...encoded }, status: 'new' });
     } else if (valueEquals([decodeRowSetRow(field, previous)], [value])) {
-      row = previous; // untouched: verbatim, including columns no field models
+      rows.push({ row: previous, status: 'same' }); // verbatim, including columns no field models
     } else {
-      row = { ...previous, ...encoded };
+      rows.push({ row: { ...previous, ...encoded }, status: 'changed' });
     }
-    inserts.push(row);
-    keys.push(keyOf(def, row));
   }
 
+  return { rows, removed: snapshotRows.filter((row) => !seen.has(keyText(def, row))) };
+}
+
+/** A many-row table the quest owns: every model row is rewritten, every dropped row deleted. */
+function buildManyRowTable(
+  def: TableDef,
+  snapshotRows: readonly RawRow[],
+  aggregate: QuestAggregate,
+  schema: SchemaInfo,
+  registry: Registry,
+  readOnly: ReadonlySet<string>,
+): TablePatch {
+  const model = modelRows(def, snapshotRows, aggregate, schema, registry, readOnly);
+  if (model === undefined) return EMPTY;
   // Rows dropped in the editor must still be deleted, so the keys are the union of both sides.
-  const deletes = snapshotRows.filter((row) => !seen.has(keyText(def, row))).map((row) => keyOf(def, row));
-  return { deletes: [...deletes, ...keys], inserts };
+  const deletes = model.removed.map((row) => keyOf(def, row));
+  return {
+    deletes: [...deletes, ...model.rows.map((r) => keyOf(def, r.row))],
+    inserts: model.rows.map((r) => r.row),
+  };
+}
+
+/**
+ * A linked table: rows found by item, which another quest may own just as much as this one.
+ *
+ * Only the rows this edit actually touched are written, so a patch never rewrites a row it merely
+ * read, and each statement names one exact primary key: no `DELETE ... WHERE Item = X` that would
+ * take another quest's rows with it.
+ */
+function buildLinkedTable(
+  def: TableDef,
+  snapshotRows: readonly RawRow[],
+  aggregate: QuestAggregate,
+  schema: SchemaInfo,
+  registry: Registry,
+  readOnly: ReadonlySet<string>,
+  warnings: PatchWarning[],
+): TablePatch {
+  const model = modelRows(def, snapshotRows, aggregate, schema, registry, readOnly);
+  if (model === undefined) return EMPTY;
+
+  const touched = model.rows.filter((r) => r.status !== 'same').map((r) => r.row);
+  warnLinked(def, aggregate, registry, [...touched, ...model.removed], touched, warnings);
+  return {
+    deletes: [...model.removed, ...touched].map((row) => keyOf(def, row)),
+    inserts: touched,
+  };
+}
+
+/** Whether the next import's query for a linked table would find this row again. */
+function matchesWhere(row: RawRow, where: Where): boolean {
+  return Object.entries(where).every(([column, want]) => {
+    const value = row[column] ?? null;
+    if (value === null) return false;
+    return typeof want === 'string' ? value === want : want.includes(value);
+  });
+}
+
+/**
+ * The two things the user cannot see from the form: that a touched row belongs to another quest
+ * too, and that a row they added will not be found by the next import of this quest.
+ */
+function warnLinked(
+  def: TableDef,
+  aggregate: QuestAggregate,
+  registry: Registry,
+  touchedOrRemoved: readonly RawRow[],
+  touched: readonly RawRow[],
+  warnings: PatchWarning[],
+): void {
+  const itemColumn = def.itemColumn;
+  if (itemColumn === undefined) return;
+
+  for (const row of touchedOrRemoved) {
+    const item = row[itemColumn];
+    const shared = item === null ? undefined : aggregate.sharedItems[item];
+    if (!Array.isArray(shared) || shared.length === 0) continue;
+    const many = shared.length > 1;
+    warnings.push({
+      code: 'SHARED_ROW_MODIFIED',
+      table: def.table,
+      message:
+        `This row's item is also used by quest${many ? 's' : ''} ${shared.join(', ')}; ` +
+        `changing it affects ${many ? 'those quests' : 'that quest'} too.`,
+    });
+  }
+
+  // The where-clause the importer will use is the whole rule: the item has to be one of the
+  // quest's, and a loot row has to be marked as a quest drop.
+  const where = def.where(aggregate.questId, questItemIds(aggregate.values, registry));
+  for (const row of touched) {
+    if (matchesWhere(row, where)) continue;
+    warnings.push({
+      code: 'LINKED_ROW_NOT_QUEST_ITEM',
+      table: def.table,
+      message:
+        `Item ${row[itemColumn] ?? 'NULL'} is not one of this quest's items (or QuestRequired is not 1), ` +
+        'so the next import will not find this row.',
+    });
+  }
 }
 
 /** The decoded value of a field in a raw row, or `undefined` when the stored text cannot be read. */

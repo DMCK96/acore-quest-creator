@@ -102,6 +102,8 @@ export interface TableDef {
   cardinality: 'one' | 'many';
   keyColumns: readonly string[];
   alwaysEmit?: boolean;
+  /** For a linked table, the column holding the item ID that ties the row to the quest. */
+  itemColumn?: string;
   where(questId: number, itemIds: readonly number[]): Where;
 }
 

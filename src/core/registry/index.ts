@@ -1,4 +1,5 @@
 import { conditionsFields, conditionsTable } from './fields/conditions';
+import { linkedFields, linkedTables, localeTables } from './fields/linked';
 import { poiFields, poiTables } from './fields/poi';
 import { questDetailsFields, questDetailsTable } from './fields/quest-details';
 import { questMailSenderFields, questMailSenderTable } from './fields/quest-mail-sender';
@@ -79,7 +80,9 @@ export const registry: Registry = {
     questMailSenderTable,
     ...poiTables,
     conditionsTable,
+    ...linkedTables,
     ...relationTables,
+    ...localeTables,
   ]),
   fields: [
     ...questTemplateFields,
@@ -90,6 +93,7 @@ export const registry: Registry = {
     ...questMailSenderFields,
     ...poiFields,
     ...conditionsFields,
+    ...linkedFields,
     ...relationFields,
   ],
 };
