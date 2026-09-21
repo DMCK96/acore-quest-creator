@@ -20,8 +20,10 @@ function rowKey(keyColumns: readonly string[], row: RawRow): string {
  */
 export function listUnmodelled(schema: SchemaInfo, registry: Registry, snapshot: Snapshot): UnmodelledColumn[] {
   const keyColumns = new Map(registry.tables.map((t) => [t.table, t.keyColumns]));
+  const verbatim = new Set(registry.tables.filter((t) => t.role === 'verbatim').map((t) => t.table));
   const out: UnmodelledColumn[] = [];
   for (const { table, column } of diffSchema(schema, registry).unregistered) {
+    if (verbatim.has(table)) continue; // preserved wholesale by design, not "unmodelled"
     const rows = snapshot.tables[table];
     if (!rows) continue;
     const keys = keyColumns.get(table) ?? [];

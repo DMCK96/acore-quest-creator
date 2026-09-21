@@ -42,6 +42,20 @@ describe('diffSchema', () => {
     expect(diff.unregistered.some((u) => u.column === 'ID')).toBe(false);
     expect(hasBlockingDrift(diff)).toBe(false);
   });
+  it('does not report columns of verbatim tables as unregistered, but still does for ordinary tables', async () => {
+    const withVerbatim: Registry = {
+      ...tiny,
+      tables: [
+        ...tiny.tables,
+        { table: 'quest_template_locale', role: 'verbatim', cardinality: 'many', keyColumns: ['ID', 'locale'], where: (q) => ({ ID: String(q) }) },
+      ],
+    };
+    const db = dbWith(['quest_template', 'quest_template_locale']);
+    const diff = diffSchema(await loadSchema(db, ['quest_template', 'quest_template_locale']), withVerbatim);
+    expect(diff.unregistered.some((u) => u.table === 'quest_template_locale')).toBe(false);
+    expect(diff.unregistered.some((u) => u.table === 'quest_template' && u.column === 'RewardMoney')).toBe(true);
+    expect(diff.missingTables).toEqual(['creature_queststarter']);
+  });
   it('flags type mismatches (string field on a numeric column)', async () => {
     const db = dbWith(['quest_template']);
     const diff = diffSchema(await loadSchema(db, ['quest_template']), tiny);

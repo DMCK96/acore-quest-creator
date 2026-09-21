@@ -5,7 +5,7 @@ import type { Registry, ScalarType } from '../registry/types';
 export interface SchemaDiff {
   /** Registry tables the database does not have. */
   missingTables: string[];
-  /** Database columns no registry field owns (kept verbatim, never edited). */
+  /** Database columns no registry field owns in a table the tool writes (kept verbatim, never edited). Verbatim tables are excluded. */
   unregistered: { table: string; column: string }[];
   /** Registered columns the database lacks; the owning field is excluded from import/export. */
   missingColumns: { table: string; column: string; fieldId: string }[];
@@ -61,6 +61,7 @@ export function diffSchema(schema: SchemaInfo, registry: Registry): SchemaDiff {
   }
 
   const tableNames = new Set(registry.tables.map((t) => t.table));
+  const verbatimTables = new Set(registry.tables.filter((t) => t.role === 'verbatim').map((t) => t.table));
   for (const table of tableNames) {
     const dbColumns = schema.tables[table];
     if (!dbColumns) continue;
@@ -89,6 +90,8 @@ export function diffSchema(schema: SchemaInfo, registry: Registry): SchemaDiff {
       }
     }
 
+    // Verbatim tables are preserved wholesale by design; their columns are not "unmodelled".
+    if (verbatimTables.has(table)) continue;
     for (const c of dbColumns) {
       if (!registered.has(c.name)) diff.unregistered.push({ table, column: c.name });
     }

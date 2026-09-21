@@ -57,6 +57,18 @@ describe('importQuest', () => {
     expect(un).toContainEqual({ table: 'quest_template', column: 'FutureCol', values: [{ key: 'ID=60001', value: '9' }] });
   });
 
+  it('does not list verbatim (locale) table columns as unmodelled, but still lists unknown quest_template columns', async () => {
+    const db = forkDb();
+    db.addColumn('quest_template', { name: 'FutureCol', dataType: 'int', columnType: 'int', nullable: false, default: '0', ordinal: 106, isKey: false });
+    db.insert('quest_template', { ID: '60001', FutureCol: '9' });
+    db.insert('quest_template_locale', { ID: '60001', locale: 'frFR', Title: 'Titre' });
+    const { snapshot, schema } = await importFixture(db, 60001);
+    expect(snapshot.tables['quest_template_locale']).toHaveLength(1);
+    const un = listUnmodelled(schema, registry, snapshot);
+    expect(un.some((u) => u.table.endsWith('_locale'))).toBe(false);
+    expect(un.some((u) => u.table === 'quest_template' && u.column === 'FutureCol')).toBe(true);
+  });
+
   it('skips tables absent from the DB', async () => {
     const db = forkDb();
     db.dropTable('quest_template_addon');
