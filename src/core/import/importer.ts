@@ -33,14 +33,18 @@ export class ImportIntegrityError extends Error {
   }
 }
 
-/** The row a quest gets when a one-to-one table has none: every column's default, keyed by the quest. */
-export function defaultRow(table: string, schema: SchemaInfo, keyColumn: string, questId: number): RawRow {
+/** A fresh row of nothing but column defaults: the caller supplies every identifying column. */
+export function defaultColumnValues(table: string, schema: SchemaInfo): RawRow {
   const columns = schema.tables[table];
   if (!columns) throw new ImportIntegrityError(table, `Table ${table} is not in the loaded schema.`);
   const row: Record<string, string | null> = {};
   for (const c of columns) row[c.name] = defaultValueFor(c);
-  row[keyColumn] = String(questId);
   return row;
+}
+
+/** The row a quest gets when a one-to-one table has none: every column's default, keyed by the quest. */
+export function defaultRow(table: string, schema: SchemaInfo, keyColumn: string, questId: number): RawRow {
+  return { ...defaultColumnValues(table, schema), [keyColumn]: String(questId) };
 }
 
 function checkRowColumns(table: string, columns: readonly string[], row: RawRow): void {

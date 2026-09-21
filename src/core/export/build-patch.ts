@@ -1,5 +1,5 @@
 import type { RawRow, RawValue, SchemaInfo } from '../db/types';
-import { defaultRow } from '../import/importer';
+import { defaultColumnValues, defaultRow } from '../import/importer';
 import type { QuestAggregate, Snapshot } from '../model/aggregate';
 import {
   CodecError,
@@ -33,6 +33,25 @@ export interface PatchWarning {
   code: 'SHARED_ROW_MODIFIED' | 'LINKED_ROW_NOT_QUEST_ITEM' | 'QUESTGIVER_FLAG_ADDED';
   table: string;
   message: string;
+}
+
+/**
+ * Two rows of one many-row table share a primary key.
+ *
+ * A patch deletes by key and then inserts, so the pair would render one DELETE and two INSERTs and
+ * the second INSERT would fail on the live server. The model has to be fixed, not the patch.
+ */
+export class DuplicateRowError extends Error {
+  constructor(
+    public readonly table: string,
+    public readonly key: Record<string, string>,
+  ) {
+    super(
+      `${table} has two rows with the same key ${JSON.stringify(key)}. ` +
+        'Remove the duplicate before exporting; the database can only hold one of them.',
+    );
+    this.name = 'DuplicateRowError';
+  }
 }
 
 export interface BuiltPatch {
@@ -188,6 +207,16 @@ function buildManyRowTable(
     | undefined;
   if (!field) return EMPTY;
 
+  // Every key column has to come from the field (or its quest / fixed columns), or a row the editor
+  // adds would be keyed by a default value and silently collide with the next one.
+  const owned = new Set(columnsOfField(field));
+  const unowned = def.keyColumns.filter((c) => !owned.has(c));
+  if (unowned.length > 0) {
+    throw new Error(
+      `Registry error: ${def.table} is keyed by ${unowned.join(', ')}, which ${field.id} does not model.`,
+    );
+  }
+
   const snapshotByKey = new Map(snapshotRows.map((row) => [keyText(def, row), row]));
   const writable = !readOnly.has(field.id) && Object.prototype.hasOwnProperty.call(aggregate.values, field.id);
   // Without an editable value the snapshot is the model, and every row goes back out verbatim.
@@ -203,21 +232,23 @@ function buildManyRowTable(
     if (field.questColumn !== undefined) encoded[field.questColumn] = String(aggregate.questId);
     Object.assign(encoded, field.fixedColumns ?? {});
     const text = keyText(def, encoded);
+    // One DELETE cannot clear two rows, so a duplicate key is a model error, not a patch to render.
+    if (seen.has(text)) throw new DuplicateRowError(def.table, keyOf(def, encoded));
+    seen.add(text);
+
     const previous = snapshotByKey.get(text);
     // The single rows are wrapped in arrays only to reach the codec's one strict equality.
     let row: RawRow;
     if (previous === undefined) {
-      row = { ...defaultRow(def.table, schema, field.questColumn ?? def.keyColumns[0], aggregate.questId), ...encoded };
+      // Only the defaults: the key and the quest come from `encoded`, never from the quest ID.
+      row = { ...defaultColumnValues(def.table, schema), ...encoded };
     } else if (valueEquals([decodeRowSetRow(field, previous)], [value])) {
       row = previous; // untouched: verbatim, including columns no field models
     } else {
       row = { ...previous, ...encoded };
     }
     inserts.push(row);
-    if (!seen.has(text)) {
-      seen.add(text);
-      keys.push(keyOf(def, row));
-    }
+    keys.push(keyOf(def, row));
   }
 
   // Rows dropped in the editor must still be deleted, so the keys are the union of both sides.
