@@ -36,7 +36,8 @@ export function renderValue(col: ColumnInfo, value: RawValue): string {
   return quoteString(value);
 }
 
-const ident = (name: string): string => `\`${name.replace(/`/g, '``')}\``;
+/** Backtick-quoted identifier. */
+export const ident = (name: string): string => `\`${name.replace(/`/g, '``')}\``;
 
 export function renderInsert(table: string, columns: readonly ColumnInfo[], row: RawRow): string {
   const ordered = [...columns].sort((a, b) => a.ordinal - b.ordinal);
