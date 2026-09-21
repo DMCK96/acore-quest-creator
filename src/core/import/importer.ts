@@ -64,7 +64,7 @@ function checkRowColumns(table: string, columns: readonly string[], row: RawRow)
 }
 
 /** Field ids excluded from the aggregate because the database cannot back them. */
-function excludedFields(schema: SchemaInfo, registry: Registry): Set<string> {
+export function excludedFields(schema: SchemaInfo, registry: Registry): Set<string> {
   const diff = diffSchema(schema, registry);
   const excluded = new Set<string>();
   for (const m of diff.missingColumns) excluded.add(m.fieldId);

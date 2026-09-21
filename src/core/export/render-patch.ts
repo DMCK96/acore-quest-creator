@@ -45,6 +45,20 @@ function renderSetFlag(s: Extract<PatchStatement, { kind: 'set-flag' }>): string
   return `UPDATE ${ident(s.table)} SET ${ident(s.column)} = ${ident(s.column)} | ${s.bit} WHERE ${conds.join(' AND ')};`;
 }
 
+/**
+ * One statement as a single SQL string.
+ *
+ * Exported so a caller that executes the patch gets exactly one string per statement, rather than
+ * having to cut the rendered file up again: a text value may contain newlines and semicolons.
+ */
+export function renderStatement(s: PatchStatement, schema: SchemaInfo): string {
+  if (s.kind === 'delete') {
+    return renderDelete(s.table, keyColumnsOf(schema, s.table, Object.keys(s.key)), s.key);
+  }
+  if (s.kind === 'set-flag') return renderSetFlag(s);
+  return renderInsert(s.table, columnsOf(schema, s.table), s.row);
+}
+
 /** The patch as a `.sql` file: a header, then the deletes, the flag updates and the inserts. */
 export function renderPatch(
   statements: readonly PatchStatement[],
@@ -62,13 +76,8 @@ export function renderPatch(
   const flags: string[] = [];
   const inserts: string[] = [];
   for (const s of statements) {
-    if (s.kind === 'delete') {
-      deletes.push(renderDelete(s.table, keyColumnsOf(schema, s.table, Object.keys(s.key)), s.key));
-    } else if (s.kind === 'set-flag') {
-      flags.push(renderSetFlag(s));
-    } else {
-      inserts.push(renderInsert(s.table, columnsOf(schema, s.table), s.row));
-    }
+    const block = s.kind === 'delete' ? deletes : s.kind === 'set-flag' ? flags : inserts;
+    block.push(renderStatement(s, schema));
   }
 
   const blocks = [header, deletes, flags, inserts].filter((b) => b.length > 0).map((b) => b.join('\n'));
