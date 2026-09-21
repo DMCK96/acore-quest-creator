@@ -46,6 +46,8 @@ export interface ScalarFieldDef {
   advanced?: boolean;
   readOnlyUi?: boolean;
   control?: ControlId;
+  /** The column holds an item ID whose linked loot rows belong to the quest. */
+  linksItems?: boolean;
 }
 
 export interface ListMemberDef {

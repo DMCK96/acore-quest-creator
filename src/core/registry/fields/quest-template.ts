@@ -280,6 +280,7 @@ const scalars: ScalarFieldDef[] = [
     label: 'Item that starts the quest',
     help: 'An item the player is given when accepting the quest, or the item that offers the quest when it is picked up as loot. 0 for none.',
     group: 'availability',
+    linksItems: true,
   }),
   scalar({
     column: 'Flags',
