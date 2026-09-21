@@ -52,6 +52,7 @@ interface Session {
   db: WorldDb;
   schema: SchemaInfo;
   blocking: boolean;
+  blockingTables: string[];
 }
 
 const REGISTRY_TABLES = registry.tables.map((t) => t.table);
@@ -138,7 +139,7 @@ export function createApi(deps: ApiDeps): Api {
     if (live.blocking) {
       throw fail(
         'BLOCKING_DRIFT',
-        'The connected database is missing a table every quest needs. Reconnect to a database that has it.',
+        `The connected database is missing ${live.blockingTables.join(', ')}, which every quest needs. Reconnect to a database that has it.`,
       );
     }
     return live;
@@ -206,7 +207,7 @@ export function createApi(deps: ApiDeps): Api {
         const blocking = hasBlockingDrift(drift);
         // Swapping connections must not leave the old one open.
         if (session && session.db !== db) await session.db.close();
-        session = { profileId, db, schema, blocking };
+        session = { profileId, db, schema, blocking, blockingTables: drift.blockingTables };
         return { profileId, schemaHash: schema.hash, drift, blocking };
       }),
 
