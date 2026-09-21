@@ -21,3 +21,36 @@ export type RefKind =
   | 'zone'
   | 'skill'
   | 'mailTemplate';
+
+export interface ColumnInfo {
+  name: string;
+  /** Lower-case base type, e.g. `int`, `mediumint`, `varchar`, `float`. */
+  dataType: string;
+  /** Full declaration, e.g. `mediumint unsigned`. */
+  columnType: string;
+  nullable: boolean;
+  default: string | null;
+  ordinal: number;
+  isKey: boolean;
+}
+
+export interface SchemaInfo {
+  /** Columns per table, ordered by `ordinal`. */
+  tables: Record<string, ColumnInfo[]>;
+  hash: string;
+}
+
+const NUMERIC_TYPES: ReadonlySet<string> = new Set([
+  'tinyint', 'smallint', 'mediumint', 'int', 'bigint', 'float', 'double', 'decimal',
+]);
+
+export function isNumericColumn(col: ColumnInfo): boolean {
+  return NUMERIC_TYPES.has(col.dataType);
+}
+
+/** The value a fresh row gets for a column: its default, else NULL, else 0 / ''. */
+export function defaultValueFor(col: ColumnInfo): RawValue {
+  if (col.default !== null) return col.default;
+  if (col.nullable) return null;
+  return isNumericColumn(col) ? '0' : '';
+}
