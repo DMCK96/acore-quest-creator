@@ -5,46 +5,15 @@ import { drizzle } from 'drizzle-orm/better-sqlite3';
 import { migrate } from 'drizzle-orm/better-sqlite3/migrator';
 import type { QuestAggregate, Snapshot } from '../../core/model/aggregate';
 import type { FidelityReport } from '../../core/roundtrip/verify';
+import type { Project, ProfileInput, ProfileRecord, Viewport } from '../../shared/ipc';
 import { connectionProfiles, drafts, projects } from './schema';
+
+// The records the renderer sees are the IPC types; the store is where they are kept.
+export type { Project, ProfileInput, ProfileRecord, Viewport };
 
 export interface SecretBox {
   encrypt(plain: string): Uint8Array;
   decrypt(blob: Uint8Array): string;
-}
-
-export interface ProfileInput {
-  name: string;
-  role: 'world' | 'dev';
-  host: string;
-  port: number;
-  user: string;
-  database: string;
-  password: string;
-}
-
-export interface ProfileRecord {
-  id: number;
-  name: string;
-  role: 'world' | 'dev';
-  host: string;
-  port: number;
-  user: string;
-  database: string;
-}
-
-export interface Viewport {
-  x: number;
-  y: number;
-  zoom: number;
-}
-
-export interface Project {
-  id: number;
-  name: string;
-  idRangeStart: number;
-  idRangeEnd: number;
-  outputDir: string;
-  viewport: Viewport;
 }
 
 export interface DraftRecord {
