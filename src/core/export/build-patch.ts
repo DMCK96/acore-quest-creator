@@ -148,6 +148,9 @@ function buildOneRowTable(
   let overlaid = false;
   for (const field of editableFields(def.table, aggregate, registry, readOnly)) {
     if (field.shape === 'rowset') continue;
+    // The key column is the quest itself: a quest being created gets its own ID below, so a stale
+    // key value in the aggregate must not count as an edit (it would emit an otherwise empty row).
+    if (field.shape === 'scalar' && def.keyColumns.includes(field.column)) continue;
     // A field whose columns the fork does not have cannot be written back.
     if (!columnsOfField(field).every((c) => Object.prototype.hasOwnProperty.call(base, c))) continue;
     const current = decodeOrSkip(field, base);

@@ -1,3 +1,7 @@
+import { questDetailsFields, questDetailsTable } from './fields/quest-details';
+import { questMailSenderFields, questMailSenderTable } from './fields/quest-mail-sender';
+import { questOfferRewardFields, questOfferRewardTable } from './fields/quest-offer-reward';
+import { questRequestItemsFields, questRequestItemsTable } from './fields/quest-request-items';
 import { questTemplateAddonFields, questTemplateAddonTable } from './fields/quest-template-addon';
 import { questTemplateFields, questTemplateTable } from './fields/quest-template';
 import type { EditorGroup, FieldDef, Registry, TableDef } from './types';
@@ -7,8 +11,22 @@ import type { EditorGroup, FieldDef, Registry, TableDef } from './types';
  * Tables and fields are concatenated in a fixed order so the emitted patch is stable.
  */
 export const registry: Registry = {
-  tables: [questTemplateTable, questTemplateAddonTable],
-  fields: [...questTemplateFields, ...questTemplateAddonFields],
+  tables: [
+    questTemplateTable,
+    questTemplateAddonTable,
+    questDetailsTable,
+    questOfferRewardTable,
+    questRequestItemsTable,
+    questMailSenderTable,
+  ],
+  fields: [
+    ...questTemplateFields,
+    ...questTemplateAddonFields,
+    ...questDetailsFields,
+    ...questOfferRewardFields,
+    ...questRequestItemsFields,
+    ...questMailSenderFields,
+  ],
 };
 
 const fieldsById = new Map<string, FieldDef>(registry.fields.map((f) => [f.id, f]));
