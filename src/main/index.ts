@@ -20,15 +20,27 @@ const FORK_OUTPUT_DIR = 'E:\\Repositories\\azerothcore-wotlk-coa\\data\\sql\\cus
 
 const STORE_FILE = 'quest-creator.sqlite';
 
+/**
+ * Test isolation. An end-to-end run points the app at a throwaway profile directory and patch
+ * folder so it never touches the user's real store or writes into the fork's checkout. `setPath`
+ * has to happen before the app is ready, which is why it runs at import time.
+ */
+const userDataOverride = process.env['ACQC_USER_DATA'];
+if (userDataOverride) app.setPath('userData', userDataOverride);
+
 const defaultOutputDir = (): string =>
-  existsSync(FORK_OUTPUT_DIR) ? FORK_OUTPUT_DIR : join(app.getPath('documents'), 'ACORE Quest Creator', 'sql');
+  process.env['ACQC_OUTPUT_DIR'] ??
+  (existsSync(FORK_OUTPUT_DIR) ? FORK_OUTPUT_DIR : join(app.getPath('documents'), 'ACORE Quest Creator', 'sql'));
 
 /**
- * Drizzle's migration files. In development they sit in the repo; a packaged build carries them as
- * an unpacked extra resource, because they are read at runtime and cannot live inside the asar.
+ * Drizzle's migration files. In development they sit in the repo, two levels above this bundle
+ * (`out/main/index.js`); a packaged build carries them as an unpacked extra resource, because they
+ * are read at runtime and cannot live inside the asar. This is deliberately not `app.getAppPath()`:
+ * when Electron is handed a script path (`electron out/main/index.js`, which is how Playwright
+ * launches it) that is the script's own directory, not the project root.
  */
 const migrationsFolder = (): string =>
-  app.isPackaged ? join(process.resourcesPath, 'drizzle') : join(app.getAppPath(), 'drizzle');
+  app.isPackaged ? join(process.resourcesPath, 'drizzle') : join(__dirname, '..', '..', 'drizzle');
 
 const unknownError = (error: unknown): { ok: false; error: ApiError } => ({
   ok: false,

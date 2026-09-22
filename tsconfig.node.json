@@ -21,6 +21,7 @@
     "electron.vite.config.ts",
     "vitest.config.ts",
     "vitest.int.config.ts",
+    "playwright.config.ts",
     "package.json",
     "src/core/**/*",
     "src/shared/**/*",

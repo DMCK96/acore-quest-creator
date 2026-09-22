@@ -1,0 +1,18 @@
+appId: local.acore.questcreator
+productName: ACORE Quest Creator
+directories:
+  output: dist
+files:
+  - out/**
+# Drizzle reads its migrations from disk at runtime, so they cannot live inside the asar. The store
+# looks for them at `process.resourcesPath/drizzle` once packaged.
+extraResources:
+  - from: drizzle
+    to: drizzle
+# better-sqlite3 loads a native .node binary, which cannot be required from inside the asar either.
+asarUnpack:
+  - '**/node_modules/better-sqlite3/**'
+win:
+  target:
+    - dir
+    - nsis
