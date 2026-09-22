@@ -69,7 +69,7 @@ export const areatriggerInvolvedrelationField = rowset({
   columns: [{ name: 'id', type: { kind: 'idRef', target: 'areatrigger' }, label: 'Area trigger' }],
   questColumn: 'quest',
   label: 'Area triggers that complete the quest',
-  help: 'Walking into one of these area triggers completes the quest. One trigger can only ever serve one quest.',
+  help: 'Walking into one of these completes the quest. Each one can only ever serve one quest.',
   control: 'enders',
 });
 

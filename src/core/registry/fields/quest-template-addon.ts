@@ -70,14 +70,14 @@ const scalars: ScalarFieldDef[] = [
   scalar({
     column: 'PrevQuestID',
     type: { kind: 'int' },
-    label: 'Required previous quest',
+    label: 'Previous quest',
     help: 'The quest that must come before this one. A positive value means that quest must have been completed and rewarded. A negative value is a quest ID with the sign flipped and means the player only needs to have it active or completed. 0 for none.',
     group: 'availability',
   }),
   scalar({
     column: 'NextQuestID',
     type: { kind: 'int', min: 0 },
-    label: 'Quest this one leads to',
+    label: 'Next quest in chain',
     help: 'The quest ID this quest unlocks. It is the back-reference used together with the next quest\'s required-previous-quest value. 0 for none.',
     group: 'availability',
   }),

@@ -10,11 +10,17 @@ export interface RowSetEditorProps {
   onChange(next: RowSetValue): void;
   disabled?: boolean;
   readOnlyReason?: string;
+  /**
+   * Builds the row a click on "Add" appends, given the rows already present. Lets a specific group
+   * (map markers auto-numbering their id, points auto-numbering their index) compute a row from the
+   * existing ones instead of getting the all-zero default for every column.
+   */
+  newRow?: (rows: RowSetValue) => Record<string, ScalarValue>;
 }
 
 /** Same pattern as `ListEditor`, for row-set fields (`def.columns`); no slot limit. */
 export function RowSetEditor(props: RowSetEditorProps): React.JSX.Element {
-  const { def, value, onChange, disabled, readOnlyReason } = props;
+  const { def, value, onChange, disabled, readOnlyReason, newRow } = props;
   const label = props.label ?? def.label;
   const baseId = props.id ?? def.id;
 
@@ -23,6 +29,10 @@ export function RowSetEditor(props: RowSetEditorProps): React.JSX.Element {
   }
 
   function addRow(): void {
+    if (newRow) {
+      onChange([...value, newRow(value)]);
+      return;
+    }
     const row: Record<string, ScalarValue> = {};
     for (const c of def.columns) row[c.name] = defaultForType(c.type);
     onChange([...value, row]);

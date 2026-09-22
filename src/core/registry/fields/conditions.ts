@@ -101,6 +101,7 @@ export const conditionsField: RowSetFieldDef = {
   label: 'Conditions to be offered this quest',
   help: 'All conditions in one else group must hold before the quest is offered. Different else groups are alternatives.',
   group: 'availability',
+  control: 'conditions',
 };
 
 export const conditionsTable: TableDef = {

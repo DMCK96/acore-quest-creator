@@ -32,7 +32,8 @@ export type ControlId =
   | 'emote'
   | 'starters'
   | 'enders'
-  | 'poi';
+  | 'poi'
+  | 'conditions';
 
 export interface ScalarFieldDef {
   shape: 'scalar';
