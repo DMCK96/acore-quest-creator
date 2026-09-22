@@ -65,6 +65,22 @@ function escapeLike(text: string): string {
 }
 
 const INTEGER_TEXT = /^-?\d+$/;
+const DECIMAL_TEXT = /^-?\d+(\.\d+)?$/;
+const FLOAT_TYPES: ReadonlySet<string> = new Set(['float', 'double', 'decimal']);
+
+/**
+ * Whether `value` is a clean textual literal for `col`'s numeric type.
+ *
+ * MySQL compares a numeric column to a bound string parameter by coercing the
+ * string's leading numeric prefix (e.g. `"1' OR '1'='1"` -> `1`), even under
+ * strict sql_mode, since that coercion happens for WHERE-clause comparisons,
+ * not for INSERT/UPDATE truncation. Rejecting anything but a clean numeric
+ * literal before binding stops garbage input from spuriously matching a real
+ * row via that loose coercion.
+ */
+function isValidNumericLiteral(col: ColumnInfo, value: string): boolean {
+  return (FLOAT_TYPES.has(col.dataType) ? DECIMAL_TEXT : INTEGER_TEXT).test(value);
+}
 
 class MysqlWorldDb implements WorldDb {
   private readonly columnCache = new Map<string, ColumnInfo[]>();
@@ -143,11 +159,18 @@ class MysqlWorldDb implements WorldDb {
     const conds: string[] = [];
     const params: string[] = [];
     for (const [col, val] of Object.entries(where)) {
+      const colInfo = cols.find((c) => c.name === col);
+      const numeric = colInfo !== undefined && isNumericColumn(colInfo);
       if (Array.isArray(val)) {
         if (val.length === 0) return [];
-        conds.push(`${ident(col)} IN (${val.map(() => '?').join(', ')})`);
-        params.push(...val);
+        // For a numeric column, drop values that aren't clean numeric literals
+        // rather than letting MySQL's loose WHERE-clause coercion decide.
+        const values = numeric ? val.filter((v) => isValidNumericLiteral(colInfo!, v)) : val;
+        if (values.length === 0) return [];
+        conds.push(`${ident(col)} IN (${values.map(() => '?').join(', ')})`);
+        params.push(...values);
       } else {
+        if (numeric && !isValidNumericLiteral(colInfo!, val as string)) return [];
         conds.push(`${ident(col)} = ?`);
         params.push(val as string);
       }
