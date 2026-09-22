@@ -1,5 +1,5 @@
 import { vi } from 'vitest';
-import type { Api, ApiError, ErrorCode, OpenResult, Result } from '@shared/ipc';
+import type { Api, ApiError, CanvasNode, ErrorCode, OpenResult, Result } from '@shared/ipc';
 
 export function okv<T>(value: T): Result<T> {
   return { ok: true, value };
@@ -29,6 +29,22 @@ export function sampleOpen(overrides: Partial<OpenResult> = {}): OpenResult {
   return { ...base, ...overrides };
 }
 
+export function nodeOf(overrides: Partial<CanvasNode> = {}): CanvasNode {
+  const base: CanvasNode = {
+    questId: 60001,
+    title: 'Wolves',
+    level: 10,
+    isNew: false,
+    exported: false,
+    unsafe: false,
+    errors: 0,
+    warnings: 0,
+    x: 0,
+    y: 0,
+  };
+  return { ...base, ...overrides };
+}
+
 /**
  * Builds a mock `Api` where every method not overridden is a `vi.fn` answering with a sensible
  * empty success, so tests can assert on calls without wiring every method by hand.
@@ -53,7 +69,7 @@ export function makeMockApi(overrides: Partial<Record<keyof Api, (...args: any[]
     validate: vi.fn(async () => okv([])),
     exportQuest: vi.fn(async () => okv({ path: '', sql: '', warnings: [], issues: [] })),
     applyToDev: vi.fn(async () => okv({ statements: 0 })),
-    getProject: vi.fn(async () => okv({ id: 1, name: '', idRangeStart: 60000, idRangeEnd: 99999, outputDir: '', viewport: { x: 0, y: 0, zoom: 1 } })),
+    getProject: vi.fn(async () => okv({ id: 1, name: 'Default project', idRangeStart: 60000, idRangeEnd: 99999, outputDir: 'C:\\out', viewport: { x: 0, y: 0, zoom: 1 } })),
     updateProject: vi.fn(async () => okv({ id: 1, name: '', idRangeStart: 60000, idRangeEnd: 99999, outputDir: '', viewport: { x: 0, y: 0, zoom: 1 } })),
   };
 

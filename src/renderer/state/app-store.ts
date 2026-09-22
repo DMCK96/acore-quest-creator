@@ -2,7 +2,16 @@ import { create, type StoreApi, type UseBoundStore } from 'zustand';
 import type { FieldValue } from '@core/registry/types';
 import type { Issue } from '@core/validate/validate';
 import type { QuestSummary } from '@core/db/world-db';
-import type { Api, ConnectSummary, NodePosition, OpenResult, ProfileInput, ProfileRecord } from '@shared/ipc';
+import type {
+  Api,
+  CanvasNode,
+  ConnectSummary,
+  NodePosition,
+  OpenResult,
+  ProfileInput,
+  ProfileRecord,
+  Viewport,
+} from '@shared/ipc';
 
 /** The eight groups a quest is edited through, plus the two read-only side panels. */
 export type EditorGroup =
@@ -26,6 +35,8 @@ export interface AppState {
   issues: Issue[];
   saving: boolean;
   dirty: boolean;
+  nodes: CanvasNode[];
+  viewport: Viewport;
 
   loadProfiles(): Promise<void>;
   connect(input: ProfileInput & { id?: number }): Promise<void>;
@@ -36,6 +47,12 @@ export interface AppState {
   setActiveView(v: ActiveView): void;
   flushSave(): Promise<void>;
   backToPicker(): void;
+  loadNodes(): Promise<void>;
+  moveNode(questId: number, x: number, y: number): void;
+  setViewport(v: Viewport): void;
+  flushMoves(): Promise<void>;
+  removeNode(questId: number): Promise<void>;
+  closeEditor(): Promise<void>;
 }
 
 export type AppStore = UseBoundStore<StoreApi<AppState>>;
@@ -55,6 +72,14 @@ export function createAppStore(api: Api, opts: { saveDelayMs?: number } = {}): A
   // Guards against an older, slower `search`/`openQuest` response landing after a newer one.
   let searchToken = 0;
   let openToken = 0;
+  let nodesToken = 0;
+  // The latest position per quest queued by a drag, and the latest queued viewport, cleared once
+  // `flushMoves` has sent them. `lastSavedViewport` is what the API last saw, so an unchanged
+  // viewport (e.g. a pan back to where it started) does not trigger a redundant save.
+  const pendingMoves = new Map<number, NodePosition>();
+  let pendingViewport: Viewport | null = null;
+  let lastSavedViewport: Viewport = { x: 0, y: 0, zoom: 1 };
+  const viewportsEqual = (a: Viewport, b: Viewport): boolean => a.x === b.x && a.y === b.y && a.zoom === b.zoom;
 
   const store = create<AppState>((set, get) => ({
     screen: 'connect',
@@ -67,6 +92,8 @@ export function createAppStore(api: Api, opts: { saveDelayMs?: number } = {}): A
     issues: [],
     saving: false,
     dirty: false,
+    nodes: [],
+    viewport: { x: 0, y: 0, zoom: 1 },
 
     async loadProfiles() {
       const result = await api.listProfiles();
@@ -122,6 +149,7 @@ export function createAppStore(api: Api, opts: { saveDelayMs?: number } = {}): A
         error: null,
         dirty: false,
       });
+      await get().loadNodes();
     },
 
     async newQuest(position) {
@@ -140,6 +168,7 @@ export function createAppStore(api: Api, opts: { saveDelayMs?: number } = {}): A
         error: null,
         dirty: false,
       });
+      await get().loadNodes();
     },
 
     setValue(fieldId, value) {
@@ -188,6 +217,59 @@ export function createAppStore(api: Api, opts: { saveDelayMs?: number } = {}): A
         saveTimer = null;
       }
       set({ screen: 'pick', open: null, error: null, dirty: false });
+    },
+
+    async loadNodes() {
+      const token = ++nodesToken;
+      const [nodesResult, projectResult] = await Promise.all([api.listNodes(), api.getProject()]);
+      if (token !== nodesToken) return;
+      if (nodesResult.ok) set({ nodes: nodesResult.value });
+      if (projectResult.ok) {
+        lastSavedViewport = projectResult.value.viewport;
+        set({ viewport: projectResult.value.viewport });
+      }
+    },
+
+    moveNode(questId, x, y) {
+      pendingMoves.set(questId, { x, y });
+      set((s) => ({
+        nodes: s.nodes.map((n) => (n.questId === questId ? { ...n, x, y } : n)),
+      }));
+    },
+
+    setViewport(v) {
+      if (!viewportsEqual(lastSavedViewport, v)) pendingViewport = v;
+      set({ viewport: v });
+    },
+
+    async flushMoves() {
+      const moves = Array.from(pendingMoves.entries()).map(([questId, pos]) => ({ questId, ...pos }));
+      pendingMoves.clear();
+      const viewportToSave = pendingViewport;
+      pendingViewport = null;
+
+      const tasks: Promise<unknown>[] = [];
+      if (moves.length > 0) tasks.push(api.moveNodes(moves));
+      if (viewportToSave) {
+        lastSavedViewport = viewportToSave;
+        tasks.push(api.saveViewport(viewportToSave));
+      }
+      await Promise.all(tasks);
+    },
+
+    async removeNode(questId) {
+      const result = await api.removeNode(questId);
+      if (!result.ok) {
+        set({ error: result.error.message });
+        return;
+      }
+      set((s) => ({ nodes: s.nodes.filter((n) => n.questId !== questId) }));
+    },
+
+    async closeEditor() {
+      await get().flushSave();
+      set({ screen: 'pick', open: null, error: null, dirty: false });
+      await get().loadNodes();
     },
   }));
 

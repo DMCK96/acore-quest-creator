@@ -6,13 +6,28 @@ const SEARCH_DEBOUNCE_MS = 250;
 const unmodelledNotice = (count: number): string =>
   `${count} column${count === 1 ? '' : 's'} in your database ${count === 1 ? 'is' : 'are'} not modelled by this tool and will be preserved unchanged.`;
 
-export function QuestPicker({ store }: { store: AppStore }): React.JSX.Element {
+export function QuestPicker({
+  store,
+  onSelect,
+  showNewQuestButton = true,
+}: {
+  store: AppStore;
+  /** Overrides the default "open this quest" behaviour, e.g. so a host dialog can place it. */
+  onSelect?: (id: number) => void;
+  /** False when a host (like `AddExistingDialog`) provides its own "new quest" entry point. */
+  showNewQuestButton?: boolean;
+}): React.JSX.Element {
   const summary = store((s) => s.summary);
   const results = store((s) => s.results);
   const error = store((s) => s.error);
   const search = store((s) => s.search);
   const openQuest = store((s) => s.openQuest);
   const newQuest = store((s) => s.newQuest);
+
+  const selectResult = (id: number): void => {
+    if (onSelect) onSelect(id);
+    else void openQuest(id);
+  };
 
   const [text, setText] = useState('');
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -43,15 +58,17 @@ export function QuestPicker({ store }: { store: AppStore }): React.JSX.Element {
       <ul>
         {results.map((r) => (
           <li key={r.id}>
-            <button type="button" onClick={() => void openQuest(r.id)}>
+            <button type="button" onClick={() => selectResult(r.id)}>
               {r.title} ({r.id}, level {r.level})
             </button>
           </li>
         ))}
       </ul>
-      <button type="button" onClick={() => void newQuest()}>
-        New quest
-      </button>
+      {showNewQuestButton && (
+        <button type="button" onClick={() => void newQuest()}>
+          New quest
+        </button>
+      )}
     </div>
   );
 }
