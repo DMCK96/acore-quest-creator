@@ -1,4 +1,5 @@
-import type { ControlId, FieldDef, ListMemberDef, RowSetColumn, ScalarType } from '@core/registry/types';
+import type { FieldDef, ListMemberDef, RowSetColumn, ScalarType } from '@core/registry/types';
+import { controlRegistry, registerControl } from './control-registry';
 import { CreatureOrGoControl } from './CreatureOrGoControl';
 import { EnumControl } from './EnumControl';
 import { FlagsControl } from './FlagsControl';
@@ -27,12 +28,8 @@ const scalarControls: Partial<Record<ScalarType['kind'], FieldControl>> = {
   creatureOrGo: CreatureOrGoControl as unknown as FieldControl,
 };
 
-/** Special-purpose controls registered by later tasks (e.g. race/class masks, starters/enders, POI). */
-export const controlRegistry: Partial<Record<ControlId, FieldControl>> = {};
-
-export function registerControl(id: ControlId, control: FieldControl): void {
-  controlRegistry[id] = control;
-}
+/** Re-exported from `./control-registry` so existing importers of `resolve.ts` keep working. */
+export { controlRegistry, registerControl };
 
 function resolveScalar(type: ScalarType): FieldControl {
   const control = scalarControls[type.kind];
@@ -60,3 +57,7 @@ export function resolveControl(def: FieldDef | ListMemberDef | RowSetColumn): Fi
   }
   return resolveScalar(def.type);
 }
+
+// Registers the raceMask/classMask/questSort/emote controls into `controlRegistry` above. Imported
+// for its side effects, last, so every export above is already assigned by the time it runs.
+import './register';

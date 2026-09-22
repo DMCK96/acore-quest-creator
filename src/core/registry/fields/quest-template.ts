@@ -77,9 +77,10 @@ const scalars: ScalarFieldDef[] = [
   scalar({
     column: 'ID',
     type: { kind: 'int', min: 0 },
-    label: 'Quest ID',
+    label: 'ID',
     help: 'The number that identifies this quest everywhere else in the database. It cannot be changed after the quest exists.',
     group: 'identity',
+    readOnlyUi: true,
   }),
   scalar({
     column: 'QuestType',
@@ -151,21 +152,21 @@ const scalars: ScalarFieldDef[] = [
   scalar({
     column: 'QuestDescription',
     type: { kind: 'text' },
-    label: 'Quest text',
+    label: 'Story text',
     help: 'What the quest giver says when offering the quest. Tokens such as $N (player name) and $B (line break) work here.',
     group: 'story',
   }),
   scalar({
     column: 'LogDescription',
     type: { kind: 'text' },
-    label: 'Objectives summary',
+    label: 'Objectives text',
     help: 'The one-line summary of what to do, shown under the objectives in the quest log.',
     group: 'story',
   }),
   scalar({
     column: 'QuestCompletionLog',
     type: { kind: 'text' },
-    label: 'Ready to turn in text',
+    label: 'Log text when complete',
     help: 'The line shown in the quest log once every objective is done, telling the player where to go back to.',
     group: 'story',
   }),

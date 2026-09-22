@@ -2,6 +2,7 @@ import { resolveControl } from '../controls/resolve';
 import type { EditorGroup, FieldDef, FieldValue } from '@core/registry/types';
 import { fieldsOfGroup } from '@core/registry';
 import type { QuestAggregate } from '@core/model/aggregate';
+import { GROUP_LAYOUT } from './layout';
 
 export interface GroupPanelProps {
   group: EditorGroup;
@@ -15,10 +16,25 @@ export interface GroupPanelProps {
  * A field missing from `aggregate.values` (schema drift the importer could not decode into a
  * value at all) is omitted entirely rather than shown broken. `advanced` fields are grouped under
  * a collapsed "Advanced" `<details>`. A field named in `aggregate.readOnly` is still shown, but
- * disabled, with its reason displayed.
+ * disabled, with its reason displayed. A field marked `readOnlyUi` in the registry (an identifying
+ * value such as the quest ID, never editable regardless of drift) is likewise shown disabled, with
+ * no reason text since there is nothing wrong with it to explain.
  */
+/**
+ * Orders `fields` by `GROUP_LAYOUT[group]`; a field not named there keeps its relative registry
+ * order, appended after every field that is named (a stable sort with an `Infinity` rank for the
+ * unlisted ones does exactly this).
+ */
+function orderByLayout(fields: readonly FieldDef[], group: EditorGroup): FieldDef[] {
+  const rank = new Map(GROUP_LAYOUT[group].map((id, i) => [id, i]));
+  return [...fields].sort((a, b) => (rank.get(a.id) ?? Infinity) - (rank.get(b.id) ?? Infinity));
+}
+
 export function GroupPanel({ group, aggregate, onChange }: GroupPanelProps): React.JSX.Element {
-  const present = fieldsOfGroup(group).filter((f) => Object.prototype.hasOwnProperty.call(aggregate.values, f.id));
+  const present = orderByLayout(
+    fieldsOfGroup(group).filter((f) => Object.prototype.hasOwnProperty.call(aggregate.values, f.id)),
+    group,
+  );
   const basic = present.filter((f) => !f.advanced);
   const advanced = present.filter((f) => f.advanced);
   const readOnlyReasons = new Map(aggregate.readOnly.map((r) => [r.fieldId, r.reason]));
@@ -26,6 +42,7 @@ export function GroupPanel({ group, aggregate, onChange }: GroupPanelProps): Rea
   function renderField(field: FieldDef): React.JSX.Element {
     const Control = resolveControl(field);
     const reason = readOnlyReasons.get(field.id);
+    const readOnlyUi = field.shape === 'scalar' && field.readOnlyUi === true;
     return (
       <div key={field.id}>
         <Control
@@ -34,7 +51,7 @@ export function GroupPanel({ group, aggregate, onChange }: GroupPanelProps): Rea
           help={field.help}
           value={aggregate.values[field.id]}
           onChange={(next: FieldValue) => onChange(field.id, next)}
-          disabled={!!reason}
+          disabled={!!reason || readOnlyUi}
           readOnlyReason={reason}
           def={field}
           type={field.shape === 'scalar' ? field.type : undefined}

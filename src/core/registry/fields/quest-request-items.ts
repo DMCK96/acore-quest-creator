@@ -36,7 +36,7 @@ const scalars: ScalarFieldDef[] = [
   scalar({
     column: 'CompletionText',
     type: { kind: 'text' },
-    label: 'Progress text',
+    label: 'In-progress text',
     help: 'What the quest giver says when the player comes back with the quest not yet handed in. Tokens work here: $N is the player name, $C the class, $R the race, $B a line break, and $G male:female; picks a word by the gender of the player.',
     group: 'story',
   }),

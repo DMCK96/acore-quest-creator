@@ -25,7 +25,7 @@ const scalars: ScalarFieldDef[] = [
   scalar({
     column: 'RewardText',
     type: { kind: 'text' },
-    label: 'Turn-in text',
+    label: 'Reward text',
     help: 'What the quest giver says when the quest is handed in and the reward is shown. Tokens work here: $N is the player name, $C the class, $R the race, $B a line break, and $G male:female; picks a word by the gender of the player.',
     group: 'story',
   }),
