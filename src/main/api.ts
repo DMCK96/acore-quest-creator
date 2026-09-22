@@ -1,8 +1,8 @@
 import { join } from 'node:path';
 import { nextNodePosition } from '../core/canvas/layout';
 import type { DevDb } from '../core/db/dev-db';
-import type { RefKind, SchemaInfo } from '../core/db/types';
-import type { WorldDb } from '../core/db/world-db';
+import type { RawRow, RefKind, SchemaInfo } from '../core/db/types';
+import { UnknownColumnError, UnknownTableError, type WorldDb } from '../core/db/world-db';
 import { buildPatch, type PatchStatement, type PatchWarning } from '../core/export/build-patch';
 import { findQuestGiverFixes, type QuestGiverFix } from '../core/export/quest-giver';
 import { patchFileName, renderPatch, renderStatement } from '../core/export/render-patch';
@@ -60,6 +60,36 @@ const KEY_COLUMNS = keyColumnsByTable(registry);
 const TITLE_FIELD = 'quest_template.LogTitle';
 const LEVEL_FIELD = 'quest_template.QuestLevel';
 const SEARCH_LIMIT = 50;
+
+const REWARD_TIERS = 10;
+const REWARD_LEVEL_MIN = 1;
+const REWARD_LEVEL_MAX = 80;
+const INTEGER_TEXT = /^-?\d+$/;
+
+/** Reads text that must be a plain integer; anything else (garbage, missing) is `null`. */
+function parseRewardInt(raw: string | null | undefined): number | null {
+  if (raw === null || raw === undefined || !INTEGER_TEXT.test(raw)) return null;
+  return Number(raw);
+}
+
+/**
+ * Fetches the one row keyed by `level`, tolerating a table or column the connected schema does not
+ * have at all (drift outside the registry): both come back as "no row", not an error.
+ */
+async function readRewardRow(
+  db: WorldDb,
+  table: string,
+  keyColumn: string,
+  level: number,
+): Promise<RawRow | undefined> {
+  try {
+    const rows = await db.selectRows(table, { [keyColumn]: [String(level)] });
+    return rows[0];
+  } catch (error) {
+    if (error instanceof UnknownTableError || error instanceof UnknownColumnError) return undefined;
+    throw error;
+  }
+}
 
 /** The table a quest-giver fix touches; it is outside the snapshot, so previews add it by hand. */
 const CREATURE_TABLE = 'creature_template';
@@ -348,9 +378,25 @@ export function createApi(deps: ApiDeps): Api {
         return names;
       }),
 
-    // Filled in once the reward tables are read from the world DB; the method exists now so the
-    // IPC surface and the renderer's typing are complete.
-    rewardTables: async () => ({ ok: false, error: { code: 'UNKNOWN', message: 'not implemented' } }),
+    // `xp[i]` is `questxp_dbc.Difficulty_{i+1}` and `money[i]` is `quest_money_reward.Money{i}`,
+    // both for the row keyed by `level`; a missing row/table/column or an out-of-range level is
+    // all-null rather than an error, since a fork can lack these reference tables entirely.
+    rewardTables: (level) =>
+      run(async () => {
+        const live = connected();
+        const nulls = { xp: Array(REWARD_TIERS).fill(null), money: Array(REWARD_TIERS).fill(null) };
+        if (!Number.isInteger(level) || level < REWARD_LEVEL_MIN || level > REWARD_LEVEL_MAX) return nulls;
+
+        const xpRow = await readRewardRow(live.db, 'questxp_dbc', 'ID', level);
+        const moneyRow = await readRewardRow(live.db, 'quest_money_reward', 'Level', level);
+        const xp = Array.from({ length: REWARD_TIERS }, (_, i) =>
+          xpRow ? parseRewardInt(xpRow[`Difficulty_${i + 1}`]) : null,
+        );
+        const money = Array.from({ length: REWARD_TIERS }, (_, i) =>
+          moneyRow ? parseRewardInt(moneyRow[`Money${i}`]) : null,
+        );
+        return { xp, money };
+      }),
 
     saveDraft: (aggregate) =>
       run(async () => {

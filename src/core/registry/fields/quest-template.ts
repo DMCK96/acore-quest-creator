@@ -205,7 +205,7 @@ const scalars: ScalarFieldDef[] = [
   scalar({
     column: 'RewardXPDifficulty',
     type: { kind: 'int', min: 0 },
-    label: 'Experience reward',
+    label: 'XP reward',
     help: 'Picks which experience column of QuestXP.dbc to pay at the quest level, so the reward scales with the level rather than being a fixed number. 0 gives no experience.',
     group: 'rewards',
     control: 'xpDifficulty',
@@ -213,7 +213,7 @@ const scalars: ScalarFieldDef[] = [
   scalar({
     column: 'RewardMoney',
     type: { kind: 'money' },
-    label: 'Money reward',
+    label: 'Fixed money reward',
     help: 'Money given on completion, in copper. A negative value takes money from the player instead.',
     group: 'rewards',
   }),

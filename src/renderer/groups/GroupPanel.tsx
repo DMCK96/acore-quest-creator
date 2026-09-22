@@ -1,4 +1,5 @@
 import { resolveControl } from '../controls/resolve';
+import { AggregateProvider } from '../state/aggregate-context';
 import type { EditorGroup, FieldDef, FieldValue } from '@core/registry/types';
 import { fieldsOfGroup } from '@core/registry';
 import type { QuestAggregate } from '@core/model/aggregate';
@@ -65,14 +66,16 @@ export function GroupPanel({ group, aggregate, onChange }: GroupPanelProps): Rea
   }
 
   return (
-    <div>
-      {basic.map(renderField)}
-      {advanced.length > 0 && (
-        <details>
-          <summary>Advanced</summary>
-          {advanced.map(renderField)}
-        </details>
-      )}
-    </div>
+    <AggregateProvider aggregate={aggregate}>
+      <div>
+        {basic.map(renderField)}
+        {advanced.length > 0 && (
+          <details>
+            <summary>Advanced</summary>
+            {advanced.map(renderField)}
+          </details>
+        )}
+      </div>
+    </AggregateProvider>
   );
 }
