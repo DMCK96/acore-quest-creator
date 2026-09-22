@@ -27,7 +27,10 @@
     "src/main/**/*",
     "src/preload/**/*",
     "scripts/**/*",
-    "tests/**/*.ts"
+    "tests/**/*.ts",
+    // Pure model modules that live under the renderer but carry no DOM: the integration tests
+    // author a quest through them, so they must typecheck in the node project too.
+    "src/renderer/groups/drops-model.ts"
   ],
   "exclude": ["tests/renderer/**/*"]
 }

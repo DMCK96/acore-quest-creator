@@ -9,6 +9,11 @@ import { keyColumnsByTable } from './apply';
 import type { FidelityReport } from './verify';
 
 export interface MysqlScratch {
+  /**
+   * The name of the throwaway schema this scratch owns, so a caller can point its own connection
+   * (a dev-DB profile, an admin query) at the same copy the gate is working in.
+   */
+  readonly schema: string;
   reset(): Promise<void>;
   load(tables: Record<string, RawRow[]>, schema: SchemaInfo): Promise<void>;
   apply(sql: string): Promise<void>;
@@ -42,7 +47,7 @@ function randomSuffix(): string {
 class MysqlScratchImpl implements MysqlScratch {
   constructor(
     private readonly conn: Connection,
-    private readonly schema: string,
+    readonly schema: string,
     private readonly tables: readonly string[],
   ) {
     if (!schema.startsWith(SCRATCH_PREFIX)) throw new InvalidScratchSchemaError(schema);
