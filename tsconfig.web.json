@@ -24,6 +24,7 @@
     "src/core/**/*",
     "src/shared/**/*",
     "package.json",
-    "tests/renderer/**/*"
+    "tests/renderer/**/*",
+    "tests/helpers/**/*"
   ]
 }
