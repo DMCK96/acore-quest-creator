@@ -32,7 +32,11 @@ function orderByLayout(fields: readonly FieldDef[], group: EditorGroup): FieldDe
 
 export function GroupPanel({ group, aggregate, onChange }: GroupPanelProps): React.JSX.Element {
   const present = orderByLayout(
-    fieldsOfGroup(group).filter((f) => Object.prototype.hasOwnProperty.call(aggregate.values, f.id)),
+    fieldsOfGroup(group)
+      .filter((f) => Object.prototype.hasOwnProperty.call(aggregate.values, f.id))
+      // Linked rowsets (creature/gameobject loot and quest-item rows) are edited through the
+      // drops model's own UI, not as a raw table of rows the user would have to hand-edit.
+      .filter((f) => !(f.shape === 'rowset' && f.linked)),
     group,
   );
   const basic = present.filter((f) => !f.advanced);
