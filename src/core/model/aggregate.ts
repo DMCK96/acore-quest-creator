@@ -26,5 +26,11 @@ export interface Snapshot {
   tables: Record<string, RawRow[]>;
   /** Table -> the column names read, in ordinal order. */
   columnsRead: Record<string, string[]>;
+  /**
+   * Linked rows that share a creature or object with one of the quest's own, but are not the
+   * quest's: another quest's quest-item row, an ordinary non-quest drop. Read-only context for key
+   * allocation and collision detection — never edited, never written, never compared by the gate.
+   */
+  linkedContext: Record<string, RawRow[]>;
   schemaHash: string;
 }

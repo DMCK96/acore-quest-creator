@@ -15,9 +15,11 @@ export class FidelityError extends Error {
   readonly differences: Difference[];
 
   constructor(differences: Difference[]) {
-    const shown = differences
-      .slice(0, 5)
-      .map((d) => `${d.table} ${d.key} ${d.column ?? '(row)'}: ${show(d.before)} -> ${show(d.after)}`);
+    const shown = differences.slice(0, 5).map((d) => {
+      // A whole-row difference has no before/after cell to show; `kind` is what says what happened.
+      if (d.column === null && d.kind !== undefined) return `${d.table} ${d.key}: row ${d.kind}`;
+      return `${d.table} ${d.key} ${d.column ?? '(row)'}: ${show(d.before)} -> ${show(d.after)}`;
+    });
     const more = differences.length - shown.length;
     super(
       `Round trip is not lossless (${differences.length} difference${differences.length === 1 ? '' : 's'}): ` +

@@ -91,6 +91,9 @@ const lootTable = (table: string): TableDef => ({
   cardinality: 'many',
   keyColumns: ['Entry', 'Item', 'Reference', 'GroupId'],
   itemColumn: 'Item',
+  entryColumn: 'Entry',
+  // The key names the creature and the item, so a collision is genuinely the same drop: there is
+  // no free slot to move to, and the row is adopted (loudly) rather than re-keyed.
   where: (_questId, itemIds) => ({ Item: itemIds.map(String), QuestRequired: '1' }),
 });
 
@@ -100,6 +103,10 @@ const questItemTable = (table: string, entryColumn: string): TableDef => ({
   cardinality: 'many',
   keyColumns: [entryColumn, 'Idx'],
   itemColumn: 'ItemId',
+  entryColumn,
+  // `Idx` is only the client's slot number for this creature, so a row that would collide can be
+  // moved to a free slot instead of taking over the row that is already there.
+  allocatableKeyColumn: 'Idx',
   where: (_questId, itemIds) => ({ ItemId: itemIds.map(String) }),
 });
 

@@ -113,6 +113,19 @@ describe('QuestWorkspace', () => {
     expect(screen.getByText(/unsafe to export/i)).toBeInTheDocument();
     expect(screen.getByText(/quest_template.*LogTitle/)).toBeInTheDocument();
   });
+  it('says a whole row was added or removed rather than "(absent) → (absent)"', async () => {
+    const { store } = await opened({
+      fidelity: { ok: false, differences: [
+        { table: 'quest_poi_points', key: 'QuestID=60001,Idx1=0,Idx2=1', column: null, before: undefined, after: undefined, kind: 'removed' },
+        { table: 'conditions', key: 'SourceEntry=60001', column: null, before: undefined, after: undefined, kind: 'added' },
+      ] },
+    });
+    render(<QuestWorkspace store={store} />);
+    const banner = screen.getByRole('alert');
+    expect(banner).toHaveTextContent('row removed');
+    expect(banner).toHaveTextContent('row added');
+    expect(banner.textContent).not.toContain('(absent) → (absent)');
+  });
   it('saves edits as a draft and refreshes validation', async () => {
     const { api, store } = await opened();
     store.getState().setValue('quest_template.LogTitle', 'Edited');
@@ -121,6 +134,22 @@ describe('QuestWorkspace', () => {
     expect(api.saveDraft).toHaveBeenCalledWith(expect.objectContaining({ values: expect.objectContaining({ 'quest_template.LogTitle': 'Edited' }) }));
     expect(api.validate).toHaveBeenCalledWith(60001);
     expect(store.getState().dirty).toBe(false);
+  });
+  // A real debounce, so the click lands inside the window the user would actually hit.
+  it('saves the pending edit before "Back to quests" clears the editor', async () => {
+    const api = makeMockApi({ saveProfile: async () => okv(profileRec), connect: async () => okv(summary), openQuest: async () => okv(sampleOpen()), validate: async () => okv([]) });
+    const store = createAppStore(api, { saveDelayMs: 10_000 });
+    await store.getState().connect(form);
+    await store.getState().openQuest(60001);
+    render(<QuestWorkspace store={store} />);
+    store.getState().setValue('quest_template.LogTitle', 'Edited');
+    expect(store.getState().dirty).toBe(true);
+    await userEvent.click(screen.getByRole('button', { name: /Back to quests/ }));
+    await waitFor(() => expect(store.getState().screen).toBe('pick'));
+    expect(api.saveDraft).toHaveBeenCalledWith(
+      expect.objectContaining({ values: expect.objectContaining({ 'quest_template.LogTitle': 'Edited' }) }),
+    );
+    expect(store.getState().open).toBeNull();
   });
   it('lists validation issues with their severity', async () => {
     const { store } = await opened({ issues: [{ severity: 'error', code: 'NO_TITLE', message: 'The quest needs a title.' }, { severity: 'warning', code: 'NO_ENDER', message: 'Nobody can turn this quest in.' }] });

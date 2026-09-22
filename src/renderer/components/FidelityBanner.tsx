@@ -11,7 +11,16 @@ export function FidelityBanner({ fidelity }: { fidelity: FidelityReport }): Reac
       <ul>
         {fidelity.differences.map((d, i) => (
           <li key={i}>
-            {d.table} {d.key} {d.column ?? '(row)'}: {show(d.before)} &rarr; {show(d.after)}
+            {/* A whole-row difference has no cell to show; `kind` is what says what happened. */}
+            {d.column === null && d.kind !== undefined ? (
+              <>
+                {d.table} {d.key}: row {d.kind}
+              </>
+            ) : (
+              <>
+                {d.table} {d.key} {d.column ?? '(row)'}: {show(d.before)} &rarr; {show(d.after)}
+              </>
+            )}
           </li>
         ))}
       </ul>

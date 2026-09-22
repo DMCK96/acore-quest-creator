@@ -22,6 +22,40 @@ export class WorldDbConnectionError extends Error {
   }
 }
 
+/**
+ * Thrown when the connection is fine and the server refused for want of a grant.
+ *
+ * Reporting this as a connection failure sends the user to check their host and port for a problem
+ * that is entirely in their `GRANT` statements, so it gets its own name and its own message.
+ */
+export class WorldDbPermissionError extends Error {
+  constructor(
+    readonly code: string,
+    readonly context: string,
+    cause?: unknown,
+  ) {
+    super(
+      `The database user does not have permission for ${context} (${code}). ` +
+        'Grant it SELECT on the world database and reconnect.',
+    );
+    this.name = 'WorldDbPermissionError';
+    if (cause !== undefined) (this as { cause?: unknown }).cause = cause;
+  }
+}
+
+/** Thrown when a query failed for a reason that is neither the connection nor a missing grant. */
+export class WorldDbQueryError extends Error {
+  constructor(
+    readonly code: string,
+    readonly context: string,
+    cause?: unknown,
+  ) {
+    super(`The world database refused a query while ${context} (${code}).`);
+    this.name = 'WorldDbQueryError';
+    if (cause !== undefined) (this as { cause?: unknown }).cause = cause;
+  }
+}
+
 /** kind -> [table, id column, name column] */
 const LOOKUP: Partial<Record<RefKind, readonly [string, string, string]>> = {
   item: ['item_template', 'entry', 'name'],
@@ -34,29 +68,61 @@ function lookupSpec(kind: RefKind): readonly [string, string, string] | undefine
   return LOOKUP_KINDS.includes(kind) ? LOOKUP[kind] : undefined;
 }
 
+/** Codes that mean the server was not reached, or would not let us in at all. */
 const CONNECTION_ERROR_CODES: ReadonlySet<string> = new Set([
   'ECONNREFUSED',
+  'ECONNRESET',
+  'EPIPE',
   'ER_ACCESS_DENIED_ERROR',
   'ER_BAD_DB_ERROR',
   'ETIMEDOUT',
   'PROTOCOL_CONNECTION_LOST',
+  'PROTOCOL_SEQUENCE_TIMEOUT',
   'ENOTFOUND',
   'EHOSTUNREACH',
 ]);
 
-function isConnectionError(err: unknown): err is NodeJS.ErrnoException & { code: string } {
-  return typeof err === 'object' && err !== null && 'code' in err && typeof (err as { code: unknown }).code === 'string';
+/** Codes that mean the connection is fine and this user simply lacks a grant. */
+const PERMISSION_ERROR_CODES: ReadonlySet<string> = new Set([
+  'ER_TABLEACCESS_DENIED_ERROR',
+  'ER_DBACCESS_DENIED_ERROR',
+  'ER_COLUMNACCESS_DENIED_ERROR',
+  'ER_SPECIFIC_ACCESS_DENIED_ERROR',
+  'ER_PROCACCESS_DENIED_ERROR',
+]);
+
+function errorCode(err: unknown): string {
+  if (typeof err === 'object' && err !== null && 'code' in err) {
+    const code = (err as { code: unknown }).code;
+    if (typeof code === 'string' && code !== '') return code;
+  }
+  return 'UNKNOWN';
 }
 
-function wrapConnectionError(host: string, port: number, err: unknown): never {
-  if (isConnectionError(err)) {
-    const code = err.code;
-    if (CONNECTION_ERROR_CODES.has(code) || /timeout/i.test(String((err as Error).message))) {
-      throw new WorldDbConnectionError(host, port, code, err);
-    }
+export function isPermissionCode(code: string): boolean {
+  return PERMISSION_ERROR_CODES.has(code);
+}
+
+/**
+ * Turns a mysql2 failure into the one named error that actually describes it.
+ *
+ * Everything used to funnel into `WorldDbConnectionError`, so a missing `SELECT` grant was reported
+ * as "Cannot connect to MySQL at host:port" while the connection was perfectly healthy.
+ * `context` says what was being attempted, e.g. `reading quest_template`.
+ */
+export function classifyMysqlError(host: string, port: number, err: unknown, context: string): never {
+  const code = errorCode(err);
+  const message = err instanceof Error ? err.message : String(err);
+  if (CONNECTION_ERROR_CODES.has(code) || /timeout/i.test(message)) {
     throw new WorldDbConnectionError(host, port, code, err);
   }
-  throw new WorldDbConnectionError(host, port, 'UNKNOWN', err);
+  if (isPermissionCode(code)) throw new WorldDbPermissionError(code, context, err);
+  throw new WorldDbQueryError(code, context, err);
+}
+
+/** The initial handshake: anything that goes wrong there really is a connection failure. */
+function wrapConnectionError(host: string, port: number, err: unknown): never {
+  throw new WorldDbConnectionError(host, port, errorCode(err), err);
 }
 
 /** Escapes `%` and `_` in LIKE search text, backslash first. */
@@ -91,11 +157,31 @@ class MysqlWorldDb implements WorldDb {
     private readonly port: number,
   ) {}
 
-  private async run<T>(fn: () => Promise<T>): Promise<T> {
+  private async run<T>(context: string, fn: () => Promise<T>): Promise<T> {
     try {
       return await fn();
     } catch (err) {
-      wrapConnectionError(this.host, this.port, err);
+      classifyMysqlError(this.host, this.port, err, context);
+    }
+  }
+
+  /**
+   * Whether a table INFORMATION_SCHEMA did not show is genuinely absent or merely unreadable.
+   *
+   * `INFORMATION_SCHEMA.COLUMNS` hides every table the querying user has no privilege on, so
+   * `columns()` answers `[]` for both cases and the importer would go on to produce a partial
+   * import. A `SELECT ... LIMIT 0` costs nothing and tells the two apart: a permission code means
+   * the table is there and forbidden, `ER_NO_SUCH_TABLE` (or a clean result) means it is not.
+   */
+  async probeMissingTable(table: string): Promise<'absent' | 'forbidden'> {
+    try {
+      await this.pool.query(`SELECT 1 FROM ${ident(table)} LIMIT 0`);
+      return 'absent'; // readable but invisible to INFORMATION_SCHEMA: nothing we can act on
+    } catch (err) {
+      const code = errorCode(err);
+      if (isPermissionCode(code)) return 'forbidden';
+      if (CONNECTION_ERROR_CODES.has(code)) classifyMysqlError(this.host, this.port, err, `probing ${table}`);
+      return 'absent';
     }
   }
 
@@ -103,7 +189,7 @@ class MysqlWorldDb implements WorldDb {
     const cached = this.columnCache.get(table);
     if (cached) return cached;
 
-    const rows = await this.run(async () => {
+    const rows = await this.run(`reading the columns of ${table}`, async () => {
       const [result] = await this.pool.query(
         `SELECT c.COLUMN_NAME AS name, c.DATA_TYPE AS dataType, c.COLUMN_TYPE AS columnType,
                 c.IS_NULLABLE AS nullable, c.COLUMN_DEFAULT AS defaultValue, c.ORDINAL_POSITION AS ordinal,
@@ -181,7 +267,7 @@ class MysqlWorldDb implements WorldDb {
     const whereSql = conds.length > 0 ? ` WHERE ${conds.join(' AND ')}` : '';
     const sql = `SELECT * FROM ${ident(table)}${whereSql}${orderBy}`;
 
-    const rows = await this.run(async () => {
+    const rows = await this.run(`reading ${table}`, async () => {
       const [result] = await this.pool.query(sql, params);
       return result as RawRow[];
     });
@@ -195,7 +281,7 @@ class MysqlWorldDb implements WorldDb {
       : `SELECT ${ident('ID')}, ${ident('LogTitle')}, ${ident('QuestLevel')} FROM ${ident('quest_template')} WHERE ${ident('LogTitle')} LIKE ? ESCAPE '\\\\' ORDER BY ${ident('ID')} LIMIT ?`;
     const param = INTEGER_TEXT.test(text) ? text : `%${escapeLike(text)}%`;
 
-    const rows = await this.run(async () => {
+    const rows = await this.run('searching quest_template', async () => {
       const [result] = await this.pool.query(sql, [param, limit]);
       return result as Array<{ ID: string; LogTitle: string | null; QuestLevel: string | null }>;
     });
@@ -222,7 +308,7 @@ class MysqlWorldDb implements WorldDb {
   }
 
   async questIdsInRange(from: number, to: number): Promise<number[]> {
-    const rows = await this.run(async () => {
+    const rows = await this.run('listing quest IDs', async () => {
       const [result] = await this.pool.query(
         `SELECT ${ident('ID')} FROM ${ident('quest_template')} WHERE ${ident('ID')} BETWEEN ? AND ? ORDER BY ${ident('ID')} ASC`,
         [from, to],

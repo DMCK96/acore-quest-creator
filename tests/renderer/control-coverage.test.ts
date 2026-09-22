@@ -4,6 +4,12 @@ import { registry } from '@core/registry';
 import { resolveControl, controlRegistry } from '../../src/renderer/controls/resolve';
 import { GROUP_LAYOUT } from '../../src/renderer/groups/layout';
 
+/**
+ * These assert *resolvability*: that a control exists for every definition. That is not the same
+ * as reachability — a column can resolve to a control no panel ever renders, which is how the
+ * linked loot/quest-item columns went unreachable while this file stayed green. Reachability is
+ * asserted against the rendered tree in `linked-column-reachability.test.tsx`.
+ */
 describe('control coverage', () => {
   it('resolves a designed control for every field, list member and row-set column', () => {
     for (const f of registry.fields) {

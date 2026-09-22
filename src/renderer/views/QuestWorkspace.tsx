@@ -1,6 +1,7 @@
 import type { ActiveView, AppStore, EditorGroup } from '../state/app-store';
 import { FidelityBanner } from '../components/FidelityBanner';
 import { IssuesList } from '../components/IssuesList';
+import { LocaleNotice } from '../components/LocaleNotice';
 import { ChangesView } from './ChangesView';
 import { ExportBar } from './ExportBar';
 import { UnmodelledPanel } from './UnmodelledPanel';
@@ -39,7 +40,7 @@ export function QuestWorkspace({ store }: { store: AppStore }): React.JSX.Elemen
 
   return (
     <div>
-      <button type="button" className="btn workspace__back" onClick={backToPicker}>
+      <button type="button" className="btn workspace__back" onClick={() => void backToPicker()}>
         ← Back to quests
       </button>
       <h1 className="workspace__title">
@@ -61,6 +62,9 @@ export function QuestWorkspace({ store }: { store: AppStore }): React.JSX.Elemen
         ))}
       </div>
       <div role="tabpanel" className="workspace__panel">
+        {GROUP_TABS.some((t) => t.view === activeView) && (
+          <LocaleNotice open={open} group={activeView as EditorGroup} />
+        )}
         {activeView === 'unmodelled' && <UnmodelledPanel unmodelled={open.unmodelled} />}
         {activeView === 'changes' && <ChangesView store={store} />}
         {activeView === 'objectives' && (

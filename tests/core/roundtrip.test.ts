@@ -53,13 +53,27 @@ describe('compareTables', () => {
     expect(removed[0]).toMatchObject({ table: 't', key: 'ID=3', column: null });
     expect(removed[0].after).toBeUndefined();
   });
+  it('tells an added row apart from a removed one', () => {
+    expect(compareTables({ t: [] }, { t: [row({ ID: '3' })] }, k)[0].kind).toBe('added');
+    expect(compareTables({ t: [row({ ID: '3' })] }, { t: [] }, k)[0].kind).toBe('removed');
+    // A column-level difference is neither.
+    expect(compareTables({ t: [row({ ID: '1', v: 'a' })] }, { t: [row({ ID: '1', v: 'b' })] }, k)[0].kind).toBeUndefined();
+  });
 });
+
+/**
+ * The pinned hostile-text fixture. `"\ "` is a JavaScript identity escape for a plain space, so a
+ * single backslash here would silently test nothing; the guard below keeps that from creeping back.
+ */
+const HOSTILE_TITLE = "It's \\ \"quoted\" 🙂";
 
 describe('verifyRoundTrip', () => {
   it('passes for an untouched quest, including hostile text and awkward numerics', async () => {
+    expect(HOSTILE_TITLE).toContain(String.fromCharCode(92));
+    expect(HOSTILE_TITLE).toContain(String.fromCodePoint(0x1f642));
     const db = forkDb();
     db.insert('quest_template', {
-      ID: '60001', LogTitle: "It's \ \"quoted\" 🙂", QuestDescription: 'line1\r\nline2\t$B$N  ',
+      ID: '60001', LogTitle: HOSTILE_TITLE, QuestDescription: 'line1\r\nline2\t$B$N  ',
       LogDescription: '', AreaDescription: null, POIx: '1.50', POIy: '-0', RewardMoney: '4294967295',
     });
     db.insert('quest_template_addon', { ID: '60001', PrevQuestID: '-55' });
@@ -86,5 +100,14 @@ describe('verifyRoundTrip', () => {
     expect(e.differences).toHaveLength(1);
     expect(e.message).toContain('t');
     expect(keys.quest_template).toEqual(['ID']);
+  });
+  it('FidelityError says whether a whole row was added or removed, not "(absent) -> (absent)"', () => {
+    const e = new FidelityError([
+      { table: 'quest_poi_points', key: 'QuestID=1,Idx1=0,Idx2=0', column: null, before: undefined, after: undefined, kind: 'removed' },
+      { table: 'conditions', key: 'x', column: null, before: undefined, after: undefined, kind: 'added' },
+    ]);
+    expect(e.message).toContain('row removed');
+    expect(e.message).toContain('row added');
+    expect(e.message).not.toContain('(absent) -> (absent)');
   });
 });

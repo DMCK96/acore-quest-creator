@@ -28,8 +28,14 @@ export class UnknownColumnError extends Error {
 
 /** Read-only view of the world database. Implemented by MySQL and by the in-memory fake. */
 export interface WorldDb {
-  /** Columns ordered by `ordinal`; `[]` for a table that does not exist. */
+  /** Columns ordered by `ordinal`; `[]` for a table that does not exist *or* is not readable. */
   columns(table: string): Promise<ColumnInfo[]>;
+  /**
+   * For a table `columns()` came back empty for: whether it is genuinely absent from this fork, or
+   * present but hidden from this user by a missing grant. Optional — an implementation that cannot
+   * tell the difference simply omits it and every such table counts as absent.
+   */
+  probeMissingTable?(table: string): Promise<'absent' | 'forbidden'>;
   /**
    * Every column as text or `null`, ordered by the table's key columns (numeric
    * columns numerically). `where` values are ANDed; an array means `IN`, and an

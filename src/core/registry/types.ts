@@ -105,6 +105,20 @@ export interface TableDef {
   alwaysEmit?: boolean;
   /** For a linked table, the column holding the item ID that ties the row to the quest. */
   itemColumn?: string;
+  /**
+   * For a linked table, the column naming the creature or object the row hangs off.
+   *
+   * The item-keyed `where` only ever finds the rows for *this* quest's items, so the other rows of
+   * the same creature — another quest's, or an ordinary drop — are invisible. This column is how
+   * they are fetched as read-only context, for key allocation and collision detection.
+   */
+  entryColumn?: string;
+  /**
+   * A key column whose value is a bare slot number with no meaning of its own (`creature_questitem.Idx`).
+   * When a row the quest is adding would land on a key another row already holds, the exporter may
+   * move it to a free value of this column instead of overwriting that row.
+   */
+  allocatableKeyColumn?: string;
   where(questId: number, itemIds: readonly number[]): Where;
 }
 

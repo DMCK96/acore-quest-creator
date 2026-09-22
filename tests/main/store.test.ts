@@ -14,7 +14,7 @@ afterEach(() => { store?.close(); store = undefined; dirs.splice(0).forEach((d) 
 const tmp = () => { const d = mkdtempSync(join(tmpdir(), 'acqc-')); dirs.push(d); return d; };
 
 const aggregate = { questId: 60001, isNew: false, values: { 'quest_template.LogTitle': "It's \\ ok\r\n", 'creature_queststarter': [{ id: 1 }] }, readOnly: [], sharedItems: { '2000': [60002] } };
-const snapshot = { questId: 60001, tables: { quest_template: [{ ID: '60001', LogTitle: null }] }, columnsRead: { quest_template: ['ID', 'LogTitle'] }, schemaHash: 'abc' };
+const snapshot = { questId: 60001, tables: { quest_template: [{ ID: '60001', LogTitle: null }] }, columnsRead: { quest_template: ['ID', 'LogTitle'] }, linkedContext: {}, schemaHash: 'abc' };
 
 describe('store', () => {
   it('encrypts profile passwords at rest and decrypts on request', () => {

@@ -47,6 +47,8 @@ function lookupSpec(kind: RefKind): readonly [string, string, string] | undefine
 /** In-memory WorldDb for unit tests. Behaves like the MySQL implementation: text values, key ordering. */
 export class FakeWorldDb implements WorldDb {
   private readonly tables = new Map<string, Table>();
+  /** Tables the database has but this "user" may not read, as MySQL would hide them. */
+  private readonly forbidden = new Set<string>();
 
   static fromFork(tables: string[]): FakeWorldDb {
     const db = new FakeWorldDb();
@@ -82,6 +84,19 @@ export class FakeWorldDb implements WorldDb {
 
   dropTable(table: string): void {
     this.tables.delete(table);
+  }
+
+  /**
+   * Makes a table invisible the way a missing `SELECT` grant does: `columns()` answers `[]`, just
+   * as `INFORMATION_SCHEMA` would, but the probe can still tell it is there.
+   */
+  forbidTable(table: string): void {
+    this.tables.delete(table);
+    this.forbidden.add(table);
+  }
+
+  async probeMissingTable(table: string): Promise<'absent' | 'forbidden'> {
+    return this.forbidden.has(table) ? 'forbidden' : 'absent';
   }
 
   update(table: string, where: Record<string, string>, partial: Record<string, string | null>): void {

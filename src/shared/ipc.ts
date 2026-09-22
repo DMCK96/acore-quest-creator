@@ -4,6 +4,7 @@ import type { QuestSummary } from '@core/db/world-db';
 import type { PatchWarning } from '@core/export/build-patch';
 import type { UnmodelledColumn } from '@core/import/unmodelled';
 import type { QuestAggregate } from '@core/model/aggregate';
+import type { FieldValue } from '@core/registry/types';
 import type { Difference } from '@core/roundtrip/compare';
 import type { FidelityReport } from '@core/roundtrip/verify';
 import type { SchemaDiff } from '@core/schema/diff';
@@ -26,6 +27,10 @@ export type ErrorCode =
   | 'ID_COLLISION'
   | 'RANGE_EXHAUSTED'
   | 'CONNECTION'
+  /** The connection is fine; the database user lacks a grant the tool needs. */
+  | 'PERMISSION'
+  /** The server refused a query for a reason that is neither the connection nor a grant. */
+  | 'QUERY'
   | 'NO_DEV_PROFILE'
   | 'CONFIRMATION_REQUIRED'
   | 'BAD_REQUEST'
@@ -104,6 +109,13 @@ export interface OpenResult {
   hasDraft: boolean;
   /** True when the world DB changed under the draft since it was taken. */
   stale: boolean;
+  /**
+   * The locale codes this quest has translated rows for. Non-empty means an enUS edit leaves those
+   * translations stale, which the editor has to say out loud (spec §4.3).
+   */
+  locales: string[];
+  /** Field id -> the translatable English text as imported, so the UI can spot a live edit. */
+  importedText: Record<string, FieldValue>;
 }
 
 export interface ExportResult {

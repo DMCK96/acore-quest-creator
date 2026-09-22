@@ -48,7 +48,7 @@ export function ChangesView({ store }: { store: AppStore }): React.JSX.Element |
               <li key={i}>
                 {d.column === null ? (
                   <span>
-                    {d.before === undefined ? 'New row' : 'Removed row'} ({d.key})
+                    {d.kind === 'removed' ? 'Removed row' : 'New row'} ({d.key})
                   </span>
                 ) : (
                   <span>

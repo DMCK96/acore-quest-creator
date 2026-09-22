@@ -5,6 +5,7 @@ import { CodecError, decodeList, decodeRowSetRow, decodeScalar } from '../regist
 import { slotColumn } from '../registry/columns';
 import type { FieldDef, FieldValue, ListValue, Registry, ScalarValue, TableDef } from '../registry/types';
 import { diffSchema } from '../schema/diff';
+import { fetchLinkedContext } from './linked-context';
 
 /** The one table a quest cannot exist without. */
 const QUEST_TABLE = 'quest_template';
@@ -200,7 +201,10 @@ export async function importQuest(
   for (const def of linked) await fetch(def, itemIds);
   for (const def of linked) decodeTable(def);
 
-  const snapshot: Snapshot = { questId, tables, columnsRead, schemaHash: schema.hash };
+  // The rows the quest does not own but shares a creature or object with: read last, so the
+  // exporter can see the keys its own `where` clause hid from it.
+  const linkedContext = await fetchLinkedContext({ db, registry, schema, tables, values });
+  const snapshot: Snapshot = { questId, tables, columnsRead, linkedContext, schemaHash: schema.hash };
   const sharedItems = await findSharedItems(db, schema, registry, questId, itemIds);
   const aggregate: QuestAggregate = { questId, isNew: false, values, readOnly, sharedItems };
   return { aggregate, snapshot };

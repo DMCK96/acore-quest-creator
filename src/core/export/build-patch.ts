@@ -30,7 +30,11 @@ export type PatchStatement =
   | { kind: 'set-flag'; table: string; column: string; bit: number; key: Record<string, string> };
 
 export interface PatchWarning {
-  code: 'SHARED_ROW_MODIFIED' | 'LINKED_ROW_NOT_QUEST_ITEM' | 'QUESTGIVER_FLAG_ADDED';
+  code:
+    | 'SHARED_ROW_MODIFIED'
+    | 'LINKED_ROW_NOT_QUEST_ITEM'
+    | 'LINKED_ROW_COLLISION'
+    | 'QUESTGIVER_FLAG_ADDED';
   table: string;
   message: string;
 }
@@ -66,6 +70,14 @@ export interface BuildPatchInput {
   registry: Registry;
   /** Creature entries that need `creature_template.npcflag` bit 2; the API layer works them out. */
   questGiverFixes?: readonly number[];
+  /**
+   * Linked rows that belong to a creature or object the quest touches, but not to the quest.
+   *
+   * Defaults to whatever the snapshot recorded at import; the API passes a freshly read one so
+   * entries the user added since then are covered too. Without it a new row can be allocated onto
+   * a key another quest already holds, and the patch deletes that row (spec §4.2).
+   */
+  linkedContext?: Record<string, RawRow[]>;
 }
 
 /** The creature flag the server needs before it honours a quest starter or ender. */
@@ -89,6 +101,7 @@ const EMPTY: TablePatch = { deletes: [], inserts: [] };
 export function buildPatch(input: BuildPatchInput): BuiltPatch {
   const { aggregate, snapshot, schema, registry, questGiverFixes = [] } = input;
   const readOnly = new Set(aggregate.readOnly.map((r) => r.fieldId));
+  const context = input.linkedContext ?? snapshot?.linkedContext ?? {};
 
   const warnings: PatchWarning[] = [];
   const byTable = new Map<string, TablePatch>();
@@ -100,7 +113,7 @@ export function buildPatch(input: BuildPatchInput): BuiltPatch {
     byTable.set(
       def.table,
       def.role === 'linked'
-        ? buildLinkedTable(def, rows, aggregate, schema, registry, readOnly, warnings)
+        ? buildLinkedTable(def, rows, context[def.table] ?? [], aggregate, schema, registry, readOnly, warnings)
         : def.cardinality === 'one'
           ? buildOneRowTable(def, rows[0], aggregate, schema, registry, readOnly)
           : buildManyRowTable(def, rows, aggregate, schema, registry, readOnly),
@@ -218,6 +231,7 @@ function modelRows(
   schema: SchemaInfo,
   registry: Registry,
   readOnly: ReadonlySet<string>,
+  collisions?: CollisionGuard,
 ): ModelRows | undefined {
   const field = registry.fields.find((f) => f.table === def.table && f.shape === 'rowset') as
     | RowSetFieldDef
@@ -245,7 +259,16 @@ function modelRows(
     const encoded: Record<string, RawValue> = { ...encodeRowSetRow(field, value) };
     if (field.questColumn !== undefined) encoded[field.questColumn] = String(aggregate.questId);
     Object.assign(encoded, field.fixedColumns ?? {});
-    const text = keyText(def, encoded);
+    let text = keyText(def, encoded);
+
+    // A key the quest did not import may already belong to somebody else. Where the key holds a
+    // meaningless slot number the row moves to a free one; otherwise it takes over the row that is
+    // there, keeping the columns this quest does not model. Either way it is never silent.
+    let adopted: RawRow | undefined;
+    if (collisions && !snapshotByKey.has(text)) {
+      adopted = collisions.resolve(encoded, seen);
+      text = keyText(def, encoded);
+    }
     // One DELETE cannot clear two rows, so a duplicate key is a model error, not a patch to render.
     if (seen.has(text)) throw new DuplicateRowError(def.table, keyOf(def, encoded));
     seen.add(text);
@@ -254,7 +277,8 @@ function modelRows(
     // The single rows are wrapped in arrays only to reach the codec's one strict equality.
     if (previous === undefined) {
       // Only the defaults: the key and the quest come from `encoded`, never from the quest ID.
-      rows.push({ row: { ...defaultColumnValues(def.table, schema), ...encoded }, status: 'new' });
+      // An adopted row supplies the base instead, so nothing it holds outside the model is lost.
+      rows.push({ row: { ...(adopted ?? defaultColumnValues(def.table, schema)), ...encoded }, status: 'new' });
     } else if (valueEquals([decodeRowSetRow(field, previous)], [value])) {
       rows.push({ row: previous, status: 'same' }); // verbatim, including columns no field models
     } else {
@@ -263,6 +287,82 @@ function modelRows(
   }
 
   return { rows, removed: snapshotRows.filter((row) => !seen.has(keyText(def, row))) };
+}
+
+/**
+ * Keeps a new linked row off a key that belongs to a row the quest never imported.
+ *
+ * The linked `where` clauses find rows by item, so everything else on the same creature or object
+ * is missing from the snapshot. `resolve` is handed the encoded row before its key is committed:
+ * it either moves the row to a free slot (and returns nothing) or hands back the row being taken
+ * over, so the caller can build on it instead of on the column defaults. Both paths warn.
+ */
+class CollisionGuard {
+  private readonly byKey = new Map<string, RawRow>();
+  /** Keys that are taken but are the quest's own, so a moved row must not land on them either. */
+  private readonly occupied = new Set<string>();
+
+  constructor(
+    private readonly def: TableDef,
+    contextRows: readonly RawRow[],
+    snapshotRows: readonly RawRow[],
+    private readonly warnings: PatchWarning[],
+  ) {
+    for (const row of contextRows) this.byKey.set(keyText(def, row), row);
+    for (const row of snapshotRows) this.occupied.add(keyText(def, row));
+  }
+
+  resolve(encoded: Record<string, RawValue>, seen: ReadonlySet<string>): RawRow | undefined {
+    const clash = this.byKey.get(keyText(this.def, encoded));
+    if (clash === undefined) return undefined;
+
+    const slot = this.def.allocatableKeyColumn;
+    if (slot !== undefined) {
+      const moved = this.freeSlot(encoded, seen);
+      this.warnings.push({
+        code: 'LINKED_ROW_COLLISION',
+        table: this.def.table,
+        message:
+          `${this.def.entryColumn ?? 'entry'} ${encoded[this.def.entryColumn ?? ''] ?? '?'} already uses ` +
+          `${slot} ${encoded[slot] ?? '?'} for ${this.def.itemColumn ?? 'item'} ${clash[this.def.itemColumn ?? ''] ?? '?'}, ` +
+          `which this quest does not own; this row was moved to ${slot} ${moved} so that one is left alone.`,
+      });
+      encoded[slot] = moved;
+      return undefined;
+    }
+
+    // The key names the thing itself (creature + item), so there is nowhere to move to: this is
+    // the same row. It is replaced, not added — and the patch says exactly what it is replacing.
+    const shown = Object.keys(clash)
+      .filter((c) => !this.def.keyColumns.includes(c))
+      .map((c) => `${c}=${clash[c] === null ? 'NULL' : clash[c]}`)
+      .join(', ');
+    this.warnings.push({
+      code: 'LINKED_ROW_COLLISION',
+      table: this.def.table,
+      message:
+        `${this.def.table} already has a row for ${this.def.keyColumns.map((c) => `${c}=${encoded[c] ?? 'NULL'}`).join(', ')} ` +
+        `that this quest did not import (${shown}). The patch replaces that row instead of adding a second one, ` +
+        'so check the values above before applying it.',
+    });
+    return clash;
+  }
+
+  /** The lowest non-negative slot no context row, snapshot row or earlier model row is using. */
+  private freeSlot(encoded: Record<string, RawValue>, seen: ReadonlySet<string>): string {
+    const slot = this.def.allocatableKeyColumn as string;
+    for (let n = 0; n < 10_000; n++) {
+      const candidate = { ...encoded, [slot]: String(n) };
+      const text = keyText(this.def, candidate);
+      if (!this.byKey.has(text) && !this.occupied.has(text) && !seen.has(text)) return String(n);
+    }
+    throw new Error(`${this.def.table}: no free ${slot} left for ${JSON.stringify(keyOf(this.def, encoded))}.`);
+  }
+
+  /** True for a key held by a row the quest never imported: the patch must not delete it. */
+  holds(row: RawRow): boolean {
+    return this.byKey.has(keyText(this.def, row));
+  }
 }
 
 /** A many-row table the quest owns: every model row is rewritten, every dropped row deleted. */
@@ -294,19 +394,24 @@ function buildManyRowTable(
 function buildLinkedTable(
   def: TableDef,
   snapshotRows: readonly RawRow[],
+  contextRows: readonly RawRow[],
   aggregate: QuestAggregate,
   schema: SchemaInfo,
   registry: Registry,
   readOnly: ReadonlySet<string>,
   warnings: PatchWarning[],
 ): TablePatch {
-  const model = modelRows(def, snapshotRows, aggregate, schema, registry, readOnly);
+  const guard = new CollisionGuard(def, contextRows, snapshotRows, warnings);
+  const model = modelRows(def, snapshotRows, aggregate, schema, registry, readOnly, guard);
   if (model === undefined) return EMPTY;
 
   const touched = model.rows.filter((r) => r.status !== 'same').map((r) => r.row);
   warnLinked(def, aggregate, registry, [...touched, ...model.removed], touched, warnings);
+  // A row the quest dropped from its model is deleted by key — unless that key is one the context
+  // holds, which would mean deleting somebody else's row on the way out.
+  const removed = model.removed.filter((row) => !guard.holds(row));
   return {
-    deletes: [...model.removed, ...touched].map((row) => keyOf(def, row)),
+    deletes: [...removed, ...touched].map((row) => keyOf(def, row)),
     inserts: touched,
   };
 }

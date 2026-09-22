@@ -37,6 +37,12 @@ export interface ColumnInfo {
 export interface SchemaInfo {
   /** Columns per table, ordered by `ordinal`. */
   tables: Record<string, ColumnInfo[]>;
+  /**
+   * Tables that exist in the database but this user may not read, sorted. They are absent from
+   * `tables` exactly like a table the fork does not have, which is the whole reason they are named
+   * separately: a missing grant must not be reported as a missing table, nor quietly imported around.
+   */
+  forbidden: string[];
   hash: string;
 }
 

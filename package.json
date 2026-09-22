@@ -10,7 +10,7 @@
     "build": "npm run rebuild:electron && electron-vite build",
     "test": "npm run rebuild:node && vitest run",
     "typecheck": "tsc -p tsconfig.node.json --noEmit && tsc -p tsconfig.web.json --noEmit",
-    "test:int": "vitest run --config vitest.int.config.ts --passWithNoTests",
+    "test:int": "vitest run --config vitest.int.config.ts",
     "test:e2e": "npm run build && playwright test",
     "dist": "npm run rebuild:electron && electron-vite build && electron-builder",
     "corpus": "tsx scripts/corpus.ts",

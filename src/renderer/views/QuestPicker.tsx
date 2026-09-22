@@ -6,6 +6,11 @@ const SEARCH_DEBOUNCE_MS = 250;
 const unmodelledNotice = (count: number): string =>
   `${count} column${count === 1 ? '' : 's'} in your database ${count === 1 ? 'is' : 'are'} not modelled by this tool and will be preserved unchanged.`;
 
+/** A forbidden table would otherwise read as "this fork does not have it" and import partially. */
+const forbiddenNotice = (tables: string[]): string =>
+  `${tables.join(', ')} exist${tables.length === 1 ? 's' : ''} in your database but this user may not read ` +
+  `${tables.length === 1 ? 'it' : 'them'}. Quests will import without those rows until the user is granted SELECT on ${tables.length === 1 ? 'it' : 'them'}.`;
+
 export function QuestPicker({
   store,
   onSelect,
@@ -48,11 +53,13 @@ export function QuestPicker({
   };
 
   const unregisteredCount = summary?.drift.unregistered.length ?? 0;
+  const forbidden = summary?.drift.forbiddenTables ?? [];
 
   return (
     <div>
       <h1>Find a quest</h1>
       {error && <div role="alert">{error}</div>}
+      {forbidden.length > 0 && <p>{forbiddenNotice(forbidden)}</p>}
       {unregisteredCount > 0 && <p>{unmodelledNotice(unregisteredCount)}</p>}
       <input role="searchbox" value={text} onChange={(e) => onChange(e.target.value)} placeholder="Search quests" />
       <ul>

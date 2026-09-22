@@ -3,10 +3,16 @@ import type { RawRow, RawValue } from '../db/types';
 export interface Difference {
   table: string;
   key: string;
-  /** `null` means a whole row: added (`before` undefined) or removed (`after` undefined). */
+  /** `null` means the whole row differs; `kind` then says which way. */
   column: string | null;
   before: RawValue | undefined;
   after: RawValue | undefined;
+  /**
+   * Only set on a whole-row difference (`column === null`): `'added'` when the row is only on the
+   * "after" side, `'removed'` when it is only on the "before" side. A per-column difference leaves
+   * it undefined, and so does a synthetic difference that stands for something other than a row.
+   */
+  kind?: 'added' | 'removed';
 }
 
 const keyText = (columns: readonly string[], row: RawRow): string =>
@@ -47,7 +53,7 @@ export function compareTables(
       leftRows.forEach((leftRow, i) => {
         const rightRow = rightRows[i];
         if (rightRow === undefined) {
-          differences.push({ table, key, column: null, before: undefined, after: undefined });
+          differences.push({ table, key, column: null, before: undefined, after: undefined, kind: 'removed' });
           return;
         }
         for (const column of Object.keys(leftRow)) {
@@ -63,7 +69,7 @@ export function compareTables(
     for (const [key, rightRows] of right) {
       const extra = rightRows.length - (left.get(key)?.length ?? 0);
       for (let i = 0; i < extra; i++) {
-        differences.push({ table, key, column: null, before: undefined, after: undefined });
+        differences.push({ table, key, column: null, before: undefined, after: undefined, kind: 'added' });
       }
     }
   }

@@ -13,6 +13,7 @@ import type {
   OpenResult,
   ProfileInput,
   ProfileRecord,
+  Result,
   Viewport,
 } from '@shared/ipc';
 
@@ -40,6 +41,7 @@ export interface AppState {
   dirty: boolean;
   nodes: CanvasNode[];
   viewport: Viewport;
+  projectName: string;
   preview: Difference[] | null;
   exportResult: ExportResult | null;
   exportError: ApiError | null;
@@ -55,7 +57,8 @@ export interface AppState {
   setValue(fieldId: string, value: FieldValue): void;
   setActiveView(v: ActiveView): void;
   flushSave(): Promise<void>;
-  backToPicker(): void;
+  dismissError(): void;
+  backToPicker(): Promise<void>;
   loadNodes(): Promise<void>;
   moveNode(questId: number, x: number, y: number): void;
   setViewport(v: Viewport): void;
@@ -71,8 +74,20 @@ export interface AppState {
 
 export type AppStore = UseBoundStore<StoreApi<AppState>>;
 
-const missingTablesMessage = (tables: string[]): string =>
-  `This database is missing required tables: ${tables.join(', ')}`;
+/**
+ * A table this user may not read is not a table the fork lacks: one is fixed with a `GRANT`, the
+ * other by pointing at a different database, so the two are never reported with the same sentence.
+ */
+const missingTablesMessage = (tables: string[], forbidden: string[] = []): string => {
+  const hidden = tables.filter((t) => forbidden.includes(t));
+  const absent = tables.filter((t) => !forbidden.includes(t));
+  const parts: string[] = [];
+  if (absent.length > 0) parts.push(`This database is missing required tables: ${absent.join(', ')}`);
+  if (hidden.length > 0) {
+    parts.push(`This database user has no permission to read: ${hidden.join(', ')} (ask for SELECT on them)`);
+  }
+  return parts.join('. ');
+};
 
 /**
  * The whole renderer's state, built once per `<App>` around one `Api`.
@@ -108,6 +123,7 @@ export function createAppStore(api: Api, opts: { saveDelayMs?: number } = {}): A
     dirty: false,
     nodes: [],
     viewport: { x: 0, y: 0, zoom: 1 },
+    projectName: '',
     preview: null,
     exportResult: null,
     exportError: null,
@@ -137,7 +153,11 @@ export function createAppStore(api: Api, opts: { saveDelayMs?: number } = {}): A
       }
       const summary = connected.value;
       if (summary.blocking) {
-        set({ error: missingTablesMessage(summary.drift.missingTables), screen: 'connect', summary });
+        set({
+          error: missingTablesMessage(summary.drift.missingTables, summary.drift.forbiddenTables ?? []),
+          screen: 'connect',
+          summary,
+        });
         return;
       }
       set({ summary, error: null, screen: 'pick' });
@@ -211,6 +231,10 @@ export function createAppStore(api: Api, opts: { saveDelayMs?: number } = {}): A
       set({ activeView: v });
     },
 
+    dismissError() {
+      set({ error: null });
+    },
+
     async flushSave() {
       if (saveTimer) {
         clearTimeout(saveTimer);
@@ -233,12 +257,12 @@ export function createAppStore(api: Api, opts: { saveDelayMs?: number } = {}): A
       });
     },
 
-    backToPicker() {
-      if (saveTimer) {
-        clearTimeout(saveTimer);
-        saveTimer = null;
-      }
-      set({ screen: 'pick', open: null, error: null, dirty: false });
+    // Leaving the editor is a close: the debounced edit still in flight is written first, exactly
+    // as `closeEditor` does, so clicking Back inside the debounce window cannot lose it.
+    async backToPicker() {
+      set({ error: null });
+      await get().flushSave();
+      set({ screen: 'pick', open: null, dirty: false });
     },
 
     async loadNodes() {
@@ -248,7 +272,7 @@ export function createAppStore(api: Api, opts: { saveDelayMs?: number } = {}): A
       if (nodesResult.ok) set({ nodes: nodesResult.value });
       if (projectResult.ok) {
         lastSavedViewport = projectResult.value.viewport;
-        set({ viewport: projectResult.value.viewport });
+        set({ viewport: projectResult.value.viewport, projectName: projectResult.value.name });
       }
     },
 
@@ -270,13 +294,15 @@ export function createAppStore(api: Api, opts: { saveDelayMs?: number } = {}): A
       const viewportToSave = pendingViewport;
       pendingViewport = null;
 
-      const tasks: Promise<unknown>[] = [];
+      const tasks: Promise<Result<unknown>>[] = [];
       if (moves.length > 0) tasks.push(api.moveNodes(moves));
       if (viewportToSave) {
         lastSavedViewport = viewportToSave;
         tasks.push(api.saveViewport(viewportToSave));
       }
-      await Promise.all(tasks);
+      // A dropped layout save used to vanish: the results were awaited and then thrown away.
+      const failed = (await Promise.all(tasks)).find((r) => !r.ok);
+      if (failed && !failed.ok) set({ error: failed.error.message });
     },
 
     async removeNode(questId) {
@@ -288,9 +314,12 @@ export function createAppStore(api: Api, opts: { saveDelayMs?: number } = {}): A
       set((s) => ({ nodes: s.nodes.filter((n) => n.questId !== questId) }));
     },
 
+    // A failed save is the one thing that must survive closing: clearing `error` first drops a
+    // stale message, and `flushSave` puts a fresh one back if the draft did not reach the store.
     async closeEditor() {
+      set({ error: null });
       await get().flushSave();
-      set({ screen: 'pick', open: null, error: null, dirty: false });
+      set({ screen: 'pick', open: null, dirty: false });
       await get().loadNodes();
     },
 

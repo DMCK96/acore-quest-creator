@@ -3,8 +3,13 @@ import { columnTypes } from '../registry/columns';
 import type { Registry, ScalarType } from '../registry/types';
 
 export interface SchemaDiff {
-  /** Registry tables the database does not have. */
+  /** Registry tables the database does not have (including those it will not show this user). */
   missingTables: string[];
+  /**
+   * The subset of `missingTables` the database does have and this user may not read. Named apart
+   * so the connect notice can say "ask for a grant" rather than "this fork lacks the table".
+   */
+  forbiddenTables: string[];
   /** Database columns no registry field owns in a table the tool writes (kept verbatim, never edited). Verbatim tables are excluded. */
   unregistered: { table: string; column: string }[];
   /** Registered columns the database lacks; the owning field is excluded from import/export. */
@@ -48,15 +53,18 @@ function familyOf(type: ScalarType): Family {
 export function diffSchema(schema: SchemaInfo, registry: Registry): SchemaDiff {
   const diff: SchemaDiff = {
     missingTables: [],
+    forbiddenTables: [],
     unregistered: [],
     missingColumns: [],
     typeMismatches: [],
     blockingTables: [],
   };
 
+  const forbidden = new Set(schema.forbidden ?? []);
   for (const def of registry.tables) {
     if (schema.tables[def.table] || diff.missingTables.includes(def.table)) continue;
     diff.missingTables.push(def.table);
+    if (forbidden.has(def.table)) diff.forbiddenTables.push(def.table);
     if (def.role === 'owned' && def.alwaysEmit) diff.blockingTables.push(def.table);
   }
 

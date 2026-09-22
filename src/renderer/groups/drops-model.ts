@@ -55,6 +55,11 @@ export function listDropSources(values: Values, itemId: number): DropRow[] {
  * Returns a copy of `values` with only the touched loot and quest-item arrays replaced. The
  * quest-item row's `Idx` is the highest existing `Idx` for that entry, across whatever items it
  * already shows, plus one — 0 if the entry has none yet.
+ *
+ * That slot is only *provisional*: the aggregate holds the rows for this quest's items and nothing
+ * else, so a slot another quest already uses looks free from here. The exporter reads the
+ * creature's real rows (`fetchLinkedContext`) and moves the row to a genuinely free slot, with a
+ * `LINKED_ROW_COLLISION` warning, rather than letting the patch delete the row that is there.
  */
 export function addDropSource(values: Values, itemId: number, row: DropRow): Values {
   const { loot, questItem, entryColumn } = TABLES[row.source.kind];

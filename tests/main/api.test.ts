@@ -58,6 +58,39 @@ describe('connection', () => {
     expect(s.blocking).toBe(true);
     expect(s.drift.missingTables).toContain('quest_offer_reward');
   });
+  it('tells a forbidden table apart from a missing one, and never calls a grant problem a connection problem', async () => {
+    db.forbidTable('quest_poi');
+    db.dropTable('quest_mail_sender');
+    const { api } = makeApi();
+    const rec = ok(await api.saveProfile(profile));
+    const s = ok(await api.connect(rec.id));
+    expect(s.drift.forbiddenTables).toEqual(['quest_poi']);
+    expect(s.drift.missingTables).toEqual(expect.arrayContaining(['quest_poi', 'quest_mail_sender']));
+    expect(s.blocking).toBe(false);
+  });
+  it('refuses with PERMISSION, not BLOCKING_DRIFT, when a required table is merely unreadable', async () => {
+    db.forbidTable('quest_offer_reward');
+    const { api } = makeApi();
+    const rec = ok(await api.saveProfile(profile));
+    expect(ok(await api.connect(rec.id)).blocking).toBe(true);
+    const r = await api.openQuest(60001);
+    expect(r).toMatchObject({ ok: false, error: { code: 'PERMISSION' } });
+    expect((r as any).error.message).toMatch(/may not read.*quest_offer_reward|quest_offer_reward.*may not read/);
+  });
+  it('maps a missing grant on a query to PERMISSION and any other query failure to QUERY', async () => {
+    const boom = (name: string) => async () => ({
+      columns: async () => [],
+      selectRows: async () => { throw Object.assign(new Error('nope'), { name }); },
+      searchQuests: async () => { throw Object.assign(new Error('nope'), { name }); },
+      lookupNames: async () => new Map(), existingIds: async () => new Set(), questIdsInRange: async () => [], close: async () => {},
+    }) as any;
+    for (const [name, code] of [['WorldDbPermissionError', 'PERMISSION'], ['WorldDbQueryError', 'QUERY']] as const) {
+      const { api } = makeApi({ openWorldDb: boom(name) });
+      const rec = ok(await api.saveProfile(profile));
+      ok(await api.connect(rec.id));
+      expect(await api.searchQuests('x'), name).toMatchObject({ ok: false, error: { code } });
+    }
+  });
   it('maps connection failures to CONNECTION', async () => {
     const { api } = makeApi({ openWorldDb: async () => { throw Object.assign(new Error('boom'), { name: 'WorldDbConnectionError' }); } });
     const rec = ok(await api.saveProfile(profile));
@@ -173,6 +206,70 @@ describe('open / draft', () => {
   });
 });
 
+describe('linked rows another quest owns', () => {
+  const edited = (r: { aggregate: QuestAggregate }, v: Record<string, any>): QuestAggregate => ({ ...r.aggregate, values: { ...r.aggregate.values, ...v } });
+
+  it('exports a new drop source without deleting the questitem row a different quest holds', async () => {
+    db.update('quest_template', { ID: '60001' }, { RequiredItemId1: '2000', RequiredItemCount1: '1' });
+    db.insert('item_template', { entry: '2000', name: 'Wolf Pelt' });
+    // Creature 500 already shows a different quest's item in slot 0.
+    db.insert('creature_questitem', { CreatureEntry: '500', Idx: '0', ItemId: '9999' });
+    const { api } = await connected();
+    const r = ok(await api.openQuest(60001));
+    // Exactly what the drops UI produces: slot 0, because it cannot see the row that is there.
+    ok(await api.saveDraft(edited(r, {
+      creature_loot_template: [{ Entry: 500, Item: 2000, Reference: 0, Chance: 100, QuestRequired: 1, LootMode: 1, GroupId: 0, MinCount: 1, MaxCount: 1, Comment: null }],
+      creature_questitem: [{ CreatureEntry: 500, Idx: 0, ItemId: 2000, VerifiedBuild: 0 }],
+    })));
+
+    const e = ok(await api.exportQuest(60001));
+    expect(e.sql).not.toContain('DELETE FROM `creature_questitem` WHERE `CreatureEntry` = 500 AND `Idx` = 0;');
+    expect(e.sql).toContain('DELETE FROM `creature_questitem` WHERE `CreatureEntry` = 500 AND `Idx` = 1;');
+    expect(e.warnings.map((w) => w.code)).toContain('LINKED_ROW_COLLISION');
+
+    // And the dev-DB apply runs the same statements, so the other quest survives there too.
+    ok(await api.saveProfile({ ...profile, name: 'dev', role: 'dev' }));
+    ok(await api.applyToDev(60001, true));
+    expect(executed[0].some((s) => s.includes('`creature_questitem`') && s.includes('`Idx` = 0'))).toBe(false);
+  });
+
+  it('warns rather than silently turning an ordinary drop into a quest drop', async () => {
+    db.update('quest_template', { ID: '60001' }, { RequiredItemId1: '2000', RequiredItemCount1: '1' });
+    db.insert('creature_loot_template', { Entry: '600', Item: '2000', Chance: '4', QuestRequired: '0', Comment: 'normal drop' });
+    const { api } = await connected();
+    const r = ok(await api.openQuest(60001));
+    ok(await api.saveDraft(edited(r, {
+      creature_loot_template: [{ Entry: 600, Item: 2000, Reference: 0, Chance: 100, QuestRequired: 1, LootMode: 1, GroupId: 0, MinCount: 1, MaxCount: 1, Comment: null }],
+    })));
+    const e = ok(await api.exportQuest(60001));
+    const w = e.warnings.find((x) => x.code === 'LINKED_ROW_COLLISION');
+    expect(w, 'the user must be told the row was already there').toBeDefined();
+    expect(w!.message).toContain('normal drop');
+  });
+});
+
+describe('locale rows', () => {
+  it('reports the quest\'s locales and the imported English text so the UI can warn about translations', async () => {
+    db.insert('quest_template_locale', { ID: '60001', locale: 'frFR', Title: 'Loups' });
+    db.insert('quest_template_locale', { ID: '60001', locale: 'deDE', Title: 'Wölfe' });
+    db.insert('quest_offer_reward', { ID: '60001', RewardText: 'Well done.' });
+    const { api } = await connected();
+    const r = ok(await api.openQuest(60001));
+    expect(r.locales).toEqual(['deDE', 'frFR']);
+    expect(r.importedText['quest_template.LogTitle']).toBe('Wolves');
+    expect(r.importedText['quest_offer_reward.RewardText']).toBe('Well done.');
+    // Numeric and non-translatable fields stay out of it.
+    expect(r.importedText['quest_template.QuestLevel']).toBeUndefined();
+    // Reopening onto the existing draft answers from the fresh rows, not the draft.
+    expect(ok(await api.openQuest(60001)).locales).toEqual(['deDE', 'frFR']);
+  });
+  it('reports no locales for a quest that has none, and none for a brand new quest', async () => {
+    const { api } = await connected();
+    expect(ok(await api.openQuest(60001)).locales).toEqual([]);
+    expect(ok(await api.newQuest()).locales).toEqual([]);
+  });
+});
+
 describe('search and names', () => {
   it('searches and resolves names', async () => {
     const { api } = await connected();
@@ -266,6 +363,36 @@ describe('apply to dev DB', () => {
     expect(executed).toHaveLength(1);
     expect(executed[0].some((s) => s.startsWith('INSERT INTO `quest_template`'))).toBe(true);
     expect(executed[0].length).toBe(r.statements);
+  });
+});
+
+describe('fidelity report freshness', () => {
+  it('re-stores the freshly computed report on the draft, so the export gate and the UI agree', async () => {
+    const { api, store } = await connected();
+    ok(await api.openQuest(60001));
+    const project = store.projects.ensureDefault('C:\\out');
+    expect(store.drafts.get(project.id, 60001)!.fidelity).toEqual({ ok: true });
+
+    // The world moves under the draft: the next open recomputes the gate from fresh rows.
+    gate.throwWith = new Error('patch failed to apply');
+    const again = ok(await api.openQuest(60001));
+    expect(again.hasDraft).toBe(true);
+    expect(again.fidelity.ok).toBe(false);
+    expect(store.drafts.get(project.id, 60001)!.fidelity).toEqual(again.fidelity);
+    // The gate reads the draft, so it must refuse now that the UI says unsafe.
+    expect(await api.exportQuest(60001)).toMatchObject({ ok: false, error: { code: 'FIDELITY' } });
+  });
+
+  it('keeps the draft aggregate, snapshot and position untouched while refreshing the report', async () => {
+    const { api, store } = await connected();
+    const r = ok(await api.openQuest(60001, { x: 77, y: 88 }));
+    ok(await api.saveDraft({ ...r.aggregate, values: { ...r.aggregate.values, 'quest_template.LogTitle': 'Edited' } }));
+    gate.throwWith = new Error('patch failed to apply');
+    ok(await api.openQuest(60001));
+    const d = store.drafts.get(store.projects.ensureDefault('C:\\out').id, 60001)!;
+    expect(d.aggregate.values['quest_template.LogTitle']).toBe('Edited');
+    expect([d.x, d.y]).toEqual([77, 88]);
+    expect(d.snapshot).not.toBeNull();
   });
 });
 

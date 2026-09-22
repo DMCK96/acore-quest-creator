@@ -8,9 +8,11 @@ import { findQuestGiverFixes, type QuestGiverFix } from '../core/export/quest-gi
 import { patchFileName, renderPatch, renderStatement } from '../core/export/render-patch';
 import { allocateQuestId, assertIdFree, collectTakenIds } from '../core/ids/allocator';
 import { importQuest } from '../core/import/importer';
+import { fetchLinkedContext } from '../core/import/linked-context';
 import { createNewAggregate } from '../core/import/new-quest';
 import { listUnmodelled } from '../core/import/unmodelled';
 import type { QuestAggregate, Snapshot } from '../core/model/aggregate';
+import { localesInSnapshot, localizedTextValues } from '../core/model/locales';
 import { registry } from '../core/registry';
 import { applyPatchInMemory, keyColumnsByTable } from '../core/roundtrip/apply';
 import { compareTables, type Difference } from '../core/roundtrip/compare';
@@ -53,6 +55,8 @@ interface Session {
   schema: SchemaInfo;
   blocking: boolean;
   blockingTables: string[];
+  /** Blocking tables the database has but will not show this user: a grant, not a missing table. */
+  forbiddenTables: string[];
 }
 
 const REGISTRY_TABLES = registry.tables.map((t) => t.table);
@@ -117,6 +121,10 @@ function toApiError(error: unknown): ApiError {
     IdCollisionError: 'ID_COLLISION',
     InvalidRangeError: 'BAD_REQUEST',
     WorldDbConnectionError: 'CONNECTION',
+    // A missing grant is not a connection failure, and the message must not send the user to
+    // check their host and port for a problem that lives in their GRANT statements.
+    WorldDbPermissionError: 'PERMISSION',
+    WorldDbQueryError: 'QUERY',
   };
   const code = error instanceof Error ? byName[error.name] : undefined;
   return { code: code ?? 'UNKNOWN', message };
@@ -166,13 +174,19 @@ export function createApi(deps: ApiDeps): Api {
   /** A connection whose schema can actually carry a quest: drift that blocks is refused here. */
   const usable = (): Session => {
     const live = connected();
-    if (live.blocking) {
+    if (!live.blocking) return live;
+    const forbidden = live.blockingTables.filter((t) => live.forbiddenTables.includes(t));
+    // "Missing" and "you may not read it" need different fixes, so they get different sentences.
+    if (forbidden.length > 0) {
       throw fail(
-        'BLOCKING_DRIFT',
-        `The connected database is missing ${live.blockingTables.join(', ')}, which every quest needs. Reconnect to a database that has it.`,
+        'PERMISSION',
+        `The connected database has ${forbidden.join(', ')} but this user may not read ${forbidden.length > 1 ? 'them' : 'it'}. Grant it SELECT and reconnect.`,
       );
     }
-    return live;
+    throw fail(
+      'BLOCKING_DRIFT',
+      `The connected database is missing ${live.blockingTables.join(', ')}, which every quest needs. Reconnect to a database that has it.`,
+    );
   };
 
   const draftOf = (questId: number): DraftRecord => {
@@ -206,12 +220,23 @@ export function createApi(deps: ApiDeps): Api {
     draft: DraftRecord,
   ): Promise<{ statements: PatchStatement[]; warnings: PatchWarning[]; fixes: QuestGiverFix[] }> {
     const fixes = await findQuestGiverFixes(live.db, draft.aggregate.values);
+    // Read the neighbouring linked rows now rather than trusting the ones the import saw: the
+    // draft may name a creature the quest had nothing to do with when it was opened, and those
+    // are exactly the rows a new drop source would otherwise be allocated on top of.
+    const linkedContext = await fetchLinkedContext({
+      db: live.db,
+      registry,
+      schema: live.schema,
+      tables: draft.snapshot?.tables ?? {},
+      values: draft.aggregate.values,
+    });
     const { statements, warnings } = buildPatch({
       aggregate: draft.aggregate,
       snapshot: draft.snapshot,
       schema: live.schema,
       registry,
       questGiverFixes: fixes.map((f) => f.entry),
+      linkedContext,
     });
     return { statements, warnings, fixes };
   }
@@ -237,7 +262,14 @@ export function createApi(deps: ApiDeps): Api {
         const blocking = hasBlockingDrift(drift);
         // Swapping connections must not leave the old one open.
         if (session && session.db !== db) await session.db.close();
-        session = { profileId, db, schema, blocking, blockingTables: drift.blockingTables };
+        session = {
+          profileId,
+          db,
+          schema,
+          blocking,
+          blockingTables: drift.blockingTables,
+          forbiddenTables: drift.forbiddenTables,
+        };
         return { profileId, schemaHash: schema.hash, drift, blocking };
       }),
 
@@ -252,12 +284,27 @@ export function createApi(deps: ApiDeps): Api {
         const unmodelled = listUnmodelled(live.schema, registry, fresh.snapshot);
         const refs = refCheckerFor(live.db);
         const proj = project();
+        // Both branches report the translations against the rows just read, never against a draft.
+        const locales = localesInSnapshot(fresh.snapshot);
+        const importedText = localizedTextValues(fresh.aggregate, registry);
 
         const draft = deps.store.drafts.get(proj.id, questId);
         if (draft) {
           // The draft is the user's work: it is returned as it stands, wherever it sits, and only
           // the comparison against the freshly read rows says whether the world moved underneath.
           const stale = compareTables(draft.snapshot?.tables ?? {}, fresh.snapshot.tables, KEY_COLUMNS).length > 0;
+          // The export gate reads `draft.fidelity`, so the report the UI is about to show has to
+          // become the stored one: otherwise the button and the gate answer different questions.
+          if (JSON.stringify(draft.fidelity) !== JSON.stringify(fidelity)) {
+            deps.store.drafts.save({
+              projectId: draft.projectId,
+              questId: draft.questId,
+              isNew: draft.isNew,
+              aggregate: draft.aggregate,
+              snapshot: draft.snapshot,
+              fidelity,
+            });
+          }
           return {
             questId,
             aggregate: draft.aggregate,
@@ -266,6 +313,8 @@ export function createApi(deps: ApiDeps): Api {
             issues: await validateQuest(draft.aggregate, refs),
             hasDraft: true,
             stale,
+            locales,
+            importedText,
           };
         }
 
@@ -288,6 +337,8 @@ export function createApi(deps: ApiDeps): Api {
           issues: await validateQuest(fresh.aggregate, refs),
           hasDraft: false,
           stale: false,
+          locales,
+          importedText,
         };
       }),
 
@@ -321,6 +372,9 @@ export function createApi(deps: ApiDeps): Api {
           issues: await validateQuest(aggregate, refCheckerFor(live.db)),
           hasDraft: false,
           stale: false,
+          // A quest that does not exist yet has no translations to leave behind.
+          locales: [],
+          importedText: {},
         };
       }),
 

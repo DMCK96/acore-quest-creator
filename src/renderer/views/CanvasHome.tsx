@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   Background,
+  Controls,
+  MiniMap,
   ReactFlow,
   ReactFlowProvider,
   useReactFlow,
@@ -14,6 +16,9 @@ import type { CanvasNode } from '@shared/ipc';
 import { QuestNodeCard } from './QuestNodeCard';
 import { EditorDrawer } from './EditorDrawer';
 import { AddExistingDialog } from './AddExistingDialog';
+import { TopBar } from '../components/TopBar';
+import { ErrorBanner } from '../components/ErrorBanner';
+import './CanvasHome.css';
 
 /** Drags and pans are queued locally and flushed together after the user pauses. */
 const FLUSH_DEBOUNCE_MS = 300;
@@ -92,46 +97,68 @@ function CanvasInner({ store }: { store: AppStore }): React.JSX.Element {
   };
 
   return (
-    <div style={{ display: 'flex', width: '100%', height: '100%' }}>
-      <div style={{ flex: 1, position: 'relative', minWidth: 0 }} onDoubleClick={handlePaneDoubleClick}>
-        <div>
-          <button type="button" onClick={() => void newQuest()}>
-            New quest
-          </button>
-          <button type="button" onClick={() => setShowAddExisting(true)}>
-            Add existing quest
-          </button>
-          <button type="button" onClick={() => void fitView()}>
-            Fit view
-          </button>
-        </div>
-        {nodes.length === 0 && (
-          <p>Double-click anywhere to start your first quest, or add one that already exists in your database.</p>
-        )}
-        <div style={{ position: 'absolute', inset: 0, top: '2.5em' }}>
-          {ready && (
-            <ReactFlow
-              nodes={flowNodes}
-              edges={[]}
-              nodeTypes={nodeTypes}
-              zoomOnDoubleClick={false}
-              defaultViewport={viewport}
-              nodesConnectable={false}
-              onNodeDragStop={(_, node) => {
-                moveNode(Number(node.id), node.position.x, node.position.y);
-                scheduleFlush();
-              }}
-              onMoveEnd={(_, vp: RFViewport) => {
-                setViewport(vp);
-                scheduleFlush();
-              }}
-            >
-              <Background />
-            </ReactFlow>
+    <div className="canvas-shell">
+      <TopBar
+        store={store}
+        onNewQuest={() => void newQuest()}
+        onAddExisting={() => setShowAddExisting(true)}
+        onFitView={() => void fitView()}
+      />
+      <ErrorBanner store={store} />
+      <div className="canvas-body">
+        <div className="canvas-pane" onDoubleClick={handlePaneDoubleClick}>
+          {nodes.length === 0 && (
+            <div className="canvas-empty">
+              <div className="canvas-empty__circle">
+                <div className="canvas-empty__icon">📜</div>
+                <h2 className="canvas-empty__title">Start Your Journey</h2>
+                <p className="canvas-empty__subtitle">
+                  Begin by adding your first quest or an existing quest chain to the canvas.
+                </p>
+                <div className="canvas-empty__actions">
+                  <button type="button" className="btn btn--primary" onClick={() => void newQuest()}>
+                    + Create New Quest
+                  </button>
+                  <button type="button" className="btn" onClick={() => setShowAddExisting(true)}>
+                    Add Existing Quest Chain
+                  </button>
+                </div>
+              </div>
+            </div>
           )}
+          <div style={{ position: 'absolute', inset: 0 }}>
+            {ready && (
+              <ReactFlow
+                nodes={flowNodes}
+                edges={[]}
+                nodeTypes={nodeTypes}
+                zoomOnDoubleClick={false}
+                defaultViewport={viewport}
+                nodesConnectable={false}
+                onNodeDragStop={(_, node) => {
+                  moveNode(Number(node.id), node.position.x, node.position.y);
+                  scheduleFlush();
+                }}
+                onMoveEnd={(_, vp: RFViewport) => {
+                  setViewport(vp);
+                  scheduleFlush();
+                }}
+              >
+                <Background color="var(--border-soft)" gap={18} />
+                <MiniMap
+                  pannable
+                  zoomable
+                  nodeColor="var(--accent)"
+                  maskColor="rgba(0, 0, 0, 0.6)"
+                  style={{ background: 'transparent' }}
+                />
+                <Controls showInteractive={false} />
+              </ReactFlow>
+            )}
+          </div>
         </div>
+        {screen === 'edit' && <EditorDrawer store={store} />}
       </div>
-      {screen === 'edit' && <EditorDrawer store={store} />}
       {showAddExisting && <AddExistingDialog store={store} onClose={() => setShowAddExisting(false)} />}
     </div>
   );

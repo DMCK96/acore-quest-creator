@@ -25,6 +25,8 @@ export function sampleOpen(overrides: Partial<OpenResult> = {}): OpenResult {
     issues: [],
     hasDraft: false,
     stale: false,
+    locales: [],
+    importedText: {},
   };
   return { ...base, ...overrides };
 }
