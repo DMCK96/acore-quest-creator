@@ -96,6 +96,13 @@ describe('QuestWorkspace', () => {
       expect(screen.getByRole('tab', { name })).toBeInTheDocument();
     }
   });
+  it('renders the real group panel content when a group tab is selected, not a placeholder', async () => {
+    const { store } = await opened();
+    render(<QuestWorkspace store={store} />);
+    await userEvent.click(screen.getByRole('tab', { name: 'Story' }));
+    expect(screen.getByLabelText('Quest title')).toBeInTheDocument();
+    expect(screen.queryByText(/editor is not implemented yet/i)).toBeNull();
+  });
   it('hides the fidelity banner when ok and shows an unsafe-to-export banner with the differences when not', async () => {
     const good = await opened();
     const { unmount } = render(<QuestWorkspace store={good.store} />);

@@ -4,6 +4,9 @@ import { IssuesList } from '../components/IssuesList';
 import { ChangesView } from './ChangesView';
 import { ExportBar } from './ExportBar';
 import { UnmodelledPanel } from './UnmodelledPanel';
+import { GroupPanel } from '../groups/GroupPanel';
+import { ObjectivesPanel } from '../groups/ObjectivesPanel';
+import './QuestWorkspace.css';
 
 const GROUP_TABS: { view: EditorGroup; label: string }[] = [
   { view: 'identity', label: 'Identity' },
@@ -27,6 +30,7 @@ export function QuestWorkspace({ store }: { store: AppStore }): React.JSX.Elemen
   const issues = store((s) => s.issues);
   const setActiveView = store((s) => s.setActiveView);
   const backToPicker = store((s) => s.backToPicker);
+  const setValue = store((s) => s.setValue);
 
   if (!open) return null;
 
@@ -35,15 +39,15 @@ export function QuestWorkspace({ store }: { store: AppStore }): React.JSX.Elemen
 
   return (
     <div>
-      <button type="button" onClick={backToPicker}>
-        Back to quests
+      <button type="button" className="btn workspace__back" onClick={backToPicker}>
+        ← Back to quests
       </button>
-      <h1>
+      <h1 className="workspace__title">
         {title} &mdash; {open.questId}
       </h1>
       <FidelityBanner fidelity={open.fidelity} />
       <ExportBar store={store} />
-      <div role="tablist">
+      <div role="tablist" className="workspace__tabs">
         {TABS.map((tab) => (
           <button
             key={tab.view}
@@ -56,11 +60,14 @@ export function QuestWorkspace({ store }: { store: AppStore }): React.JSX.Elemen
           </button>
         ))}
       </div>
-      <div role="tabpanel">
+      <div role="tabpanel" className="workspace__panel">
         {activeView === 'unmodelled' && <UnmodelledPanel unmodelled={open.unmodelled} />}
         {activeView === 'changes' && <ChangesView store={store} />}
-        {GROUP_TABS.some((t) => t.view === activeView) && (
-          <p>{GROUP_TABS.find((t) => t.view === activeView)?.label} editor is not implemented yet.</p>
+        {activeView === 'objectives' && (
+          <ObjectivesPanel aggregate={open.aggregate} onChange={setValue} />
+        )}
+        {GROUP_TABS.some((t) => t.view === activeView) && activeView !== 'objectives' && (
+          <GroupPanel group={activeView as EditorGroup} aggregate={open.aggregate} onChange={setValue} />
         )}
       </div>
       <IssuesList issues={issues} />
