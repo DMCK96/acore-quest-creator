@@ -2,10 +2,13 @@ import { create, type StoreApi, type UseBoundStore } from 'zustand';
 import type { FieldValue } from '@core/registry/types';
 import type { Issue } from '@core/validate/validate';
 import type { QuestSummary } from '@core/db/world-db';
+import type { Difference } from '@core/roundtrip/compare';
 import type {
   Api,
+  ApiError,
   CanvasNode,
   ConnectSummary,
+  ExportResult,
   NodePosition,
   OpenResult,
   ProfileInput,
@@ -37,6 +40,12 @@ export interface AppState {
   dirty: boolean;
   nodes: CanvasNode[];
   viewport: Viewport;
+  preview: Difference[] | null;
+  exportResult: ExportResult | null;
+  exportError: ApiError | null;
+  hasDevProfile: boolean;
+  pendingApply: { sql: string } | null;
+  appliedCount: number | null;
 
   loadProfiles(): Promise<void>;
   connect(input: ProfileInput & { id?: number }): Promise<void>;
@@ -53,6 +62,11 @@ export interface AppState {
   flushMoves(): Promise<void>;
   removeNode(questId: number): Promise<void>;
   closeEditor(): Promise<void>;
+  loadPreview(): Promise<void>;
+  exportQuest(): Promise<void>;
+  prepareApply(): Promise<void>;
+  confirmApply(): Promise<void>;
+  cancelApply(): void;
 }
 
 export type AppStore = UseBoundStore<StoreApi<AppState>>;
@@ -94,10 +108,18 @@ export function createAppStore(api: Api, opts: { saveDelayMs?: number } = {}): A
     dirty: false,
     nodes: [],
     viewport: { x: 0, y: 0, zoom: 1 },
+    preview: null,
+    exportResult: null,
+    exportError: null,
+    hasDevProfile: false,
+    pendingApply: null,
+    appliedCount: null,
 
     async loadProfiles() {
       const result = await api.listProfiles();
-      if (result.ok) set({ profiles: result.value });
+      if (result.ok) {
+        set({ profiles: result.value, hasDevProfile: result.value.some((p) => p.role === 'dev') });
+      }
     },
 
     async connect(input) {
@@ -270,6 +292,50 @@ export function createAppStore(api: Api, opts: { saveDelayMs?: number } = {}): A
       await get().flushSave();
       set({ screen: 'pick', open: null, error: null, dirty: false });
       await get().loadNodes();
+    },
+
+    async loadPreview() {
+      const { open } = get();
+      if (!open) return;
+      const result = await api.previewChanges(open.questId);
+      if (result.ok) set({ preview: result.value });
+      else set({ error: result.error.message });
+    },
+
+    async exportQuest() {
+      const { open } = get();
+      if (!open) return;
+      await get().flushSave();
+      set({ exportError: null });
+      const result = await api.exportQuest(open.questId);
+      if (result.ok) set({ exportResult: result.value, exportError: null });
+      else set({ exportResult: null, exportError: result.error });
+    },
+
+    async prepareApply() {
+      const { open } = get();
+      if (!open) return;
+      await get().flushSave();
+      set({ exportError: null });
+      const result = await api.exportQuest(open.questId);
+      if (result.ok) {
+        set({ exportResult: result.value, exportError: null, pendingApply: { sql: result.value.sql } });
+      } else {
+        set({ exportResult: null, exportError: result.error });
+      }
+    },
+
+    async confirmApply() {
+      const { open } = get();
+      if (!open) return;
+      set({ pendingApply: null });
+      const result = await api.applyToDev(open.questId, true);
+      if (result.ok) set({ appliedCount: result.value.statements, exportError: null });
+      else set({ appliedCount: null, exportError: result.error });
+    },
+
+    cancelApply() {
+      set({ pendingApply: null });
     },
   }));
 

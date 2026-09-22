@@ -1,6 +1,9 @@
 import type { ActiveView, AppStore, EditorGroup } from '../state/app-store';
 import { FidelityBanner } from '../components/FidelityBanner';
 import { IssuesList } from '../components/IssuesList';
+import { ChangesView } from './ChangesView';
+import { ExportBar } from './ExportBar';
+import { UnmodelledPanel } from './UnmodelledPanel';
 
 const GROUP_TABS: { view: EditorGroup; label: string }[] = [
   { view: 'identity', label: 'Identity' },
@@ -39,6 +42,7 @@ export function QuestWorkspace({ store }: { store: AppStore }): React.JSX.Elemen
         {title} &mdash; {open.questId}
       </h1>
       <FidelityBanner fidelity={open.fidelity} />
+      <ExportBar store={store} />
       <div role="tablist">
         {TABS.map((tab) => (
           <button
@@ -53,16 +57,8 @@ export function QuestWorkspace({ store }: { store: AppStore }): React.JSX.Elemen
         ))}
       </div>
       <div role="tabpanel">
-        {activeView === 'unmodelled' && (
-          <ul>
-            {open.unmodelled.map((u, i) => (
-              <li key={i}>
-                {u.table}.{u.column}
-              </li>
-            ))}
-          </ul>
-        )}
-        {activeView === 'changes' && <p>Changes preview is not implemented yet.</p>}
+        {activeView === 'unmodelled' && <UnmodelledPanel unmodelled={open.unmodelled} />}
+        {activeView === 'changes' && <ChangesView store={store} />}
         {GROUP_TABS.some((t) => t.view === activeView) && (
           <p>{GROUP_TABS.find((t) => t.view === activeView)?.label} editor is not implemented yet.</p>
         )}
