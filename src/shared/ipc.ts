@@ -1,3 +1,4 @@
+import { z } from 'zod';
 import type { RefKind } from '@core/db/types';
 import type { QuestSummary } from '@core/db/world-db';
 import type { PatchWarning } from '@core/export/build-patch';
@@ -9,10 +10,11 @@ import type { SchemaDiff } from '@core/schema/diff';
 import type { Issue } from '@core/validate/validate';
 
 /**
- * The contract between the main process and the renderer: types only.
+ * The contract between the main process and the renderer: the `Api` types plus the zod schemas
+ * that validate every call as it crosses the wire.
  *
- * Nothing here executes, so the renderer can import it without pulling in MySQL, SQLite or Node.
- * The zod schemas that validate these shapes on the wire arrive with the IPC bridge itself.
+ * Only zod is pulled in, so the renderer, the preload and the main process can all import this
+ * without dragging in MySQL, SQLite or Node.
  */
 
 export type ErrorCode =
@@ -140,6 +142,8 @@ export interface Api {
   removeNode(questId: number): Promise<Result<true>>;
   saveViewport(v: Viewport): Promise<Result<true>>;
   lookupNames(kind: RefKind, ids: number[]): Promise<Result<Record<number, string>>>;
+  /** The XP and money a quest of this level rewards, one entry per reward index. */
+  rewardTables(level: number): Promise<Result<{ xp: (number | null)[]; money: (number | null)[] }>>;
   saveDraft(aggregate: QuestAggregate): Promise<Result<{ updatedAt: string }>>;
   previewChanges(questId: number): Promise<Result<Difference[]>>;
   validate(questId: number): Promise<Result<Issue[]>>;
@@ -147,4 +151,139 @@ export interface Api {
   applyToDev(questId: number, confirm: boolean): Promise<Result<{ statements: number }>>;
   getProject(): Promise<Result<Project>>;
   updateProject(p: Project): Promise<Result<Project>>;
+}
+
+/**
+ * Request validation.
+ *
+ * Every argument list that arrives over IPC is untrusted, so each method gets a tuple schema and
+ * nothing reaches `createApi` until it matches. The schemas guard shape, not policy: a quest ID of
+ * `0` or `-5` is a well-formed request that the API answers with its own `INVALID_QUEST_ID`, and
+ * only genuinely malformed input becomes `BAD_REQUEST`.
+ *
+ * zod rejects `NaN` and `Infinity` for `z.number()`, so every number below is finite by
+ * construction; coordinates therefore cannot poison the stored canvas.
+ */
+
+// The method and channel names live in a zod-free module so the sandboxed preload can import them.
+export { API_METHODS, channelFor } from './api-methods';
+
+const REF_KINDS = [
+  'item',
+  'creature',
+  'gameobject',
+  'quest',
+  'spell',
+  'faction',
+  'title',
+  'areatrigger',
+  'map',
+  'emote',
+  'zone',
+  'skill',
+  'mailTemplate',
+] as const;
+
+// Fails to compile if `RefKind` gains a member that the wire schema does not accept.
+type Exactly<A, B> = [A] extends [B] ? ([B] extends [A] ? true : never) : never;
+const _refKindsAreComplete: Exactly<(typeof REF_KINDS)[number], RefKind> = true;
+void _refKindsAreComplete;
+
+/** Search text is bounded so a runaway renderer cannot hand MySQL a megabyte-long LIKE. */
+const MAX_SEARCH_TEXT = 200;
+/** One lookup covers a whole canvas of quests; beyond this the caller is not asking a question. */
+const MAX_LOOKUP_IDS = 5000;
+/** A drag never moves more nodes than a project holds. */
+const MAX_MOVES = 500;
+
+const positionSchema = z.object({ x: z.number(), y: z.number() });
+const viewportSchema = z.object({ x: z.number(), y: z.number(), zoom: z.number().positive() });
+
+const profileFields = {
+  name: z.string(),
+  role: z.enum(['world', 'dev']),
+  host: z.string(),
+  port: z.number().int(),
+  user: z.string(),
+  database: z.string(),
+  password: z.string(),
+};
+// Strict: a misspelled key must be a loud error, never a silently unsaved connection setting.
+const profileInputSchema = z.object(profileFields).strict();
+const profileSaveSchema = z.object({ ...profileFields, id: z.number().int().optional() }).strict();
+
+const aggregateSchema = z
+  .object({
+    questId: z.number(),
+    isNew: z.boolean(),
+    // Field values are registry-shaped and checked by the registry, not here.
+    values: z.record(z.string(), z.unknown()),
+    readOnly: z.array(z.object({ fieldId: z.string(), reason: z.string() })),
+    sharedItems: z.record(z.string(), z.array(z.number())),
+  })
+  .strict();
+
+const projectSchema = z
+  .object({
+    id: z.number().int(),
+    name: z.string(),
+    idRangeStart: z.number().int(),
+    idRangeEnd: z.number().int(),
+    outputDir: z.string(),
+    viewport: viewportSchema,
+  })
+  .strict();
+
+/**
+ * One tuple schema per method, in `Api` declaration order.
+ *
+ * The `Record<keyof Api, ...>` annotation is the completeness check: a method added to `Api`
+ * without a schema, or a schema for a method that no longer exists, fails to compile.
+ */
+const REQUEST_SCHEMAS: Record<keyof Api, z.ZodType<unknown[]>> = {
+  testConnection: z.tuple([profileInputSchema]),
+  saveProfile: z.tuple([profileSaveSchema]),
+  listProfiles: z.tuple([]),
+  connect: z.tuple([z.number()]),
+  searchQuests: z.tuple([z.string().max(MAX_SEARCH_TEXT)]),
+  openQuest: z.tuple([z.number(), positionSchema.optional()]),
+  newQuest: z.tuple([positionSchema.optional()]),
+  listNodes: z.tuple([]),
+  moveNodes: z.tuple([
+    z.array(z.object({ questId: z.number(), x: z.number(), y: z.number() })).max(MAX_MOVES),
+  ]),
+  removeNode: z.tuple([z.number()]),
+  saveViewport: z.tuple([viewportSchema]),
+  lookupNames: z.tuple([z.enum(REF_KINDS), z.array(z.number()).max(MAX_LOOKUP_IDS)]),
+  rewardTables: z.tuple([z.number()]),
+  saveDraft: z.tuple([aggregateSchema]),
+  previewChanges: z.tuple([z.number()]),
+  validate: z.tuple([z.number()]),
+  exportQuest: z.tuple([z.number()]),
+  applyToDev: z.tuple([z.number(), z.boolean()]),
+  getProject: z.tuple([]),
+  updateProject: z.tuple([projectSchema]),
+};
+
+/**
+ * Validates one call's arguments. The returned `args` are the parsed values, so unknown keys are
+ * already gone by the time the API sees them.
+ */
+export function parseRequest(
+  method: keyof Api,
+  args: unknown[],
+): { ok: true; args: unknown[] } | { ok: false; error: ApiError } {
+  const schema = REQUEST_SCHEMAS[method];
+  if (!schema) {
+    return { ok: false, error: { code: 'BAD_REQUEST', message: `Unknown API method '${String(method)}'.` } };
+  }
+  const parsed = schema.safeParse(args);
+  if (parsed.success) return { ok: true, args: [...parsed.data] };
+
+  const issue = parsed.error.issues[0];
+  const where = issue && issue.path.length > 0 ? ` at argument ${issue.path.join('.')}` : '';
+  return {
+    ok: false,
+    error: { code: 'BAD_REQUEST', message: `${method}${where}: ${issue?.message ?? 'invalid request'}` },
+  };
 }

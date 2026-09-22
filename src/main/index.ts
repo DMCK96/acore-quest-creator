@@ -1,5 +1,76 @@
-import { app, BrowserWindow } from 'electron';
+import { app, BrowserWindow, ipcMain, safeStorage } from 'electron';
+import { existsSync } from 'node:fs';
+import { mkdir, readdir, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
+import { openMysqlDevDb } from '../core/db/mysql-dev-db';
+import { openMysqlWorldDb } from '../core/db/mysql-world-db';
+import { API_METHODS, channelFor, parseRequest, type Api, type ApiError } from '../shared/ipc';
+import { createApi, type ApiDeps } from './api';
+import { createSecretBox } from './secret-box';
+import { openStore, type Store } from './store/store';
+
+/**
+ * The Electron shell: it owns the window, the SQLite store and the IPC surface, and nothing else.
+ * All behaviour lives in `createApi`, which is why this file has no logic worth testing beyond the
+ * wiring below.
+ */
+
+/** The reference fork's patch directory, used when this machine has it checked out. */
+const FORK_OUTPUT_DIR = 'E:\\Repositories\\azerothcore-wotlk-coa\\data\\sql\\custom\\db_world';
+
+const STORE_FILE = 'quest-creator.sqlite';
+
+const defaultOutputDir = (): string =>
+  existsSync(FORK_OUTPUT_DIR) ? FORK_OUTPUT_DIR : join(app.getPath('documents'), 'ACORE Quest Creator', 'sql');
+
+/**
+ * Drizzle's migration files. In development they sit in the repo; a packaged build carries them as
+ * an unpacked extra resource, because they are read at runtime and cannot live inside the asar.
+ */
+const migrationsFolder = (): string =>
+  app.isPackaged ? join(process.resourcesPath, 'drizzle') : join(app.getAppPath(), 'drizzle');
+
+const unknownError = (error: unknown): { ok: false; error: ApiError } => ({
+  ok: false,
+  error: { code: 'UNKNOWN', message: error instanceof Error ? error.message : String(error) },
+});
+
+function buildDeps(store: Store): ApiDeps {
+  return {
+    store,
+    openWorldDb: (p) => openMysqlWorldDb(p),
+    openDevDb: (p) => openMysqlDevDb(p),
+    fs: {
+      writeFile: (path, text) => writeFile(path, text, 'utf8'),
+      ensureDir: async (path) => {
+        await mkdir(path, { recursive: true });
+      },
+      listDir: (path) => readdir(path),
+    },
+    now: () => new Date(),
+    defaultOutputDir: defaultOutputDir(),
+  };
+}
+
+/**
+ * One handler per API method. Arguments are validated before the API sees them and nothing is ever
+ * allowed to reject: an exception crossing IPC would reach the renderer as an opaque `Error`, so
+ * every failure comes back as an ordinary `Result`.
+ */
+function registerIpc(api: Api): void {
+  for (const method of API_METHODS) {
+    ipcMain.handle(channelFor(method), async (_event, ...args: unknown[]) => {
+      const parsed = parseRequest(method, args);
+      if (!parsed.ok) return { ok: false, error: parsed.error };
+      try {
+        const call = api[method] as (...a: unknown[]) => Promise<unknown>;
+        return await call.apply(api, parsed.args);
+      } catch (error) {
+        return unknownError(error);
+      }
+    });
+  }
+}
 
 function createWindow(): void {
   const win = new BrowserWindow({
@@ -25,6 +96,11 @@ function createWindow(): void {
 }
 
 void app.whenReady().then(() => {
+  // `safeStorage` is only usable once the app is ready, so the store opens here and not at import.
+  const store = openStore(join(app.getPath('userData'), STORE_FILE), createSecretBox(safeStorage), migrationsFolder());
+  app.on('will-quit', () => store.close());
+  registerIpc(createApi(buildDeps(store)));
+
   createWindow();
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow();

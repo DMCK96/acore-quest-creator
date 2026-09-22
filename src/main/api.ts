@@ -348,6 +348,10 @@ export function createApi(deps: ApiDeps): Api {
         return names;
       }),
 
+    // Filled in once the reward tables are read from the world DB; the method exists now so the
+    // IPC surface and the renderer's typing are complete.
+    rewardTables: async () => ({ ok: false, error: { code: 'UNKNOWN', message: 'not implemented' } }),
+
     saveDraft: (aggregate) =>
       run(async () => {
         connected();
