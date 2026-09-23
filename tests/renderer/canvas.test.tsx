@@ -35,6 +35,10 @@ describe('QuestNodeCard', () => {
     expect(screen.queryByText(/error/)).toBeNull();
     expect(screen.getByRole('button', { name: 'Quest 60001: (untitled quest)' })).toBeInTheDocument();
   });
+  it('shows how the quest starts, its groups and whether it is connected', () => {
+    render(<QuestNodeCard node={nodeOf({ starts: ['npc', 'script'], groups: [{ group: 5, kind: 'pickOne' }], notConnected: true })} selected={false} />);
+    for (const t of ['NPC', 'Script', 'Pick one', 'Not connected']) expect(screen.getByText(t)).toBeInTheDocument();
+  });
 });
 
 describe('CanvasHome', () => {
@@ -86,6 +90,11 @@ describe('CanvasHome', () => {
     fireEvent.doubleClick(first);
     await waitFor(() => expect(screen.getAllByTestId('quest-node')[0]).toHaveAttribute('aria-current', 'true'));
     expect(screen.getAllByTestId('quest-node')[1]).not.toHaveAttribute('aria-current');
+  });
+  it('adds the rest of a chain from the "+N linked" chip', async () => {
+    const { api } = await canvas({ listNodes: async () => okv([nodeOf({ offCanvasLinks: 2 })]) });
+    await userEvent.click(await screen.findByRole('button', { name: 'Add 2 linked quests not on the canvas' }));
+    await waitFor(() => expect(api.addQuestChain).toHaveBeenCalledWith(60001));
   });
 });
 

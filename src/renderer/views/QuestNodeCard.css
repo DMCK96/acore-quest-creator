@@ -55,6 +55,35 @@
   margin-top: 0.4em;
 }
 
+.chip--start {
+  background: var(--accent-soft);
+  color: var(--accent);
+  border-color: var(--accent);
+}
+
+.chip--group {
+  background: var(--bg-inset);
+  color: var(--text-muted);
+  border-color: var(--border);
+}
+
+.quest-card__more {
+  display: block;
+  width: 100%;
+  text-align: left;
+  border: none;
+  background: none;
+  color: var(--accent);
+  font-size: 0.78em;
+  font-weight: 600;
+  padding: 0.2em 0;
+  margin-top: 0.3em;
+}
+
+.quest-card__more:hover {
+  text-decoration: underline;
+}
+
 .quest-card__remove {
   border: none;
   background: none;

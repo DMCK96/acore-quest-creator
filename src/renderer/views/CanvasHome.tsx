@@ -2,7 +2,9 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   Background,
   Controls,
+  Handle,
   MiniMap,
+  Position,
   ReactFlow,
   ReactFlowProvider,
   useReactFlow,
@@ -14,6 +16,7 @@ import '@xyflow/react/dist/style.css';
 import type { AppStore } from '../state/app-store';
 import type { CanvasNode } from '@shared/ipc';
 import { QuestNodeCard } from './QuestNodeCard';
+import { toFlowEdges } from './canvas-edges';
 import { EditorDrawer } from './EditorDrawer';
 import { AddExistingDialog } from './AddExistingDialog';
 import { TopBar } from '../components/TopBar';
@@ -30,10 +33,23 @@ interface QuestNodeData extends Record<string, unknown> {
   selected: boolean;
   onOpen: () => void;
   onRemove: () => void;
+  onAddChain: () => void;
 }
 
 function QuestFlowNode({ data }: { data: QuestNodeData }): React.JSX.Element {
-  return <QuestNodeCard node={data.node} selected={data.selected} onOpen={data.onOpen} onRemove={data.onRemove} />;
+  return (
+    <>
+      <Handle type="target" position={Position.Left} isConnectable={false} />
+      <QuestNodeCard
+        node={data.node}
+        selected={data.selected}
+        onOpen={data.onOpen}
+        onRemove={data.onRemove}
+        onAddChain={data.onAddChain}
+      />
+      <Handle type="source" position={Position.Right} isConnectable={false} />
+    </>
+  );
 }
 
 const nodeTypes: NodeTypes = { quest: QuestFlowNode };
@@ -50,6 +66,7 @@ function CanvasInner({ store }: { store: AppStore }): React.JSX.Element {
   const openQuest = store((s) => s.openQuest);
   const newQuest = store((s) => s.newQuest);
   const removeNode = store((s) => s.removeNode);
+  const addQuestChain = store((s) => s.addQuestChain);
 
   const { screenToFlowPosition, fitView } = useReactFlow();
   const [showAddExisting, setShowAddExisting] = useState(false);
@@ -88,6 +105,7 @@ function CanvasInner({ store }: { store: AppStore }): React.JSX.Element {
       selected: open?.questId === n.questId,
       onOpen: () => void openQuest(n.questId),
       onRemove: () => void removeNode(n.questId),
+      onAddChain: () => void addQuestChain(n.questId),
     } satisfies QuestNodeData,
   }));
 
@@ -142,7 +160,7 @@ function CanvasInner({ store }: { store: AppStore }): React.JSX.Element {
             {ready && (
               <ReactFlow
                 nodes={flowNodes}
-                edges={[]}
+                edges={toFlowEdges(nodes)}
                 nodeTypes={nodeTypes}
                 zoomOnDoubleClick={false}
                 defaultViewport={viewport}

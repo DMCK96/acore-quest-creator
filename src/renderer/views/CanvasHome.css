@@ -143,3 +143,30 @@
 .react-flow__background {
   background: var(--bg) !important;
 }
+
+/* React Flow puts the edge's own class on its `<g>`, one level above the path it draws, so every
+   rule below has to reach through it. */
+.react-flow__edge.edge--turnin .react-flow__edge-path {
+  stroke: var(--accent);
+}
+
+.react-flow__edge.edge--inlog .react-flow__edge-path {
+  stroke: var(--accent);
+  opacity: 0.55;
+}
+
+.react-flow__edge.edge--offer .react-flow__edge-path {
+  stroke: var(--accent);
+}
+
+.react-flow__edge.edge--breadcrumb .react-flow__edge-path {
+  stroke-dasharray: 6 4;
+}
+
+.react-flow__edge.edge--finishall .react-flow__edge-path {
+  stroke-width: 2;
+}
+
+.react-flow__edge.edge--script .react-flow__edge-path {
+  stroke-dasharray: 2 4;
+}
