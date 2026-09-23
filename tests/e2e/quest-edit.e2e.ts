@@ -39,7 +39,8 @@ test('connect, add a quest to the canvas, edit it, review changes and export', a
   // an unscoped level-1 heading matches two elements once the editor has finished mounting.
   const editor = page.getByRole('complementary', { name: 'Quest editor' });
   await expect(editor.getByRole('heading', { level: 1 })).toBeVisible();
-  await expect(page.getByTestId('quest-node')).toHaveCount(1);
+  // "Add existing" imports the picked quest's whole chain, so there may be more than one node.
+  await expect(page.getByTestId('quest-node').first()).toBeVisible();
   await expect(page.getByText(/unsafe to export/i)).toHaveCount(0);
 
   await page.getByRole('tab', { name: 'Story' }).click();
