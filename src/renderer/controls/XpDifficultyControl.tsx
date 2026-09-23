@@ -21,12 +21,20 @@ export function XpDifficultyControl(props: ControlProps<number>): React.JSX.Elem
   const tables = useRewardTables(level);
 
   const known = DIFFICULTIES.includes(value) ? DIFFICULTIES : [...DIFFICULTIES, value];
+  // The amounts come from `questxp_dbc` or, as that table is usually empty, the server's QuestXP.dbc.
+  const amountsMissing = !scalesWithPlayer && tables !== null && tables.xp.every((xp) => xp === null);
 
   return (
     <div>
       <label htmlFor={id}>{label}</label>
       {help && <p>{help}</p>}
       {scalesWithPlayer && <p>This quest has no fixed level, so the XP depends on the player&apos;s level and no fixed amount can be shown.</p>}
+      {amountsMissing && (
+        <p>
+          To see how much XP each tier gives, set the server data folder on the connection. The server reads these
+          amounts from its QuestXP.dbc file.
+        </p>
+      )}
       <select id={id} value={value} disabled={disabled} onChange={(e) => onChange(Number(e.target.value))}>
         {known.map((n) => {
           const xp = scalesWithPlayer ? null : (tables?.xp[n] ?? null);
@@ -45,7 +53,7 @@ export function XpDifficultyControl(props: ControlProps<number>): React.JSX.Elem
 /** `0` pays nothing; any other tier leads with its XP when the quest level makes it known. */
 function optionLabel(tier: number, xp: number | null): string {
   if (tier === 0) return 'No XP';
-  return xp !== null ? `${xp} XP (tier ${tier})` : `Tier ${tier}`;
+  return xp !== null ? `${xp.toLocaleString()} XP (tier ${tier})` : `Tier ${tier}`;
 }
 
 export const XpDifficultyFieldControl = XpDifficultyControl as unknown as FieldControl;

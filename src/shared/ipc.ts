@@ -65,6 +65,8 @@ export interface ProfileInput {
   user: string;
   database: string;
   password: string;
+  /** The server's data folder (`DataDir`, holding `dbc/`), optional; '' or absent for none. */
+  dbcDir?: string;
 }
 
 /** Saving a profile: an update (`id` given) may leave `password` out to keep the stored one. */
@@ -78,6 +80,8 @@ export interface ProfileRecord {
   port: number;
   user: string;
   database: string;
+  /** '' when the profile names no server data folder. */
+  dbcDir: string;
 }
 
 export interface NodePosition {
@@ -136,6 +140,15 @@ export interface ConnectSummary {
   drift: SchemaDiff;
   /** True when a table every quest needs is missing: the fork cannot be worked with as it is. */
   blocking: boolean;
+  /** What was read from the profile's server data folder; null when it names none. */
+  serverData: ServerDataStatus | null;
+}
+
+/** The optional server data folder: the files read from it and what went wrong with the rest. */
+export interface ServerDataStatus {
+  dir: string;
+  loaded: string[];
+  problems: string[];
 }
 
 export interface OpenResult {
@@ -242,6 +255,8 @@ export interface Api {
   /** The profile to connect to without asking, seeded from `.env` in development; else null. */
   startupProfile(): Promise<Result<number | null>>;
   connect(profileId: number): Promise<Result<ConnectSummary>>;
+  /** Shows a folder picker for the server data folder; null when cancelled. */
+  chooseServerDataDir(): Promise<Result<string | null>>;
   searchQuests(text: string): Promise<Result<QuestSummary[]>>;
   /** Items, NPCs, objects or quests whose name contains the text, or whose ID is it. */
   searchEntities(kind: SearchKind, text: string): Promise<Result<EntityHit[]>>;
@@ -337,6 +352,7 @@ const profileFields = {
   user: z.string(),
   database: z.string(),
   password: z.string(),
+  dbcDir: z.string().optional(),
 };
 // Strict: a misspelled key must be a loud error, never a silently unsaved connection setting.
 const profileInputSchema = z.object(profileFields).strict();
@@ -367,6 +383,7 @@ const REQUEST_SCHEMAS: Record<keyof Api, z.ZodType<unknown[]>> = {
   saveProfile: z.tuple([profileSaveSchema]),
   listProfiles: z.tuple([]),
   startupProfile: z.tuple([]),
+  chooseServerDataDir: z.tuple([]),
   connect: z.tuple([z.number()]),
   searchQuests: z.tuple([z.string().max(MAX_SEARCH_TEXT)]),
   searchEntities: z.tuple([z.enum(['item', 'creature', 'gameobject', 'quest']), z.string().max(MAX_SEARCH_TEXT)]),

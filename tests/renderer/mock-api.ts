@@ -59,10 +59,11 @@ export function nodeOf(overrides: Partial<CanvasNode> = {}): CanvasNode {
 export function makeMockApi(overrides: Partial<Record<keyof Api, (...args: any[]) => any>> = {}): Api {
   const defaults: Record<keyof Api, (...args: any[]) => any> = {
     testConnection: vi.fn(async () => okv({ ok: true as const })),
-    saveProfile: vi.fn(async () => okv({ id: 1, name: '', role: 'world', host: '', port: 3306, user: '', database: '' })),
+    saveProfile: vi.fn(async () => okv({ id: 1, name: '', role: 'world', host: '', port: 3306, user: '', database: '', dbcDir: '' })),
     listProfiles: vi.fn(async () => okv([])),
     startupProfile: vi.fn(async () => okv(null)),
-    connect: vi.fn(async () => okv({ profileId: 1, schemaHash: '', drift: { missingTables: [], unregistered: [], missingColumns: [], typeMismatches: [], blockingTables: [] }, blocking: false })),
+    chooseServerDataDir: vi.fn(async () => okv(null)),
+    connect: vi.fn(async () => okv({ profileId: 1, schemaHash: '', drift: { missingTables: [], unregistered: [], missingColumns: [], typeMismatches: [], blockingTables: [] }, blocking: false, serverData: null })),
     searchQuests: vi.fn(async () => okv([])),
     searchEntities: vi.fn(async () => okv([])),
     openQuest: vi.fn(async () => okv(sampleOpen())),

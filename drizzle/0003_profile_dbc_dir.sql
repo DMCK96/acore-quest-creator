@@ -1,0 +1,1 @@
+ALTER TABLE `connection_profiles` ADD `dbc_dir` text DEFAULT '' NOT NULL;

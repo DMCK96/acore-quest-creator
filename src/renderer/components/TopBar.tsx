@@ -1,3 +1,4 @@
+import type { ServerDataStatus } from '@shared/ipc';
 import type { AppStore } from '../state/app-store';
 import './TopBar.css';
 
@@ -60,10 +61,24 @@ export function TopBar({
           <span className="status-pill__dot" />
           {connectedDatabase ? `Connected: ${connectedDatabase}` : 'Not connected'}
         </span>
+        {connectedDatabase && summary?.serverData && <ServerDataPill status={summary.serverData} />}
         <button type="button" className="btn btn--icon" aria-label="Settings" title="Settings">
           ⚙
         </button>
       </div>
     </header>
+  );
+}
+
+/** The optional server data folder: read cleanly, or what could not be read from it. */
+function ServerDataPill({ status }: { status: ServerDataStatus }): React.JSX.Element {
+  const problems = status.problems.length;
+  const label = problems === 0 ? 'Server data' : `Server data: ${problems} ${problems === 1 ? 'problem' : 'problems'}`;
+  const detail = [`Folder: ${status.dir}`, ...status.loaded.map((f) => `Read ${f}`), ...status.problems].join('\n');
+  return (
+    <span className={`status-pill ${problems === 0 ? 'status-pill--connected' : 'status-pill--warning'}`} title={detail}>
+      <span className="status-pill__dot" />
+      {label}
+    </span>
   );
 }

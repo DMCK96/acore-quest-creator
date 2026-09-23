@@ -49,6 +49,7 @@ import type {
   StartBadge,
 } from '../shared/ipc';
 import type { Store } from './store/store';
+import { loadServerData, type ServerData, type ServerDataFiles } from './server-data';
 import type { ProjectQuest } from './project/project-file';
 import type { ProjectSession } from './project/session';
 import type { ProjectController } from './project/controller';
@@ -71,7 +72,13 @@ export interface ApiDeps {
   projects: ProjectController;
   /** A profile to connect to on launch (seeded from `.env` in development). */
   startupProfileId?: number | null;
+  /** Reads the optional server data folder; without it the folder is reported as unreadable. */
+  serverDataFiles?: ServerDataFiles;
+  /** The native folder picker; null when cancelled. */
+  chooseDirectory?(): Promise<string | null>;
 }
+
+const NO_SERVER_DATA_FILES: ServerDataFiles = { read: async () => null, isDir: async () => false };
 
 /** The live world connection plus everything that was read from it once, at connect time. */
 interface Session {
@@ -88,6 +95,8 @@ interface Session {
   availability: Availability;
   /** Every quest-starting item, read once here because asking `item_template` per link read is a full scan. */
   itemStarters: ItemStarter[];
+  /** What the profile's server data folder added, read once at connect; null when it names none. */
+  serverData: ServerData | null;
 }
 
 const REGISTRY_TABLES = registry.tables.map((t) => t.table);
@@ -432,6 +441,7 @@ export function createApi(deps: ApiDeps): Api {
           : [];
         const drift = diffSchema(schema, registry);
         const blocking = hasBlockingDrift(drift);
+        const serverData = await loadServerData(profile.dbcDir ?? '', deps.serverDataFiles ?? NO_SERVER_DATA_FILES);
         // Swapping connections must not leave the old one open.
         if (session && session.db !== db) await session.db.close();
         session = {
@@ -444,9 +454,12 @@ export function createApi(deps: ApiDeps): Api {
           contextTables: contextSchema.tables,
           availability,
           itemStarters,
+          serverData,
         };
-        return { profileId, schemaHash: schema.hash, drift, blocking };
+        return { profileId, schemaHash: schema.hash, drift, blocking, serverData: serverData?.status ?? null };
       }),
+
+    chooseServerDataDir: () => run(async () => (deps.chooseDirectory ? await deps.chooseDirectory() : null)),
 
     searchQuests: (text) => run(async () => connected().db.searchQuests(text, SEARCH_LIMIT)),
     searchEntities: (kind, text) => run(async () => connected().db.searchEntities(kind, text, ENTITY_SEARCH_LIMIT)),
@@ -687,6 +700,8 @@ export function createApi(deps: ApiDeps): Api {
     // `xp[i]` is `questxp_dbc.Difficulty_{i+1}` and `money[i]` is `quest_money_reward.Money{i}`,
     // both for the row keyed by `level`; a missing row/table/column or an out-of-range level is
     // all-null rather than an error, since a fork can lack these reference tables entirely.
+    // `questxp_dbc` only overrides QuestXP.dbc and is usually empty, so without a row the XP comes
+    // from the server data folder's QuestXP.dbc when the profile names one.
     rewardTables: (level) =>
       run(async () => {
         const live = connected();
@@ -695,8 +710,9 @@ export function createApi(deps: ApiDeps): Api {
 
         const xpRow = await readRewardRow(live.db, 'questxp_dbc', 'ID', level);
         const moneyRow = await readRewardRow(live.db, 'quest_money_reward', 'Level', level);
+        const dbcXp = live.serverData?.questXp?.get(level);
         const xp = Array.from({ length: REWARD_TIERS }, (_, i) =>
-          xpRow ? parseRewardInt(xpRow[`Difficulty_${i + 1}`]) : null,
+          xpRow ? parseRewardInt(xpRow[`Difficulty_${i + 1}`]) : (dbcXp?.[i] ?? null),
         );
         const money = Array.from({ length: REWARD_TIERS }, (_, i) =>
           moneyRow ? parseRewardInt(moneyRow[`Money${i}`]) : null,

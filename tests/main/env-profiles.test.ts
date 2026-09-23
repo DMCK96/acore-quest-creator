@@ -18,7 +18,10 @@ const world = { ACQC_WORLD_DB_HOST: 'h', ACQC_WORLD_DB_USER: 'u', ACQC_WORLD_DB_
 
 describe('profileFromEnv', () => {
   it('reads a role, defaulting the port', () => {
-    expect(profileFromEnv(world, 'world')).toEqual({ name: 'World (.env)', role: 'world', host: 'h', port: 3306, user: 'u', database: 'acore_world', password: 'pw' });
+    expect(profileFromEnv(world, 'world')).toEqual({ name: 'World (.env)', role: 'world', host: 'h', port: 3306, user: 'u', database: 'acore_world', password: 'pw', dbcDir: '' });
+  });
+  it('reads the world server data folder', () => {
+    expect(profileFromEnv({ ...world, ACQC_WORLD_DB_DBC_DIR: ' /srv/data ' }, 'world')?.dbcDir).toBe('/srv/data');
   });
   it('is null unless host, user and database are all set', () => {
     expect(profileFromEnv({ ...world, ACQC_WORLD_DB_HOST: '' }, 'world')).toBeNull();

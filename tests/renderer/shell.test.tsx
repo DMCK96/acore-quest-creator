@@ -56,6 +56,16 @@ describe('ConnectionScreen', () => {
     expect(sent).toMatchObject({ id: 1, host: 'h' });
     expect(sent).not.toHaveProperty('password');
   });
+  it('saves the optional server data folder, picked with Browse', async () => {
+    const api = makeMockApi({ saveProfile: async () => okv(profileRec), connect: async () => okv(summary), chooseServerDataDir: async () => okv('/srv/acore/data') });
+    const store = createAppStore(api);
+    render(<ConnectionScreen store={store} />);
+    await userEvent.click(screen.getByRole('button', { name: 'Browse…' }));
+    await waitFor(() => expect(screen.getByLabelText('Server data folder (optional)')).toHaveValue('/srv/acore/data'));
+    await userEvent.click(screen.getByRole('button', { name: 'Save and connect' }));
+    await waitFor(() => expect(store.getState().screen).toBe('pick'));
+    expect(api.saveProfile).toHaveBeenCalledWith(expect.objectContaining({ dbcDir: '/srv/acore/data' }));
+  });
   it('shows a readable error when the server is unreachable', async () => {
     const api = makeMockApi({ saveProfile: async () => okv(profileRec), connect: async () => errv('CONNECTION', 'Cannot reach h:3306 (ECONNREFUSED)') });
     const store = createAppStore(api);

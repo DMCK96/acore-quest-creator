@@ -15,6 +15,7 @@ export const API_METHODS = [
   'listProfiles',
   'startupProfile',
   'connect',
+  'chooseServerDataDir',
   'searchQuests',
   'searchEntities',
   'openQuest',

@@ -6,6 +6,7 @@ export function ConnectionScreen({ store }: { store: AppStore }): React.JSX.Elem
   const profiles = store((s) => s.profiles);
   const connect = store((s) => s.connect);
   const connectProfile = store((s) => s.connectProfile);
+  const chooseServerDataDir = store((s) => s.chooseServerDataDir);
 
   // The saved profile being edited: saving updates it instead of adding a copy.
   const [editingId, setEditingId] = useState<number | undefined>(undefined);
@@ -16,10 +17,11 @@ export function ConnectionScreen({ store }: { store: AppStore }): React.JSX.Elem
   const [user, setUser] = useState('');
   const [database, setDatabase] = useState('');
   const [password, setPassword] = useState('');
+  const [dbcDir, setDbcDir] = useState('');
 
   const submit = (e: React.FormEvent): void => {
     e.preventDefault();
-    const fields = { name, role, host, port: Number(port) || 0, user, database };
+    const fields = { name, role, host, port: Number(port) || 0, user, database, dbcDir: dbcDir.trim() };
     // Editing a saved profile with the password left blank keeps the stored password.
     void connect(editingId !== undefined && password === '' ? { ...fields, id: editingId } : { ...fields, id: editingId, password });
   };
@@ -35,6 +37,12 @@ export function ConnectionScreen({ store }: { store: AppStore }): React.JSX.Elem
     setUser(profile.user);
     setDatabase(profile.database);
     setPassword('');
+    setDbcDir(profile.dbcDir ?? '');
+  };
+
+  const browse = async (): Promise<void> => {
+    const chosen = await chooseServerDataDir();
+    if (chosen !== null) setDbcDir(chosen);
   };
 
   return (
@@ -80,6 +88,22 @@ export function ConnectionScreen({ store }: { store: AppStore }): React.JSX.Elem
           placeholder={editingId !== undefined ? 'Leave blank to keep the saved password' : undefined}
           onChange={(e) => setPassword(e.target.value)}
         />
+
+        <label htmlFor="conn-dbc-dir">Server data folder (optional)</label>
+        <p id="conn-dbc-dir-help">
+          The worldserver&apos;s data folder, the one holding dbc/. With it the editor can show values the server reads
+          from its DBC files, such as how much XP each quest reward tier gives. Everything works without it.
+        </p>
+        <input
+          id="conn-dbc-dir"
+          aria-describedby="conn-dbc-dir-help"
+          value={dbcDir}
+          placeholder="e.g. /home/acore/server/data"
+          onChange={(e) => setDbcDir(e.target.value)}
+        />
+        <button type="button" onClick={() => void browse()}>
+          Browse…
+        </button>
 
         <button type="submit">Save and connect</button>
       </form>

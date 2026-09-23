@@ -8,6 +8,7 @@ import { FLUSH_DONE_CHANNEL, FLUSH_REQUEST_CHANNEL } from '../shared/api-methods
 import { API_METHODS, channelFor, parseRequest, type Api, type ApiError } from '../shared/ipc';
 import { createApi, type ApiDeps } from './api';
 import { seedEnvProfiles } from './env-profiles';
+import { nodeServerDataFiles } from './server-data';
 import { createSecretBox } from './secret-box';
 import { openStore, type Store } from './store/store';
 import { DEFAULT_PROJECT_NAME, PROJECT_EXTENSION, defaultProjectMeta } from './project/project-file';
@@ -85,6 +86,13 @@ function buildDeps(
       listDir: (path) => readdir(path),
     },
     now: () => new Date(),
+    serverDataFiles: nodeServerDataFiles,
+    async chooseDirectory() {
+      const parent = BrowserWindow.getFocusedWindow() ?? BrowserWindow.getAllWindows()[0];
+      const options = { title: 'Server data folder', properties: ['openDirectory' as const] };
+      const r = parent ? await dialog.showOpenDialog(parent, options) : await dialog.showOpenDialog(options);
+      return r.canceled || r.filePaths.length === 0 ? null : r.filePaths[0]!;
+    },
   };
 }
 

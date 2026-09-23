@@ -82,3 +82,12 @@
 .status-pill--connected .status-pill__dot {
   background: var(--green);
 }
+
+.status-pill--warning {
+  border-color: var(--amber);
+  color: var(--amber);
+}
+
+.status-pill--warning .status-pill__dot {
+  background: var(--amber);
+}

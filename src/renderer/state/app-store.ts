@@ -58,6 +58,8 @@ export interface AppState {
   connect(input: ProfileSave): Promise<void>;
   /** Connects with a saved profile and its stored password. */
   connectProfile(profileId: number): Promise<void>;
+  /** Asks for the server data folder with the native picker; null when cancelled or it failed. */
+  chooseServerDataDir(): Promise<string | null>;
   search(text: string): Promise<void>;
   /** Loads a quest into the preview; false when it failed or a newer open replaced it. */
   openQuest(id: number, position?: NodePosition): Promise<boolean>;
@@ -194,6 +196,11 @@ export function createAppStore(api: Api, opts: { saveDelayMs?: number } = {}): A
       const profile = saved.value;
       set((s) => ({ profiles: dedupeProfiles(s.profiles, profile) }));
       await get().connectProfile(profile.id);
+    },
+
+    async chooseServerDataDir() {
+      const chosen = await api.chooseServerDataDir();
+      return chosen.ok ? chosen.value : null;
     },
 
     async connectProfile(profileId) {
