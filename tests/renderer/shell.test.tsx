@@ -5,7 +5,7 @@ import userEvent from '@testing-library/user-event';
 import { createAppStore } from '../../src/renderer/state/app-store';
 import { ConnectionScreen } from '../../src/renderer/views/ConnectionScreen';
 import { QuestPicker } from '../../src/renderer/views/QuestPicker';
-import { QuestWorkspace } from '../../src/renderer/views/QuestWorkspace';
+import { renderFlow } from './module-harness';
 import { makeMockApi, okv, errv, sampleOpen } from './mock-api';
 
 const drift = { missingTables: [], unregistered: [], missingColumns: [], typeMismatches: [] };
@@ -109,7 +109,7 @@ describe('QuestPicker', () => {
   });
 });
 
-describe('QuestWorkspace', () => {
+describe('Quest flow view', () => {
   const opened = async (over = {}) => {
     const api = makeMockApi({ saveProfile: async () => okv(profileRec), connect: async () => okv(summary), openQuest: async () => okv(sampleOpen(over)), validate: async () => okv([]) });
     const store = createAppStore(api, { saveDelayMs: 0 });
@@ -117,39 +117,42 @@ describe('QuestWorkspace', () => {
     await store.getState().openQuest(60001);
     return { api, store };
   };
-  it('shows title, id and the group navigation', async () => {
-    const { store } = await opened();
-    render(<QuestWorkspace store={store} />);
-    expect(screen.getByRole('heading', { level: 1 })).toHaveTextContent('60001');
-    for (const name of ['Identity', 'Story', 'Objectives', 'Rewards', 'Availability', 'Map', 'Unmodelled columns', 'Changes']) {
-      expect(screen.getByRole('tab', { name })).toBeInTheDocument();
+  it('shows title, id and the modules', async () => {
+    const { api, store } = await opened();
+    renderFlow(store, api);
+    expect(screen.getByLabelText('Quest title')).toHaveValue('Wolves');
+    expect(screen.getByText('#60001')).toBeInTheDocument();
+    for (const name of ['Quest Giver', 'Objectives', 'Dialogue', 'Rewards']) {
+      expect(screen.getByRole('button', { name: new RegExp(`^${name}`) })).toBeInTheDocument();
     }
   });
-  it('renders the real group panel content when a group tab is selected, not a placeholder', async () => {
-    const { store } = await opened();
-    render(<QuestWorkspace store={store} />);
-    await userEvent.click(screen.getByRole('tab', { name: 'Story' }));
-    expect(screen.getByLabelText('Quest title')).toBeInTheDocument();
+  it('renders the real module content when a module is opened, not a placeholder', async () => {
+    const { api, store } = await opened({
+      aggregate: { questId: 60001, isNew: false, readOnly: [], sharedItems: {}, values: { 'quest_template.LogTitle': 'Wolves', 'quest_template.QuestDescription': '' } },
+    });
+    renderFlow(store, api);
+    await userEvent.click(screen.getByRole('button', { name: /^Dialogue/ }));
+    expect(screen.getByLabelText('Offer text')).toBeInTheDocument();
     expect(screen.queryByText(/editor is not implemented yet/i)).toBeNull();
   });
   it('hides the fidelity banner when ok and shows an unsafe-to-export banner with the differences when not', async () => {
     const good = await opened();
-    const { unmount } = render(<QuestWorkspace store={good.store} />);
+    const { unmount } = renderFlow(good.store, good.api);
     expect(screen.queryByText(/unsafe to export/i)).toBeNull();
     unmount();
     const bad = await opened({ fidelity: { ok: false, differences: [{ table: 'quest_template', key: 'ID=60001', column: 'LogTitle', before: 'a', after: 'b' }] } });
-    render(<QuestWorkspace store={bad.store} />);
+    renderFlow(bad.store, bad.api);
     expect(screen.getByText(/unsafe to export/i)).toBeInTheDocument();
     expect(screen.getByText(/quest_template.*LogTitle/)).toBeInTheDocument();
   });
   it('says a whole row was added or removed rather than "(absent) → (absent)"', async () => {
-    const { store } = await opened({
+    const { api, store } = await opened({
       fidelity: { ok: false, differences: [
         { table: 'quest_poi_points', key: 'QuestID=60001,Idx1=0,Idx2=1', column: null, before: undefined, after: undefined, kind: 'removed' },
         { table: 'conditions', key: 'SourceEntry=60001', column: null, before: undefined, after: undefined, kind: 'added' },
       ] },
     });
-    render(<QuestWorkspace store={store} />);
+    renderFlow(store, api);
     const banner = screen.getByRole('alert');
     expect(banner).toHaveTextContent('row removed');
     expect(banner).toHaveTextContent('row added');
@@ -173,24 +176,23 @@ describe('QuestWorkspace', () => {
     expect(vi.mocked(api.listNodes).mock.invocationCallOrder[0]).toBeGreaterThan(saved);
   });
   // A real debounce, so the click lands inside the window the user would actually hit.
-  it('saves the pending edit before "Back to quests" clears the editor', async () => {
+  it('saves the pending edit before "Back to chain" leaves the editor', async () => {
     const api = makeMockApi({ saveProfile: async () => okv(profileRec), connect: async () => okv(summary), openQuest: async () => okv(sampleOpen()), validate: async () => okv([]) });
     const store = createAppStore(api, { saveDelayMs: 10_000 });
     await store.getState().connect(form);
     await store.getState().openQuest(60001);
-    render(<QuestWorkspace store={store} />);
+    renderFlow(store, api);
     store.getState().setValue('quest_template.LogTitle', 'Edited');
     expect(store.getState().dirty).toBe(true);
-    await userEvent.click(screen.getByRole('button', { name: /Back to quests/ }));
-    await waitFor(() => expect(store.getState().screen).toBe('pick'));
+    await userEvent.click(screen.getByRole('button', { name: '← Back to chain' }));
+    await waitFor(() => expect(store.getState().screen).toBe('preview'));
     expect(api.updateQuest).toHaveBeenCalledWith(
       expect.objectContaining({ values: expect.objectContaining({ 'quest_template.LogTitle': 'Edited' }) }),
     );
-    expect(store.getState().open).toBeNull();
   });
   it('lists validation issues with their severity', async () => {
-    const { store } = await opened({ issues: [{ severity: 'error', code: 'NO_TITLE', message: 'The quest needs a title.' }, { severity: 'warning', code: 'NO_ENDER', message: 'Nobody can turn this quest in.' }] });
-    render(<QuestWorkspace store={store} />);
+    const { api, store } = await opened({ issues: [{ severity: 'error', code: 'NO_TITLE', message: 'The quest needs a title.' }, { severity: 'warning', code: 'NO_ENDER', message: 'Nobody can turn this quest in.' }] });
+    renderFlow(store, api);
     expect(screen.getByText('The quest needs a title.')).toBeInTheDocument();
     expect(screen.getByText('Nobody can turn this quest in.')).toBeInTheDocument();
   });

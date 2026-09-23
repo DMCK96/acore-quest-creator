@@ -229,11 +229,17 @@ export function presentModules(values: Values, added: readonly ModuleId[]): Modu
   );
 }
 
-/** The optional modules "Add module" offers: not shown yet, and backed by at least one field. */
+/**
+ * The optional modules "Add module" offers: not shown yet, and backed by at least one field.
+ * Advanced is always offered, because the columns the tool does not model are shown there.
+ */
 export function offeredModules(values: Values, added: readonly ModuleId[]): ModuleId[] {
   const shown = new Set(presentModules(values, added));
   return MODULES.filter(
-    (m) => m.kind === 'optional' && !shown.has(m.id) && m.owns.some((id) => Object.prototype.hasOwnProperty.call(values, id)),
+    (m) =>
+      m.kind === 'optional' &&
+      !shown.has(m.id) &&
+      (m.id === 'advanced' || m.owns.some((id) => Object.prototype.hasOwnProperty.call(values, id))),
   ).map((m) => m.id);
 }
 

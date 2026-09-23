@@ -72,10 +72,10 @@ describe('module catalog', () => {
     expect(isModulePresent('rewards', { 'quest_template.RewardMoney': 100 })).toBe(true);
   });
 
-  it('offers the optional modules not shown yet whose fields exist', () => {
+  it('offers the optional modules not shown yet whose fields exist, and always Advanced', () => {
     const values = { 'quest_template.TimeAllowed': 0, 'quest_template_addon.PrevQuestID': 0 };
-    expect(offeredModules(values, [])).toEqual(['chain', 'timer']);
-    expect(offeredModules(values, ['chain'])).toEqual(['timer']);
+    expect(offeredModules(values, [])).toEqual(['chain', 'timer', 'advanced']);
+    expect(offeredModules(values, ['chain', 'advanced'])).toEqual(['timer']);
   });
 
   it('resets every owned field that is not read-only', () => {

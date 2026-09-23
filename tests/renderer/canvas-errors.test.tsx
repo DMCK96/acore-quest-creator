@@ -63,10 +63,10 @@ describe('CanvasHome error reporting', () => {
     expect(await screen.findByRole('alert')).toHaveTextContent('The draft store is locked.');
   });
 
-  it('shows a failed draft save while the editor drawer is open', async () => {
+  it('shows a failed draft save while a quest is open', async () => {
     const { store } = await canvas({ updateQuest: async () => errv('UNKNOWN', 'Could not keep the edit.') });
     await store.getState().openQuest(60001);
-    expect(await screen.findByRole('complementary', { name: 'Quest editor' })).toBeInTheDocument();
+    expect(await screen.findByRole('complementary', { name: 'Quest preview' })).toBeInTheDocument();
     store.getState().setValue('quest_template.LogTitle', 'Edited');
     await store.getState().flushSave();
     expect(await screen.findByRole('alert')).toHaveTextContent('Could not keep the edit.');

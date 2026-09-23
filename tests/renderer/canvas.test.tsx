@@ -64,12 +64,12 @@ describe('CanvasHome', () => {
     fireEvent.doubleClick(view.container.querySelector('.react-flow__pane')!, { clientX: 400, clientY: 300 });
     await waitFor(() => expect(api.newQuest).toHaveBeenCalledWith(expect.objectContaining({ x: expect.any(Number), y: expect.any(Number) })));
   });
-  it('the New quest button creates a node and opens its editor drawer', async () => {
+  it('the New quest button creates a node and opens it in the editor', async () => {
     const { api, store } = await canvas();
     await userEvent.click(screen.getByRole('button', { name: 'New quest' }));
     await waitFor(() => expect(api.newQuest).toHaveBeenCalled());
     expect(store.getState().screen).toBe('edit');
-    expect(await screen.findByRole('complementary', { name: 'Quest editor' })).toBeInTheDocument();
+    expect(await screen.findByRole('list', { name: 'Modules' })).toBeInTheDocument();
     await waitFor(() => expect((api.listNodes as any).mock.calls.length).toBeGreaterThanOrEqual(2));
   });
   it('adds an existing quest with its whole chain through search and places it', async () => {
@@ -104,21 +104,21 @@ describe('CanvasHome', () => {
   });
 });
 
-describe('drawer', () => {
+describe('preview drawer', () => {
   const opened = async () => {
     const c = await canvas();
     await c.store.getState().openQuest(60001);
     return c;
   };
-  it('closes with the button, saving the draft and refreshing the nodes', async () => {
+  it('closes with the button, saving any draft and refreshing the nodes', async () => {
     const { api, store } = await opened();
     store.getState().setValue('quest_template.LogTitle', 'Edited');
     const before = (api.listNodes as any).mock.calls.length;
-    await userEvent.click(screen.getByRole('button', { name: 'Close editor' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Close preview' }));
     await waitFor(() => expect(store.getState().screen).toBe('pick'));
     expect(api.updateQuest).toHaveBeenCalledWith(expect.objectContaining({ values: expect.objectContaining({ 'quest_template.LogTitle': 'Edited' }) }));
     expect((api.listNodes as any).mock.calls.length).toBeGreaterThan(before);
-    expect(screen.queryByRole('complementary', { name: 'Quest editor' })).toBeNull();
+    expect(screen.queryByRole('complementary', { name: 'Quest preview' })).toBeNull();
     expect(screen.getAllByTestId('quest-node').length).toBe(2);
   });
   it('closes with Escape', async () => {
@@ -126,12 +126,21 @@ describe('drawer', () => {
     await userEvent.keyboard('{Escape}');
     await waitFor(() => expect(store.getState().screen).toBe('pick'));
   });
-  it('expands to full width and back', async () => {
-    await opened();
-    const toggle = screen.getByRole('button', { name: 'Expand editor' });
-    expect(toggle).toHaveAttribute('aria-pressed', 'false');
-    await userEvent.click(toggle);
-    expect(screen.getByRole('button', { name: 'Expand editor' })).toHaveAttribute('aria-pressed', 'true');
+  it('clicking a quest card previews it; double-clicking edits it', async () => {
+    const { store } = await canvas();
+    const [card] = await screen.findAllByTestId('quest-node');
+    await userEvent.click(card);
+    expect(await screen.findByRole('complementary', { name: 'Quest preview' })).toBeInTheDocument();
+    await userEvent.dblClick(card);
+    expect(await screen.findByRole('list', { name: 'Modules' })).toBeInTheDocument();
+    expect(store.getState().screen).toBe('edit');
+  });
+  it('ignores the click that ends a drag', async () => {
+    const { api } = await canvas();
+    const [card] = await screen.findAllByTestId('quest-node');
+    fireEvent.mouseDown(card, { clientX: 10, clientY: 10 });
+    fireEvent.click(card, { clientX: 80, clientY: 40 });
+    expect(api.openQuest).not.toHaveBeenCalled();
   });
 });
 

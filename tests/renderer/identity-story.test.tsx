@@ -7,13 +7,7 @@ import { RaceMaskControl } from '../../src/renderer/controls/RaceMaskControl';
 import { ClassMaskControl } from '../../src/renderer/controls/ClassMaskControl';
 import { QuestSortControl } from '../../src/renderer/controls/QuestSortControl';
 import { EmoteControl } from '../../src/renderer/controls/EmoteControl';
-import { GroupPanel } from '../../src/renderer/groups/GroupPanel';
-import { NamesProvider } from '../../src/renderer/state/names';
-import { registry } from '@core/registry';
-import { createNewAggregate } from '@core/import/new-quest';
-import { loadSchema } from '@core/schema/load';
-import { forkDb } from '../helpers/fixtures';
-import { makeMockApi } from './mock-api';
+import { mountBody } from './module-harness';
 
 const p = { id: 'f', label: 'Field', def: {} as any };
 
@@ -97,23 +91,15 @@ describe('EmoteControl', () => {
   });
 });
 
-describe('Identity and Story panels', () => {
-  const mount = async (group: any, onChange = vi.fn()) => {
-    const schema = await loadSchema(forkDb(), registry.tables.map((t) => t.table));
-    const agg = createNewAggregate(schema, registry, 60001);
-    return render(<NamesProvider api={makeMockApi()}><GroupPanel group={group} aggregate={agg} onChange={onChange} /></NamesProvider>);
-  };
-  it('lists the story texts in the order a player meets them', async () => {
-    const { container } = await mount('story');
-    const wanted = ['Quest title', 'Story text', 'Objectives text', 'In-progress text', 'Reward text', 'Log text when complete'];
-    const labels = [...container.querySelectorAll('label')].map((l) => l.textContent!.trim()).filter((t) => wanted.includes(t));
+describe('Dialogue and Requirements modules', () => {
+  it('lists the dialogue texts in the order a player meets them', async () => {
+    await mountBody('dialogue');
+    const wanted = ['Offer text', 'Progress text', 'Turn-in text', 'Completion log line'];
+    const labels = [...document.querySelectorAll('label')].map((l) => l.textContent!.trim()).filter((t) => wanted.includes(t));
     expect(labels).toEqual(wanted);
   });
-  it('shows the quest ID as read-only and puts levels before races', async () => {
-    const { container } = await mount('identity');
-    expect(screen.getByLabelText('ID')).toBeDisabled();
-    const text = container.textContent!;
-    expect(text.indexOf('Quest level')).toBeLessThan(text.indexOf('Races'));
+  it('edits races and classes as checkboxes', async () => {
+    await mountBody('requirements');
     expect(screen.getByRole('checkbox', { name: 'All races' })).toBeInTheDocument();
     expect(screen.getByRole('checkbox', { name: 'All classes' })).toBeInTheDocument();
   });

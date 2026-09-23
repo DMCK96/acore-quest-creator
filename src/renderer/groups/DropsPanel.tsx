@@ -75,7 +75,7 @@ function ColumnControl({
  *
  * The columns the "where does this drop" abstraction does not need — reference loot, loot mode,
  * group, comment, the quest-item slot and verified build — sit under a collapsed "Advanced" per
- * source, the same convention `GroupPanel` uses, rather than being unreachable.
+ * source, rather than being unreachable.
  */
 export function DropsPanel({ itemId, values, sharedItems, onChange }: DropsPanelProps): React.JSX.Element {
   const { state, name } = useName('item', itemId);

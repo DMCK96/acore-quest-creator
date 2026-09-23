@@ -3,6 +3,7 @@ import type { ModuleBodyProps } from '../body-props';
 import { SettingsList } from './SettingsList';
 
 const PREV = 'quest_template_addon.PrevQuestID';
+const NEXT = 'quest_template_addon.NextQuestID';
 
 /**
  * The quests around this one. The previous quest is stored signed: positive means it must be
@@ -14,6 +15,8 @@ export function ChainBody(props: ModuleBodyProps): React.JSX.Element {
   const hasPrev = Object.prototype.hasOwnProperty.call(open.aggregate.values, PREV);
   const prev = Number(open.aggregate.values[PREV] ?? 0);
   const inLog = prev < 0;
+  // Stored as a plain integer, but it is always a quest.
+  const hasNext = Object.prototype.hasOwnProperty.call(open.aggregate.values, NEXT);
 
   return (
     <div>
@@ -33,10 +36,15 @@ export function ChainBody(props: ModuleBodyProps): React.JSX.Element {
           )}
         </div>
       )}
+      {hasNext && (
+        <div className="field-setting" data-field={NEXT}>
+          <EntityPicker id={NEXT} label="Next quest" kind="quest" value={Number(open.aggregate.values[NEXT] ?? 0)}
+            onChange={(id) => onChange(NEXT, id)} />
+        </div>
+      )}
       <SettingsList
         {...props}
         fields={[
-          ['quest_template_addon.NextQuestID', 'Next quest'],
           ['quest_template_addon.BreadcrumbForQuestId', 'Breadcrumb for'],
           ['quest_template.RewardNextQuest', 'Offered next on turn-in'],
           [

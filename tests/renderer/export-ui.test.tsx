@@ -3,7 +3,7 @@ import { describe, it, expect } from 'vitest';
 import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { createAppStore } from '../../src/renderer/state/app-store';
-import { QuestWorkspace } from '../../src/renderer/views/QuestWorkspace';
+import { renderFlow } from './module-harness';
 import { makeMockApi, okv, errv, sampleOpen } from './mock-api';
 
 const drift = { missingTables: [], unregistered: [], missingColumns: [], typeMismatches: [] };
@@ -21,37 +21,42 @@ async function workspace(over: Record<string, any> = {}, openOver = {}) {
   await store.getState().loadProfiles();
   await store.getState().connect(form);
   await store.getState().openQuest(60001);
-  const view = render(<QuestWorkspace store={store} />);
+  const view = renderFlow(store, api);
   return { api, store, unmount: view.unmount };
 }
 
-describe('Unmodelled columns tab', () => {
+const openAdvanced = async (): Promise<void> => {
+  await userEvent.click(screen.getByRole('button', { name: 'Add module' }));
+  await userEvent.click(screen.getByRole('menuitem', { name: /Advanced/ }));
+};
+
+describe('Unmodelled columns in Advanced', () => {
   it('lists preserved columns read-only, or says everything is covered', async () => {
     await workspace({}, { unmodelled: [{ table: 'quest_template', column: 'FutureCol', values: [{ key: 'ID=60001', value: '9' }] }] });
-    await userEvent.click(screen.getByRole('tab', { name: 'Unmodelled columns' }));
+    await openAdvanced();
     expect(screen.getByText('quest_template.FutureCol')).toBeInTheDocument();
     expect(screen.getByText('9')).toBeInTheDocument();
     expect(screen.getByText(/kept unchanged/i)).toBeInTheDocument();
   });
   it('shows an all-clear message when nothing is unmodelled', async () => {
     await workspace();
-    await userEvent.click(screen.getByRole('tab', { name: 'Unmodelled columns' }));
+    await openAdvanced();
     expect(screen.getByText(/every column in your database is covered/i)).toBeInTheDocument();
   });
 });
 
-describe('Changes tab', () => {
+describe('Changes panel', () => {
   it('shows nothing-changed, then before/after cells grouped by table', async () => {
     const { api } = await workspace();
-    await userEvent.click(screen.getByRole('tab', { name: 'Changes' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Changes' }));
     expect(await screen.findByText(/no changes/i)).toBeInTheDocument();
     (api.previewChanges as any).mockResolvedValue(okv([
       { table: 'quest_template', key: 'ID=60001', column: 'LogTitle', before: 'Old', after: 'New' },
       { table: 'quest_template', key: 'ID=60001', column: 'AreaDescription', before: null, after: '' },
       { table: 'creature_queststarter', key: 'id=5,quest=60001', column: null, before: undefined, after: undefined },
     ]));
-    await userEvent.click(screen.getByRole('tab', { name: 'Identity' }));
-    await userEvent.click(screen.getByRole('tab', { name: 'Changes' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Close panel' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Changes' }));
     expect(await screen.findByText('Old')).toBeInTheDocument();
     expect(screen.getByText('New')).toBeInTheDocument();
     expect(screen.getByText('NULL')).toBeInTheDocument();

@@ -7,8 +7,8 @@ import { FieldSetting } from '../FieldSetting';
 import '../modules.css';
 
 const ROLES = [
-  { role: 'start', list: 'Starts at', add: 'Add quest giver' },
-  { role: 'end', list: 'Ends at', add: 'Add quest ender' },
+  { role: 'start', list: 'Starts at', add: 'Add quest giver', tables: ['creature_queststarter', 'gameobject_queststarter'] },
+  { role: 'end', list: 'Ends at', add: 'Add quest ender', tables: ['creature_questender', 'gameobject_questender'] },
 ] as const;
 
 /** Who offers the quest and who takes it back, as NPC-or-object cards, plus how it starts. */
@@ -21,11 +21,13 @@ export function GiverBody({ open, links, onChange, onOpenQuest }: ModuleBodyProp
 
   return (
     <div>
-      {ROLES.map(({ role, list, add }) => {
+      {ROLES.map(({ role, list, add, tables }) => {
         const targets = readGivers(aggregate.values, role);
         const set = (index: number, next: GiverTarget): void => write(role, targets.map((t, i) => (i === index ? next : t)));
         return (
-          <section key={role} className="entry-list">
+          <section key={role} className="entry-list" data-field={tables[0]}>
+            {/* Links jump to a field by `data-field`; both relation tables of the role land here. */}
+            <span data-field={tables[1]} />
             <h3 className="module-section__title">{list}</h3>
             {targets.map((t, i) => {
               const n = i + 1;

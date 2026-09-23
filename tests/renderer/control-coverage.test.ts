@@ -2,7 +2,7 @@
 import { describe, it, expect } from 'vitest';
 import { registry } from '@core/registry';
 import { resolveControl, controlRegistry } from '../../src/renderer/controls/resolve';
-import { GROUP_LAYOUT } from '../../src/renderer/groups/layout';
+import { MODULES } from '@core/modules/catalog';
 
 /**
  * These assert *resolvability*: that a control exists for every definition. That is not the same
@@ -22,8 +22,8 @@ describe('control coverage', () => {
     const used = new Set(registry.fields.map((f) => f.control).filter(Boolean));
     for (const id of used) expect(controlRegistry[id!], String(id)).toBeTypeOf('function');
   });
-  it('lists only real field ids in the group layouts', () => {
+  it('lists only real field ids in the modules', () => {
     const ids = new Set(registry.fields.map((f) => f.id));
-    for (const [group, list] of Object.entries(GROUP_LAYOUT)) for (const id of list) expect(ids.has(id), `${group}: ${id}`).toBe(true);
+    for (const m of MODULES) for (const id of m.owns) expect(ids.has(id), `${m.id}: ${id}`).toBe(true);
   });
 });

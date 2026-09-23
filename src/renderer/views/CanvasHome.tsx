@@ -17,7 +17,8 @@ import type { AppStore } from '../state/app-store';
 import type { CanvasNode } from '@shared/ipc';
 import { QuestNodeCard } from './QuestNodeCard';
 import { toFlowEdges } from './canvas-edges';
-import { EditorDrawer } from './EditorDrawer';
+import { QuestPreview } from './QuestPreview';
+import { QuestFlowView } from './QuestFlowView';
 import { AddExistingDialog } from './AddExistingDialog';
 import { ProjectDialog } from './ProjectDialog';
 import { RecoveryDialog } from './RecoveryDialog';
@@ -34,6 +35,7 @@ interface QuestNodeData extends Record<string, unknown> {
   node: CanvasNode;
   selected: boolean;
   onOpen: () => void;
+  onEdit: () => void;
   onRemove: () => void;
   onAddChain: () => void;
 }
@@ -46,6 +48,7 @@ function QuestFlowNode({ data }: { data: QuestNodeData }): React.JSX.Element {
         node={data.node}
         selected={data.selected}
         onOpen={data.onOpen}
+        onEdit={data.onEdit}
         onRemove={data.onRemove}
         onAddChain={data.onAddChain}
       />
@@ -138,6 +141,7 @@ function CanvasInner({ store }: { store: AppStore }): React.JSX.Element {
       node: n,
       selected: open?.questId === n.questId,
       onOpen: () => void openQuest(n.questId),
+      onEdit: () => void openQuest(n.questId).then(() => store.getState().editQuest()),
       onRemove: () => void removeNode(n.questId),
       onAddChain: () => void addQuestChain(n.questId),
     } satisfies QuestNodeData,
@@ -226,7 +230,8 @@ function CanvasInner({ store }: { store: AppStore }): React.JSX.Element {
             )}
           </div>
         </div>
-        {(screen === 'edit' || screen === 'preview') && <EditorDrawer store={store} />}
+        {screen === 'preview' && <QuestPreview store={store} />}
+        {screen === 'edit' && <QuestFlowView store={store} />}
       </div>
       {showAddExisting && <AddExistingDialog store={store} onClose={() => setShowAddExisting(false)} />}
       {showProject && <ProjectDialog store={store} onClose={() => setShowProject(false)} />}

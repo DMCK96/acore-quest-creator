@@ -23,15 +23,6 @@ import type {
 import type { ModuleId } from '@core/modules/model';
 import { resetModule } from '@core/modules/catalog';
 
-/** The eight groups a quest is edited through, plus the two read-only side panels. */
-export type EditorGroup =
-  | 'identity'
-  | 'story'
-  | 'objectives'
-  | 'rewards'
-  | 'availability'
-  | 'map';
-
 export interface AppState {
   screen: 'connect' | 'pick' | 'preview' | 'edit';
   profiles: ProfileRecord[];

@@ -5,7 +5,7 @@ import './QuestStartsList.css';
 /**
  * The field an editable start's first claim leads to. A rowset claim (e.g. `creature_queststarter`)
  * has no `column`, and its control renders as a `<fieldset>` with no `id` of its own, so `data-field`
- * on GroupPanel's field wrapper is the only handle either shape of claim can be found by.
+ * on the module panel's field wrapper is the only handle either shape of claim can be found by.
  */
 function fieldIdOf(claim: RowRef): string {
   return claim.column ? `${claim.table}.${claim.column}` : claim.table;

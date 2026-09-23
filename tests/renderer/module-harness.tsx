@@ -8,6 +8,8 @@ import type { ReadOnlyReason } from '@core/model/aggregate';
 import type { ModuleId } from '@core/modules/model';
 import type { Api, QuestLinks } from '@shared/ipc';
 import { ModuleBody } from '../../src/renderer/modules/ModuleBody';
+import { QuestFlowView } from '../../src/renderer/views/QuestFlowView';
+import type { AppStore } from '../../src/renderer/state/app-store';
 import { NamesProvider } from '../../src/renderer/state/names';
 import { RewardTablesProvider } from '../../src/renderer/state/reward-tables';
 import { forkDb } from '../helpers/fixtures';
@@ -17,11 +19,11 @@ import { makeMockApi, sampleOpen } from './mock-api';
 export async function mountBody(
   id: ModuleId,
   over: Record<string, FieldValue> = {},
-  opts: { api?: Api; onChange?: Mock; links?: QuestLinks | null; readOnly?: ReadOnlyReason[] } = {},
+  opts: { api?: Api; onChange?: Mock; links?: QuestLinks | null; readOnly?: ReadOnlyReason[]; sharedItems?: Record<string, number[]> } = {},
 ): Promise<{ onChange: Mock; api: Api }> {
   const schema = await loadSchema(forkDb(), registry.tables.map((t) => t.table));
   const a = createNewAggregate(schema, registry, 60001);
-  const aggregate = { ...a, values: { ...a.values, 'quest_template.QuestLevel': 10, ...over }, readOnly: opts.readOnly ?? [] };
+  const aggregate = { ...a, values: { ...a.values, 'quest_template.QuestLevel': 10, ...over }, readOnly: opts.readOnly ?? [], sharedItems: opts.sharedItems ?? {} };
   const api = opts.api ?? makeMockApi();
   const onChange = opts.onChange ?? vi.fn();
   render(
@@ -32,4 +34,16 @@ export async function mountBody(
     </NamesProvider>,
   );
   return { onChange, api };
+}
+
+/** Switches an opened quest into the editor and renders the flow view with its providers. */
+export function renderFlow(store: AppStore, api: Api) {
+  store.getState().editQuest();
+  return render(
+    <NamesProvider api={api}>
+      <RewardTablesProvider api={api}>
+        <QuestFlowView store={store} />
+      </RewardTablesProvider>
+    </NamesProvider>,
+  );
 }

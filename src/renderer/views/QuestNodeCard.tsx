@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import type { CanvasNode, StartBadge } from '@shared/ipc';
 import './QuestNodeCard.css';
 
@@ -22,20 +22,29 @@ const GROUP_LABEL: Record<'pickOne' | 'finishAll', string> = { pickOne: 'Pick on
 /** Shown as the `title` of the "Not connected" chip, so hovering explains what it means. */
 export const NOT_CONNECTED_MESSAGE = 'Not connected to any other quest on the canvas.';
 
+/** How far the pointer may move between press and release for it to still count as a click. */
+const DRAG_SLOP_PX = 4;
+
 export function QuestNodeCard({
   node,
   selected,
   onOpen,
+  onEdit,
   onRemove,
   onAddChain,
 }: {
   node: CanvasNode;
   selected: boolean;
+  /** A single click: preview the quest. */
   onOpen?: () => void;
+  /** A double click: edit the quest. */
+  onEdit?: () => void;
   onRemove?: () => void;
   onAddChain?: () => void;
 }): React.JSX.Element {
   const [confirming, setConfirming] = useState(false);
+  // A drag ends in a click too; only a press that stayed put is a click on the card.
+  const pressedAt = useRef<{ x: number; y: number } | null>(null);
   const title = node.title.trim() === '' ? '(untitled quest)' : node.title;
   const label = `Quest ${node.questId}: ${title}`;
   const statusClass = node.unsafe ? 'quest-card--unsafe' : node.exported ? 'quest-card--exported' : node.isNew ? 'quest-card--new' : '';
@@ -49,7 +58,15 @@ export function QuestNodeCard({
       aria-label={label}
       aria-current={selected ? 'true' : undefined}
       style={{ width: NODE_WIDTH }}
-      onDoubleClick={() => onOpen?.()}
+      onMouseDown={(e) => {
+        pressedAt.current = { x: e.clientX, y: e.clientY };
+      }}
+      onClick={(e) => {
+        const at = pressedAt.current;
+        if (at && Math.hypot(e.clientX - at.x, e.clientY - at.y) > DRAG_SLOP_PX) return;
+        onOpen?.();
+      }}
+      onDoubleClick={() => (onEdit ?? onOpen)?.()}
       onKeyDown={(e) => {
         if (e.key === 'Enter') onOpen?.();
       }}

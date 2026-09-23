@@ -3,7 +3,7 @@ import { describe, it, expect } from 'vitest';
 import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { createAppStore } from '../../src/renderer/state/app-store';
-import { QuestWorkspace } from '../../src/renderer/views/QuestWorkspace';
+import { renderFlow } from './module-harness';
 import { makeMockApi, okv, sampleOpen } from './mock-api';
 import type { OpenResult } from '@shared/ipc';
 
@@ -22,8 +22,8 @@ async function storyOf(over: Partial<OpenResult>) {
   const store = createAppStore(api, { saveDelayMs: 0 });
   await store.getState().connect(form);
   await store.getState().openQuest(60001);
-  render(<QuestWorkspace store={store} />);
-  await userEvent.click(screen.getByRole('tab', { name: 'Story' }));
+  renderFlow(store, api);
+  await userEvent.click(screen.getByRole('button', { name: /^Dialogue/ }));
   return store;
 }
 

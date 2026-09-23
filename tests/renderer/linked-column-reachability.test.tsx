@@ -1,15 +1,10 @@
 // @vitest-environment jsdom
 import { describe, it, expect } from 'vitest';
-import { render, screen } from '@testing-library/react';
+import { screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { registry } from '@core/registry';
 import type { RowSetFieldDef } from '@core/registry/types';
-import { createNewAggregate } from '@core/import/new-quest';
-import { loadSchema } from '@core/schema/load';
-import { ObjectivesPanel } from '../../src/renderer/groups/ObjectivesPanel';
-import { NamesProvider } from '../../src/renderer/state/names';
-import { forkDb } from '../helpers/fixtures';
-import { makeMockApi } from './mock-api';
+import { mountBody } from './module-harness';
 
 const ITEM = 2000;
 const CREATURE = 100;
@@ -20,26 +15,22 @@ const linkedFields = registry.fields.filter(
 );
 
 async function objectives() {
-  const schema = await loadSchema(forkDb(), registry.tables.map((t) => t.table));
-  const aggregate = createNewAggregate(schema, registry, 60001);
-  aggregate.values['quest_template.RequiredItems'] = [{ item: ITEM, count: 1 }];
-  aggregate.values['creature_loot_template'] = [
-    { Entry: CREATURE, Item: ITEM, Reference: 0, Chance: 100, QuestRequired: 1, LootMode: 1, GroupId: 0, MinCount: 1, MaxCount: 1, Comment: null },
-  ];
-  aggregate.values['creature_questitem'] = [{ CreatureEntry: CREATURE, Idx: 0, ItemId: ITEM, VerifiedBuild: 0 }];
-  aggregate.values['gameobject_loot_template'] = [
-    { Entry: OBJECT, Item: ITEM, Reference: 0, Chance: 50, QuestRequired: 1, LootMode: 1, GroupId: 0, MinCount: 1, MaxCount: 1, Comment: null },
-  ];
-  aggregate.values['gameobject_questitem'] = [{ GameObjectEntry: OBJECT, Idx: 0, ItemId: ITEM, VerifiedBuild: 0 }];
-  const view = render(
-    <NamesProvider api={makeMockApi()}>
-      <ObjectivesPanel aggregate={aggregate} onChange={() => {}} />
-    </NamesProvider>,
-  );
+  await mountBody('objectives', {
+    'quest_template.RequiredItems': [{ item: ITEM, count: 1 }],
+    creature_loot_template: [
+      { Entry: CREATURE, Item: ITEM, Reference: 0, Chance: 100, QuestRequired: 1, LootMode: 1, GroupId: 0, MinCount: 1, MaxCount: 1, Comment: null },
+    ],
+    creature_questitem: [{ CreatureEntry: CREATURE, Idx: 0, ItemId: ITEM, VerifiedBuild: 0 }],
+    gameobject_loot_template: [
+      { Entry: OBJECT, Item: ITEM, Reference: 0, Chance: 50, QuestRequired: 1, LootMode: 1, GroupId: 0, MinCount: 1, MaxCount: 1, Comment: null },
+    ],
+    gameobject_questitem: [{ GameObjectEntry: OBJECT, Idx: 0, ItemId: ITEM, VerifiedBuild: 0 }],
+  });
+  const view = { container: document.body };
   // Advanced columns live behind a collapsed <details>, which jsdom keeps out of the accessibility
   // tree until it is open — so open every one before looking.
   for (const summary of view.container.querySelectorAll('summary')) await userEvent.click(summary);
-  return { aggregate, view };
+  return { view };
 }
 
 /**
@@ -79,8 +70,8 @@ describe('linked-table column reachability', () => {
       Entry: 'Source ID',
       CreatureEntry: 'Source ID',
       GameObjectEntry: 'Source ID',
-      Item: 'Items to collect',
-      ItemId: 'Items to collect',
+      Item: 'Item 1',
+      ItemId: 'Item 1',
     };
     const missing: string[] = [];
     for (const field of linkedFields) {

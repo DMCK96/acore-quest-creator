@@ -1,14 +1,8 @@
 // @vitest-environment jsdom
 import { describe, it, expect, vi } from 'vitest';
-import { render, screen } from '@testing-library/react';
+import { screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { GroupPanel } from '../../src/renderer/groups/GroupPanel';
-import { NamesProvider } from '../../src/renderer/state/names';
-import { RewardTablesProvider } from '../../src/renderer/state/reward-tables';
-import { registry } from '@core/registry';
-import { createNewAggregate } from '@core/import/new-quest';
-import { loadSchema } from '@core/schema/load';
-import { forkDb } from '../helpers/fixtures';
+import { mountBody } from './module-harness';
 import { makeMockApi, okv } from './mock-api';
 
 const xp = [100, 200, 300, 400, 500, 600, 700, 800, 900, 1000];
@@ -16,10 +10,7 @@ const money = [null, 5000, 10000, 15000, 20000, 25000, 30000, 35000, 40000, 4500
 const api = makeMockApi({ rewardTables: async () => okv({ xp, money }) });
 
 async function mount(over: Record<string, any> = {}, onChange = vi.fn()) {
-  const schema = await loadSchema(forkDb(), registry.tables.map((t) => t.table));
-  const a = createNewAggregate(schema, registry, 60001);
-  const aggregate = { ...a, values: { ...a.values, 'quest_template.QuestLevel': 10, ...over } };
-  return render(<NamesProvider api={api}><RewardTablesProvider api={api}><GroupPanel group="rewards" aggregate={aggregate} onChange={onChange} /></RewardTablesProvider></NamesProvider>);
+  return mountBody('rewards', over, { api, onChange });
 }
 
 describe('Rewards group', () => {
@@ -49,13 +40,11 @@ describe('Rewards group', () => {
     const six = Array.from({ length: 6 }, (_, i) => ({ item: i + 1, quantity: 1 }));
     await mount({ 'quest_template.RewardChoiceItems': six });
     expect(screen.getByText(/at most 6/i)).toBeInTheDocument();
-    expect(screen.getAllByRole('button', { name: 'Add' }).some((b) => (b as HTMLButtonElement).disabled)).toBe(true);
+    expect(screen.getByRole('button', { name: 'Add choice' })).toBeDisabled();
   });
   it('degrades gracefully when the reference tables are unavailable', async () => {
     const empty = makeMockApi({ rewardTables: async () => okv({ xp: Array(10).fill(null), money: Array(10).fill(null) }) });
-    const schema = await loadSchema(forkDb(), registry.tables.map((t) => t.table));
-    const a = createNewAggregate(schema, registry, 60001);
-    render(<NamesProvider api={empty}><RewardTablesProvider api={empty}><GroupPanel group="rewards" aggregate={a} onChange={() => {}} /></RewardTablesProvider></NamesProvider>);
+    await mountBody('rewards', {}, { api: empty });
     expect(await screen.findByRole('option', { name: '0' })).toBeInTheDocument();
   });
 });

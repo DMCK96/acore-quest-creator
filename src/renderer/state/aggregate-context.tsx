@@ -3,7 +3,7 @@ import type { QuestAggregate } from '@core/model/aggregate';
 
 const AggregateContext = createContext<QuestAggregate | null>(null);
 
-/** Makes the quest under edit available to controls nested anywhere inside a `GroupPanel`. */
+/** Makes the quest under edit available to controls nested anywhere inside a module panel. */
 export function AggregateProvider({
   aggregate,
   children,
