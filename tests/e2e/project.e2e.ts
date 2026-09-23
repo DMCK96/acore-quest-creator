@@ -48,7 +48,7 @@ test('new, name, save, reopen from recent, and recover after a crash', async () 
   await page.getByRole('button', { name: 'Add existing quest', exact: true }).click();
   await page.getByRole('searchbox').fill('a');
   await page.getByRole('button', { name: /level \d+\)/ }).first().click();
-  await page.getByRole('button', { name: 'Close editor' }).click();
+  await page.getByRole('button', { name: 'Close preview' }).click();
   await expect(page.getByTestId('quest-node').first()).toBeVisible();
   const nodeCount = await page.getByTestId('quest-node').count();
   expect(nodeCount).toBeGreaterThan(0);

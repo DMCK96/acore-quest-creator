@@ -48,6 +48,18 @@ describe('module editor store', () => {
     expect(api.updateQuest).toHaveBeenCalled();
   });
 
+  it('the changes view sends an edit still waiting on the debounce before it compares', async () => {
+    const api = makeMockApi({ openQuest: vi.fn(async () => okv(open)) });
+    const store = createAppStore(api, { saveDelayMs: 10_000 });
+    await store.getState().openQuest(60001);
+    store.getState().editQuest();
+    store.getState().setValue('quest_template.LogTitle', 'Wolves!');
+    await store.getState().loadPreview();
+    const saved = vi.mocked(api.updateQuest).mock.invocationCallOrder[0];
+    expect(saved).toBeDefined();
+    expect(vi.mocked(api.previewChanges).mock.invocationCallOrder[0]).toBeGreaterThan(saved);
+  });
+
   it('going back to the chain sends an edit still waiting on the debounce', async () => {
     const api = makeMockApi({ openQuest: vi.fn(async () => okv(open)) });
     const store = createAppStore(api, { saveDelayMs: 10_000 });

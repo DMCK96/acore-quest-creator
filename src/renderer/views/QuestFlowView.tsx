@@ -74,6 +74,7 @@ export function QuestFlowView({ store }: { store: AppStore }): React.JSX.Element
         <FidelityBanner fidelity={open.fidelity} />
         <ul aria-label="Modules" className="module-flow">
           {core.map(box)}
+          {optional.length > 0 && <li className="module-flow__break" aria-hidden="true" />}
           {optional.map(box)}
         </ul>
         {offered.length > 0 && (

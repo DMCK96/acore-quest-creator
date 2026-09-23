@@ -21,7 +21,7 @@ export function QuestHeader({ store, chips }: { store: AppStore; chips: readonly
   const title = typeof titleValue === 'string' ? titleValue : '';
 
   return (
-    <header className="quest-header">
+    <div className="quest-header">
       <div className="quest-header__title-row">
         <label htmlFor="quest-title" className="quest-header__title-label">
           Quest title
@@ -37,9 +37,9 @@ export function QuestHeader({ store, chips }: { store: AppStore; chips: readonly
         {aggregate.isNew && <span className="quest-header__new">NEW</span>}
       </div>
       <div className="quest-header__basics">
-        <FieldSetting fieldId="quest_template.QuestLevel" label="Level" aggregate={aggregate} onChange={setValue} />
-        <FieldSetting fieldId="quest_template.MinLevel" label="Min level" aggregate={aggregate} onChange={setValue} />
-        <FieldSetting fieldId="quest_template.QuestSortID" label="Zone or category" aggregate={aggregate} onChange={setValue} />
+        <FieldSetting fieldId="quest_template.QuestLevel" label="Level" help="" aggregate={aggregate} onChange={setValue} />
+        <FieldSetting fieldId="quest_template.MinLevel" label="Min level" help="" aggregate={aggregate} onChange={setValue} />
+        <FieldSetting fieldId="quest_template.QuestSortID" label="Zone or category" help="" aggregate={aggregate} onChange={setValue} />
       </div>
       <div className="quest-header__bar">
         <div className="quest-header__chips">
@@ -61,6 +61,6 @@ export function QuestHeader({ store, chips }: { store: AppStore; chips: readonly
           <ExportBar store={store} />
         </div>
       </div>
-    </header>
+    </div>
   );
 }

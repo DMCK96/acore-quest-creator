@@ -19,7 +19,7 @@ export function ModuleBox({ def, values, names, severity, selected, onOpen }: Mo
     .filter(Boolean)
     .join(' ');
   return (
-    <li className="module-flow__item">
+    <li className={`module-flow__item module-flow__item--${def.kind}`}>
       <button type="button" className={classes} data-module={def.id} aria-pressed={selected} onClick={onOpen}>
         <span className="module-box__label">
           {def.label}

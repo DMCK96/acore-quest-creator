@@ -19,7 +19,7 @@ export function PanelFrame({
 }): React.JSX.Element {
   return (
     <div role="dialog" aria-label={title} className="module-panel">
-      <header className="module-panel__head">
+      <div className="module-panel__head">
         <div>
           <h2 className="module-panel__title">{title}</h2>
           {description && <p className="module-panel__description">{description}</p>}
@@ -27,7 +27,7 @@ export function PanelFrame({
         <button type="button" className="module-panel__close" aria-label="Close panel" onClick={onClose}>
           ×
         </button>
-      </header>
+      </div>
       <div className="module-panel__body">{children}</div>
     </div>
   );

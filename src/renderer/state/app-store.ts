@@ -433,7 +433,9 @@ export function createAppStore(api: Api, opts: { saveDelayMs?: number } = {}): A
       await get().loadNodes();
     },
 
+    // The comparison reads the saved quest, so an edit still on the debounce is sent first.
     async loadPreview() {
+      await get().flushSave();
       const { open } = get();
       if (!open) return;
       const result = await api.previewChanges(open.questId);

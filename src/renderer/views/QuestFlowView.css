@@ -129,8 +129,8 @@
   position: relative;
 }
 
-/* An arrow into each box after the first, like the mockup's flow. */
-.module-flow__item + .module-flow__item::before {
+/* The core steps read left to right, joined by arrows like the mockup's flow. */
+.module-flow__item--core + .module-flow__item--core::before {
   content: '→';
   position: absolute;
   left: -26px;
@@ -138,6 +138,12 @@
   transform: translateY(-50%);
   color: var(--text-faint);
   font-size: 18px;
+}
+
+/* Optional modules start their own row, under the core flow. */
+.module-flow__break {
+  flex-basis: 100%;
+  height: 0;
 }
 
 .module-box {
