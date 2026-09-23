@@ -96,6 +96,18 @@ export interface Project {
   viewport: Viewport;
 }
 
+/** Unsaved work a crash left behind, offered back on the next launch. */
+export interface RecoveryEntry {
+  id: string;
+  name: string;
+  /** The file the work belonged to, or null when it had never been saved. */
+  recoveredFrom: string | null;
+  writtenAt: string;
+  questCount: number;
+  /** The file could not be read; it can only be discarded. */
+  damaged: boolean;
+}
+
 export interface ConnectSummary {
   profileId: number;
   schemaHash: string;
