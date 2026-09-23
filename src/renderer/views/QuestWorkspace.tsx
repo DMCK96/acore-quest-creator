@@ -34,8 +34,16 @@ export function QuestWorkspace({ store }: { store: AppStore }): React.JSX.Elemen
   const backToPicker = store((s) => s.backToPicker);
   const setValue = store((s) => s.setValue);
   const links = store((s) => s.links);
+  const openQuest = store((s) => s.openQuest);
+  const flushSave = store((s) => s.flushSave);
 
   if (!open) return null;
+
+  // Switching quests must not drop an edit still waiting on the autosave debounce.
+  const openOwner = async (id: number): Promise<void> => {
+    await flushSave();
+    await openQuest(id);
+  };
 
   const titleValue = open.aggregate.values['quest_template.LogTitle'];
   const title = typeof titleValue === 'string' ? titleValue : '';
@@ -72,7 +80,9 @@ export function QuestWorkspace({ store }: { store: AppStore }): React.JSX.Elemen
         {activeView === 'objectives' && (
           <ObjectivesPanel aggregate={open.aggregate} onChange={setValue} />
         )}
-        {activeView === 'availability' && <QuestStartsList links={links} />}
+        {activeView === 'availability' && (
+          <QuestStartsList links={links} questId={open.questId} onOpenQuest={(id) => void openOwner(id)} />
+        )}
         {GROUP_TABS.some((t) => t.view === activeView) && activeView !== 'objectives' && (
           <GroupPanel group={activeView as EditorGroup} aggregate={open.aggregate} onChange={setValue} />
         )}

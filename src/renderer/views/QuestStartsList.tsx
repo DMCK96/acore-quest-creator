@@ -20,8 +20,20 @@ function jumpToField(claim: RowRef): void {
   control?.focus();
 }
 
-function StartRow({ instance }: { instance: LinkView }): React.JSX.Element {
+interface RowProps {
+  instance: LinkView;
+  questId: number;
+  onOpenQuest: (questId: number) => void;
+}
+
+/**
+ * A link is edited on the quest that owns its rows: "turning in A unlocks B" is B's `PrevQuestID`,
+ * so on A's tab the only honest action is to open B. "Edit" jumps to a field of the open quest, and
+ * offering it for a row another quest owns would land on this quest's own, unrelated, field.
+ */
+function StartRow({ instance, questId, onOpenQuest }: RowProps): React.JSX.Element {
   const claim = instance.claims[0];
+  const owned = instance.owner === questId;
   return (
     <li>
       <span>{instance.summary}</span>
@@ -29,35 +41,94 @@ function StartRow({ instance }: { instance: LinkView }): React.JSX.Element {
         <span className="quest-starts__reason"> {instance.readOnlyReason}</span>
       )}
       {instance.inactiveReason && <span className="quest-starts__inactive"> {instance.inactiveReason}</span>}
-      {instance.editable && claim && (
+      {owned && instance.editable && claim && (
         <button type="button" aria-label={`Edit: ${instance.summary}`} onClick={() => jumpToField(claim)}>
           Edit
+        </button>
+      )}
+      {!owned && (
+        <button type="button" onClick={() => onOpenQuest(instance.owner)}>
+          Open quest {instance.owner}
         </button>
       )}
     </li>
   );
 }
 
-/**
- * The Availability tab's answer to "how does a player get this quest": every recognised start or
- * unlock, in plain language, plus the script rows the tool could not parse and the components this
- * database cannot support at all, so nothing about a quest's availability is left unexplained.
- */
-export function QuestStartsList({ links }: { links: QuestLinks | null }): React.JSX.Element | null {
-  if (links === null) return null;
+const isQuest = (endpoint: LinkView['from'], questId: number): boolean =>
+  endpoint.kind === 'quest' && endpoint.questId === questId;
 
+/** Starts and unlocks *of* this quest, including every group it belongs to. */
+function startsThis(instance: LinkView, questId: number): boolean {
+  if (isQuest(instance.to, questId)) return true;
+  const members = instance.params.members;
+  return instance.from.kind === 'group' && Array.isArray(members) && members.includes(questId);
+}
+
+/** Quest links from this quest on to another one. */
+function unlockedByThis(instance: LinkView, questId: number): boolean {
+  return isQuest(instance.from, questId) && instance.to.kind === 'quest' && instance.to.questId !== questId;
+}
+
+function LinkSection(props: {
+  title: string;
+  empty: string;
+  instances: LinkView[];
+  questId: number;
+  onOpenQuest: (questId: number) => void;
+}): React.JSX.Element {
+  const { title, empty, instances, questId, onOpenQuest } = props;
   return (
-    <section aria-label="Quest starts" className="quest-starts">
-      <h3>How this quest starts</h3>
-      {links.instances.length === 0 ? (
-        <p>Nothing starts or unlocks this quest yet.</p>
+    <section aria-label={title}>
+      <h3>{title}</h3>
+      {instances.length === 0 ? (
+        <p>{empty}</p>
       ) : (
         <ul>
-          {links.instances.map((instance) => (
-            <StartRow key={instance.id} instance={instance} />
+          {instances.map((instance) => (
+            <StartRow key={instance.id} instance={instance} questId={questId} onOpenQuest={onOpenQuest} />
           ))}
         </ul>
       )}
+    </section>
+  );
+}
+
+/**
+ * The Availability tab's answer to "how does a player get this quest", and what finishing it leads
+ * to: every recognised start or unlock in plain language, plus the script rows the tool could not
+ * parse and the components this database cannot support at all, so nothing about a quest's
+ * availability is left unexplained.
+ */
+export function QuestStartsList({
+  links,
+  questId,
+  onOpenQuest,
+}: {
+  links: QuestLinks | null;
+  questId: number;
+  onOpenQuest: (questId: number) => void;
+}): React.JSX.Element | null {
+  if (links === null) return null;
+  const starts = links.instances.filter((instance) => startsThis(instance, questId));
+  const unlocks = links.instances.filter((instance) => !startsThis(instance, questId) && unlockedByThis(instance, questId));
+
+  return (
+    <section aria-label="Quest starts" className="quest-starts">
+      <LinkSection
+        title="How this quest starts"
+        empty="Nothing starts this quest yet."
+        instances={starts}
+        questId={questId}
+        onOpenQuest={onOpenQuest}
+      />
+      <LinkSection
+        title="What this quest unlocks"
+        empty="This quest does not unlock another quest."
+        instances={unlocks}
+        questId={questId}
+        onOpenQuest={onOpenQuest}
+      />
       {links.unrecognised.length > 0 && (
         <>
           <h4>Script rows the tool does not understand yet</h4>
