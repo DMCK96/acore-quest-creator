@@ -37,6 +37,11 @@ export type ErrorCode =
   | 'CONFIRMATION_REQUIRED'
   | 'BAD_REQUEST'
   | 'BLOCKING_DRIFT'
+  /** A project or recovery file could not be read, or is not a project this tool can open. */
+  | 'PROJECT_FILE'
+  /** Writing the project file failed; the work is still open and unsaved. */
+  | 'SAVE_FAILED'
+  | 'INVALID_NAME'
   | 'UNKNOWN';
 
 export interface ApiError {
@@ -258,6 +263,18 @@ export interface Api {
   exportQuest(questId: number): Promise<Result<ExportResult>>;
   applyToDev(questId: number, confirm: boolean): Promise<Result<{ statements: number }>>;
   projectState(): Promise<Result<ProjectState>>;
+  renameProject(name: string): Promise<Result<true>>;
+  /** Asks about unsaved changes first; `done` is false when the user cancelled. */
+  newProject(name: string): Promise<Result<ProjectActionResult>>;
+  /** Without a path, shows the open dialog. */
+  openProject(path?: string): Promise<Result<ProjectActionResult>>;
+  saveProject(): Promise<Result<ProjectActionResult>>;
+  saveProjectAs(): Promise<Result<ProjectActionResult>>;
+  recentProjects(): Promise<Result<RecentProject[]>>;
+  forgetRecent(path: string): Promise<Result<true>>;
+  recoveries(): Promise<Result<RecoveryEntry[]>>;
+  restoreRecovery(id: string): Promise<Result<true>>;
+  discardRecovery(id: string): Promise<Result<true>>;
 }
 
 /**
@@ -302,6 +319,10 @@ const MAX_SEARCH_TEXT = 200;
 const MAX_LOOKUP_IDS = 5000;
 /** A drag never moves more nodes than a project holds. */
 const MAX_MOVES = 500;
+/** Project names, file paths and recovery ids: generous, and only there to refuse garbage. */
+const MAX_PROJECT_NAME = 200;
+const MAX_PATH = 4096;
+const MAX_RECOVERY_ID = 100;
 
 const positionSchema = z.object({ x: z.number(), y: z.number() });
 const viewportSchema = z.object({ x: z.number(), y: z.number(), zoom: z.number().positive() });
@@ -364,6 +385,16 @@ const REQUEST_SCHEMAS: Record<keyof Api, z.ZodType<unknown[]>> = {
   exportQuest: z.tuple([z.number()]),
   applyToDev: z.tuple([z.number(), z.boolean()]),
   projectState: z.tuple([]),
+  renameProject: z.tuple([z.string().max(MAX_PROJECT_NAME)]),
+  newProject: z.tuple([z.string().max(MAX_PROJECT_NAME)]),
+  openProject: z.tuple([z.string().max(MAX_PATH).optional()]),
+  saveProject: z.tuple([]),
+  saveProjectAs: z.tuple([]),
+  recentProjects: z.tuple([]),
+  forgetRecent: z.tuple([z.string().max(MAX_PATH)]),
+  recoveries: z.tuple([]),
+  restoreRecovery: z.tuple([z.string().max(MAX_RECOVERY_ID)]),
+  discardRecovery: z.tuple([z.string().max(MAX_RECOVERY_ID)]),
 };
 
 /**

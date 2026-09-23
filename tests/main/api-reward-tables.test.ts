@@ -3,12 +3,13 @@ import { createApi } from '../../src/main/api';
 import { openStore } from '../../src/main/store/store';
 import { createProjectSession } from '../../src/main/project/session';
 import { defaultProjectMeta } from '../../src/main/project/project-file';
+import type { ProjectController } from '../../src/main/project/controller';
 import { FakeWorldDb } from '../helpers/fake-world-db';
 
 const box = { encrypt: (s: string) => Uint8Array.from(Buffer.from(s)), decrypt: (b: Uint8Array) => Buffer.from(b).toString() };
 async function apiWith(db: FakeWorldDb) {
   const api = createApi({ store: openStore(':memory:', box), openWorldDb: async () => db, openDevDb: async () => { throw new Error('x'); },
-    fs: { writeFile: async () => {}, ensureDir: async () => {}, listDir: async () => [] }, now: () => new Date(), session: createProjectSession(defaultProjectMeta('Untitled Project', 'C:\\out')) });
+    fs: { writeFile: async () => {}, ensureDir: async () => {}, listDir: async () => [] }, now: () => new Date(), session: createProjectSession(defaultProjectMeta('Untitled Project', 'C:\\out')), projects: {} as ProjectController });
   const rec: any = await api.saveProfile({ name: 'w', role: 'world', host: 'h', port: 1, user: 'u', database: 'd', password: 'p' });
   await api.connect(rec.value.id);
   return api;

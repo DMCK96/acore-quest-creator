@@ -10,6 +10,7 @@ describe('parseRequest', () => {
       'addQuestChain', 'applyToDev', 'connect', 'exportQuest', 'projectState', 'listNodes', 'listProfiles', 'lookupNames', 'moveNodes', 'newQuest',
       'openQuest', 'previewChanges', 'questLinks', 'removeNode', 'rewardTables', 'updateQuest', 'saveProfile', 'saveViewport', 'searchQuests', 'startupProfile',
       'testConnection', 'validate',
+      'renameProject', 'newProject', 'openProject', 'saveProject', 'saveProjectAs', 'recentProjects', 'forgetRecent', 'recoveries', 'restoreRecovery', 'discardRecovery',
     ].sort());
   });
   it('accepts well-formed requests', () => {
@@ -29,6 +30,12 @@ describe('parseRequest', () => {
     expect(parseRequest('removeNode', [1]).ok).toBe(true);
     expect(parseRequest('listNodes', []).ok).toBe(true);
     expect(parseRequest('questLinks', [[1, 2]]).ok).toBe(true);
+    expect(parseRequest('newProject', ['Northshire']).ok).toBe(true);
+    expect(parseRequest('openProject', []).ok).toBe(true);
+    expect(parseRequest('openProject', ['C:/w/p.aqc']).ok).toBe(true);
+    expect(parseRequest('renameProject', ['x']).ok).toBe(true);
+    expect(parseRequest('restoreRecovery', ['abc']).ok).toBe(true);
+    expect(parseRequest('saveProject', []).ok).toBe(true);
   });
   it('lets numeric edge cases through so the API can answer with its own error', () => {
     expect(parseRequest('openQuest', [0]).ok).toBe(true);
@@ -43,6 +50,7 @@ describe('parseRequest', () => {
       ['moveNodes', [[{ questId: 1, x: Number.POSITIVE_INFINITY, y: 0 }]]], ['moveNodes', [[{ questId: 1, x: Number.NaN, y: 0 }]]],
       ['newQuest', [{ x: 'a', y: 0 }]], ['saveViewport', [{ x: 0, y: 0, zoom: 0 }]], ['saveViewport', [{ x: 0, y: 0 }]],
       ['questLinks', ['x']],
+      ['newProject', ['x'.repeat(201)]], ['newProject', [42]], ['openProject', [7]], ['forgetRecent', []],
     ] as const) {
       const r = parseRequest(m, [...a]);
       expect(r, `${m} ${JSON.stringify(a)}`).toMatchObject({ ok: false, error: { code: 'BAD_REQUEST' } });

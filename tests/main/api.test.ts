@@ -2,7 +2,10 @@ import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { createApi, type ApiDeps, type DevDb } from '../../src/main/api';
 import { openStore, type SecretBox } from '../../src/main/store/store';
 import { createProjectSession, type ProjectSession } from '../../src/main/project/session';
-import { defaultProjectMeta } from '../../src/main/project/project-file';
+import { defaultProjectMeta, serializeProject } from '../../src/main/project/project-file';
+import { createProjectController, type Dialogs } from '../../src/main/project/controller';
+import { createRecovery } from '../../src/main/project/recovery';
+import { memFs } from '../helpers/mem-fs';
 import { forkDb } from '../helpers/fixtures';
 import { FakeWorldDb } from '../helpers/fake-world-db';
 import type { QuestAggregate } from '@core/model/aggregate';
@@ -29,13 +32,16 @@ function seed(): FakeWorldDb {
 function makeApi(overrides: Partial<ApiDeps> = {}) {
   const store = openStore(':memory:', box);
   const session: ProjectSession = overrides.session ?? createProjectSession(defaultProjectMeta('Untitled Project', 'C:\\out'));
+  const pfs = memFs();
+  const dialogs: Dialogs = { showSave: async () => null, showOpen: async () => null, confirmUnsaved: async () => 'discard' };
+  const projects = overrides.projects ?? createProjectController({ session, fs: pfs, dialogs, recovery: createRecovery({ dir: 'C:\\ud\\recovery', fs: pfs, now: () => new Date() }), recent: store.recent, defaultOutputDir: 'C:\\out', now: () => new Date() });
   const dev: DevDb = { execute: async (s) => { executed.push([...s]); }, close: async () => {} };
   const deps: ApiDeps = {
-    store, session, openWorldDb: async () => db, openDevDb: async () => { devOpened++; return dev; },
+    store, session, projects, openWorldDb: async () => db, openDevDb: async () => { devOpened++; return dev; },
     fs: { writeFile: async (p, t) => { files.set(p, t); }, ensureDir: async () => {}, listDir: async () => [...files.keys()].map((k) => k.split(/[\\/]/).pop()!) },
     now: () => new Date('2026-09-21T10:00:00Z'), ...overrides,
   };
-  return { api: createApi(deps), store, session };
+  return { api: createApi(deps), store, session, pfs };
 }
 beforeEach(() => { gate.throwWith = null; db = seed(); files = new Map(); executed = []; devOpened = 0; });
 const ok = <T>(r: { ok: boolean; value?: T; error?: any }): T => { if (!r.ok) throw new Error(JSON.stringify(r.error)); return r.value as T; };
@@ -609,5 +615,47 @@ describe('project session', () => {
     });
     session.rename('Northshire');
     expect(ok(await api.projectState())).toMatchObject({ name: 'Northshire', dirty: true });
+  });
+});
+
+describe('project files over the API', () => {
+  it('works without a database connection', async () => {
+    const { api } = makeApi();
+    expect(ok(await api.projectState()).name).toBe('Untitled Project');
+    expect(ok(await api.newProject('Northshire'))).toEqual({ done: true });
+    expect(ok(await api.saveProjectAs())).toEqual({ done: false });
+    expect(ok(await api.recentProjects())).toEqual([]);
+    expect(ok(await api.recoveries())).toEqual([]);
+  });
+  it('renames, refusing an empty name with INVALID_NAME', async () => {
+    const { api } = makeApi();
+    ok(await api.renameProject('Wolves'));
+    expect(ok(await api.projectState())).toMatchObject({ name: 'Wolves', dirty: true });
+    expect(await api.renameProject('  ')).toMatchObject({ ok: false, error: { code: 'INVALID_NAME' } });
+  });
+  it('reports a bad project file as PROJECT_FILE with its reason in the message', async () => {
+    const { api, pfs } = makeApi();
+    pfs.files.set('C:\\w\\bad.aqc', 'nope');
+    const r = await api.openProject('C:\\w\\bad.aqc');
+    expect(r).toMatchObject({ ok: false, error: { code: 'PROJECT_FILE' } });
+    expect((r as any).error.message).toMatch(/not an ACORE Quest Creator project/);
+  });
+  it('reports a failed save as SAVE_FAILED', async () => {
+    const { api, pfs } = makeApi();
+    pfs.files.set('C:\\w\\p.aqc', serializeProject({ ...defaultProjectMeta('P', 'C:\\out'), quests: [] }));
+    ok(await api.openProject('C:\\w\\p.aqc'));
+    ok(await api.renameProject('Q'));
+    pfs.failNext.write = new Error('ENOSPC: no space left on device');
+    expect(await api.saveProject()).toMatchObject({ ok: false, error: { code: 'SAVE_FAILED' } });
+  });
+  it('opening a project brings its quests back onto the canvas', async () => {
+    const { api, session, pfs } = await connected();
+    ok(await api.openQuest(60001));
+    const doc = session.toDocument();
+    ok(await api.newProject('Empty'));
+    expect(ok(await api.listNodes())).toEqual([]);
+    pfs.files.set('C:\\w\\p.aqc', serializeProject(doc));
+    ok(await api.openProject('C:\\w\\p.aqc'));
+    expect(ok(await api.listNodes()).map((n) => n.questId)).toEqual([60001]);
   });
 });

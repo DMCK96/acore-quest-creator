@@ -80,6 +80,16 @@ export function makeMockApi(overrides: Partial<Record<keyof Api, (...args: any[]
     exportQuest: vi.fn(async () => okv({ path: '', sql: '', warnings: [], issues: [] })),
     applyToDev: vi.fn(async () => okv({ statements: 0 })),
     projectState: vi.fn(async () => okv({ name: 'Untitled Project', filePath: null, dirty: false, idRangeStart: 60000, idRangeEnd: 99999, outputDir: 'C:\\out', viewport: { x: 0, y: 0, zoom: 1 } })),
+    renameProject: vi.fn(async () => okv(true as const)),
+    newProject: vi.fn(async () => okv({ done: true })),
+    openProject: vi.fn(async () => okv({ done: true })),
+    saveProject: vi.fn(async () => okv({ done: true })),
+    saveProjectAs: vi.fn(async () => okv({ done: true })),
+    recentProjects: vi.fn(async () => okv([])),
+    forgetRecent: vi.fn(async () => okv(true as const)),
+    recoveries: vi.fn(async () => okv([])),
+    restoreRecovery: vi.fn(async () => okv(true as const)),
+    discardRecovery: vi.fn(async () => okv(true as const)),
   };
 
   const wrapped = Object.fromEntries(

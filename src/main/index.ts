@@ -11,6 +11,9 @@ import { createSecretBox } from './secret-box';
 import { openStore, type Store } from './store/store';
 import { DEFAULT_PROJECT_NAME, defaultProjectMeta } from './project/project-file';
 import { createProjectSession, type ProjectSession } from './project/session';
+import { createProjectController, type ProjectController } from './project/controller';
+import { createRecovery } from './project/recovery';
+import { nodeProjectFs } from './project/node-fs';
 
 /**
  * The Electron shell: it owns the window, the SQLite store and the IPC surface, and nothing else.
@@ -59,10 +62,16 @@ const unknownError = (error: unknown): { ok: false; error: ApiError } => ({
   error: { code: 'UNKNOWN', message: error instanceof Error ? error.message : String(error) },
 });
 
-function buildDeps(store: Store, session: ProjectSession, startupProfileId: number | null): ApiDeps {
+function buildDeps(
+  store: Store,
+  session: ProjectSession,
+  projects: ProjectController,
+  startupProfileId: number | null,
+): ApiDeps {
   return {
     store,
     session,
+    projects,
     startupProfileId,
     openWorldDb: (p) => openMysqlWorldDb(p),
     openDevDb: (p) => openMysqlDevDb(p),
@@ -132,7 +141,18 @@ void app.whenReady().then(() => {
     console.error('Ignoring connection settings from the environment:', error);
   }
   const session = createProjectSession(defaultProjectMeta(DEFAULT_PROJECT_NAME, defaultOutputDir()));
-  registerIpc(createApi(buildDeps(store, session, startupProfileId)));
+  // Placeholder dialogs until the window exists to parent them (wired properly in the next change).
+  const recovery = createRecovery({ dir: join(app.getPath('userData'), 'recovery'), fs: nodeProjectFs, now: () => new Date() });
+  const projects = createProjectController({
+    session,
+    fs: nodeProjectFs,
+    dialogs: { showSave: async () => null, showOpen: async () => null, confirmUnsaved: async () => 'cancel' },
+    recovery,
+    recent: store.recent,
+    defaultOutputDir: defaultOutputDir(),
+    now: () => new Date(),
+  });
+  registerIpc(createApi(buildDeps(store, session, projects, startupProfileId)));
 
   createWindow();
   app.on('activate', () => {

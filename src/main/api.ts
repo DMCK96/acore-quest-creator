@@ -50,6 +50,7 @@ import type {
 import type { Store } from './store/store';
 import type { ProjectQuest } from './project/project-file';
 import type { ProjectSession } from './project/session';
+import type { ProjectController } from './project/controller';
 
 export type { DevDb };
 
@@ -65,6 +66,8 @@ export interface ApiDeps {
   now(): Date;
   /** The open project: every quest on the canvas lives here until the user saves it to a file. */
   session: ProjectSession;
+  /** New, Open, Save and the rest of the project-file actions, which need no database. */
+  projects: ProjectController;
   /** A profile to connect to on launch (seeded from `.env` in development). */
   startupProfileId?: number | null;
 }
@@ -147,6 +150,9 @@ function toApiError(error: unknown): ApiError {
     RangeExhaustedError: 'RANGE_EXHAUSTED',
     IdCollisionError: 'ID_COLLISION',
     InvalidRangeError: 'BAD_REQUEST',
+    ProjectFileError: 'PROJECT_FILE',
+    SaveFailedError: 'SAVE_FAILED',
+    InvalidNameError: 'INVALID_NAME',
     WorldDbConnectionError: 'CONNECTION',
     // A missing grant is not a connection failure, and the message must not send the user to
     // check their host and port for a problem that lives in their GRANT statements.
@@ -779,12 +785,43 @@ export function createApi(deps: ApiDeps): Api {
         return { statements: rendered.length };
       }),
 
-    projectState: () =>
-      run(async (): Promise<ProjectState> => ({
-        ...deps.session.meta(),
-        filePath: deps.session.filePath(),
-        dirty: deps.session.dirty(),
-      })),
+    projectState: () => run(async (): Promise<ProjectState> => deps.projects.state()),
+
+    renameProject: (name) =>
+      run(async () => {
+        deps.projects.rename(name);
+        return true as const;
+      }),
+
+    newProject: (name) => run(() => deps.projects.newProject(name)),
+
+    openProject: (path) => run(() => deps.projects.open(path)),
+
+    saveProject: () => run(() => deps.projects.save()),
+
+    saveProjectAs: () => run(() => deps.projects.saveAs()),
+
+    recentProjects: () => run(() => deps.projects.recent()),
+
+    forgetRecent: (path) =>
+      run(async () => {
+        deps.projects.forgetRecent(path);
+        return true as const;
+      }),
+
+    recoveries: () => run(() => deps.projects.recoveries()),
+
+    restoreRecovery: (id) =>
+      run(async () => {
+        await deps.projects.restoreRecovery(id);
+        return true as const;
+      }),
+
+    discardRecovery: (id) =>
+      run(async () => {
+        await deps.projects.discardRecovery(id);
+        return true as const;
+      }),
   };
 }
 

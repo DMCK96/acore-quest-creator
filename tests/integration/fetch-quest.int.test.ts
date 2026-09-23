@@ -8,6 +8,7 @@ import { createApi } from '../../src/main/api';
 import { openStore } from '../../src/main/store/store';
 import { createProjectSession } from '../../src/main/project/session';
 import { defaultProjectMeta } from '../../src/main/project/project-file';
+import type { ProjectController } from '../../src/main/project/controller';
 import { openMysqlWorldDb } from '@core/db/mysql-world-db';
 import { openMysqlDevDb } from '@core/db/mysql-dev-db';
 import { createMysqlScratch, type MysqlScratch } from '@core/roundtrip/mysql-gate';
@@ -42,7 +43,7 @@ describe('authoring a fetch quest end to end', () => {
       store, openWorldDb: (p) => openMysqlWorldDb({ host: p.host, port: p.port, user: p.user, password: p.password, database: p.database }),
       openDevDb: (p) => openMysqlDevDb({ host: p.host, port: p.port, user: p.user, password: p.password, database: scratch.schema }),
       fs: { writeFile: (p, t) => writeFile(p, t, 'utf8'), ensureDir: async (p) => { await mkdir(p, { recursive: true }); }, listDir: (p) => readdir(p) },
-      now: () => new Date('2026-09-21T10:00:00Z'), session: createProjectSession(defaultProjectMeta('Untitled Project', outDir)),
+      now: () => new Date('2026-09-21T10:00:00Z'), session: createProjectSession(defaultProjectMeta('Untitled Project', outDir)), projects: {} as ProjectController,
     });
     const ok = async <T,>(r: Promise<any>): Promise<T> => { const x = await r; if (!x.ok) throw new Error(JSON.stringify(x.error)); return x.value; };
     const world = await ok<any>(api.saveProfile({ name: 'w', role: 'world', host: conn.host, port: conn.port, user: conn.user, database: worldDb, password: conn.password }));
