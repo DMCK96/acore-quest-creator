@@ -44,7 +44,18 @@
 }
 
 .project-dialog__field input {
+  font: inherit;
   font-size: 1.1em;
+  padding: 0.45em 0.6em;
+  color: var(--text);
+  background: var(--bg-inset);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+}
+
+.project-dialog__field input:focus {
+  outline: none;
+  border-color: var(--accent);
 }
 
 .project-dialog__path {
