@@ -100,6 +100,19 @@ export interface ProjectState {
   viewport: Viewport;
 }
 
+/** A project file opened or saved lately; `exists` is false once the file has gone. */
+export interface RecentProject {
+  path: string;
+  name: string;
+  openedAt: string;
+  exists: boolean;
+}
+
+/** New, Open and Save can each be cancelled by the user part way; `done` says whether it happened. */
+export interface ProjectActionResult {
+  done: boolean;
+}
+
 /** Unsaved work a crash left behind, offered back on the next launch. */
 export interface RecoveryEntry {
   id: string;
