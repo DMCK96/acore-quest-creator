@@ -2,6 +2,7 @@ import type { ComponentDef } from './component';
 import type { ComponentId } from './model';
 import { QUEST_COLUMN_COMPONENTS } from './components/quest-columns';
 import { GROUP_COMPONENTS } from './components/groups';
+import { RELATION_COMPONENTS } from './components/relations';
 
 /**
  * The full list of built-in components, in claim-priority order: `recogniseLinks` walks this list
@@ -21,6 +22,7 @@ export const CATALOG: readonly ComponentDef[] = [
   byId.get('unlock.nextQuest')!,
   byId.get('start.offeredStraightAway')!,
   byId.get('gate.breadcrumb')!,
+  ...RELATION_COMPONENTS,
 ];
 
 const catalogById = new Map(CATALOG.map((c) => [c.id, c]));
