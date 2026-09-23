@@ -491,3 +491,63 @@ describe('profiles and testConnection', () => {
     expect(ok(await api.listProfiles())).toEqual([]);
   });
 });
+
+describe('links', () => {
+  it('reports links between canvas quests, their start badges and nothing disconnected', async () => {
+    db.insert('quest_template', { ID: '60002', LogTitle: 'More wolves' });
+    db.insert('quest_template_addon', { ID: '60002', PrevQuestID: '60001' });
+    const { api } = await connected();
+    ok(await api.addQuestChain(60001));
+    const nodes = ok(await api.listNodes());
+    const first = nodes.find((n) => n.questId === 60001)!;
+    const second = nodes.find((n) => n.questId === 60002)!;
+    expect(first.links).toEqual([{ to: 60002, component: 'unlock.afterTurnIn', owner: 60002 }]);
+    expect(first.starts).toEqual(['npc']);
+    expect(second.starts).toEqual(['backend']);
+    expect(nodes.every((n) => !n.notConnected)).toBe(true);
+  });
+  it('follows the draft, not the world, once the link is cleared in the editor', async () => {
+    db.insert('quest_template', { ID: '60002', LogTitle: 'More wolves' });
+    db.insert('quest_template_addon', { ID: '60002', PrevQuestID: '60001' });
+    const { api } = await connected();
+    ok(await api.addQuestChain(60001));
+    const open = ok(await api.openQuest(60002));
+    ok(await api.saveDraft({ ...open.aggregate, values: { ...open.aggregate.values, 'quest_template_addon.PrevQuestID': 0 } }));
+    const nodes = ok(await api.listNodes());
+    expect(nodes.find((n) => n.questId === 60001)!.links).toEqual([]);
+    expect(nodes.filter((n) => n.notConnected).map((n) => n.questId).sort()).toEqual([60001, 60002]);
+    expect(nodes.find((n) => n.questId === 60002)!.warnings).toBeGreaterThanOrEqual(1);
+  });
+  it('counts linked quests that exist but are not on the canvas, and ignores ones that do not exist', async () => {
+    db.insert('quest_template', { ID: '60002', LogTitle: 'More wolves' });
+    db.insert('quest_template_addon', { ID: '60002', PrevQuestID: '60001' });
+    db.insert('quest_template_addon', { ID: '60001', NextQuestID: '70000' }); // 70000 does not exist
+    const { api } = await connected();
+    ok(await api.openQuest(60001));
+    const [node] = ok(await api.listNodes());
+    expect(node.offCanvasLinks).toBe(1);
+    expect(node.notConnected).toBe(false); // alone on the canvas
+  });
+  it('shows a script start instead of warning that nothing starts the quest', async () => {
+    db.insert('smart_scripts', { entryorguid: '100', source_type: '0', id: '0', link: '0', event_type: '64', action_type: '7', action_param1: '60001', comment: '' });
+    const { api } = await connected();
+    const open = ok(await api.openQuest(60001));
+    expect(open.issues.map((i) => i.code)).not.toContain('NO_STARTER');
+    const links = ok(await api.questLinks([60001]));
+    expect(links.instances.map((i) => i.summary)).toEqual(expect.arrayContaining([
+      'Offered by Marshal (100)', 'Offered by a script on Marshal (100) when the player talks to it',
+    ]));
+    expect(links.instances.find((i) => i.component === 'start.smartai')!.label).toBe('Offered by a SmartAI script');
+    expect(links.unavailable).toEqual([]);
+  });
+  it('lists script rows it does not understand', async () => {
+    db.insert('smart_scripts', { entryorguid: '60001', source_type: '5', id: '0', link: '0', event_type: '48', action_type: '12', comment: '' });
+    const { api } = await connected();
+    ok(await api.openQuest(60001));
+    const links = ok(await api.questLinks([60001]));
+    expect(links.unrecognised).toEqual([{
+      questId: 60001, key: 'entryorguid=60001,source_type=5,id=0,link=0',
+      summary: 'when a quest objective is completed: SmartAI action 12 (quest 60001, row 0)',
+    }]);
+  });
+});

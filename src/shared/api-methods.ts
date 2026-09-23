@@ -24,6 +24,7 @@ export const API_METHODS = [
   'removeNode',
   'saveViewport',
   'lookupNames',
+  'questLinks',
   'rewardTables',
   'saveDraft',
   'previewChanges',

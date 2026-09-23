@@ -3,6 +3,8 @@ import type { RefKind } from '@core/db/types';
 import type { QuestSummary } from '@core/db/world-db';
 import type { PatchWarning } from '@core/export/build-patch';
 import type { UnmodelledColumn } from '@core/import/unmodelled';
+import type { UnavailableComponent } from '@core/links/availability';
+import type { ComponentId, ComponentInstance } from '@core/links/model';
 import type { QuestAggregate } from '@core/model/aggregate';
 import type { FieldValue } from '@core/registry/types';
 import type { Difference } from '@core/roundtrip/compare';
@@ -151,6 +153,51 @@ export interface CanvasNode {
   warnings: number;
   x: number;
   y: number;
+  /** The quest-to-quest edges that leave this node, one per target and component. */
+  links: NodeLink[];
+  /** What offers this quest, as badges in a fixed order so the node never reshuffles them. */
+  starts: StartBadge[];
+  /** The quest groups this node belongs to. */
+  groups: NodeGroup[];
+  /** Linked quests that exist in the world but are not drawn, so the user knows the chain goes on. */
+  offCanvasLinks: number;
+  /** Shares no edge with any other quest on the canvas; also counted in `warnings`. */
+  notConnected: boolean;
+}
+
+/** How a quest is offered, reduced to the few kinds a canvas node has room to show. */
+export type StartBadge = 'npc' | 'object' | 'event' | 'item' | 'script' | 'backend';
+
+/** One edge leaving a node; `owner` is the quest whose rows carry it, which is where it is edited. */
+export interface NodeLink {
+  to: number;
+  component: ComponentId;
+  owner: number;
+}
+
+export interface NodeGroup {
+  group: number;
+  kind: 'pickOne' | 'finishAll';
+}
+
+/** A component instance with the words the links panel shows for it. */
+export interface LinkView extends ComponentInstance {
+  label: string;
+  summary: string;
+}
+
+/** A script row that names a quest but that no component explains. */
+export interface UnrecognisedView {
+  questId: number;
+  key: string;
+  summary: string;
+}
+
+export interface QuestLinks {
+  instances: LinkView[];
+  unrecognised: UnrecognisedView[];
+  /** Components the connected database cannot support, and why, so their absence is explained. */
+  unavailable: UnavailableComponent[];
 }
 
 /** Everything the renderer can ask the main process to do. */
@@ -171,6 +218,8 @@ export interface Api {
   removeNode(questId: number): Promise<Result<true>>;
   saveViewport(v: Viewport): Promise<Result<true>>;
   lookupNames(kind: RefKind, ids: number[]): Promise<Result<Record<number, string>>>;
+  /** Every quest link touching these quests, described, with the rows no component explains. */
+  questLinks(questIds: number[]): Promise<Result<QuestLinks>>;
   /** The XP and money a quest of this level rewards, one entry per reward index. */
   rewardTables(level: number): Promise<Result<{ xp: (number | null)[]; money: (number | null)[] }>>;
   saveDraft(aggregate: QuestAggregate): Promise<Result<{ updatedAt: string }>>;
@@ -289,6 +338,7 @@ const REQUEST_SCHEMAS: Record<keyof Api, z.ZodType<unknown[]>> = {
   removeNode: z.tuple([z.number()]),
   saveViewport: z.tuple([viewportSchema]),
   lookupNames: z.tuple([z.enum(REF_KINDS), z.array(z.number()).max(MAX_LOOKUP_IDS)]),
+  questLinks: z.tuple([z.array(z.number()).max(MAX_LOOKUP_IDS)]),
   rewardTables: z.tuple([z.number()]),
   saveDraft: z.tuple([aggregateSchema]),
   previewChanges: z.tuple([z.number()]),

@@ -26,7 +26,7 @@ const numberOf = (raw: string | null | undefined): number => {
 };
 
 /** A fork without the table or column simply has no rows of that kind. */
-async function rowsOrNone(db: WorldDb, table: string, where: Where): Promise<RawRow[]> {
+export async function rowsOrNone(db: WorldDb, table: string, where: Where): Promise<RawRow[]> {
   const values = Object.values(where);
   if (values.some((v) => typeof v !== 'string' && v.length === 0)) return [];
   try {

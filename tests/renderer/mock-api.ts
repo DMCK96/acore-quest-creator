@@ -43,6 +43,11 @@ export function nodeOf(overrides: Partial<CanvasNode> = {}): CanvasNode {
     warnings: 0,
     x: 0,
     y: 0,
+    links: [],
+    starts: [],
+    groups: [],
+    offCanvasLinks: 0,
+    notConnected: false,
   };
   return { ...base, ...overrides };
 }
@@ -67,6 +72,7 @@ export function makeMockApi(overrides: Partial<Record<keyof Api, (...args: any[]
     removeNode: vi.fn(async () => okv(true as const)),
     saveViewport: vi.fn(async () => okv(true as const)),
     lookupNames: vi.fn(async () => okv({})),
+    questLinks: vi.fn(async () => okv({ instances: [], unrecognised: [], unavailable: [] })),
     rewardTables: vi.fn(async () => okv({ xp: [], money: [] })),
     saveDraft: vi.fn(async () => okv({ updatedAt: new Date(0).toISOString() })),
     previewChanges: vi.fn(async () => okv([])),

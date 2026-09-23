@@ -8,7 +8,7 @@ describe('parseRequest', () => {
   it('knows every API method', () => {
     expect([...API_METHODS].sort()).toEqual([
       'addQuestChain', 'applyToDev', 'connect', 'exportQuest', 'getProject', 'listNodes', 'listProfiles', 'lookupNames', 'moveNodes', 'newQuest',
-      'openQuest', 'previewChanges', 'removeNode', 'rewardTables', 'saveDraft', 'saveProfile', 'saveViewport', 'searchQuests', 'startupProfile',
+      'openQuest', 'previewChanges', 'questLinks', 'removeNode', 'rewardTables', 'saveDraft', 'saveProfile', 'saveViewport', 'searchQuests', 'startupProfile',
       'testConnection', 'updateProject', 'validate',
     ].sort());
   });
@@ -28,6 +28,7 @@ describe('parseRequest', () => {
     expect(parseRequest('saveViewport', [{ x: -5, y: 5, zoom: 0.5 }]).ok).toBe(true);
     expect(parseRequest('removeNode', [1]).ok).toBe(true);
     expect(parseRequest('listNodes', []).ok).toBe(true);
+    expect(parseRequest('questLinks', [[1, 2]]).ok).toBe(true);
   });
   it('lets numeric edge cases through so the API can answer with its own error', () => {
     expect(parseRequest('openQuest', [0]).ok).toBe(true);
@@ -41,6 +42,7 @@ describe('parseRequest', () => {
       ['saveDraft', [{ questId: 'x' }]],
       ['moveNodes', [[{ questId: 1, x: Number.POSITIVE_INFINITY, y: 0 }]]], ['moveNodes', [[{ questId: 1, x: Number.NaN, y: 0 }]]],
       ['newQuest', [{ x: 'a', y: 0 }]], ['saveViewport', [{ x: 0, y: 0, zoom: 0 }]], ['saveViewport', [{ x: 0, y: 0 }]],
+      ['questLinks', ['x']],
     ] as const) {
       const r = parseRequest(m, [...a]);
       expect(r, `${m} ${JSON.stringify(a)}`).toMatchObject({ ok: false, error: { code: 'BAD_REQUEST' } });

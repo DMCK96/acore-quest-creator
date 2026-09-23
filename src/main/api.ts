@@ -1,7 +1,7 @@
 import { join } from 'node:path';
 import { layoutChain, NODE_GRID, nextNodePosition } from '../core/canvas/layout';
 import type { DevDb } from '../core/db/dev-db';
-import type { RawRow, RefKind, SchemaInfo } from '../core/db/types';
+import type { ColumnInfo, RawRow, RefKind, SchemaInfo } from '../core/db/types';
 import { UnknownColumnError, UnknownTableError, type WorldDb } from '../core/db/world-db';
 import { buildPatch, type PatchStatement, type PatchWarning } from '../core/export/build-patch';
 import { findQuestGiverFixes, type QuestGiverFix } from '../core/export/quest-giver';
@@ -12,26 +12,38 @@ import { fetchLinkedContext } from '../core/import/linked-context';
 import { createNewAggregate } from '../core/import/new-quest';
 import { findQuestChain } from '../core/import/quest-chain';
 import { listUnmodelled } from '../core/import/unmodelled';
+import { componentAvailability, type Availability } from '../core/links/availability';
+import { componentById } from '../core/links/catalog';
+import type { NameBook, NameKind } from '../core/links/component';
+import { CONTEXT_TABLES } from '../core/links/context';
+import { disconnectedQuests, linkIssues } from '../core/links/issues';
+import { questEdges, type ComponentId, type Endpoint } from '../core/links/model';
+import { loadLinks, type LinkSnapshot } from '../core/links/service';
 import type { QuestAggregate, Snapshot } from '../core/model/aggregate';
 import { localesInSnapshot, localizedTextValues } from '../core/model/locales';
 import { registry } from '../core/registry';
+import { actionName, describeEvent, sourceName } from '../core/smartai/ids';
 import { applyPatchInMemory, keyColumnsByTable } from '../core/roundtrip/apply';
 import { compareTables, type Difference } from '../core/roundtrip/compare';
 import { verifyRoundTrip, type FidelityReport } from '../core/roundtrip/verify';
 import { diffSchema, hasBlockingDrift } from '../core/schema/diff';
 import { loadSchema } from '../core/schema/load';
-import { refCheckerFor, validateQuest, type Issue } from '../core/validate/validate';
+import { refCheckerFor, validateQuest, type Issue, type RefChecker } from '../core/validate/validate';
 import { TOOL_VERSION } from '../core/version';
 import type {
   Api,
   ApiError,
   CanvasNode,
   ErrorCode,
+  NodeGroup,
+  NodeLink,
   NodePosition,
   OpenResult,
   ProfileInput,
   Project,
+  QuestLinks,
   Result,
+  StartBadge,
 } from '../shared/ipc';
 import type { DraftRecord, Store } from './store/store';
 
@@ -61,6 +73,10 @@ interface Session {
   blockingTables: string[];
   /** Blocking tables the database has but will not show this user: a grant, not a missing table. */
   forbiddenTables: string[];
+  /** The tables quest links read beyond the registry's, as the connected database has them. */
+  contextTables: Record<string, ColumnInfo[]>;
+  /** Which link components this database can carry, decided once so every call agrees. */
+  availability: Availability;
 }
 
 const REGISTRY_TABLES = registry.tables.map((t) => t.table);
@@ -159,6 +175,38 @@ const numberOf = (aggregate: QuestAggregate, fieldId: string): number => {
 };
 
 /**
+ * The start components a canvas node shows as a badge, in the order the node draws them.
+ * `start.offeredStraightAway` is missing on purpose: it comes from another quest, so it is an edge.
+ */
+const START_BADGES: readonly [ComponentId, StartBadge][] = [
+  ['start.npc', 'npc'],
+  ['start.object', 'object'],
+  ['start.gameEvent', 'event'],
+  ['start.item', 'item'],
+  ['start.smartai', 'script'],
+  ['start.backend', 'backend'],
+];
+
+const GROUP_KINDS: Partial<Record<ComponentId, NodeGroup['kind']>> = {
+  'group.pickOne': 'pickOne',
+  'group.finishAll': 'finishAll',
+};
+
+/** The world entity an endpoint names, when it is one the links panel can show a name for. */
+function nameTarget(endpoint: Endpoint): [NameKind, number] | undefined {
+  switch (endpoint.kind) {
+    case 'quest':
+      return ['quest', endpoint.questId];
+    case 'creature':
+    case 'gameobject':
+    case 'item':
+      return [endpoint.kind, endpoint.entry];
+    default:
+      return undefined;
+  }
+}
+
+/**
  * The whole application, as one object of plain async functions.
  *
  * Every side effect arrives through `deps`, so the tests drive the real thing with an in-memory
@@ -202,6 +250,22 @@ export function createApi(deps: ApiDeps): Api {
   const placeAt = (projectId: number, position?: NodePosition): NodePosition =>
     position ?? nextNodePosition(deps.store.drafts.list(projectId).map((d) => ({ x: d.x, y: d.y })));
 
+  /** Every draft in the project: links are read from the user's edits, not the world, wherever one exists. */
+  const draftAggregates = (): Map<number, QuestAggregate> =>
+    new Map(deps.store.drafts.list(project().id).map((d) => [d.questId, d.aggregate]));
+
+  const linksFor = (live: Session, scope: readonly number[]): Promise<LinkSnapshot> =>
+    loadLinks(live.db, scope, draftAggregates(), live.availability.available);
+
+  /**
+   * A quest's own validation plus what its links say about it. Only for display: the export gate
+   * reads errors alone and link issues are warnings, so `guardWrite` has no use for them.
+   */
+  async function issuesOf(live: Session, questId: number, aggregate: QuestAggregate, refs: RefChecker): Promise<Issue[]> {
+    const own = await validateQuest(aggregate, refs);
+    return [...own, ...linkIssues(questId, await linksFor(live, [questId]))];
+  }
+
   /** Opens one quest: its draft if the project has one, otherwise a fresh import placed on the canvas. */
   async function openOne(questId: number, position?: NodePosition): Promise<OpenResult> {
     const live = usable();
@@ -217,7 +281,7 @@ export function createApi(deps: ApiDeps): Api {
         aggregate: draft.aggregate,
         fidelity: draft.fidelity ?? { ok: true },
         unmodelled: [],
-        issues: await validateQuest(draft.aggregate, refs),
+        issues: await issuesOf(live, questId, draft.aggregate, refs),
         hasDraft: true,
         stale: false,
         locales: [],
@@ -254,7 +318,7 @@ export function createApi(deps: ApiDeps): Api {
         aggregate: draft.aggregate,
         fidelity,
         unmodelled,
-        issues: await validateQuest(draft.aggregate, refs),
+        issues: await issuesOf(live, questId, draft.aggregate, refs),
         hasDraft: true,
         stale,
         locales,
@@ -278,7 +342,7 @@ export function createApi(deps: ApiDeps): Api {
       aggregate: fresh.aggregate,
       fidelity,
       unmodelled,
-      issues: await validateQuest(fresh.aggregate, refs),
+      issues: await issuesOf(live, questId, fresh.aggregate, refs),
       hasDraft: false,
       stale: false,
       locales,
@@ -348,6 +412,10 @@ export function createApi(deps: ApiDeps): Api {
         const profile = deps.store.profiles.getWithPassword(profileId);
         const db = await deps.openWorldDb(profile);
         const schema = await loadSchema(db, REGISTRY_TABLES);
+        const contextSchema = await loadSchema(db, CONTEXT_TABLES);
+        // Where the context list and the registry share a table, the registry's reading is the one
+        // the rest of the session already trusts, so it wins.
+        const availability = componentAvailability({ ...contextSchema.tables, ...schema.tables });
         const drift = diffSchema(schema, registry);
         const blocking = hasBlockingDrift(drift);
         // Swapping connections must not leave the old one open.
@@ -359,6 +427,8 @@ export function createApi(deps: ApiDeps): Api {
           blocking,
           blockingTables: drift.blockingTables,
           forbiddenTables: drift.forbiddenTables,
+          contextTables: contextSchema.tables,
+          availability,
         };
         return { profileId, schemaHash: schema.hash, drift, blocking };
       }),
@@ -433,7 +503,7 @@ export function createApi(deps: ApiDeps): Api {
           aggregate,
           fidelity,
           unmodelled: [],
-          issues: await validateQuest(aggregate, refCheckerFor(live.db)),
+          issues: await issuesOf(live, questId, aggregate, refCheckerFor(live.db)),
           hasDraft: false,
           stale: false,
           // A quest that does not exist yet has no translations to leave behind.
@@ -447,20 +517,79 @@ export function createApi(deps: ApiDeps): Api {
         const live = connected();
         // One checker for the whole canvas: the same NPC or item is asked about once, not per node.
         const refs = refCheckerFor(live.db);
+        const drafts = deps.store.drafts.list(project().id);
+        const canvasIds = drafts.map((d) => d.questId);
+        const onCanvas = new Set(canvasIds);
+        // One link snapshot for the whole canvas, so the context is read once rather than per node.
+        const snapshot = await loadLinks(
+          live.db,
+          canvasIds,
+          new Map(drafts.map((d) => [d.questId, d.aggregate])),
+          live.availability.available,
+        );
+        const disconnected = disconnectedQuests(canvasIds, snapshot);
+        const edges = snapshot.result.instances.flatMap((instance) =>
+          questEdges(instance).map((edge) => ({ ...edge, instance })),
+        );
+
+        // A link to a quest that is not drawn is only worth counting when that quest is real, and
+        // the existence check is one batched read rather than one per neighbour.
+        const offCanvas = new Set<number>();
+        for (const { from, to } of edges) {
+          if (onCanvas.has(from) && !onCanvas.has(to)) offCanvas.add(to);
+          if (onCanvas.has(to) && !onCanvas.has(from)) offCanvas.add(from);
+        }
+        const existing = offCanvas.size > 0 ? await live.db.existingIds('quest', [...offCanvas]) : new Set<number>();
+
         const nodes: CanvasNode[] = [];
-        for (const draft of deps.store.drafts.list(project().id)) {
-          const issues = await validateQuest(draft.aggregate, refs);
+        for (const draft of drafts) {
+          const questId = draft.questId;
+          const issues = [...(await validateQuest(draft.aggregate, refs)), ...linkIssues(questId, snapshot)];
+          const notConnected = disconnected.has(questId);
+
+          const links = new Map<string, NodeLink>();
+          const neighbours = new Set<number>();
+          for (const { from, to, instance } of edges) {
+            if (from === questId) {
+              links.set(`${to}/${instance.component}`, { to, component: instance.component, owner: instance.owner });
+              if (!onCanvas.has(to)) neighbours.add(to);
+            }
+            if (to === questId && !onCanvas.has(from)) neighbours.add(from);
+          }
+
+          const startedBy = new Set<ComponentId>();
+          const groups: NodeGroup[] = [];
+          for (const instance of snapshot.result.instances) {
+            if (
+              instance.to.kind === 'quest'
+              && instance.to.questId === questId
+              && componentById(instance.component).hook === 'start'
+            ) {
+              startedBy.add(instance.component);
+            }
+            const kind = GROUP_KINDS[instance.component];
+            const members = instance.params.members;
+            if (kind && Array.isArray(members) && members.includes(questId)) {
+              groups.push({ group: instance.params.group as number, kind });
+            }
+          }
+
           nodes.push({
-            questId: draft.questId,
+            questId,
             title: textOf(draft.aggregate, TITLE_FIELD),
             level: numberOf(draft.aggregate, LEVEL_FIELD),
             isNew: draft.isNew,
             exported: draft.lastExportPath !== null,
             unsafe: draft.fidelity !== null && !draft.fidelity.ok,
             errors: issues.filter((i) => i.severity === 'error').length,
-            warnings: issues.filter((i) => i.severity === 'warning').length,
+            warnings: issues.filter((i) => i.severity === 'warning').length + (notConnected ? 1 : 0),
             x: draft.x,
             y: draft.y,
+            links: [...links.values()].sort((a, b) => a.to - b.to || a.component.localeCompare(b.component, 'en')),
+            starts: START_BADGES.filter(([component]) => startedBy.has(component)).map(([, badge]) => badge),
+            groups,
+            offCanvasLinks: [...neighbours].filter((id) => existing.has(id)).length,
+            notConnected,
           });
         }
         return nodes;
@@ -494,6 +623,45 @@ export function createApi(deps: ApiDeps): Api {
         const names: Record<number, string> = {};
         for (const [id, name] of found) names[id] = name;
         return names;
+      }),
+
+    questLinks: (questIds) =>
+      run(async (): Promise<QuestLinks> => {
+        const live = connected();
+        const { instances, unrecognised } = (await linksFor(live, questIds)).result;
+
+        // Every name a description could ask for, looked up in one read per kind.
+        const wanted = new Map<NameKind, Set<number>>();
+        const want = (kind: NameKind, id: number): void => {
+          const ids = wanted.get(kind) ?? new Set<number>();
+          ids.add(id);
+          wanted.set(kind, ids);
+        };
+        for (const instance of instances) {
+          for (const endpoint of [instance.from, instance.to]) {
+            const target = nameTarget(endpoint);
+            if (target) want(...target);
+          }
+          const { members, then } = instance.params;
+          if (Array.isArray(members)) for (const id of members) want('quest', id);
+          if (typeof then === 'number' && then > 0) want('quest', then);
+        }
+        const found = new Map<NameKind, Map<number, string>>();
+        for (const [kind, ids] of wanted) found.set(kind, await live.db.lookupNames(kind, [...ids]));
+        const names: NameBook = (kind, id) => found.get(kind)?.get(id);
+
+        return {
+          instances: instances.map((instance) => {
+            const component = componentById(instance.component);
+            return { ...instance, label: component.label, summary: component.describe(instance, names) };
+          }),
+          unrecognised: unrecognised.map(({ questId, ref, row }) => ({
+            questId,
+            key: ref.key,
+            summary: `${describeEvent(row)}: ${actionName(row.actionType)} (${sourceName(row.sourceType)} ${row.entryorguid}, row ${row.id})`,
+          })),
+          unavailable: live.availability.unavailable,
+        };
       }),
 
     // `xp[i]` is `questxp_dbc.Difficulty_{i+1}` and `money[i]` is `quest_money_reward.Money{i}`,
@@ -556,7 +724,7 @@ export function createApi(deps: ApiDeps): Api {
     validate: (questId) =>
       run(async () => {
         const live = connected();
-        return validateQuest(draftOf(questId).aggregate, refCheckerFor(live.db));
+        return issuesOf(live, questId, draftOf(questId).aggregate, refCheckerFor(live.db));
       }),
 
     exportQuest: (questId) =>
