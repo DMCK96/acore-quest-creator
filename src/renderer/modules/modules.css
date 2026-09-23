@@ -86,3 +86,10 @@
   color: var(--text-muted);
   font-size: 13px;
 }
+
+.module-section__title {
+  margin: 14px 0 6px;
+  font-family: var(--font-display);
+  font-size: 15px;
+  color: var(--accent-strong);
+}
