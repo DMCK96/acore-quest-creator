@@ -22,7 +22,9 @@ import { loadLinks, type LinkSnapshot } from '../core/links/service';
 import type { QuestAggregate, Snapshot } from '../core/model/aggregate';
 import { localesInSnapshot, localizedTextValues } from '../core/model/locales';
 import { registry } from '../core/registry';
-import { actionName, describeEvent, sourceName } from '../core/smartai/ids';
+import { actionName, describeEvent } from '../core/smartai/ids';
+import { sourceEndpoint } from '../core/links/components/smartai';
+import { endpointName } from '../core/links/describe';
 import { applyPatchInMemory, keyColumnsByTable } from '../core/roundtrip/apply';
 import { compareTables, type Difference } from '../core/roundtrip/compare';
 import { verifyRoundTrip, type FidelityReport } from '../core/roundtrip/verify';
@@ -655,6 +657,10 @@ export function createApi(deps: ApiDeps): Api {
           if (Array.isArray(members)) for (const id of members) want('quest', id);
           if (typeof then === 'number' && then > 0) want('quest', then);
         }
+        for (const { row } of unrecognised) {
+          const target = nameTarget(sourceEndpoint(row));
+          if (target) want(...target);
+        }
         const found = new Map<NameKind, Map<number, string>>();
         for (const [kind, ids] of wanted) found.set(kind, await live.db.lookupNames(kind, [...ids]));
         const names: NameBook = (kind, id) => found.get(kind)?.get(id);
@@ -667,7 +673,7 @@ export function createApi(deps: ApiDeps): Api {
           unrecognised: unrecognised.map(({ questId, ref, row }) => ({
             questId,
             key: ref.key,
-            summary: `${describeEvent(row)}: ${actionName(row.actionType)} (${sourceName(row.sourceType)} ${row.entryorguid}, row ${row.id})`,
+            summary: `${describeEvent(row)}: ${actionName(row.actionType)} (${endpointName(sourceEndpoint(row), names)}, row ${row.id})`,
           })),
           unavailable: live.availability.unavailable,
         };

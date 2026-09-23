@@ -47,7 +47,12 @@ function walkChain(start: ScriptRow, scripts: readonly ScriptRow[]): { trigger: 
   return { trigger: current, rows };
 }
 
-function sourceEndpoint(row: ScriptRow): Endpoint {
+/**
+ * What a script row belongs to. A negative `entryorguid` on a creature or object script is a spawn's
+ * GUID, not a template entry, so it reads as a spawn rather than as a negative NPC ID; exported so
+ * every place that names a script's owner reads it the same way.
+ */
+export function sourceEndpoint(row: ScriptRow): Endpoint {
   const e = row.entryorguid;
   switch (row.sourceType) {
     case SOURCE.creature:

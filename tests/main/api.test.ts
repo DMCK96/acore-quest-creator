@@ -556,6 +556,14 @@ describe('links', () => {
     expect(links.instances.some((i) => i.component === 'start.item')).toBe(true);
     expect(starterReads()).toBe(atConnect);
   });
+  it('names a GUID script by its spawn, never as a negative NPC ID', async () => {
+    db.insert('smart_scripts', { entryorguid: '-4242', source_type: '0', id: '0', link: '0', event_type: '20', event_param1: '60001', action_type: '12', comment: '' });
+    const { api } = await connected();
+    ok(await api.openQuest(60001));
+    const [row] = ok(await api.questLinks([60001])).unrecognised;
+    expect(row.summary).toContain('(a spawn of an NPC (GUID 4242), row 0)');
+    expect(row.summary).not.toContain('-4242');
+  });
   it('lists script rows it does not understand', async () => {
     db.insert('smart_scripts', { entryorguid: '60001', source_type: '5', id: '0', link: '0', event_type: '48', action_type: '12', comment: '' });
     const { api } = await connected();
@@ -563,7 +571,7 @@ describe('links', () => {
     const links = ok(await api.questLinks([60001]));
     expect(links.unrecognised).toEqual([{
       questId: 60001, key: 'entryorguid=60001,source_type=5,id=0,link=0',
-      summary: 'when a quest objective is completed: SmartAI action 12 (quest 60001, row 0)',
+      summary: 'when a quest objective is completed: SmartAI action 12 (Wolves (60001), row 0)',
     }]);
   });
 });
