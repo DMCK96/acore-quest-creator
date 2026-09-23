@@ -1,6 +1,8 @@
-import { createContext, useContext, useEffect, useMemo, useReducer, useRef, type ReactNode } from 'react';
+import { createContext, useCallback, useContext, useEffect, useMemo, useReducer, useRef, type ReactNode } from 'react';
 import type { RefKind } from '@core/db/types';
-import type { Api } from '@shared/ipc';
+import type { EntityHit, SearchKind } from '@core/db/world-db';
+import type { NameBook } from '@core/links/component';
+import type { Api, Result } from '@shared/ipc';
 
 export type NameStatus = 'idle' | 'loading' | 'found' | 'missing' | 'unsupported';
 
@@ -84,11 +86,49 @@ function createNamesStore(api: Api): NamesStore {
 }
 
 const NamesContext = createContext<NamesStore | null>(null);
+const ApiContext = createContext<Api | null>(null);
 
 /** Provides `useName` to its subtree, batching id lookups per animation frame per `RefKind`. */
 export function NamesProvider({ api, children }: { api: Api; children: ReactNode }): React.JSX.Element {
   const store = useMemo(() => createNamesStore(api), [api]);
-  return <NamesContext.Provider value={store}>{children}</NamesContext.Provider>;
+  return (
+    <ApiContext.Provider value={api}>
+      <NamesContext.Provider value={store}>{children}</NamesContext.Provider>
+    </ApiContext.Provider>
+  );
+}
+
+type EntitySearch = (kind: SearchKind, text: string) => Promise<Result<EntityHit[]>>;
+
+const NO_SEARCH: EntitySearch = async () => ({ ok: true, value: [] });
+
+/** Searches the world DB by name through the nearest `NamesProvider`'s api. */
+export function useEntitySearch(): EntitySearch {
+  const api = useContext(ApiContext);
+  return useCallback<EntitySearch>((kind, text) => (api ? api.searchEntities(kind, text) : NO_SEARCH(kind, text)), [api]);
+}
+
+/**
+ * A `NameBook` over the names cache: a name the editor has already looked up, or `undefined` while
+ * it loads (the lookup is started on first ask). The component re-renders as names arrive.
+ */
+export function useNameBook(): NameBook {
+  const store = useContext(NamesContext);
+  const [version, forceRender] = useReducer((n: number) => n + 1, 0);
+
+  useEffect(() => (store ? store.subscribe(forceRender) : undefined), [store]);
+
+  // `version` makes a fresh book after each batch lands, so memoised consumers recompute.
+  return useMemo<NameBook>(() => {
+    void version;
+    return (kind, id) => {
+      if (!store) return undefined;
+      const result = store.get(kind, id);
+      // Asking during render would notify mid-render; start the lookup just after.
+      if (result.state === 'idle') queueMicrotask(() => store.request(kind, id));
+      return result.state === 'found' ? result.name : undefined;
+    };
+  }, [store, version]);
 }
 
 /**
