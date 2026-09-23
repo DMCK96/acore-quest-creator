@@ -28,6 +28,12 @@ describe('Quest Giver body', () => {
     expect(onChange).toHaveBeenCalledWith('gameobject_questender', [{ id: 0 }]);
   });
 
+  it('asks for the blank card to be filled before adding another', async () => {
+    await mountBody('giver', { creature_queststarter: [{ id: 0 }] });
+    expect(screen.getByRole('button', { name: 'Add quest giver' })).toBeDisabled();
+    expect(screen.getByRole('button', { name: 'Add quest ender' })).toBeEnabled();
+  });
+
   it('removes a card', async () => {
     const { onChange } = await mountBody('giver', { creature_queststarter: [{ id: 240 }, { id: 241 }] });
     await userEvent.click(screen.getByRole('button', { name: 'Remove starts at 1' }));

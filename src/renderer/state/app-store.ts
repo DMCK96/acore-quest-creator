@@ -59,7 +59,8 @@ export interface AppState {
   /** Connects with a saved profile and its stored password. */
   connectProfile(profileId: number): Promise<void>;
   search(text: string): Promise<void>;
-  openQuest(id: number, position?: NodePosition): Promise<void>;
+  /** Loads a quest into the preview; false when it failed or a newer open replaced it. */
+  openQuest(id: number, position?: NodePosition): Promise<boolean>;
   /** Adds the quest and every quest chained to it to the canvas, then opens the one picked. */
   addQuestChain(id: number, position?: NodePosition): Promise<void>;
   newQuest(position?: NodePosition): Promise<void>;
@@ -228,10 +229,10 @@ export function createAppStore(api: Api, opts: { saveDelayMs?: number } = {}): A
     async openQuest(id, position) {
       const token = ++openToken;
       const result = position === undefined ? await api.openQuest(id) : await api.openQuest(id, position);
-      if (token !== openToken) return;
+      if (token !== openToken) return false;
       if (!result.ok) {
         set({ error: result.error.message, screen: 'pick' });
-        return;
+        return false;
       }
       set({
         open: result.value,
@@ -243,6 +244,7 @@ export function createAppStore(api: Api, opts: { saveDelayMs?: number } = {}): A
       });
       await get().loadNodes();
       await get().loadLinks();
+      return true;
     },
 
     async addQuestChain(id, position) {
@@ -325,7 +327,8 @@ export function createAppStore(api: Api, opts: { saveDelayMs?: number } = {}): A
 
     removeModule(id) {
       const { open } = get();
-      if (!open) return;
+      // Advanced holds every rare column of an imported quest; clearing it wholesale is never wanted.
+      if (!open || id === 'advanced') return;
       const edits = resetModule(id, open.aggregate.values, open.aggregate.readOnly.map((r) => r.fieldId));
       for (const [fieldId, value] of Object.entries(edits)) get().setValue(fieldId, value);
       set((s) => ({

@@ -39,11 +39,20 @@ export function EntityPicker({ id, label, kind, value, onChange, disabled, readO
     if (timer.current) clearTimeout(timer.current);
   }, []);
 
+  // Closing also forgets the search in flight, so its answer cannot reappear in a later search.
   function close(): void {
+    if (timer.current) clearTimeout(timer.current);
+    token.current++;
     setEditing(false);
     setHits([]);
     setActive(-1);
   }
+
+  // Results for one kind are never offered for another (an NPC ID stored as an object's).
+  useEffect(() => {
+    close();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [kind]);
 
   function type(next: string): void {
     setEditing(true);

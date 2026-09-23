@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { describe, it, expect, vi } from 'vitest';
-import { render, screen } from '@testing-library/react';
+import { act, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { NamesProvider, useNameBook } from '../../src/renderer/state/names';
 import { EntityPicker } from '../../src/renderer/controls/EntityPicker';
@@ -55,6 +55,22 @@ describe('EntityPicker', () => {
     const { onChange } = mount(0, api);
     await userEvent.type(screen.getByRole('combobox', { name: 'NPC' }), 'wolf');
     expect(await screen.findByRole('alert')).toHaveTextContent('The world database refused a query');
+    expect(onChange).not.toHaveBeenCalled();
+  });
+
+  it('drops a search that answers after the picker closed', async () => {
+    let answer: (v: unknown) => void = () => {};
+    const searchEntities = vi.fn()
+      .mockImplementationOnce(() => new Promise((resolve) => { answer = resolve; }))
+      .mockImplementation(() => new Promise(() => {}));
+    const { onChange } = mount(0, makeMockApi({ searchEntities }));
+    const box = screen.getByRole('combobox', { name: 'NPC' });
+    await userEvent.type(box, 'w');
+    await waitFor(() => expect(searchEntities).toHaveBeenCalledTimes(1));
+    await userEvent.tab();
+    await act(async () => answer(okv([{ id: 299, name: 'Diseased Young Wolf' }])));
+    await userEvent.type(box, 'x');
+    expect(screen.queryByRole('option')).toBeNull();
     expect(onChange).not.toHaveBeenCalled();
   });
 

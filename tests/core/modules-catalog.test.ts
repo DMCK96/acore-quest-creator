@@ -82,6 +82,10 @@ describe('module catalog', () => {
     const values = { 'quest_template.TimeAllowed': 900, 'quest_template.RewardTalents': 2, 'quest_template.RewardHonor': 5 };
     expect(resetModule('timer', values, [])).toEqual({ 'quest_template.TimeAllowed': 0 });
     expect(resetModule('extraRewards', values, ['quest_template.RewardHonor'])).toEqual({ 'quest_template.RewardTalents': 0 });
+    // A column that holds nothing stays exactly as imported (NULL is not rewritten as 0 or '').
+    expect(resetModule('extraRewards', { ...values, 'quest_template.RewardSpell': null, 'quest_template.RewardTitle': 0 }, [])).toEqual({
+      'quest_template.RewardTalents': 0, 'quest_template.RewardHonor': 0,
+    });
   });
 });
 

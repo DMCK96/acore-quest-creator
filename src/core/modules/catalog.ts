@@ -243,11 +243,15 @@ export function offeredModules(values: Values, added: readonly ModuleId[]): Modu
   ).map((m) => m.id);
 }
 
-/** The edits that clear a module: each owned, present, writable field back to its empty value. */
+/**
+ * The edits that clear a module: each owned, writable field that holds something, back to its
+ * empty value. A field that is already unset is left exactly as imported (NULL stays NULL).
+ */
 export function resetModule(id: ModuleId, values: Values, readOnly: readonly string[]): Record<string, FieldValue> {
   const out: Record<string, FieldValue> = {};
   for (const fieldId of moduleById(id).owns) {
     if (!Object.prototype.hasOwnProperty.call(values, fieldId) || readOnly.includes(fieldId)) continue;
+    if (isUnset(fieldId, values[fieldId])) continue;
     const field = fieldById(fieldId);
     if (field) out[fieldId] = emptyValue(field);
   }

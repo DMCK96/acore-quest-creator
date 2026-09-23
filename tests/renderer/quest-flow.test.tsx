@@ -60,6 +60,14 @@ describe('quest flow view', () => {
     expect(store.getState().open?.aggregate.values['quest_template.TimeAllowed']).toBe(0);
   });
 
+  it('Advanced cannot be removed, since it holds every rare column', async () => {
+    await mountFlow();
+    await userEvent.click(screen.getByRole('button', { name: 'Add module' }));
+    await userEvent.click(screen.getByRole('menuitem', { name: /Advanced/ }));
+    expect(screen.getByRole('dialog', { name: 'Advanced' })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Remove module' })).toBeNull();
+  });
+
   it('core modules cannot be removed', async () => {
     await mountFlow();
     await userEvent.click(screen.getByRole('button', { name: /^Objectives/ }));

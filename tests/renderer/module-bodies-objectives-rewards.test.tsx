@@ -28,6 +28,10 @@ describe('Objectives body', () => {
     await userEvent.click(screen.getByRole('button', { name: 'Add explore' }));
     expect(onChange).toHaveBeenCalledWith('areatrigger_involvedrelation', [{ id: 0 }]);
   });
+  it('asks for the blank explore card to be filled before adding another', async () => {
+    await mountBody('objectives', { areatrigger_involvedrelation: [{ id: 0 }] });
+    expect(screen.getByRole('button', { name: 'Add explore' })).toBeDisabled();
+  });
   it('edits the objectives summary line', async () => {
     const { onChange } = await mountBody('objectives');
     await userEvent.type(screen.getByLabelText('Objectives summary'), 'K');

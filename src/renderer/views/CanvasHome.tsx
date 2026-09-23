@@ -141,7 +141,8 @@ function CanvasInner({ store }: { store: AppStore }): React.JSX.Element {
       node: n,
       selected: open?.questId === n.questId,
       onOpen: () => void openQuest(n.questId),
-      onEdit: () => void openQuest(n.questId).then(() => store.getState().editQuest()),
+      // Only the quest that actually opened is edited: a failed or superseded open leaves the old one.
+      onEdit: () => void openQuest(n.questId).then((opened) => opened && store.getState().editQuest()),
       onRemove: () => void removeNode(n.questId),
       onAddChain: () => void addQuestChain(n.questId),
     } satisfies QuestNodeData,

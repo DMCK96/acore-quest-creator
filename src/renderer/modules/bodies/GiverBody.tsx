@@ -54,7 +54,9 @@ export function GiverBody({ open, links, onChange, onOpenQuest }: ModuleBodyProp
               );
             })}
             <div className="entry-list__add">
-              <button type="button" className="btn" onClick={() => write(role, [...targets, { kind: 'creature', id: 0 }])}>
+              {/* The table is keyed on the ID, so a second blank card would be a duplicate row. */}
+              <button type="button" className="btn" disabled={targets.some((t) => t.id === 0)}
+                onClick={() => write(role, [...targets, { kind: 'creature', id: 0 }])}>
                 {add}
               </button>
             </div>

@@ -5,7 +5,7 @@ import userEvent from '@testing-library/user-event';
 import { createAppStore } from '../../src/renderer/state/app-store';
 import { CanvasHome } from '../../src/renderer/views/CanvasHome';
 import { QuestNodeCard } from '../../src/renderer/views/QuestNodeCard';
-import { makeMockApi, okv, sampleOpen, nodeOf } from './mock-api';
+import { makeMockApi, okv, errv, sampleOpen, nodeOf } from './mock-api';
 
 const drift = { missingTables: [], unregistered: [], missingColumns: [], typeMismatches: [] };
 const rec = { id: 1, name: 'w', role: 'world' as const, host: 'h', port: 1, user: 'u', database: 'd' };
@@ -108,6 +108,15 @@ describe('CanvasHome', () => {
     fireEvent.doubleClick(first);
     await waitFor(() => expect(screen.getAllByTestId('quest-node')[0]).toHaveAttribute('aria-current', 'true'));
     expect(screen.getAllByTestId('quest-node')[1]).not.toHaveAttribute('aria-current');
+  });
+  it('double-clicking a quest that fails to open does not edit the one previewed before', async () => {
+    const { api, store } = await canvas({ openQuest: async (id: number) => (id === 60002 ? errv('UNKNOWN', 'Lost the connection.') : okv(sampleOpen())) });
+    await store.getState().openQuest(60001);
+    const cards = await screen.findAllByTestId('quest-node');
+    fireEvent.doubleClick(cards[1]);
+    await waitFor(() => expect(api.openQuest).toHaveBeenCalledWith(60002));
+    await waitFor(() => expect(store.getState().error).toBe('Lost the connection.'));
+    expect(store.getState().screen).not.toBe('edit');
   });
   it('adds the rest of a chain from the "+N linked" chip', async () => {
     const { api } = await canvas({ listNodes: async () => okv([nodeOf({ offCanvasLinks: 2 })]) });

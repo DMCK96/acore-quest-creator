@@ -83,7 +83,9 @@ export function ObjectivesBody({ open, onChange }: ModuleBodyProps): React.JSX.E
               </section>
             ))}
             <div className="entry-list__add">
-              <button type="button" className="btn" onClick={() => onChange(TRIGGERS, [...triggers, { id: 0 }])}>
+              {/* One trigger per row, keyed on the trigger: a second blank card would collide. */}
+              <button type="button" className="btn" disabled={triggers.some((r) => Number(r.id) === 0)}
+                onClick={() => onChange(TRIGGERS, [...triggers, { id: 0 }])}>
                 Add explore
               </button>
             </div>

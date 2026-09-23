@@ -57,7 +57,7 @@ export function ModulePanel({
         </ul>
       )}
       <ModuleBody id={id} {...body} />
-      {def.kind === 'optional' && (
+      {def.kind === 'optional' && def.id !== 'advanced' && (
         <div className="module-panel__foot">
           <button type="button" className="btn module-panel__remove" onClick={remove}>
             Remove module
