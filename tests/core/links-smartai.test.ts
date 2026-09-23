@@ -55,7 +55,22 @@ describe('start.smartai', () => {
     const [i] = (await recognise(db, [fact(501)])).instances.filter((x) => x.component === 'start.smartai');
     expect(i.from).toEqual({ kind: 'creature', entry: 102 });
   });
-  it('terminates on a link loop and still recognises the offer', async () => {
+  it('terminates on a row that links to itself and still recognises the offer', async () => {
+    const db = forkDb();
+    db.insert('smart_scripts', script({ entryorguid: '100', id: '1', link: '1', event_type: '61', action_type: '7', action_param1: '500' }));
+    const got = (await recognise(db, [fact(500)])).instances.filter((x) => x.component === 'start.smartai');
+    expect(got).toHaveLength(1);
+    expect(got[0].claims).toHaveLength(1);
+  });
+  it('terminates on two rows that link to each other and still recognises the offer', async () => {
+    const db = forkDb();
+    db.insert('smart_scripts', script({ entryorguid: '100', id: '1', link: '2', event_type: '61', action_type: '7', action_param1: '500' }));
+    db.insert('smart_scripts', script({ entryorguid: '100', id: '2', link: '1', event_type: '61', action_type: '1' }));
+    const got = (await recognise(db, [fact(500)])).instances.filter((x) => x.component === 'start.smartai');
+    expect(got).toHaveLength(1);
+    expect(got[0].claims).toHaveLength(2);
+  });
+  it('follows a two-row link chain to the offer', async () => {
     const db = forkDb();
     db.insert('smart_scripts', script({ entryorguid: '100', id: '0', link: '1', event_type: '61', action_type: '1' }));
     db.insert('smart_scripts', script({ entryorguid: '100', id: '1', link: '0', event_type: '61', action_type: '7', action_param1: '500' }));
