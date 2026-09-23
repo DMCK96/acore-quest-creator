@@ -304,7 +304,9 @@ export function createAppStore(api: Api, opts: { saveDelayMs?: number } = {}): A
         issues: issues.ok ? issues.value : get().issues,
         error: issues.ok ? get().error : issues.error.message,
       });
-      await get().loadLinks();
+      // The canvas stays visible behind the editor and draws the draft's links, so an edit to a
+      // chain column must redraw it now rather than when the editor closes.
+      await Promise.all([get().loadLinks(), get().loadNodes()]);
     },
 
     // Leaving the editor is a close: the debounced edit still in flight is written first, exactly

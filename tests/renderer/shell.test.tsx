@@ -164,6 +164,14 @@ describe('QuestWorkspace', () => {
     expect(api.validate).toHaveBeenCalledWith(60001);
     expect(store.getState().dirty).toBe(false);
   });
+  it('redraws the canvas after an autosave, so a cleared link loses its edge straight away', async () => {
+    const { api, store } = await opened();
+    vi.mocked(api.listNodes).mockClear();
+    store.getState().setValue('quest_template_addon.PrevQuestID', 0);
+    await waitFor(() => expect(api.listNodes).toHaveBeenCalled());
+    const saved = vi.mocked(api.saveDraft).mock.invocationCallOrder[0];
+    expect(vi.mocked(api.listNodes).mock.invocationCallOrder[0]).toBeGreaterThan(saved);
+  });
   // A real debounce, so the click lands inside the window the user would actually hit.
   it('saves the pending edit before "Back to quests" clears the editor', async () => {
     const api = makeMockApi({ saveProfile: async () => okv(profileRec), connect: async () => okv(summary), openQuest: async () => okv(sampleOpen()), validate: async () => okv([]) });
