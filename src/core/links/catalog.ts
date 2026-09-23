@@ -3,6 +3,8 @@ import type { ComponentId } from './model';
 import { QUEST_COLUMN_COMPONENTS } from './components/quest-columns';
 import { GROUP_COMPONENTS } from './components/groups';
 import { RELATION_COMPONENTS } from './components/relations';
+import { startItem } from './components/item';
+import { SMARTAI_COMPONENTS } from './components/smartai';
 
 /**
  * The full list of built-in components, in claim-priority order: `recogniseLinks` walks this list
@@ -23,6 +25,9 @@ export const CATALOG: readonly ComponentDef[] = [
   byId.get('start.offeredStraightAway')!,
   byId.get('gate.breadcrumb')!,
   ...RELATION_COMPONENTS,
+  startItem,
+  SMARTAI_COMPONENTS.startSmartAi,
+  SMARTAI_COMPONENTS.startBackend,
 ];
 
 const catalogById = new Map(CATALOG.map((c) => [c.id, c]));
