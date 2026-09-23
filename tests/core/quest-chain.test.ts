@@ -66,6 +66,17 @@ describe('findQuestChain', () => {
     expect(chain.questIds).toHaveLength(4);
     expect(chain.truncated).toBe(true);
   });
+
+  it('follows a quest offered by a script when another quest is turned in', async () => {
+    const db = forkDb();
+    quest(db, 50);
+    quest(db, 51);
+    db.insert('smart_scripts', { entryorguid: '100', source_type: '0', id: '0', link: '0', event_type: '20', event_param1: '50', action_type: '7', action_param1: '51', comment: '' });
+    const fromFirst = await findQuestChain(db, 50);
+    expect(fromFirst.questIds.slice().sort((a, b) => a - b)).toEqual([50, 51]);
+    expect(fromFirst.links).toContainEqual({ from: 50, to: 51 });
+    expect((await findQuestChain(db, 51)).questIds.slice().sort((a, b) => a - b)).toEqual([50, 51]);
+  });
 });
 
 describe('layoutChain', () => {

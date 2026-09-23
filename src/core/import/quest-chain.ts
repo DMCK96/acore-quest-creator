@@ -1,17 +1,23 @@
 import type { RawRow, Where } from '../db/types';
 import { UnknownColumnError, UnknownTableError, type WorldDb } from '../db/world-db';
+import { ACTION } from '../smartai/ids';
+import { readWorldFacts, type QuestFacts } from '../links/facts';
+import { readLinkContext } from '../links/context';
+import { recogniseLinks } from '../links/recognise';
+import { questEdges, type ComponentId } from '../links/model';
+import { CATALOG } from '../links/catalog';
 
 /**
- * Every quest connected to one quest through the columns the server uses to chain quests.
+ * Every quest connected to one quest through the components the link model recognises: quest-column
+ * chains, exclusive groups, and any mechanism (item, SmartAI, condition, ...) the catalog knows how
+ * to read. The catalog is the one definition of what counts as a link; the columns themselves are no
+ * longer listed here.
  *
  * A quest names its neighbours in both directions, and a chain is usually only written down in one
  * of them: quest B says `PrevQuestID = A`, while A says nothing about B. So each step asks both
- * "who does this quest point at" and "who points at this quest", until nothing new turns up.
- *
- * - `quest_template_addon.PrevQuestID` — the parent; negative means "active", still the parent.
- * - `quest_template_addon.NextQuestID` and `quest_template.RewardNextQuest` — a child.
- * - `quest_template_addon.BreadcrumbForQuestId` — the breadcrumb leads into its target.
- * - `quest_template_addon.ExclusiveGroup` — every quest sharing a non-zero group is a sibling.
+ * "who does this quest point at" and "who points at this quest", until nothing new turns up. A quest
+ * can also be linked only through a script — turning in quest A makes a SmartAI row offer quest B —
+ * so the reverse read also follows `readLinkContext`'s script rows, not just the reverse columns.
  */
 
 /** A parent-to-child edge between two quests of the chain. */
@@ -51,7 +57,12 @@ async function rowsOrNone(db: WorldDb, table: string, where: Where): Promise<Raw
   }
 }
 
-export async function findQuestChain(db: WorldDb, questId: number, limit = MAX_CHAIN_QUESTS): Promise<QuestChain> {
+export async function findQuestChain(
+  db: WorldDb,
+  questId: number,
+  limit = MAX_CHAIN_QUESTS,
+  available?: ReadonlySet<ComponentId>,
+): Promise<QuestChain> {
   const found: number[] = [questId];
   const seen = new Set<number>(found);
   const seenGroups = new Set<number>();
@@ -66,42 +77,66 @@ export async function findQuestChain(db: WorldDb, questId: number, limit = MAX_C
   while (frontier.length > 0) {
     const ids = frontier.map(String);
     const negated = frontier.map((id) => String(-id));
-    const [addonOwn, templateOwn, prevOf, nextOf, crumbsOf, rewardOf] = await Promise.all([
-      rowsOrNone(db, ADDON, { ID: ids }),
-      rowsOrNone(db, TEMPLATE, { ID: ids }),
+
+    const frontierFacts = await readWorldFacts(db, frontier);
+
+    // A frontier quest's own group is only half the picture; the other members are found by asking
+    // who else shares it, same as the other reverse references below.
+    const groups: number[] = [];
+    for (const facts of frontierFacts.values()) {
+      if (facts.exclusiveGroup !== 0 && !seenGroups.has(facts.exclusiveGroup)) {
+        seenGroups.add(facts.exclusiveGroup);
+        groups.push(facts.exclusiveGroup);
+      }
+    }
+
+    const [prevOf, nextOf, crumbsOf, rewardOf, groupRows, context] = await Promise.all([
       rowsOrNone(db, ADDON, { PrevQuestID: [...ids, ...negated] }),
       rowsOrNone(db, ADDON, { NextQuestID: ids }),
       rowsOrNone(db, ADDON, { BreadcrumbForQuestId: ids }),
       rowsOrNone(db, TEMPLATE, { RewardNextQuest: ids }),
+      groups.length > 0 ? rowsOrNone(db, ADDON, { ExclusiveGroup: groups.map(String) }) : Promise.resolve([]),
+      readLinkContext(db, frontier),
     ]);
 
-    const candidates: number[] = [];
-    const groups: number[] = [];
-    for (const row of addonOwn) {
-      const id = idOf(row.ID);
-      const prev = Math.abs(idOf(row.PrevQuestID));
-      const next = idOf(row.NextQuestID);
-      const crumb = idOf(row.BreadcrumbForQuestId);
-      const group = idOf(row.ExclusiveGroup);
-      if (prev) (link(prev, id), candidates.push(prev));
-      if (next) (link(id, next), candidates.push(next));
-      if (crumb) (link(id, crumb), candidates.push(crumb));
-      if (group && !seenGroups.has(group)) (seenGroups.add(group), groups.push(group));
-    }
-    for (const row of templateOwn) {
-      const next = idOf(row.RewardNextQuest);
-      if (next) (link(idOf(row.ID), next), candidates.push(next));
-    }
-    for (const row of prevOf) (link(Math.abs(idOf(row.PrevQuestID)), idOf(row.ID)), candidates.push(idOf(row.ID)));
-    for (const row of nextOf) (link(idOf(row.ID), idOf(row.NextQuestID)), candidates.push(idOf(row.ID)));
-    for (const row of crumbsOf) (link(idOf(row.ID), idOf(row.BreadcrumbForQuestId)), candidates.push(idOf(row.ID)));
-    for (const row of rewardOf) (link(idOf(row.ID), idOf(row.RewardNextQuest)), candidates.push(idOf(row.ID)));
-    if (groups.length > 0) {
-      for (const row of await rowsOrNone(db, ADDON, { ExclusiveGroup: groups.map(String) })) candidates.push(idOf(row.ID));
+    const referencing = new Set<number>();
+    for (const row of prevOf) referencing.add(idOf(row.ID));
+    for (const row of nextOf) referencing.add(idOf(row.ID));
+    for (const row of crumbsOf) referencing.add(idOf(row.ID));
+    for (const row of rewardOf) referencing.add(idOf(row.ID));
+    for (const row of groupRows) referencing.add(idOf(row.ID));
+
+    // A quest that only turns into another through a script (turn-in fires a SmartAI offer) never
+    // shows up in the reverse column queries above; the offered quest's own facts are what recognition
+    // needs to see the edge, so they are fetched here just like any other referencing quest.
+    const offered = new Set<number>();
+    for (const row of context.questRows) {
+      if (row.actionType === ACTION.offerQuest) offered.add(row.actionParams[0]);
     }
 
-    // A column can name a quest that was never created; only quests that exist join the chain.
-    const fresh = [...new Set(candidates)].filter((id) => id > 0 && !seen.has(id));
+    const extraIds = [...new Set([...referencing, ...offered])].filter((id) => id > 0 && id !== 0);
+    const extraFacts = await readWorldFacts(db, extraIds);
+    const facts = new Map<number, QuestFacts>([...frontierFacts, ...extraFacts]);
+
+    const { instances } = recogniseLinks({ facts, context }, CATALOG, available);
+
+    const candidates = new Set<number>();
+    for (const instance of instances) {
+      for (const edge of questEdges(instance)) {
+        link(edge.from, edge.to);
+        candidates.add(edge.from);
+        candidates.add(edge.to);
+      }
+      if (instance.from.kind === 'quest') candidates.add(instance.from.questId);
+      if (instance.to.kind === 'quest') candidates.add(instance.to.questId);
+      const members = instance.params.members;
+      if (Array.isArray(members)) {
+        for (const member of members) if (typeof member === 'number') candidates.add(member);
+      }
+    }
+
+    // A candidate can name a quest that was never created; only quests that exist join the chain.
+    const fresh = [...candidates].filter((id) => id > 0 && !seen.has(id));
     const existing = new Set(
       (await rowsOrNone(db, TEMPLATE, { ID: fresh.map(String) })).map((row) => idOf(row.ID)),
     );
