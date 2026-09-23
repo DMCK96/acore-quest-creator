@@ -1,6 +1,6 @@
 import { contextBridge, ipcRenderer } from 'electron';
 // Not `../shared/ipc`: a sandboxed preload cannot `require` zod out of node_modules.
-import { API_METHODS, channelFor } from '../shared/api-methods';
+import { API_METHODS, channelFor, FLUSH_DONE_CHANNEL, FLUSH_REQUEST_CHANNEL } from '../shared/api-methods';
 
 /**
  * The only thing the renderer can reach: one function per API method, each forwarding to the
@@ -12,3 +12,18 @@ const api = Object.fromEntries(
 );
 
 contextBridge.exposeInMainWorld('api', api);
+
+/** Lets the renderer hand over pending edits when main is about to close the window. */
+contextBridge.exposeInMainWorld('appEvents', {
+  onFlushRequest(handler: () => Promise<void>): void {
+    ipcRenderer.on(FLUSH_REQUEST_CHANNEL, () => {
+      void (async () => {
+        try {
+          await handler();
+        } finally {
+          ipcRenderer.send(FLUSH_DONE_CHANNEL);
+        }
+      })();
+    });
+  },
+});

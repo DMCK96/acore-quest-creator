@@ -51,3 +51,10 @@ void _everyMethodIsListed;
 
 /** The IPC channel one method answers on. */
 export const channelFor = (method: keyof Api): string => `api:${method}`;
+
+/**
+ * Closing the window: main asks the renderer to hand over any debounced edit, and the renderer
+ * answers once it has, so the unsaved-changes check sees everything the user typed.
+ */
+export const FLUSH_REQUEST_CHANNEL = 'app:flush';
+export const FLUSH_DONE_CHANNEL = 'app:flushed';

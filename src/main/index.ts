@@ -1,18 +1,20 @@
-import { app, BrowserWindow, ipcMain, safeStorage } from 'electron';
+import { app, BrowserWindow, dialog, ipcMain, safeStorage } from 'electron';
 import { existsSync } from 'node:fs';
 import { mkdir, readdir, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { openMysqlDevDb } from '../core/db/mysql-dev-db';
 import { openMysqlWorldDb } from '../core/db/mysql-world-db';
+import { FLUSH_DONE_CHANNEL, FLUSH_REQUEST_CHANNEL } from '../shared/api-methods';
 import { API_METHODS, channelFor, parseRequest, type Api, type ApiError } from '../shared/ipc';
 import { createApi, type ApiDeps } from './api';
 import { seedEnvProfiles } from './env-profiles';
 import { createSecretBox } from './secret-box';
 import { openStore, type Store } from './store/store';
-import { DEFAULT_PROJECT_NAME, defaultProjectMeta } from './project/project-file';
+import { DEFAULT_PROJECT_NAME, PROJECT_EXTENSION, defaultProjectMeta } from './project/project-file';
 import { createProjectSession, type ProjectSession } from './project/session';
-import { createProjectController, type ProjectController } from './project/controller';
-import { createRecovery } from './project/recovery';
+import { createProjectController, type Dialogs, type ProjectController } from './project/controller';
+import { createCloseGuard, windowTitle } from './project/close-guard';
+import { createRecovery, type Recovery } from './project/recovery';
 import { nodeProjectFs } from './project/node-fs';
 
 /**
@@ -106,7 +108,44 @@ function registerIpc(api: Api): void {
   }
 }
 
-function createWindow(): void {
+/** Recovery copies are written this often while there are unsaved changes (the e2e test shortens it). */
+const recoveryIntervalMs = (): number => Number(process.env['ACQC_RECOVERY_INTERVAL_MS']) || 30000;
+
+const PROJECT_FILTERS = [{ name: 'Quest Creator project', extensions: [PROJECT_EXTENSION] }];
+
+/**
+ * The native dialogs, parented to whichever window is focused. `dialog.*` is looked up on every
+ * call rather than destructured, so the end-to-end test can answer them through `app.evaluate`.
+ */
+const electronDialogs: Dialogs = {
+  async showSave(suggestedFileName) {
+    const parent = BrowserWindow.getFocusedWindow() ?? BrowserWindow.getAllWindows()[0];
+    const options = { defaultPath: join(app.getPath('documents'), suggestedFileName), filters: PROJECT_FILTERS };
+    const r = parent ? await dialog.showSaveDialog(parent, options) : await dialog.showSaveDialog(options);
+    return r.canceled || !r.filePath ? null : r.filePath;
+  },
+  async showOpen() {
+    const parent = BrowserWindow.getFocusedWindow() ?? BrowserWindow.getAllWindows()[0];
+    const options = { properties: ['openFile' as const], filters: PROJECT_FILTERS };
+    const r = parent ? await dialog.showOpenDialog(parent, options) : await dialog.showOpenDialog(options);
+    return r.canceled || r.filePaths.length === 0 ? null : r.filePaths[0]!;
+  },
+  async confirmUnsaved(name) {
+    const parent = BrowserWindow.getFocusedWindow() ?? BrowserWindow.getAllWindows()[0];
+    const options = {
+      type: 'warning' as const,
+      buttons: ['Save', "Don't Save", 'Cancel'],
+      defaultId: 0,
+      cancelId: 2,
+      message: `Save changes to "${name}"?`,
+      detail: "Your changes will be lost if you don't save them.",
+    };
+    const { response } = parent ? await dialog.showMessageBox(parent, options) : await dialog.showMessageBox(options);
+    return response === 0 ? 'save' : response === 1 ? 'discard' : 'cancel';
+  },
+};
+
+function createWindow(session: ProjectSession, recovery: Recovery, projects: ProjectController): void {
   const win = new BrowserWindow({
     width: 1280,
     height: 800,
@@ -121,6 +160,39 @@ function createWindow(): void {
   });
 
   win.on('ready-to-show', () => win.show());
+
+  // The title carries the project name and the unsaved marker, so the page's own <title> is ignored.
+  const showTitle = (): void => win.setTitle(windowTitle(session.meta().name, session.dirty()));
+  win.on('page-title-updated', (event) => event.preventDefault());
+  showTitle();
+  const stopTitle = session.onChange(showTitle);
+
+  const tick = (): void => {
+    recovery.tick(session).catch((error: unknown) => console.error('Could not write the recovery copy:', error));
+  };
+  const timer = setInterval(tick, recoveryIntervalMs());
+  win.on('blur', tick);
+
+  const flush = (): Promise<void> =>
+    new Promise((resolve) => {
+      ipcMain.once(FLUSH_DONE_CHANNEL, () => resolve());
+      win.webContents.send(FLUSH_REQUEST_CHANNEL);
+    });
+  const guard = createCloseGuard({ flush, projects });
+  let closing = false;
+  win.on('close', (event) => {
+    if (closing) return;
+    event.preventDefault();
+    void guard().then((mayClose) => {
+      if (!mayClose) return;
+      closing = true;
+      win.close();
+    });
+  });
+  win.on('closed', () => {
+    clearInterval(timer);
+    stopTitle();
+  });
 
   if (process.env['ELECTRON_RENDERER_URL']) {
     void win.loadURL(process.env['ELECTRON_RENDERER_URL']);
@@ -141,12 +213,11 @@ void app.whenReady().then(() => {
     console.error('Ignoring connection settings from the environment:', error);
   }
   const session = createProjectSession(defaultProjectMeta(DEFAULT_PROJECT_NAME, defaultOutputDir()));
-  // Placeholder dialogs until the window exists to parent them (wired properly in the next change).
   const recovery = createRecovery({ dir: join(app.getPath('userData'), 'recovery'), fs: nodeProjectFs, now: () => new Date() });
   const projects = createProjectController({
     session,
     fs: nodeProjectFs,
-    dialogs: { showSave: async () => null, showOpen: async () => null, confirmUnsaved: async () => 'cancel' },
+    dialogs: electronDialogs,
     recovery,
     recent: store.recent,
     defaultOutputDir: defaultOutputDir(),
@@ -154,9 +225,9 @@ void app.whenReady().then(() => {
   });
   registerIpc(createApi(buildDeps(store, session, projects, startupProfileId)));
 
-  createWindow();
+  createWindow(session, recovery, projects);
   app.on('activate', () => {
-    if (BrowserWindow.getAllWindows().length === 0) createWindow();
+    if (BrowserWindow.getAllWindows().length === 0) createWindow(session, recovery, projects);
   });
 });
 
