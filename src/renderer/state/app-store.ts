@@ -15,6 +15,8 @@ import type {
   ProfileSave,
   ProjectState,
   QuestLinks,
+  RecentProject,
+  RecoveryEntry,
   Result,
   Viewport,
 } from '@shared/ipc';
@@ -44,6 +46,10 @@ export interface AppState {
   nodes: CanvasNode[];
   viewport: Viewport;
   project: ProjectState;
+  /** Goes up by one each time a different project is loaded (New, Open, Restore). */
+  projectEpoch: number;
+  recent: RecentProject[];
+  recoveries: RecoveryEntry[];
   preview: Difference[] | null;
   exportResult: ExportResult | null;
   exportError: ApiError | null;
@@ -80,6 +86,20 @@ export interface AppState {
   confirmApply(): Promise<void>;
   cancelApply(): void;
   loadLinks(): Promise<void>;
+  loadProjectState(): Promise<void>;
+  /** Sends the debounced edit and any queued moves now, so nothing typed is left behind. */
+  flushAll(): Promise<void>;
+  newProject(name: string): Promise<void>;
+  openProject(path?: string): Promise<void>;
+  saveProject(): Promise<void>;
+  saveProjectAs(): Promise<void>;
+  renameProject(name: string): Promise<void>;
+  loadRecent(): Promise<void>;
+  forgetRecent(path: string): Promise<void>;
+  loadRecoveries(): Promise<void>;
+  /** Restores one crash copy and discards every other one listed: only one project can be open. */
+  restoreRecovery(id: string): Promise<void>;
+  discardRecovery(id: string): Promise<void>;
 }
 
 export type AppStore = UseBoundStore<StoreApi<AppState>>;
@@ -136,6 +156,9 @@ export function createAppStore(api: Api, opts: { saveDelayMs?: number } = {}): A
     nodes: [],
     viewport: { x: 0, y: 0, zoom: 1 },
     project: { name: '', filePath: null, dirty: false, idRangeStart: 60000, idRangeEnd: 99999, outputDir: '', viewport: { x: 0, y: 0, zoom: 1 } },
+    projectEpoch: 0,
+    recent: [],
+    recoveries: [],
     preview: null,
     exportResult: null,
     exportError: null,
@@ -356,6 +379,7 @@ export function createAppStore(api: Api, opts: { saveDelayMs?: number } = {}): A
       // A dropped layout save used to vanish: the results were awaited and then thrown away.
       const failed = (await Promise.all(tasks)).find((r) => !r.ok);
       if (failed && !failed.ok) set({ error: failed.error.message });
+      if (tasks.length > 0) await get().loadProjectState();
     },
 
     async removeNode(questId) {
@@ -365,6 +389,7 @@ export function createAppStore(api: Api, opts: { saveDelayMs?: number } = {}): A
         return;
       }
       set((s) => ({ nodes: s.nodes.filter((n) => n.questId !== questId) }));
+      await get().loadProjectState();
     },
 
     // A failed save is the one thing that must survive closing: clearing `error` first drops a
@@ -392,6 +417,8 @@ export function createAppStore(api: Api, opts: { saveDelayMs?: number } = {}): A
       const result = await api.exportQuest(open.questId);
       if (result.ok) set({ exportResult: result.value, exportError: null });
       else set({ exportResult: null, exportError: result.error });
+      // Marking a quest exported is a change to the project.
+      if (result.ok) await get().loadProjectState();
     },
 
     async prepareApply() {
@@ -432,7 +459,120 @@ export function createAppStore(api: Api, opts: { saveDelayMs?: number } = {}): A
       if (result.ok) set({ links: result.value });
       else set({ error: result.error.message });
     },
+
+    async loadProjectState() {
+      const result = await api.projectState();
+      if (result.ok) set({ project: result.value });
+    },
+
+    async flushAll() {
+      await get().flushSave();
+      await get().flushMoves();
+    },
+
+    async newProject(name) {
+      await get().flushAll();
+      const result = await api.newProject(name);
+      if (!result.ok) {
+        set({ error: result.error.message });
+        return;
+      }
+      if (result.value.done) await switchedProject();
+    },
+
+    async openProject(path) {
+      await get().flushAll();
+      const result = path === undefined ? await api.openProject() : await api.openProject(path);
+      if (!result.ok) {
+        set({ error: result.error.message });
+        return;
+      }
+      if (result.value.done) await switchedProject();
+    },
+
+    async saveProject() {
+      await get().flushAll();
+      const result = await api.saveProject();
+      if (!result.ok) set({ error: result.error.message });
+      await Promise.all([get().loadProjectState(), get().loadRecent()]);
+    },
+
+    async saveProjectAs() {
+      await get().flushAll();
+      const result = await api.saveProjectAs();
+      if (!result.ok) set({ error: result.error.message });
+      await Promise.all([get().loadProjectState(), get().loadRecent()]);
+    },
+
+    async renameProject(name) {
+      await get().flushAll();
+      const result = await api.renameProject(name);
+      if (!result.ok) set({ error: result.error.message });
+      await get().loadProjectState();
+    },
+
+    async loadRecent() {
+      const result = await api.recentProjects();
+      if (result.ok) set({ recent: result.value });
+    },
+
+    async forgetRecent(path) {
+      const result = await api.forgetRecent(path);
+      if (!result.ok) set({ error: result.error.message });
+      await get().loadRecent();
+    },
+
+    async loadRecoveries() {
+      const result = await api.recoveries();
+      if (result.ok) set({ recoveries: result.value });
+    },
+
+    async restoreRecovery(id) {
+      await get().flushAll();
+      const result = await api.restoreRecovery(id);
+      if (!result.ok) {
+        set({ error: result.error.message });
+        return;
+      }
+      const others = get().recoveries.filter((r) => r.id !== id);
+      await Promise.all(others.map((r) => api.discardRecovery(r.id)));
+      set({ recoveries: [] });
+      await switchedProject();
+    },
+
+    async discardRecovery(id) {
+      const result = await api.discardRecovery(id);
+      if (!result.ok) {
+        set({ error: result.error.message });
+        return;
+      }
+      set((s) => ({ recoveries: s.recoveries.filter((r) => r.id !== id) }));
+    },
   }));
+
+  /**
+   * A different project is open: nothing the editor or the canvas holds belongs to it any more.
+   * Queued moves and viewport changes were for the old canvas, so they are dropped, not sent.
+   */
+  async function switchedProject(): Promise<void> {
+    if (saveTimer) {
+      clearTimeout(saveTimer);
+      saveTimer = null;
+    }
+    pendingMoves.clear();
+    pendingViewport = null;
+    store.setState((s) => ({
+      open: null,
+      screen: 'pick',
+      links: null,
+      dirty: false,
+      preview: null,
+      exportResult: null,
+      exportError: null,
+      projectEpoch: s.projectEpoch + 1,
+    }));
+    await store.getState().loadNodes();
+  }
 
   return store;
 }

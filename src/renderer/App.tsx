@@ -11,6 +11,8 @@ export function App(): React.JSX.Element {
 
   useEffect(() => {
     void store.getState().start();
+    // Closing the window asks for pending edits first, so the unsaved-changes check sees them.
+    window.appEvents?.onFlushRequest(() => store.getState().flushAll());
   }, [store]);
 
   if (screen === 'pick' || screen === 'edit') {
