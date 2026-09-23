@@ -19,9 +19,13 @@ function formatMoney(copper: number): string {
 }
 
 /**
- * `RewardMoneyDifficulty` names a tier of `quest_money_reward` (indexed by quest level, not player
- * level): `0` means "the server falls back to the fixed `RewardMoney` above", and `1..9` pick
- * `Money{n}` of the row for this quest's level. Each option shows what that tier actually pays.
+ * `RewardMoneyDifficulty` names a tier of `quest_money_reward`: `1..9` make the quest pay `Money{n}`
+ * of the row for the level of the player completing it (each option shows what it pays at this
+ * quest's own level), and `0` pays the fixed `RewardMoney` above.
+ *
+ * Imported Blizzlike quests carry the client's "money at max level" figure in this column instead.
+ * The server treats any value of 10 or more as no tier, so the control says so rather than showing
+ * the bare number as though it were one.
  */
 export function MoneyDifficultyControl(props: ControlProps<number>): React.JSX.Element {
   const { id, label, help, value, onChange, disabled, readOnlyReason } = props;
@@ -29,32 +33,35 @@ export function MoneyDifficultyControl(props: ControlProps<number>): React.JSX.E
   const level = typeof aggregate.values[LEVEL_FIELD] === 'number' ? (aggregate.values[LEVEL_FIELD] as number) : 0;
   const tables = useRewardTables(level);
 
-  const known = TIERS.includes(value) ? TIERS : [...TIERS, value];
+  const notATier = !TIERS.includes(value);
+  const known = notATier ? [...TIERS, value] : TIERS;
 
   return (
     <div>
       <label htmlFor={id}>{label}</label>
       {help && <p>{help}</p>}
+      {notATier && (
+        <p>
+          This quest stores {value} here, which is not a tier, so the server ignores it and pays the fixed amount
+          above. Imported quests often carry the client&apos;s &quot;money at max level&quot; figure in this column.
+        </p>
+      )}
       <select id={id} value={value} disabled={disabled} onChange={(e) => onChange(Number(e.target.value))}>
-        {known.map((n) => {
-          if (n === 0) {
-            return (
-              <option key={n} value={n}>
-                0 — use the fixed amount above
-              </option>
-            );
-          }
-          const money = tables?.money[n] ?? null;
-          return (
-            <option key={n} value={n}>
-              {money !== null ? `${n} — ${formatMoney(money)}` : `${n}`}
-            </option>
-          );
-        })}
+        {known.map((n) => (
+          <option key={n} value={n}>
+            {optionLabel(n, tables?.money[n] ?? null)}
+          </option>
+        ))}
       </select>
       {readOnlyReason && <p role="alert">{readOnlyReason}</p>}
     </div>
   );
+}
+
+function optionLabel(tier: number, money: number | null): string {
+  if (tier === 0) return 'None: pay the fixed amount above';
+  if (!TIERS.includes(tier)) return `Not a tier (stored value ${tier})`;
+  return money !== null ? `${formatMoney(money)} (tier ${tier})` : `Tier ${tier}`;
 }
 
 export const MoneyDifficultyFieldControl = MoneyDifficultyControl as unknown as FieldControl;

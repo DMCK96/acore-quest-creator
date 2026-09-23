@@ -221,7 +221,7 @@ const scalars: ScalarFieldDef[] = [
     column: 'RewardMoneyDifficulty',
     type: { kind: 'int', min: 0 },
     label: 'Money reward tier',
-    help: 'Names the per-level money tier the reward was authored from, which lets the payout follow the level the quest is played at. Blizzlike data in this fork stores the client\'s "money at max level" here instead, and the server falls back to matching the tier from the money reward itself.',
+    help: 'Makes the money follow the level of the player who completes the quest: pick a tier and the quest pays that tier for their level instead of the fixed amount. The amounts shown are for the level of this quest.',
     group: 'rewards',
     control: 'moneyDifficulty',
   }),

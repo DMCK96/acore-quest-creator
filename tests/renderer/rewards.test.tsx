@@ -26,9 +26,14 @@ describe('Rewards group', () => {
   it('shows what a money difficulty pays and that 0 uses the fixed amount', async () => {
     const onChange = vi.fn();
     await mount({ 'quest_template.RewardMoneyDifficulty': 0 }, onChange);
-    expect(await screen.findByRole('option', { name: '0 — use the fixed amount above' })).toBeInTheDocument();
-    await userEvent.selectOptions(screen.getByRole('combobox', { name: /money reward tier/i }), '3 — 1 gold 50 silver');
+    expect(await screen.findByRole('option', { name: 'None: pay the fixed amount above' })).toBeInTheDocument();
+    await userEvent.selectOptions(screen.getByRole('combobox', { name: /money reward tier/i }), '1 gold 50 silver (tier 3)');
     expect(onChange).toHaveBeenCalledWith('quest_template.RewardMoneyDifficulty', 3);
+  });
+  it('says a stored money value that is not a tier is ignored', async () => {
+    await mount({ 'quest_template.RewardMoneyDifficulty': 24750 });
+    expect(await screen.findByRole('option', { name: 'Not a tier (stored value 24750)' })).toBeInTheDocument();
+    expect(screen.getByText(/stores 24750 here, which is not a tier/)).toBeInTheDocument();
   });
   it('edits the fixed money as gold, silver and copper', async () => {
     const onChange = vi.fn();
@@ -45,6 +50,6 @@ describe('Rewards group', () => {
   it('degrades gracefully when the reference tables are unavailable', async () => {
     const empty = makeMockApi({ rewardTables: async () => okv({ xp: Array(10).fill(null), money: Array(10).fill(null) }) });
     await mountBody('rewards', {}, { api: empty });
-    expect(await screen.findByRole('option', { name: 'Tier 1' })).toBeInTheDocument();
+    expect(await screen.findAllByRole('option', { name: 'Tier 1' })).toHaveLength(2); // XP and money
   });
 });
