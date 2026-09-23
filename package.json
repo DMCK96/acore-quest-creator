@@ -18,9 +18,13 @@
     "rebuild:electron": "electron-rebuild -f -w better-sqlite3"
   },
   "dependencies": {
+    "@tsparticles/engine": "^4.4.0",
+    "@tsparticles/react": "^4.4.0",
+    "@tsparticles/slim": "^4.4.0",
     "@xyflow/react": "^12.11.6",
     "better-sqlite3": "^13.0.3",
     "drizzle-orm": "^0.45.3",
+    "motion": "^13.4.1",
     "mysql2": "^3.24.4",
     "react": "^19.3.0",
     "react-dom": "^19.3.0",

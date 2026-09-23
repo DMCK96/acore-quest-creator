@@ -27,6 +27,35 @@ describe('ConnectionScreen', () => {
     expect(api.saveProfile).toHaveBeenCalledWith(expect.objectContaining({ host: '127.0.0.1', database: 'acore_world', role: 'world' }));
     expect(api.connect).toHaveBeenCalledWith(1);
   });
+  it('lists saved profiles on launch and connects to one with its stored password', async () => {
+    const api = makeMockApi({ listProfiles: async () => okv([profileRec]), connect: async () => okv(summary) });
+    const store = createAppStore(api);
+    await store.getState().start();
+    render(<ConnectionScreen store={store} />);
+    await userEvent.click(screen.getByRole('button', { name: 'Connect to local' }));
+    await waitFor(() => expect(store.getState().screen).toBe('pick'));
+    expect(api.connect).toHaveBeenCalledWith(1);
+    expect(api.saveProfile).not.toHaveBeenCalled();
+  });
+  it('connects on launch to the startup profile, once', async () => {
+    const api = makeMockApi({ startupProfile: async () => okv(1), connect: async () => okv(summary) });
+    const store = createAppStore(api);
+    await Promise.all([store.getState().start(), store.getState().start()]);
+    expect(store.getState().screen).toBe('pick');
+    expect(api.connect).toHaveBeenCalledTimes(1);
+  });
+  it('editing a saved profile updates it and keeps the password when left blank', async () => {
+    const api = makeMockApi({ listProfiles: async () => okv([profileRec]), saveProfile: async () => okv(profileRec), connect: async () => okv(summary) });
+    const store = createAppStore(api);
+    await store.getState().loadProfiles();
+    render(<ConnectionScreen store={store} />);
+    await userEvent.click(screen.getByRole('button', { name: 'Edit local' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Save and connect' }));
+    await waitFor(() => expect(store.getState().screen).toBe('pick'));
+    const sent = vi.mocked(api.saveProfile).mock.calls[0]![0];
+    expect(sent).toMatchObject({ id: 1, host: 'h' });
+    expect(sent).not.toHaveProperty('password');
+  });
   it('shows a readable error when the server is unreachable', async () => {
     const api = makeMockApi({ saveProfile: async () => okv(profileRec), connect: async () => errv('CONNECTION', 'Cannot reach h:3306 (ECONNREFUSED)') });
     const store = createAppStore(api);

@@ -4,13 +4,21 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { mysqlUrl } from '../helpers/env';
 
+const withoutConnectionEnv = (env: NodeJS.ProcessEnv): Record<string, string> =>
+  Object.fromEntries(
+    Object.entries(env).filter(
+      (e): e is [string, string] => e[1] !== undefined && !/^ACQC_(WORLD|DEV)_DB_/.test(e[0]),
+    ),
+  );
+
 test('connect, add a quest to the canvas, edit it, review changes and export', async () => {
   const u = new URL(mysqlUrl());
   const userData = mkdtempSync(join(tmpdir(), 'acqc-ud-'));
   const outDir = mkdtempSync(join(tmpdir(), 'acqc-out-'));
   const app = await electron.launch({
     args: ['out/main/index.js'],
-    env: { ...process.env, ACQC_USER_DATA: userData, ACQC_OUTPUT_DIR: outDir },
+    // No `.env` and no connection variables from the shell: this test drives the connection form.
+    env: { ...withoutConnectionEnv(process.env), ACQC_USER_DATA: userData, ACQC_OUTPUT_DIR: outDir, ACQC_ENV_FILE: 'none' },
   });
   const page = await app.firstWindow();
 

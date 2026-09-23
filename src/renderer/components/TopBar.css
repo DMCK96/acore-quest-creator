@@ -1,0 +1,66 @@
+.topbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1em;
+  padding: 0.6em 1.2em;
+  background: var(--bg-panel);
+  border-bottom: 1px solid var(--border);
+}
+
+.topbar__identity {
+  min-width: 0;
+}
+
+.topbar__label {
+  display: block;
+  font-size: 0.7em;
+  color: var(--text-faint);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+.topbar__title {
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: 1.2em;
+  font-weight: 600;
+  color: var(--text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.topbar__actions {
+  display: flex;
+  align-items: center;
+  gap: 0.5em;
+  flex-shrink: 0;
+}
+
+.status-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5em;
+  padding: 0.4em 0.8em;
+  border-radius: 999px;
+  font-size: 0.85em;
+  border: 1px solid var(--border);
+  color: var(--text-muted);
+}
+
+.status-pill__dot {
+  width: 0.55em;
+  height: 0.55em;
+  border-radius: 50%;
+  background: var(--text-faint);
+}
+
+.status-pill--connected {
+  border-color: var(--green);
+  color: var(--green);
+}
+
+.status-pill--connected .status-pill__dot {
+  background: var(--green);
+}

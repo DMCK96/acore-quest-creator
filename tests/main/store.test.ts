@@ -34,6 +34,8 @@ describe('store', () => {
     expect(b.id).toBe(a.id);
     expect(store.profiles.list()).toHaveLength(1);
     expect(store.profiles.getWithPassword(a.id).password).toBe('p2');
+    store.profiles.save({ id: a.id, name: 'kept', role: 'world', host: 'h', port: 1, user: 'u', database: 'd' });
+    expect(store.profiles.getWithPassword(a.id)).toMatchObject({ name: 'kept', password: 'p2' });
     store.profiles.remove(a.id);
     expect(store.profiles.list()).toEqual([]);
   });

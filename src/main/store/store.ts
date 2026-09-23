@@ -5,11 +5,11 @@ import { drizzle } from 'drizzle-orm/better-sqlite3';
 import { migrate } from 'drizzle-orm/better-sqlite3/migrator';
 import type { QuestAggregate, Snapshot } from '../../core/model/aggregate';
 import type { FidelityReport } from '../../core/roundtrip/verify';
-import type { Project, ProfileInput, ProfileRecord, Viewport } from '../../shared/ipc';
+import type { Project, ProfileInput, ProfileRecord, ProfileSave, Viewport } from '../../shared/ipc';
 import { connectionProfiles, drafts, projects } from './schema';
 
 // The records the renderer sees are the IPC types; the store is where they are kept.
-export type { Project, ProfileInput, ProfileRecord, Viewport };
+export type { Project, ProfileInput, ProfileRecord, ProfileSave, Viewport };
 
 export interface SecretBox {
   encrypt(plain: string): Uint8Array;
@@ -43,7 +43,8 @@ export interface DraftInput {
 
 export interface Store {
   profiles: {
-    save(input: ProfileInput & { id?: number }): ProfileRecord;
+    /** Updating a profile (`id` given) without a password keeps the one already stored. */
+    save(input: ProfileSave): ProfileRecord;
     list(): ProfileRecord[];
     getWithPassword(id: number): ProfileInput & { id: number };
     remove(id: number): void;
@@ -134,10 +135,12 @@ export function openStore(path: string, secrets: SecretBox, migrationsFolder: st
   return {
     profiles: {
       save({ id, password, ...rest }) {
-        const values = { ...rest, passwordEnc: Buffer.from(secrets.encrypt(password)) };
         if (id === undefined) {
+          if (password === undefined) throw new Error('A new connection profile needs a password');
+          const values = { ...rest, passwordEnc: Buffer.from(secrets.encrypt(password)) };
           return toProfile(db.insert(connectionProfiles).values(values).returning().get());
         }
+        const values = password === undefined ? rest : { ...rest, passwordEnc: Buffer.from(secrets.encrypt(password)) };
         const row = db.update(connectionProfiles).set(values).where(eq(connectionProfiles.id, id)).returning().get();
         if (!row) throw new Error(`Connection profile ${id} does not exist`);
         return toProfile(row);

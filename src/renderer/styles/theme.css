@@ -1,0 +1,132 @@
+:root {
+  --bg: #171310;
+  --bg-panel: #221b15;
+  --bg-panel-raised: #2a2119;
+  --bg-inset: #14100c;
+  --border: #3c2f22;
+  --border-soft: #2e241a;
+  --text: #ece2cd;
+  --text-muted: #a99a80;
+  --text-faint: #7a6c56;
+  --accent: #cf9f3f;
+  --accent-strong: #e4b458;
+  --accent-soft: rgba(207, 159, 63, 0.16);
+  --green: #5a8a5f;
+  --green-soft: rgba(90, 138, 95, 0.18);
+  --blue: #4f7cad;
+  --blue-soft: rgba(79, 124, 173, 0.18);
+  --red: #b1463f;
+  --red-soft: rgba(177, 70, 63, 0.18);
+  --amber: #c98a3a;
+  --amber-soft: rgba(201, 138, 58, 0.18);
+  --font-display: Georgia, 'Times New Roman', serif;
+  --font-body: -apple-system, 'Segoe UI', Roboto, sans-serif;
+  --radius: 8px;
+  --radius-lg: 14px;
+  --shadow: 0 4px 16px rgba(0, 0, 0, 0.4);
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+  margin: 0;
+}
+
+body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--font-body);
+  font-size: 14px;
+}
+
+button {
+  font-family: inherit;
+  font-size: inherit;
+  cursor: pointer;
+}
+
+.btn {
+  appearance: none;
+  border: 1px solid var(--border);
+  background: var(--bg-panel-raised);
+  color: var(--text);
+  border-radius: var(--radius);
+  padding: 0.45em 0.9em;
+  transition:
+    background 0.15s ease,
+    border-color 0.15s ease;
+}
+
+.btn:hover {
+  background: var(--border-soft);
+  border-color: var(--accent);
+}
+
+.btn:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.btn--primary {
+  background: var(--accent-soft);
+  border-color: var(--accent);
+  color: var(--accent-strong);
+}
+
+.btn--primary:hover {
+  background: var(--accent);
+  color: var(--bg);
+}
+
+.btn--icon {
+  padding: 0.45em 0.55em;
+  line-height: 1;
+}
+
+.chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3em;
+  padding: 0.15em 0.6em;
+  border-radius: 999px;
+  font-size: 0.75em;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+  border: 1px solid transparent;
+}
+
+.chip--green {
+  background: var(--green-soft);
+  color: var(--green);
+  border-color: var(--green);
+}
+
+.chip--blue {
+  background: var(--blue-soft);
+  color: var(--blue);
+  border-color: var(--blue);
+}
+
+.chip--red {
+  background: var(--red-soft);
+  color: var(--red);
+  border-color: var(--red);
+}
+
+.chip--amber {
+  background: var(--amber-soft);
+  color: var(--amber);
+  border-color: var(--amber);
+}
+
+.chip--neutral {
+  background: var(--bg-inset);
+  color: var(--text-muted);
+  border-color: var(--border);
+}

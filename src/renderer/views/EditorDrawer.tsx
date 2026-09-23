@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import type { AppStore } from '../state/app-store';
 import { QuestWorkspace } from './QuestWorkspace';
+import './EditorDrawer.css';
 
 /** The editor as a drawer over the canvas: the canvas stays mounted and interactive beside it. */
 export function EditorDrawer({ store }: { store: AppStore }): React.JSX.Element {
@@ -19,17 +20,20 @@ export function EditorDrawer({ store }: { store: AppStore }): React.JSX.Element 
     <div
       role="complementary"
       aria-label="Quest editor"
-      style={{ width: expanded ? '100%' : '55%', height: '100%', overflow: 'auto' }}
+      className="editor-drawer"
+      style={{ width: expanded ? '100%' : '55%' }}
     >
-      <div>
-        <button type="button" aria-pressed={expanded} onClick={() => setExpanded((v) => !v)}>
+      <div className="editor-drawer__bar">
+        <button type="button" className="btn" aria-pressed={expanded} onClick={() => setExpanded((v) => !v)}>
           Expand editor
         </button>
-        <button type="button" onClick={() => void closeEditor()}>
+        <button type="button" className="btn" onClick={() => void closeEditor()}>
           Close editor
         </button>
       </div>
-      <QuestWorkspace store={store} />
+      <div className="editor-drawer__body">
+        <QuestWorkspace store={store} />
+      </div>
     </div>
   );
 }

@@ -18,6 +18,8 @@ import { EditorDrawer } from './EditorDrawer';
 import { AddExistingDialog } from './AddExistingDialog';
 import { TopBar } from '../components/TopBar';
 import { ErrorBanner } from '../components/ErrorBanner';
+import { QuestOrb } from '../components/QuestOrb';
+import { AnimatedButton } from '../components/AnimatedButton';
 import './CanvasHome.css';
 
 /** Drags and pans are queued locally and flushed together after the user pauses. */
@@ -110,18 +112,28 @@ function CanvasInner({ store }: { store: AppStore }): React.JSX.Element {
           {nodes.length === 0 && (
             <div className="canvas-empty">
               <div className="canvas-empty__circle">
-                <div className="canvas-empty__icon">📜</div>
-                <h2 className="canvas-empty__title">Start Your Journey</h2>
-                <p className="canvas-empty__subtitle">
-                  Begin by adding your first quest or an existing quest chain to the canvas.
-                </p>
-                <div className="canvas-empty__actions">
-                  <button type="button" className="btn btn--primary" onClick={() => void newQuest()}>
-                    + Create New Quest
-                  </button>
-                  <button type="button" className="btn" onClick={() => setShowAddExisting(true)}>
-                    Add Existing Quest Chain
-                  </button>
+                <QuestOrb />
+                <div className="canvas-empty__content">
+                  <div className="canvas-empty__icon">📜</div>
+                  <h2 className="canvas-empty__title">Start Your Journey</h2>
+                  <p className="canvas-empty__subtitle">
+                    Begin by adding your first quest or an existing quest chain to the canvas.
+                  </p>
+                  <div className="canvas-empty__actions">
+                    <AnimatedButton className="canvas-empty__btn" onClick={() => void newQuest()}>
+                      <svg className="canvas-empty__btn-icon" viewBox="0 0 16 16" aria-hidden="true">
+                        <path d="M8 2v12M2 8h12" />
+                      </svg>
+                      Create New Quest
+                    </AnimatedButton>
+                    <AnimatedButton className="canvas-empty__btn" onClick={() => setShowAddExisting(true)}>
+                      <svg className="canvas-empty__btn-icon" viewBox="0 0 16 16" aria-hidden="true">
+                        <path d="M6.6 9.4a2.6 2.6 0 0 0 3.7 0l2.4-2.4a2.6 2.6 0 0 0-3.7-3.7l-.9.9" />
+                        <path d="M9.4 6.6a2.6 2.6 0 0 0-3.7 0L3.3 9a2.6 2.6 0 0 0 3.7 3.7l.9-.9" />
+                      </svg>
+                      Add Existing Quest Chain
+                    </AnimatedButton>
+                  </div>
                 </div>
               </div>
             </div>

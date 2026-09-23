@@ -1,0 +1,145 @@
+.canvas-shell {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  height: 100%;
+}
+
+.canvas-body {
+  display: flex;
+  flex: 1;
+  min-height: 0;
+}
+
+.canvas-pane {
+  flex: 1;
+  position: relative;
+  min-width: 0;
+}
+
+.canvas-empty {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  pointer-events: none;
+  z-index: 1;
+}
+
+.canvas-empty__circle {
+  position: relative;
+  pointer-events: auto;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  gap: 0.6em;
+  width: 22em;
+  padding: 2.4em 2em;
+  border-radius: 50%;
+  aspect-ratio: 1;
+  justify-content: center;
+}
+
+.canvas-empty__content {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.6em;
+}
+
+.canvas-empty__icon {
+  font-size: 2.4em;
+}
+
+.canvas-empty__title {
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: 1.4em;
+  color: #fffaf0;
+  text-shadow: 0 1px 6px rgba(40, 28, 16, 0.6);
+}
+
+.canvas-empty__subtitle {
+  margin: 0;
+  color: rgba(255, 248, 235, 0.9);
+  text-shadow: 0 1px 4px rgba(40, 28, 16, 0.7);
+  font-size: 0.9em;
+  max-width: 18em;
+}
+
+.canvas-empty__actions {
+  display: flex;
+  gap: 0.6em;
+  margin-top: 0.6em;
+}
+
+/* `.btn.` for specificity: theme.css loads after this file and its `.btn` would win a tie.
+   Wider than the circle's text column on purpose, like the reference: the buttons overhang the
+   sphere slightly so each label fits on one line. */
+.btn.canvas-empty__btn {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.25em;
+  white-space: nowrap;
+  padding: 0.55em 1.7em;
+  /* Frosted glass: a faint light sheen over a thin warm tint, blurring the sphere behind it. */
+  background:
+    linear-gradient(180deg, rgba(255, 246, 228, 0.16) 0%, rgba(255, 246, 228, 0.04) 100%),
+    rgba(60, 44, 30, 0.32);
+  backdrop-filter: blur(8px) saturate(1.2);
+  border-color: rgba(255, 240, 215, 0.3);
+  color: #fffaf0;
+  text-shadow: 0 1px 3px rgba(30, 20, 10, 0.6);
+  box-shadow:
+    0 2px 12px rgba(20, 14, 8, 0.3),
+    inset 0 1px 0 rgba(255, 250, 238, 0.25);
+}
+
+.btn.canvas-empty__btn:hover {
+  background:
+    linear-gradient(180deg, rgba(255, 246, 228, 0.24) 0%, rgba(255, 246, 228, 0.08) 100%),
+    rgba(60, 44, 30, 0.32);
+  border-color: rgba(255, 244, 224, 0.55);
+}
+
+.canvas-empty__btn-icon {
+  width: 1em;
+  height: 1em;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.8;
+  stroke-linecap: round;
+}
+
+.react-flow__minimap {
+  background: var(--bg-inset) !important;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+}
+
+.react-flow__controls {
+  box-shadow: none !important;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  overflow: hidden;
+}
+
+.react-flow__controls-button {
+  background: var(--bg-panel-raised) !important;
+  border-bottom: 1px solid var(--border) !important;
+  color: var(--text) !important;
+  fill: var(--text) !important;
+}
+
+.react-flow__controls-button:hover {
+  background: var(--border-soft) !important;
+}
+
+.react-flow__background {
+  background: var(--bg) !important;
+}

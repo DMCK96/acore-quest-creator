@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import type { CanvasNode } from '@shared/ipc';
+import './QuestNodeCard.css';
 
 /** Roughly the width a node occupies on the canvas; used to lay out new nodes. */
 export const NODE_WIDTH = 220;
@@ -20,11 +21,12 @@ export function QuestNodeCard({
   const [confirming, setConfirming] = useState(false);
   const title = node.title.trim() === '' ? '(untitled quest)' : node.title;
   const label = `Quest ${node.questId}: ${title}`;
+  const statusClass = node.unsafe ? 'quest-card--unsafe' : node.exported ? 'quest-card--exported' : node.isNew ? 'quest-card--new' : '';
 
   return (
     <div
       data-testid="quest-node"
-      className="nodrag nopan"
+      className={`quest-card nodrag nopan ${statusClass}`}
       role="button"
       tabIndex={0}
       aria-label={label}
@@ -35,16 +37,21 @@ export function QuestNodeCard({
         if (e.key === 'Enter') onOpen?.();
       }}
     >
-      <div>{title}</div>
-      <div>#{node.questId}</div>
-      <div>Level {node.level}</div>
-      {node.isNew && <span>New</span>}
-      {node.exported && <span>Exported</span>}
-      {node.unsafe && <span>Unsafe</span>}
-      {node.errors > 0 && <span>{countLabel(node.errors, 'error')}</span>}
-      {node.warnings > 0 && <span>{countLabel(node.warnings, 'warning')}</span>}
+      <div className="quest-card__title">{title}</div>
+      <div className="quest-card__meta">
+        <span>#{node.questId}</span>
+        <span>Level {node.level}</span>
+      </div>
+      <div className="quest-card__chips">
+        {node.isNew && <span className="chip chip--blue">New</span>}
+        {node.exported && <span className="chip chip--green">Exported</span>}
+        {node.unsafe && <span className="chip chip--red">Unsafe</span>}
+        {node.errors > 0 && <span className="chip chip--red">{countLabel(node.errors, 'error')}</span>}
+        {node.warnings > 0 && <span className="chip chip--amber">{countLabel(node.warnings, 'warning')}</span>}
+      </div>
       <button
         type="button"
+        className="quest-card__remove"
         onClick={(e) => {
           e.stopPropagation();
           setConfirming(true);
@@ -53,27 +60,31 @@ export function QuestNodeCard({
         Remove quest {node.questId} from canvas
       </button>
       {confirming && (
-        <div role="alertdialog">
+        <div role="alertdialog" className="quest-card__confirm">
           <p>This removes the draft only. Nothing in your database changes.</p>
-          <button
-            type="button"
-            onClick={(e) => {
-              e.stopPropagation();
-              setConfirming(false);
-            }}
-          >
-            Cancel
-          </button>
-          <button
-            type="button"
-            onClick={(e) => {
-              e.stopPropagation();
-              setConfirming(false);
-              onRemove?.();
-            }}
-          >
-            Remove
-          </button>
+          <div className="quest-card__confirm-actions">
+            <button
+              type="button"
+              className="btn"
+              onClick={(e) => {
+                e.stopPropagation();
+                setConfirming(false);
+              }}
+            >
+              Cancel
+            </button>
+            <button
+              type="button"
+              className="btn btn--primary"
+              onClick={(e) => {
+                e.stopPropagation();
+                setConfirming(false);
+                onRemove?.();
+              }}
+            >
+              Remove
+            </button>
+          </div>
         </div>
       )}
     </div>

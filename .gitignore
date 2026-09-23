@@ -6,3 +6,4 @@ corpus-report.json
 test-results/
 .superpowers/
 *.tsbuildinfo
+.env

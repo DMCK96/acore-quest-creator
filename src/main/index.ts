@@ -6,6 +6,7 @@ import { openMysqlDevDb } from '../core/db/mysql-dev-db';
 import { openMysqlWorldDb } from '../core/db/mysql-world-db';
 import { API_METHODS, channelFor, parseRequest, type Api, type ApiError } from '../shared/ipc';
 import { createApi, type ApiDeps } from './api';
+import { seedEnvProfiles } from './env-profiles';
 import { createSecretBox } from './secret-box';
 import { openStore, type Store } from './store/store';
 
@@ -28,6 +29,15 @@ const STORE_FILE = 'quest-creator.sqlite';
 const userDataOverride = process.env['ACQC_USER_DATA'];
 if (userDataOverride) app.setPath('userData', userDataOverride);
 
+/**
+ * An unpackaged app (`npm run dev`, or `electron out/main/index.js` as Playwright launches it) reads
+ * the repo's `.env` (see `.env.example`), so the connection details need not be typed on every
+ * launch. `ACQC_ENV_FILE` points at another file, or is `none` to read nothing, which is how the
+ * end-to-end test keeps the connection form in front of it. Variables already set in the shell win.
+ */
+const envFile = process.env['ACQC_ENV_FILE'] ?? (app.isPackaged ? 'none' : join(__dirname, '..', '..', '.env'));
+if (envFile !== 'none' && existsSync(envFile)) process.loadEnvFile(envFile);
+
 const defaultOutputDir = (): string =>
   process.env['ACQC_OUTPUT_DIR'] ??
   (existsSync(FORK_OUTPUT_DIR) ? FORK_OUTPUT_DIR : join(app.getPath('documents'), 'ACORE Quest Creator', 'sql'));
@@ -47,9 +57,10 @@ const unknownError = (error: unknown): { ok: false; error: ApiError } => ({
   error: { code: 'UNKNOWN', message: error instanceof Error ? error.message : String(error) },
 });
 
-function buildDeps(store: Store): ApiDeps {
+function buildDeps(store: Store, startupProfileId: number | null): ApiDeps {
   return {
     store,
+    startupProfileId,
     openWorldDb: (p) => openMysqlWorldDb(p),
     openDevDb: (p) => openMysqlDevDb(p),
     fs: {
@@ -111,7 +122,14 @@ void app.whenReady().then(() => {
   // `safeStorage` is only usable once the app is ready, so the store opens here and not at import.
   const store = openStore(join(app.getPath('userData'), STORE_FILE), createSecretBox(safeStorage), migrationsFolder());
   app.on('will-quit', () => store.close());
-  registerIpc(createApi(buildDeps(store)));
+  let startupProfileId: number | null = null;
+  try {
+    startupProfileId = seedEnvProfiles(store, process.env);
+  } catch (error) {
+    // A bad `.env` must not stop the app opening: the connection screen is still there.
+    console.error('Ignoring connection settings from the environment:', error);
+  }
+  registerIpc(createApi(buildDeps(store, startupProfileId)));
 
   createWindow();
   app.on('activate', () => {

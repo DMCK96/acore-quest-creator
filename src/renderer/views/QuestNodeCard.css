@@ -1,0 +1,88 @@
+.quest-card {
+  background: var(--bg-panel-raised);
+  border: 1px solid var(--border);
+  border-left: 4px solid var(--text-faint);
+  border-radius: var(--radius);
+  padding: 0.6em 0.8em;
+  box-shadow: var(--shadow);
+  cursor: pointer;
+  outline: none;
+}
+
+.quest-card:hover {
+  border-color: var(--accent);
+}
+
+.quest-card[aria-current='true'] {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 2px var(--accent-soft);
+}
+
+.quest-card--new {
+  border-left-color: var(--blue);
+}
+
+.quest-card--exported {
+  border-left-color: var(--green);
+}
+
+.quest-card--unsafe {
+  border-left-color: var(--red);
+}
+
+.quest-card__title {
+  font-weight: 600;
+  font-size: 0.95em;
+  color: var(--text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.quest-card__meta {
+  display: flex;
+  align-items: center;
+  gap: 0.5em;
+  color: var(--text-muted);
+  font-size: 0.78em;
+  margin-top: 0.15em;
+}
+
+.quest-card__chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35em;
+  margin-top: 0.4em;
+}
+
+.quest-card__remove {
+  border: none;
+  background: none;
+  color: var(--text-faint);
+  font-size: 0.75em;
+  padding: 0.2em 0;
+  margin-top: 0.3em;
+}
+
+.quest-card__remove:hover {
+  color: var(--red);
+}
+
+.quest-card__confirm {
+  margin-top: 0.4em;
+  padding: 0.5em;
+  background: var(--bg-inset);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  font-size: 0.8em;
+}
+
+.quest-card__confirm p {
+  margin: 0 0 0.5em;
+  color: var(--text-muted);
+}
+
+.quest-card__confirm-actions {
+  display: flex;
+  gap: 0.4em;
+}
