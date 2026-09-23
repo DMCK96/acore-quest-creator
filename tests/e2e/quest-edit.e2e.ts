@@ -58,7 +58,8 @@ test('connect, add a quest to the canvas, edit it, review changes and export', a
   expect(readFileSync(join(outDir, files[0]), 'utf8')).toContain(`${original} (edited)`.replace(/'/g, "\\'"));
 
   await page.getByRole('button', { name: 'Close editor' }).click();
-  await expect(page.getByTestId('quest-node')).toContainText(`${original} (edited)`);
+  // The chain puts several nodes on the canvas; exactly one of them carries the edited title.
+  await expect(page.getByTestId('quest-node').filter({ hasText: `${original} (edited)` })).toHaveCount(1);
 
   await page.screenshot({ path: 'test-results/quest-edit.png' });
   await app.close();
