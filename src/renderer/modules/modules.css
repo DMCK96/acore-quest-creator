@@ -1,0 +1,88 @@
+.field-setting {
+  margin-bottom: 12px;
+}
+
+.entry-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-bottom: 14px;
+}
+
+.entry-list__help {
+  color: var(--text-muted);
+  font-size: 13px;
+  margin: 0;
+}
+
+.entry-card {
+  background: var(--bg-panel-raised);
+  border: 1px solid var(--border);
+  border-left: 3px solid var(--accent);
+  border-radius: var(--radius);
+  padding: 10px 12px;
+}
+
+.entry-card__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.entry-card__title {
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: 16px;
+  color: var(--text);
+}
+
+.entry-card__actions {
+  display: flex;
+  gap: 4px;
+}
+
+.entry-card__btn {
+  background: none;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  color: var(--text-muted);
+  cursor: pointer;
+  font-size: 12px;
+  padding: 2px 8px;
+}
+
+.entry-card__btn:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+.entry-card__btn--danger {
+  color: var(--red);
+}
+
+.entry-card__body {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  gap: 8px 12px;
+}
+
+.entry-card__target {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 4px 8px;
+  align-items: end;
+  grid-column: 1 / -1;
+}
+
+.entry-list__add {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.entry-list__limit {
+  color: var(--text-muted);
+  font-size: 13px;
+}
