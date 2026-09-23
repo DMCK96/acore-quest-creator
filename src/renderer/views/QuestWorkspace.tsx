@@ -1,4 +1,5 @@
-import type { ActiveView, AppStore, EditorGroup } from '../state/app-store';
+import { useState } from 'react';
+import type { AppStore, EditorGroup } from '../state/app-store';
 import { FidelityBanner } from '../components/FidelityBanner';
 import { IssuesList } from '../components/IssuesList';
 import { LocaleNotice } from '../components/LocaleNotice';
@@ -9,6 +10,8 @@ import { GroupPanel } from '../groups/GroupPanel';
 import { ObjectivesPanel } from '../groups/ObjectivesPanel';
 import { QuestStartsList } from './QuestStartsList';
 import './QuestWorkspace.css';
+
+type ActiveView = EditorGroup | 'unmodelled' | 'changes';
 
 const GROUP_TABS: { view: EditorGroup; label: string }[] = [
   { view: 'identity', label: 'Identity' },
@@ -28,9 +31,8 @@ const TABS = [...GROUP_TABS, ...SIDE_TABS];
 
 export function QuestWorkspace({ store }: { store: AppStore }): React.JSX.Element | null {
   const open = store((s) => s.open);
-  const activeView = store((s) => s.activeView);
+  const [activeView, setActiveView] = useState<ActiveView>('identity');
   const issues = store((s) => s.issues);
-  const setActiveView = store((s) => s.setActiveView);
   const backToPicker = store((s) => s.backToPicker);
   const setValue = store((s) => s.setValue);
   const links = store((s) => s.links);

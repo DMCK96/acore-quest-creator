@@ -20,6 +20,8 @@ import type {
   Result,
   Viewport,
 } from '@shared/ipc';
+import type { ModuleId } from '@core/modules/model';
+import { resetModule } from '@core/modules/catalog';
 
 /** The eight groups a quest is edited through, plus the two read-only side panels. */
 export type EditorGroup =
@@ -30,16 +32,17 @@ export type EditorGroup =
   | 'availability'
   | 'map';
 
-export type ActiveView = EditorGroup | 'unmodelled' | 'changes';
-
 export interface AppState {
-  screen: 'connect' | 'pick' | 'edit';
+  screen: 'connect' | 'pick' | 'preview' | 'edit';
   profiles: ProfileRecord[];
   summary: ConnectSummary | null;
   error: string | null;
   results: QuestSummary[];
   open: OpenResult | null;
-  activeView: ActiveView;
+  /** The module (or the changes view) open in the flow view's side panel. */
+  openPanel: ModuleId | 'changes' | null;
+  /** Optional modules added this session that have nothing in them yet, so they still show. */
+  addedModules: ModuleId[];
   issues: Issue[];
   saving: boolean;
   dirty: boolean;
@@ -70,7 +73,14 @@ export interface AppState {
   addQuestChain(id: number, position?: NodePosition): Promise<void>;
   newQuest(position?: NodePosition): Promise<void>;
   setValue(fieldId: string, value: FieldValue): void;
-  setActiveView(v: ActiveView): void;
+  /** Switches the previewed quest into the module editor. */
+  editQuest(): void;
+  /** Leaves the editor for the chain canvas, sending any pending edit first; the quest stays previewed. */
+  backToChain(): Promise<void>;
+  setOpenPanel(p: ModuleId | 'changes' | null): void;
+  addModule(id: ModuleId): void;
+  /** Clears every writable field the module owns and hides it again. */
+  removeModule(id: ModuleId): void;
   flushSave(): Promise<void>;
   dismissError(): void;
   backToPicker(): Promise<void>;
@@ -149,7 +159,8 @@ export function createAppStore(api: Api, opts: { saveDelayMs?: number } = {}): A
     error: null,
     results: [],
     open: null,
-    activeView: 'identity',
+    openPanel: null,
+    addedModules: [],
     issues: [],
     saving: false,
     dirty: false,
@@ -234,8 +245,8 @@ export function createAppStore(api: Api, opts: { saveDelayMs?: number } = {}): A
       set({
         open: result.value,
         issues: result.value.issues,
-        activeView: 'identity',
-        screen: 'edit',
+        openPanel: null,
+        screen: 'preview',
         error: null,
         dirty: false,
       });
@@ -256,8 +267,8 @@ export function createAppStore(api: Api, opts: { saveDelayMs?: number } = {}): A
       set({
         open,
         issues: open.issues,
-        activeView: 'identity',
-        screen: 'edit',
+        openPanel: null,
+        screen: 'preview',
         // A chain cut short is still a chain on the canvas, but the user has to know it is not all of it.
         error: truncated ? `Only the first ${questIds.length} quests of this chain were added.` : null,
         dirty: false,
@@ -277,7 +288,8 @@ export function createAppStore(api: Api, opts: { saveDelayMs?: number } = {}): A
       set({
         open: result.value,
         issues: result.value.issues,
-        activeView: 'identity',
+        openPanel: null,
+        addedModules: [],
         screen: 'edit',
         error: null,
         dirty: false,
@@ -300,8 +312,35 @@ export function createAppStore(api: Api, opts: { saveDelayMs?: number } = {}): A
       }, saveDelayMs);
     },
 
-    setActiveView(v) {
-      set({ activeView: v });
+    editQuest() {
+      if (!get().open) return;
+      set({ screen: 'edit', openPanel: null, addedModules: [] });
+    },
+
+    async backToChain() {
+      await get().flushSave();
+      set({ screen: 'preview', openPanel: null });
+      await get().loadNodes();
+    },
+
+    setOpenPanel(p) {
+      set({ openPanel: p });
+    },
+
+    addModule(id) {
+      const { addedModules } = get();
+      set({ addedModules: addedModules.includes(id) ? addedModules : [...addedModules, id], openPanel: id });
+    },
+
+    removeModule(id) {
+      const { open } = get();
+      if (!open) return;
+      const edits = resetModule(id, open.aggregate.values, open.aggregate.readOnly.map((r) => r.fieldId));
+      for (const [fieldId, value] of Object.entries(edits)) get().setValue(fieldId, value);
+      set((s) => ({
+        addedModules: s.addedModules.filter((m) => m !== id),
+        openPanel: s.openPanel === id ? null : s.openPanel,
+      }));
     },
 
     dismissError() {

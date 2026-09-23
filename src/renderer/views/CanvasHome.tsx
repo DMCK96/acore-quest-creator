@@ -226,7 +226,7 @@ function CanvasInner({ store }: { store: AppStore }): React.JSX.Element {
             )}
           </div>
         </div>
-        {screen === 'edit' && <EditorDrawer store={store} />}
+        {(screen === 'edit' || screen === 'preview') && <EditorDrawer store={store} />}
       </div>
       {showAddExisting && <AddExistingDialog store={store} onClose={() => setShowAddExisting(false)} />}
       {showProject && <ProjectDialog store={store} onClose={() => setShowProject(false)} />}

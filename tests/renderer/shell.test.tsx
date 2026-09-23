@@ -93,7 +93,7 @@ describe('QuestPicker', () => {
     render(<QuestPicker store={store} />);
     await userEvent.type(screen.getByRole('searchbox'), 'wolves');
     await userEvent.click(await screen.findByRole('button', { name: /Wolves of Elwynn/ }));
-    await waitFor(() => expect(store.getState().screen).toBe('edit'));
+    await waitFor(() => expect(store.getState().screen).toBe('preview'));
     expect(api.openQuest).toHaveBeenCalledWith(5);
     store.getState().backToPicker();
     await userEvent.click(screen.getByRole('button', { name: 'New quest' }));

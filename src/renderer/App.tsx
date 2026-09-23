@@ -15,7 +15,7 @@ export function App(): React.JSX.Element {
     window.appEvents?.onFlushRequest(() => store.getState().flushAll());
   }, [store]);
 
-  if (screen === 'pick' || screen === 'edit') {
+  if (screen === 'pick' || screen === 'preview' || screen === 'edit') {
     return (
       <NamesProvider api={window.api}>
         <RewardTablesProvider api={window.api}>

@@ -79,7 +79,7 @@ describe('CanvasHome', () => {
     await userEvent.type(within(dialog).getByRole('searchbox'), 'wolves');
     await userEvent.click(await within(dialog).findByRole('button', { name: /Wolves of Elwynn/ }));
     await waitFor(() => expect(api.addQuestChain).toHaveBeenCalledWith(5, expect.objectContaining({ x: expect.any(Number), y: expect.any(Number) })));
-    expect(store.getState().screen).toBe('edit');
+    expect(store.getState().screen).toBe('preview');
     expect(screen.queryByRole('dialog')).toBeNull();
   });
   it('opens a node by double-click or Enter, without moving it', async () => {
