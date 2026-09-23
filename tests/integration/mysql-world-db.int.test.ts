@@ -40,6 +40,15 @@ describe('MysqlWorldDb', () => {
     expect((await db.lookupNames('item', [id])).get(id)).toBe(item.name);
     expect([...(await db.existingIds('item', [id, 2147480000]))]).toEqual([id]);
   });
+  it('searches creatures and items by name against the real world DB', async () => {
+    const hits = await db.searchEntities('creature', 'wolf', 25);
+    expect(hits.length).toBeGreaterThan(0);
+    expect(hits.length).toBeLessThanOrEqual(25);
+    expect(hits.every((h) => h.name.toLowerCase().includes('wolf'))).toBe(true);
+    expect(await db.searchEntities('item', "'; DROP TABLE x; --", 25)).toEqual([]);
+    const [first] = await db.searchEntities('item', '25', 25);
+    expect(first?.id).toBe(25);
+  });
   it('searches quests and lists ids in a range', async () => {
     const hits = await db.searchQuests('a', 5);
     expect(hits.length).toBeLessThanOrEqual(5);

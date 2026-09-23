@@ -77,6 +77,9 @@ class ProbingDb implements WorldDb {
   async searchQuests(): Promise<QuestSummary[]> {
     return [];
   }
+  async searchEntities(): Promise<never[]> {
+    return [];
+  }
   async lookupNames(_k: RefKind, _i: readonly number[]): Promise<Map<number, string>> {
     return new Map();
   }
@@ -116,6 +119,7 @@ describe('schema load distinguishes a forbidden table from an absent one', () =>
       columns: async (t) => (t === 'quest_template' ? [col] : []),
       selectRows: async () => [],
       searchQuests: async () => [],
+      searchEntities: async () => [],
       lookupNames: async () => new Map(),
       existingIds: async () => new Set(),
       questIdsInRange: async () => [],

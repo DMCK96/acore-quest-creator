@@ -1,4 +1,7 @@
 import type { ColumnInfo, RawRow, RefKind, Where } from './types';
+import type { EntityHit, SearchKind } from './entity-search';
+
+export type { EntityHit, SearchKind } from './entity-search';
 
 export interface QuestSummary {
   id: number;
@@ -51,6 +54,11 @@ export interface WorldDb {
    */
   selectNonZero?(table: string, column: string): Promise<RawRow[]>;
   searchQuests(text: string, limit: number): Promise<QuestSummary[]>;
+  /**
+   * Entities whose ID is `text` (a whole number) or whose name contains it, case-insensitively:
+   * exact names first, then prefixes, then by ID. Blank text finds nothing.
+   */
+  searchEntities(kind: SearchKind, text: string, limit: number): Promise<EntityHit[]>;
   /** Empty map for kinds outside `LOOKUP_KINDS`. */
   lookupNames(kind: RefKind, ids: readonly number[]): Promise<Map<number, string>>;
   /** Returns all requested ids for kinds outside `LOOKUP_KINDS` (existence unknown). */

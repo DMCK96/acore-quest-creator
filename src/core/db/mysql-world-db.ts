@@ -3,6 +3,7 @@ import type { Pool, Field } from 'mysql2/promise';
 import { ident } from '../sql/render';
 import type { ColumnInfo, RawRow, RawValue, RefKind, Where } from './types';
 import { isNumericColumn } from './types';
+import { ENTITY_TABLES, ID_TEXT, toHit, type EntityHit, type SearchKind } from './entity-search';
 import { LOOKUP_KINDS, UnknownColumnError, UnknownTableError, type QuestSummary, type WorldDb } from './world-db';
 
 export interface MysqlWorldDbOptions {
@@ -299,6 +300,30 @@ class MysqlWorldDb implements WorldDb {
       return result as Array<{ ID: string; LogTitle: string | null; QuestLevel: string | null }>;
     });
     return rows.map((r) => ({ id: Number(r.ID), title: r.LogTitle ?? '', level: Number(r.QuestLevel) }));
+  }
+
+  async searchEntities(kind: SearchKind, text: string, limit: number): Promise<EntityHit[]> {
+    const needle = text.trim();
+    if (needle === '') return [];
+    const spec = ENTITY_TABLES[kind];
+    const cols = await this.knownColumns(spec.table);
+    // A fork that dropped a detail column still searches; the hits just say less.
+    const present = new Set(cols.map((c) => c.name));
+    const select = [spec.id, spec.name, ...spec.detail.filter((c) => present.has(c))].map(ident).join(', ');
+    const [id, name] = [ident(spec.id), ident(spec.name)];
+    const byId = ID_TEXT.test(needle);
+    const sql = byId
+      ? `SELECT ${select} FROM ${ident(spec.table)} WHERE ${id} = ? LIMIT ?`
+      : `SELECT ${select} FROM ${ident(spec.table)} WHERE ${name} LIKE ? ESCAPE '\\\\'` +
+        ` ORDER BY (LOWER(${name}) = LOWER(?)) DESC, (LOWER(${name}) LIKE LOWER(?) ESCAPE '\\\\') DESC, ${id} ASC LIMIT ?`;
+    const params = byId
+      ? [needle, limit]
+      : [`%${escapeLike(needle)}%`, needle, `${escapeLike(needle)}%`, limit];
+    const rows = await this.run(`searching ${kind}s`, async () => {
+      const [result] = await this.pool.query(sql, params);
+      return result as RawRow[];
+    });
+    return rows.map((r) => toHit(kind, r));
   }
 
   async lookupNames(kind: RefKind, ids: readonly number[]): Promise<Map<number, string>> {

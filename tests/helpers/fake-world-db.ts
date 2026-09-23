@@ -8,6 +8,7 @@ import {
   type WorldDb,
 } from '@core/db/world-db';
 import { loadFork } from './ddl';
+import { ENTITY_TABLES, ID_TEXT, rankHits, toHit, type EntityHit, type SearchKind } from '@core/db/entity-search';
 
 type MutableRow = Record<string, RawValue>;
 interface Table {
@@ -147,6 +148,17 @@ export class FakeWorldDb implements WorldDb {
       ? rows.filter((r) => r.ID !== null && BigInt(r.ID) === BigInt(text))
       : rows.filter((r) => (r.LogTitle ?? '').toLowerCase().includes(needle));
     return hits.slice(0, limit).map((r) => ({ id: Number(r.ID), title: r.LogTitle ?? '', level: Number(r.QuestLevel) }));
+  }
+
+  async searchEntities(kind: SearchKind, text: string, limit: number): Promise<EntityHit[]> {
+    const needle = text.trim();
+    if (needle === '') return [];
+    const spec = ENTITY_TABLES[kind];
+    const rows = await this.selectRows(spec.table, {});
+    const matches = ID_TEXT.test(needle)
+      ? rows.filter((r) => r[spec.id] === needle)
+      : rows.filter((r) => (r[spec.name] ?? '').toLowerCase().includes(needle.toLowerCase()));
+    return rankHits(matches.map((r) => toHit(kind, r)), needle).slice(0, limit);
   }
 
   async lookupNames(kind: RefKind, ids: readonly number[]): Promise<Map<number, string>> {

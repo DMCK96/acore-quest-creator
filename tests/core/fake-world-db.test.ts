@@ -48,6 +48,30 @@ describe('FakeWorldDb', () => {
     expect((await db.searchQuests('wolves', 10))[0]).toEqual({ id: 5, title: 'Wolves of Elwynn', level: 3 });
     expect((await db.searchQuests('6', 10)).map((q) => q.id)).toEqual([6]);
   });
+  it('searches entities by id or name, exact then prefix then id order', async () => {
+    const db = make();
+    db.insert('creature_template', { entry: '300', name: 'Young Wolf', minlevel: '1', maxlevel: '2' });
+    db.insert('creature_template', { entry: '299', name: 'Diseased Young Wolf', minlevel: '1', maxlevel: '2' });
+    db.insert('creature_template', { entry: '301', name: 'Wolf', minlevel: '5', maxlevel: '5' });
+    expect((await db.searchEntities('creature', 'wolf', 25)).map((h) => h.id)).toEqual([301, 299, 300]);
+    expect((await db.searchEntities('creature', 'young', 25)).map((h) => h.id)).toEqual([300, 299]);
+    expect(await db.searchEntities('creature', '301', 25)).toEqual([{ id: 301, name: 'Wolf', detail: 'Level 5' }]);
+    expect((await db.searchEntities('creature', 'wolf', 1)).map((h) => h.id)).toEqual([301]);
+    expect((await db.searchEntities('creature', 'Young Wolf', 25))[0].detail).toBe('Level 1–2');
+  });
+  it('names item quality and treats quotes and percent signs as plain text', async () => {
+    const db = make();
+    db.insert('item_template', { entry: '750', name: "Thrall's Pelt", Quality: '2' });
+    db.insert('item_template', { entry: '751', name: 'Other', Quality: '0' });
+    expect(await db.searchEntities('item', "thrall's", 25)).toEqual([{ id: 750, name: "Thrall's Pelt", detail: 'Uncommon' }]);
+    expect(await db.searchEntities('item', '%', 25)).toEqual([]);
+    expect(await db.searchEntities('item', '   ', 25)).toEqual([]);
+  });
+  it('searches quests by title', async () => {
+    const db = make();
+    db.insert('quest_template', { ID: '5', LogTitle: 'Wolves of Elwynn', QuestLevel: '3' });
+    expect(await db.searchEntities('quest', 'wolves', 25)).toEqual([{ id: 5, name: 'Wolves of Elwynn', detail: 'Level 3' }]);
+  });
   it('resolves names only for lookup kinds and treats other kinds as existing', async () => {
     const db = make();
     db.insert('item_template', { entry: '25', name: 'Worn Shortsword' });
