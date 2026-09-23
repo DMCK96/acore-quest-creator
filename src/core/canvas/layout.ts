@@ -42,3 +42,43 @@ export function nextNodePosition(existing: readonly { x: number; y: number }[]):
   }
   return slot(limit);
 }
+
+/** A quest's place in a chain layout: columns run left to right in chain order. */
+export interface ChainSlot {
+  column: number;
+  row: number;
+}
+
+/**
+ * Lays a quest chain out as columns: each quest sits one column to the right of its deepest parent,
+ * and quests sharing a column are stacked in ID order. A cycle cannot push a quest further right
+ * than there are quests, so the walk always ends.
+ */
+export function layoutChain(
+  questIds: readonly number[],
+  links: readonly { from: number; to: number }[],
+): Map<number, ChainSlot> {
+  const depth = new Map<number, number>(questIds.map((id) => [id, 0]));
+  const cap = questIds.length - 1;
+  for (let pass = 0; pass < questIds.length; pass++) {
+    let changed = false;
+    for (const { from, to } of links) {
+      const want = Math.min((depth.get(from) ?? 0) + 1, cap);
+      if (depth.has(to) && want > (depth.get(to) ?? 0)) {
+        depth.set(to, want);
+        changed = true;
+      }
+    }
+    if (!changed) break;
+  }
+
+  const slots = new Map<number, ChainSlot>();
+  const rows = new Map<number, number>();
+  for (const id of [...questIds].sort((a, b) => a - b)) {
+    const column = depth.get(id) ?? 0;
+    const row = rows.get(column) ?? 0;
+    rows.set(column, row + 1);
+    slots.set(id, { column, row });
+  }
+  return slots;
+}

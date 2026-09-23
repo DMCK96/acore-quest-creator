@@ -7,16 +7,18 @@ const aggregate = { questId: 1, isNew: false, values: { a: 1 }, readOnly: [], sh
 describe('parseRequest', () => {
   it('knows every API method', () => {
     expect([...API_METHODS].sort()).toEqual([
-      'applyToDev', 'connect', 'exportQuest', 'getProject', 'listNodes', 'listProfiles', 'lookupNames', 'moveNodes', 'newQuest',
-      'openQuest', 'previewChanges', 'removeNode', 'rewardTables', 'saveDraft', 'saveProfile', 'saveViewport', 'searchQuests',
+      'addQuestChain', 'applyToDev', 'connect', 'exportQuest', 'getProject', 'listNodes', 'listProfiles', 'lookupNames', 'moveNodes', 'newQuest',
+      'openQuest', 'previewChanges', 'removeNode', 'rewardTables', 'saveDraft', 'saveProfile', 'saveViewport', 'searchQuests', 'startupProfile',
       'testConnection', 'updateProject', 'validate',
     ].sort());
   });
   it('accepts well-formed requests', () => {
     expect(parseRequest('openQuest', [60001]).ok).toBe(true);
+    expect(parseRequest('addQuestChain', [60001, { x: 1, y: 2 }]).ok).toBe(true);
     expect(parseRequest('searchQuests', ['wolves']).ok).toBe(true);
     expect(parseRequest('applyToDev', [60001, true]).ok).toBe(true);
     expect(parseRequest('saveProfile', [profile]).ok).toBe(true);
+    expect(parseRequest('saveProfile', [{ ...profile, id: 1, password: undefined }]).ok).toBe(true);
     expect(parseRequest('saveDraft', [aggregate]).ok).toBe(true);
     expect(parseRequest('lookupNames', ['item', [1, 2]]).ok).toBe(true);
     expect(parseRequest('newQuest', []).ok).toBe(true);
@@ -35,6 +37,7 @@ describe('parseRequest', () => {
     for (const [m, a] of [
       ['openQuest', ['5']], ['openQuest', []], ['openQuest', [1, 2]], ['applyToDev', [1]], ['searchQuests', [1]],
       ['lookupNames', ['nonsense', [1]]], ['saveProfile', [{ ...profile, role: 'admin' }]], ['saveProfile', [{ ...profile, extra: 1 }]],
+      ['saveProfile', [{ ...profile, password: undefined }]],
       ['saveDraft', [{ questId: 'x' }]],
       ['moveNodes', [[{ questId: 1, x: Number.POSITIVE_INFINITY, y: 0 }]]], ['moveNodes', [[{ questId: 1, x: Number.NaN, y: 0 }]]],
       ['newQuest', [{ x: 'a', y: 0 }]], ['saveViewport', [{ x: 0, y: 0, zoom: 0 }]], ['saveViewport', [{ x: 0, y: 0 }]],

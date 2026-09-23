@@ -3,17 +3,17 @@ import type { AppStore } from '../state/app-store';
 import { QuestPicker } from './QuestPicker';
 
 /**
- * A modal wrapper around `QuestPicker`'s search list: choosing a result places that quest at the
- * centre of the current viewport and opens its editor, instead of `QuestPicker`'s own default of
- * opening wherever the API happens to put it.
+ * A modal wrapper around `QuestPicker`'s search list: choosing a result adds that quest *and every
+ * quest chained to it*, with the chosen one at the centre of the current viewport and its editor
+ * open, instead of `QuestPicker`'s own default of opening the one quest wherever the API puts it.
  */
 export function AddExistingDialog({ store, onClose }: { store: AppStore; onClose: () => void }): React.JSX.Element {
-  const openQuest = store((s) => s.openQuest);
+  const addQuestChain = store((s) => s.addQuestChain);
   const { screenToFlowPosition } = useReactFlow();
 
   const handleSelect = (id: number): void => {
     const center = screenToFlowPosition({ x: window.innerWidth / 2, y: window.innerHeight / 2 });
-    void openQuest(id, center);
+    void addQuestChain(id, center);
     onClose();
   };
 

@@ -60,6 +60,9 @@ export interface ProfileInput {
   password: string;
 }
 
+/** Saving a profile: an update (`id` given) may leave `password` out to keep the stored one. */
+export type ProfileSave = Omit<ProfileInput, 'password'> & { id?: number; password?: string };
+
 export interface ProfileRecord {
   id: number;
   name: string;
@@ -118,6 +121,16 @@ export interface OpenResult {
   importedText: Record<string, FieldValue>;
 }
 
+/** A whole quest chain added to the canvas at once. */
+export interface ChainResult {
+  /** The quest that was picked, opened for editing exactly as `openQuest` would. */
+  open: OpenResult;
+  /** Every quest of the chain, including ones that were already on the canvas. */
+  questIds: number[];
+  /** The chain was longer than one add will take, so only part of it was placed. */
+  truncated: boolean;
+}
+
 export interface ExportResult {
   path: string;
   sql: string;
@@ -143,12 +156,16 @@ export interface CanvasNode {
 /** Everything the renderer can ask the main process to do. */
 export interface Api {
   testConnection(i: ProfileInput): Promise<Result<{ ok: true }>>;
-  saveProfile(i: ProfileInput & { id?: number }): Promise<Result<ProfileRecord>>;
+  saveProfile(i: ProfileSave): Promise<Result<ProfileRecord>>;
   listProfiles(): Promise<Result<ProfileRecord[]>>;
+  /** The profile to connect to without asking, seeded from `.env` in development; else null. */
+  startupProfile(): Promise<Result<number | null>>;
   connect(profileId: number): Promise<Result<ConnectSummary>>;
   searchQuests(text: string): Promise<Result<QuestSummary[]>>;
   openQuest(questId: number, position?: NodePosition): Promise<Result<OpenResult>>;
   newQuest(position?: NodePosition): Promise<Result<OpenResult>>;
+  /** Imports the quest and every quest chained to it; `position` is where the picked quest lands. */
+  addQuestChain(questId: number, position?: NodePosition): Promise<Result<ChainResult>>;
   listNodes(): Promise<Result<CanvasNode[]>>;
   moveNodes(moves: { questId: number; x: number; y: number }[]): Promise<Result<true>>;
   removeNode(questId: number): Promise<Result<true>>;
@@ -222,7 +239,10 @@ const profileFields = {
 };
 // Strict: a misspelled key must be a loud error, never a silently unsaved connection setting.
 const profileInputSchema = z.object(profileFields).strict();
-const profileSaveSchema = z.object({ ...profileFields, id: z.number().int().optional() }).strict();
+const profileSaveSchema = z
+  .object({ ...profileFields, id: z.number().int().optional(), password: z.string().optional() })
+  .strict()
+  .refine((p) => p.id !== undefined || p.password !== undefined, { message: 'a new profile needs a password' });
 
 const aggregateSchema = z
   .object({
@@ -256,10 +276,12 @@ const REQUEST_SCHEMAS: Record<keyof Api, z.ZodType<unknown[]>> = {
   testConnection: z.tuple([profileInputSchema]),
   saveProfile: z.tuple([profileSaveSchema]),
   listProfiles: z.tuple([]),
+  startupProfile: z.tuple([]),
   connect: z.tuple([z.number()]),
   searchQuests: z.tuple([z.string().max(MAX_SEARCH_TEXT)]),
   openQuest: z.tuple([z.number(), positionSchema.optional()]),
   newQuest: z.tuple([positionSchema.optional()]),
+  addQuestChain: z.tuple([z.number(), positionSchema.optional()]),
   listNodes: z.tuple([]),
   moveNodes: z.tuple([
     z.array(z.object({ questId: z.number(), x: z.number(), y: z.number() })).max(MAX_MOVES),

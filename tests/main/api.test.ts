@@ -178,6 +178,41 @@ describe('canvas nodes', () => {
   });
 });
 
+describe('addQuestChain', () => {
+  it('imports every quest of the chain, laid out left to right, and opens the one picked', async () => {
+    db.insert('quest_template', { ID: '60002', LogTitle: 'More wolves' });
+    db.insert('quest_template', { ID: '60003', LogTitle: 'Wolf king' });
+    db.insert('quest_template_addon', { ID: '60002', PrevQuestID: '60001' });
+    db.insert('quest_template_addon', { ID: '60003', PrevQuestID: '60002' });
+    const { api } = await connected();
+    const r = ok(await api.addQuestChain(60002, { x: 500, y: 500 }));
+    expect(r.open.questId).toBe(60002);
+    expect(r.questIds.slice().sort()).toEqual([60001, 60002, 60003]);
+    expect(r.truncated).toBe(false);
+    const nodes = ok(await api.listNodes());
+    const at = (id: number) => nodes.find((n) => n.questId === id)!;
+    expect(nodes).toHaveLength(3);
+    expect(at(60002)).toMatchObject({ x: 500, y: 500 });
+    expect(at(60001).x).toBeLessThan(500);
+    expect(at(60003).x).toBeGreaterThan(500);
+  });
+  it('leaves quests already on the canvas where they are', async () => {
+    db.insert('quest_template', { ID: '60002', LogTitle: 'More wolves' });
+    db.insert('quest_template_addon', { ID: '60002', PrevQuestID: '60001' });
+    const { api } = await connected();
+    ok(await api.openQuest(60001, { x: -900, y: -900 }));
+    ok(await api.addQuestChain(60002));
+    const nodes = ok(await api.listNodes());
+    expect(nodes).toHaveLength(2);
+    expect(nodes.find((n) => n.questId === 60001)).toMatchObject({ x: -900, y: -900 });
+  });
+  it('fails like openQuest for a quest that does not exist, adding nothing', async () => {
+    const { api } = await connected();
+    expect(await api.addQuestChain(70000)).toMatchObject({ ok: false, error: { code: 'QUEST_NOT_FOUND' } });
+    expect(ok(await api.listNodes())).toHaveLength(0);
+  });
+});
+
 describe('open / draft', () => {
   it('rejects bad ids and unknown quests', async () => {
     const { api } = await connected();
@@ -293,6 +328,15 @@ describe('new quest', () => {
     ok(await api.updateProject({ ...ok(await api.getProject()), idRangeStart: 60000, idRangeEnd: 60000 }));
     ok(await api.newQuest());
     expect(await api.newQuest()).toMatchObject({ ok: false, error: { code: 'RANGE_EXHAUSTED' } });
+  });
+  // A brand-new quest has no row in the world DB yet, so reopening it (e.g. after closing the
+  // editor) must not go through the importer, which would fail with QUEST_NOT_FOUND.
+  it('reopens a never-exported quest from its draft, without importing it', async () => {
+    const { api } = await connected();
+    const created = ok(await api.newQuest());
+    const reopened = ok(await api.openQuest(created.questId));
+    expect(reopened).toMatchObject({ questId: created.questId, hasDraft: true, stale: false, locales: [] });
+    expect(reopened.aggregate).toEqual(created.aggregate);
   });
 });
 

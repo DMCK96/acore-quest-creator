@@ -44,7 +44,7 @@ describe('CanvasHome', () => {
   });
   it('shows an inviting empty state with the two ways to start', async () => {
     await canvas({ listNodes: async () => okv([]) });
-    expect(await screen.findByText(/double-click anywhere to start your first quest/i)).toBeInTheDocument();
+    expect(await screen.findByText(/start your journey/i)).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'New quest' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Add existing quest' })).toBeInTheDocument();
   });
@@ -62,13 +62,13 @@ describe('CanvasHome', () => {
     expect(await screen.findByRole('complementary', { name: 'Quest editor' })).toBeInTheDocument();
     await waitFor(() => expect((api.listNodes as any).mock.calls.length).toBeGreaterThanOrEqual(2));
   });
-  it('adds an existing quest through search and places it', async () => {
+  it('adds an existing quest with its whole chain through search and places it', async () => {
     const { api, store } = await canvas();
     await userEvent.click(screen.getByRole('button', { name: 'Add existing quest' }));
     const dialog = await screen.findByRole('dialog');
     await userEvent.type(within(dialog).getByRole('searchbox'), 'wolves');
     await userEvent.click(await within(dialog).findByRole('button', { name: /Wolves of Elwynn/ }));
-    await waitFor(() => expect(api.openQuest).toHaveBeenCalledWith(5, expect.objectContaining({ x: expect.any(Number), y: expect.any(Number) })));
+    await waitFor(() => expect(api.addQuestChain).toHaveBeenCalledWith(5, expect.objectContaining({ x: expect.any(Number), y: expect.any(Number) })));
     expect(store.getState().screen).toBe('edit');
     expect(screen.queryByRole('dialog')).toBeNull();
   });

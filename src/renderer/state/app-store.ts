@@ -11,8 +11,8 @@ import type {
   ExportResult,
   NodePosition,
   OpenResult,
-  ProfileInput,
   ProfileRecord,
+  ProfileSave,
   Result,
   Viewport,
 } from '@shared/ipc';
@@ -50,9 +50,15 @@ export interface AppState {
   appliedCount: number | null;
 
   loadProfiles(): Promise<void>;
-  connect(input: ProfileInput & { id?: number }): Promise<void>;
+  /** Launch: lists the saved profiles, then connects straight away if one is set up for it. */
+  start(): Promise<void>;
+  connect(input: ProfileSave): Promise<void>;
+  /** Connects with a saved profile and its stored password. */
+  connectProfile(profileId: number): Promise<void>;
   search(text: string): Promise<void>;
   openQuest(id: number, position?: NodePosition): Promise<void>;
+  /** Adds the quest and every quest chained to it to the canvas, then opens the one picked. */
+  addQuestChain(id: number, position?: NodePosition): Promise<void>;
   newQuest(position?: NodePosition): Promise<void>;
   setValue(fieldId: string, value: FieldValue): void;
   setActiveView(v: ActiveView): void;
@@ -102,6 +108,8 @@ export function createAppStore(api: Api, opts: { saveDelayMs?: number } = {}): A
   let searchToken = 0;
   let openToken = 0;
   let nodesToken = 0;
+  // StrictMode runs effects twice in development; launch must still connect only once.
+  let started = false;
   // The latest position per quest queued by a drag, and the latest queued viewport, cleared once
   // `flushMoves` has sent them. `lastSavedViewport` is what the API last saw, so an unchanged
   // viewport (e.g. a pan back to where it started) does not trigger a redundant save.
@@ -138,6 +146,14 @@ export function createAppStore(api: Api, opts: { saveDelayMs?: number } = {}): A
       }
     },
 
+    async start() {
+      if (started) return;
+      started = true;
+      await get().loadProfiles();
+      const startup = await api.startupProfile();
+      if (startup.ok && startup.value !== null) await get().connectProfile(startup.value);
+    },
+
     async connect(input) {
       const saved = await api.saveProfile(input);
       if (!saved.ok) {
@@ -146,7 +162,11 @@ export function createAppStore(api: Api, opts: { saveDelayMs?: number } = {}): A
       }
       const profile = saved.value;
       set((s) => ({ profiles: dedupeProfiles(s.profiles, profile) }));
-      const connected = await api.connect(profile.id);
+      await get().connectProfile(profile.id);
+    },
+
+    async connectProfile(profileId) {
+      const connected = await api.connect(profileId);
       if (!connected.ok) {
         set({ error: connected.error.message, screen: 'connect' });
         return;
@@ -189,6 +209,28 @@ export function createAppStore(api: Api, opts: { saveDelayMs?: number } = {}): A
         activeView: 'identity',
         screen: 'edit',
         error: null,
+        dirty: false,
+      });
+      await get().loadNodes();
+    },
+
+    async addQuestChain(id, position) {
+      const token = ++openToken;
+      const result = position === undefined ? await api.addQuestChain(id) : await api.addQuestChain(id, position);
+      if (token !== openToken) return;
+      if (!result.ok) {
+        set({ error: result.error.message });
+        await get().loadNodes();
+        return;
+      }
+      const { open, questIds, truncated } = result.value;
+      set({
+        open,
+        issues: open.issues,
+        activeView: 'identity',
+        screen: 'edit',
+        // A chain cut short is still a chain on the canvas, but the user has to know it is not all of it.
+        error: truncated ? `Only the first ${questIds.length} quests of this chain were added.` : null,
         dirty: false,
       });
       await get().loadNodes();

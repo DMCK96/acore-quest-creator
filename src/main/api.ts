@@ -1,5 +1,5 @@
 import { join } from 'node:path';
-import { nextNodePosition } from '../core/canvas/layout';
+import { layoutChain, NODE_GRID, nextNodePosition } from '../core/canvas/layout';
 import type { DevDb } from '../core/db/dev-db';
 import type { RawRow, RefKind, SchemaInfo } from '../core/db/types';
 import { UnknownColumnError, UnknownTableError, type WorldDb } from '../core/db/world-db';
@@ -10,6 +10,7 @@ import { allocateQuestId, assertIdFree, collectTakenIds } from '../core/ids/allo
 import { importQuest } from '../core/import/importer';
 import { fetchLinkedContext } from '../core/import/linked-context';
 import { createNewAggregate } from '../core/import/new-quest';
+import { findQuestChain } from '../core/import/quest-chain';
 import { listUnmodelled } from '../core/import/unmodelled';
 import type { QuestAggregate, Snapshot } from '../core/model/aggregate';
 import { localesInSnapshot, localizedTextValues } from '../core/model/locales';
@@ -27,6 +28,7 @@ import type {
   CanvasNode,
   ErrorCode,
   NodePosition,
+  OpenResult,
   ProfileInput,
   Project,
   Result,
@@ -46,6 +48,8 @@ export interface ApiDeps {
   };
   now(): Date;
   defaultOutputDir: string;
+  /** A profile to connect to on launch (seeded from `.env` in development). */
+  startupProfileId?: number | null;
 }
 
 /** The live world connection plus everything that was read from it once, at connect time. */
@@ -198,6 +202,90 @@ export function createApi(deps: ApiDeps): Api {
   const placeAt = (projectId: number, position?: NodePosition): NodePosition =>
     position ?? nextNodePosition(deps.store.drafts.list(projectId).map((d) => ({ x: d.x, y: d.y })));
 
+  /** Opens one quest: its draft if the project has one, otherwise a fresh import placed on the canvas. */
+  async function openOne(questId: number, position?: NodePosition): Promise<OpenResult> {
+    const live = usable();
+    const refs = refCheckerFor(live.db);
+    const proj = project();
+    const draft = deps.store.drafts.get(proj.id, questId);
+
+    // A brand-new quest (never exported) has no row in the live database to import or diff
+    // against — asking the importer for it would fail outright, so the draft alone is opened.
+    if (draft?.isNew) {
+      return {
+        questId,
+        aggregate: draft.aggregate,
+        fidelity: draft.fidelity ?? { ok: true },
+        unmodelled: [],
+        issues: await validateQuest(draft.aggregate, refs),
+        hasDraft: true,
+        stale: false,
+        locales: [],
+        importedText: {},
+      };
+    }
+
+    // The importer is the one place that decides what a usable quest ID is.
+    const fresh = await importQuest(live.db, live.schema, registry, questId);
+    const fidelity = roundTripOf(fresh, live.schema);
+    const unmodelled = listUnmodelled(live.schema, registry, fresh.snapshot);
+    // Both branches report the translations against the rows just read, never against a draft.
+    const locales = localesInSnapshot(fresh.snapshot);
+    const importedText = localizedTextValues(fresh.aggregate, registry);
+
+    if (draft) {
+      // The draft is the user's work: it is returned as it stands, wherever it sits, and only
+      // the comparison against the freshly read rows says whether the world moved underneath.
+      const stale = compareTables(draft.snapshot?.tables ?? {}, fresh.snapshot.tables, KEY_COLUMNS).length > 0;
+      // The export gate reads `draft.fidelity`, so the report the UI is about to show has to
+      // become the stored one: otherwise the button and the gate answer different questions.
+      if (JSON.stringify(draft.fidelity) !== JSON.stringify(fidelity)) {
+        deps.store.drafts.save({
+          projectId: draft.projectId,
+          questId: draft.questId,
+          isNew: draft.isNew,
+          aggregate: draft.aggregate,
+          snapshot: draft.snapshot,
+          fidelity,
+        });
+      }
+      return {
+        questId,
+        aggregate: draft.aggregate,
+        fidelity,
+        unmodelled,
+        issues: await validateQuest(draft.aggregate, refs),
+        hasDraft: true,
+        stale,
+        locales,
+        importedText,
+      };
+    }
+
+    const at = placeAt(proj.id, position);
+    deps.store.drafts.save({
+      projectId: proj.id,
+      questId,
+      isNew: false,
+      aggregate: fresh.aggregate,
+      snapshot: fresh.snapshot,
+      fidelity,
+      x: at.x,
+      y: at.y,
+    });
+    return {
+      questId,
+      aggregate: fresh.aggregate,
+      fidelity,
+      unmodelled,
+      issues: await validateQuest(fresh.aggregate, refs),
+      hasDraft: false,
+      stale: false,
+      locales,
+      importedText,
+    };
+  }
+
   /** The three gates every write passes: lossless import, no validation errors, and a free ID. */
   async function guardWrite(db: WorldDb, draft: DraftRecord): Promise<Issue[]> {
     if (draft.fidelity !== null && !draft.fidelity.ok) {
@@ -253,6 +341,8 @@ export function createApi(deps: ApiDeps): Api {
 
     listProfiles: () => run(async () => deps.store.profiles.list()),
 
+    startupProfile: () => run(async () => deps.startupProfileId ?? null),
+
     connect: (profileId) =>
       run(async () => {
         const profile = deps.store.profiles.getWithPassword(profileId);
@@ -275,71 +365,45 @@ export function createApi(deps: ApiDeps): Api {
 
     searchQuests: (text) => run(async () => connected().db.searchQuests(text, SEARCH_LIMIT)),
 
-    openQuest: (questId, position) =>
+    openQuest: (questId, position) => run(async () => openOne(questId, position)),
+
+    addQuestChain: (questId, position) =>
       run(async () => {
         const live = usable();
-        // The importer is the one place that decides what a usable quest ID is.
-        const fresh = await importQuest(live.db, live.schema, registry, questId);
-        const fidelity = roundTripOf(fresh, live.schema);
-        const unmodelled = listUnmodelled(live.schema, registry, fresh.snapshot);
-        const refs = refCheckerFor(live.db);
         const proj = project();
-        // Both branches report the translations against the rows just read, never against a draft.
-        const locales = localesInSnapshot(fresh.snapshot);
-        const importedText = localizedTextValues(fresh.aggregate, registry);
+        const chain = await findQuestChain(live.db, questId);
+        const slots = layoutChain(chain.questIds, chain.links);
+        const rootSlot = slots.get(questId) ?? { column: 0, row: 0 };
 
-        const draft = deps.store.drafts.get(proj.id, questId);
-        if (draft) {
-          // The draft is the user's work: it is returned as it stands, wherever it sits, and only
-          // the comparison against the freshly read rows says whether the world moved underneath.
-          const stale = compareTables(draft.snapshot?.tables ?? {}, fresh.snapshot.tables, KEY_COLUMNS).length > 0;
-          // The export gate reads `draft.fidelity`, so the report the UI is about to show has to
-          // become the stored one: otherwise the button and the gate answer different questions.
-          if (JSON.stringify(draft.fidelity) !== JSON.stringify(fidelity)) {
-            deps.store.drafts.save({
-              projectId: draft.projectId,
-              questId: draft.questId,
-              isNew: draft.isNew,
-              aggregate: draft.aggregate,
-              snapshot: draft.snapshot,
-              fidelity,
-            });
-          }
-          return {
-            questId,
-            aggregate: draft.aggregate,
-            fidelity,
-            unmodelled,
-            issues: await validateQuest(draft.aggregate, refs),
-            hasDraft: true,
-            stale,
-            locales,
-            importedText,
-          };
-        }
-
-        const at = placeAt(proj.id, position);
-        deps.store.drafts.save({
-          projectId: proj.id,
-          questId,
-          isNew: false,
-          aggregate: fresh.aggregate,
-          snapshot: fresh.snapshot,
-          fidelity,
-          x: at.x,
-          y: at.y,
-        });
-        return {
-          questId,
-          aggregate: fresh.aggregate,
-          fidelity,
-          unmodelled,
-          issues: await validateQuest(fresh.aggregate, refs),
-          hasDraft: false,
-          stale: false,
-          locales,
-          importedText,
+        // The picked quest lands where it was asked for; with no position, the chain starts in
+        // the first column below everything already on the canvas, so it never lands on top of it.
+        const drafts = deps.store.drafts.list(proj.id);
+        const origin = position
+          ? { x: position.x - rootSlot.column * NODE_GRID.x, y: position.y - rootSlot.row * NODE_GRID.y }
+          : { x: 0, y: drafts.length === 0 ? 0 : Math.max(...drafts.map((d) => d.y)) + NODE_GRID.y };
+        const at = (id: number): NodePosition => {
+          const slot = slots.get(id) ?? rootSlot;
+          return { x: origin.x + slot.column * NODE_GRID.x, y: origin.y + slot.row * NODE_GRID.y };
         };
+
+        // The picked quest first: if it cannot be opened, nothing else is added either.
+        const open = await openOne(questId, at(questId));
+        for (const id of chain.questIds) {
+          if (id === questId || deps.store.drafts.get(proj.id, id)) continue;
+          const fresh = await importQuest(live.db, live.schema, registry, id);
+          const place = at(id);
+          deps.store.drafts.save({
+            projectId: proj.id,
+            questId: id,
+            isNew: false,
+            aggregate: fresh.aggregate,
+            snapshot: fresh.snapshot,
+            fidelity: roundTripOf(fresh, live.schema),
+            x: place.x,
+            y: place.y,
+          });
+        }
+        return { open, questIds: chain.questIds, truncated: chain.truncated };
       }),
 
     newQuest: (position) =>
