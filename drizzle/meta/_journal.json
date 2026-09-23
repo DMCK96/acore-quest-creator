@@ -8,6 +8,20 @@
       "when": 1790028704083,
       "tag": "0000_jittery_clint_barton",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "6",
+      "when": 1790179239344,
+      "tag": "0001_drop_drafts",
+      "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "6",
+      "when": 1790179246897,
+      "tag": "0002_recent_projects",
+      "breakpoints": true
     }
   ]
 }

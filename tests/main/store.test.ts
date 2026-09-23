@@ -2,7 +2,8 @@ import { describe, it, expect, afterEach } from 'vitest';
 import { mkdtempSync, rmSync, readFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { openStore, DEFAULT_ID_RANGE, type SecretBox, type Store } from '../../src/main/store/store';
+import Database from 'better-sqlite3';
+import { openStore, type SecretBox, type Store } from '../../src/main/store/store';
 
 const box: SecretBox = {
   encrypt: (s) => Uint8Array.from(Buffer.from(s, 'utf8').map((b) => b ^ 0x5a)),
@@ -13,8 +14,6 @@ let store: Store | undefined;
 afterEach(() => { store?.close(); store = undefined; dirs.splice(0).forEach((d) => rmSync(d, { recursive: true, force: true })); });
 const tmp = () => { const d = mkdtempSync(join(tmpdir(), 'acqc-')); dirs.push(d); return d; };
 
-const aggregate = { questId: 60001, isNew: false, values: { 'quest_template.LogTitle': "It's \\ ok\r\n", 'creature_queststarter': [{ id: 1 }] }, readOnly: [], sharedItems: { '2000': [60002] } };
-const snapshot = { questId: 60001, tables: { quest_template: [{ ID: '60001', LogTitle: null }] }, columnsRead: { quest_template: ['ID', 'LogTitle'] }, linkedContext: {}, schemaHash: 'abc' };
 
 describe('store', () => {
   it('encrypts profile passwords at rest and decrypts on request', () => {
@@ -40,61 +39,39 @@ describe('store', () => {
     expect(store.profiles.list()).toEqual([]);
   });
 
-  it('creates one default project with the default range and is idempotent', () => {
+  it('keeps recent projects newest first, updating an entry in place', () => {
     store = openStore(':memory:', box);
-    const p = store.projects.ensureDefault('C:\\out');
-    expect(p).toMatchObject({ idRangeStart: DEFAULT_ID_RANGE.start, idRangeEnd: DEFAULT_ID_RANGE.end, outputDir: 'C:\\out' });
-    expect(store.projects.ensureDefault('C:\\other').id).toBe(p.id);
-    expect(store.projects.update({ ...p, outputDir: 'D:\\x' }).outputDir).toBe('D:\\x');
+    const t = (m: number) => new Date(Date.UTC(2026, 8, 23, 10, m));
+    store.recent.touch('C:\\a.aqc', 'A', t(1));
+    store.recent.touch('C:\\b.aqc', 'B', t(2));
+    store.recent.touch('C:\\a.aqc', 'A renamed', t(3));
+    expect(store.recent.list()).toEqual([
+      { path: 'C:\\a.aqc', name: 'A renamed', openedAt: t(3).toISOString() },
+      { path: 'C:\\b.aqc', name: 'B', openedAt: t(2).toISOString() },
+    ]);
+    store.recent.forget('C:\\b.aqc');
+    store.recent.forget('C:\\missing.aqc');
+    expect(store.recent.list().map((r) => r.path)).toEqual(['C:\\a.aqc']);
   });
 
-  it('upserts drafts by project and quest, round-tripping JSON exactly', () => {
+  it('keeps only the ten most recent projects', () => {
     store = openStore(':memory:', box);
-    const p = store.projects.ensureDefault('C:\\out');
-    const input = { projectId: p.id, questId: 60001, isNew: false, aggregate, snapshot, fidelity: { ok: true as const } };
-    store.drafts.save(input);
-    store.drafts.save({ ...input, aggregate: { ...aggregate, values: { ...aggregate.values, 'quest_template.LogTitle': 'v2' } } });
-    const d = store.drafts.get(p.id, 60001)!;
-    expect(store.drafts.list(p.id)).toHaveLength(1);
-    expect(d.aggregate.values['quest_template.LogTitle']).toBe('v2');
-    expect(d.snapshot).toEqual(snapshot);
-    expect(d.fidelity).toEqual({ ok: true });
-    expect(d.lastExportPath).toBeNull();
-    store.drafts.markExported(p.id, 60001, 'C:\\out\\a.sql');
-    expect(store.drafts.get(p.id, 60001)!.lastExportPath).toBe('C:\\out\\a.sql');
-    expect(store.drafts.usedQuestIds(p.id)).toEqual([60001]);
-    store.drafts.remove(p.id, 60001);
-    expect(store.drafts.get(p.id, 60001)).toBeUndefined();
+    for (let i = 0; i < 12; i++) store.recent.touch(`C:\\p${i}.aqc`, `P${i}`, new Date(Date.UTC(2026, 8, 23, 10, i)));
+    const paths = store.recent.list().map((r) => r.path);
+    expect(paths).toHaveLength(10);
+    expect(paths[0]).toBe('C:\\p11.aqc');
+    expect(paths).not.toContain('C:\\p0.aqc');
+    expect(paths).not.toContain('C:\\p1.aqc');
   });
 
-  it('stores node positions, keeps them across draft edits, and moves them in bulk', () => {
-    store = openStore(':memory:', box);
-    const p = store.projects.ensureDefault('C:\\out');
-    const input = { projectId: p.id, questId: 60001, isNew: false, aggregate, snapshot, fidelity: { ok: true as const } };
-    expect(store.drafts.save(input)).toMatchObject({ x: 0, y: 0 });
-    store.drafts.save({ ...input, x: 320, y: 180 });
-    store.drafts.save({ ...input, aggregate: { ...aggregate, values: { ...aggregate.values, t: 1 } } });
-    expect(store.drafts.get(p.id, 60001)).toMatchObject({ x: 320, y: 180 });
-    store.drafts.save({ ...input, questId: 60002, aggregate: { ...aggregate, questId: 60002 } });
-    store.drafts.setPositions(p.id, [{ questId: 60001, x: -50.5, y: 10 }, { questId: 99999, x: 1, y: 1 }]);
-    expect(store.drafts.get(p.id, 60001)).toMatchObject({ x: -50.5, y: 10 });
-    expect(store.drafts.get(p.id, 60002)).toMatchObject({ x: 0, y: 0 });
-    expect(store.drafts.get(p.id, 99999)).toBeUndefined();
-  });
-
-  it('persists the canvas viewport on the project', () => {
-    store = openStore(':memory:', box);
-    const p = store.projects.ensureDefault('C:\\out');
-    expect(p.viewport).toEqual({ x: 0, y: 0, zoom: 1 });
-    store.projects.update({ ...p, viewport: { x: -120, y: 40, zoom: 0.6 } });
-    expect(store.projects.get(p.id).viewport).toEqual({ x: -120, y: 40, zoom: 0.6 });
-  });
-
-  it('preserves unicode and control characters in draft text', () => {
-    store = openStore(':memory:', box);
-    const p = store.projects.ensureDefault('C:\\out');
-    const text = "🙂 \0 \x1a \u2028 'q' \"d\" \\";
-    store.drafts.save({ projectId: p.id, questId: 1, isNew: true, aggregate: { ...aggregate, values: { t: text } }, snapshot: null, fidelity: null });
-    expect(store.drafts.get(p.id, 1)!.aggregate.values['t']).toBe(text);
+  it('holds no project content: the draft and project tables are gone', () => {
+    const dir = tmp(); const file = join(dir, 'app.sqlite');
+    store = openStore(file, box);
+    store.profiles.save({ name: 'kept', role: 'world', host: 'h', port: 1, user: 'u', database: 'd', password: 'p' });
+    store.close(); store = undefined;
+    const raw = new Database(file, { readonly: true });
+    const tables = raw.prepare("SELECT name FROM sqlite_master WHERE type = 'table' AND name NOT LIKE '\\_\\_%' ESCAPE '\\' AND name NOT LIKE 'sqlite_%'").all().map((r: any) => r.name).sort();
+    raw.close();
+    expect(tables).toEqual(['connection_profiles', 'recent_projects']);
   });
 });

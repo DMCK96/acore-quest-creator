@@ -1,54 +1,29 @@
 import { fileURLToPath } from 'node:url';
 import Database from 'better-sqlite3';
-import { and, asc, eq } from 'drizzle-orm';
+import { asc, desc, eq, notInArray } from 'drizzle-orm';
 import { drizzle } from 'drizzle-orm/better-sqlite3';
 import { migrate } from 'drizzle-orm/better-sqlite3/migrator';
-import type { QuestAggregate, Snapshot } from '../../core/model/aggregate';
-import type { FidelityReport } from '../../core/roundtrip/verify';
-import type { ProfileInput, ProfileRecord, ProfileSave, Viewport } from '../../shared/ipc';
-
-/** The single implicit project the store kept before project files; removed with the drafts table. */
-export interface Project {
-  id: number;
-  name: string;
-  idRangeStart: number;
-  idRangeEnd: number;
-  outputDir: string;
-  viewport: Viewport;
-}
-import { connectionProfiles, drafts, projects } from './schema';
+import type { ProfileInput, ProfileRecord, ProfileSave } from '../../shared/ipc';
+import { connectionProfiles, recentProjects } from './schema';
 
 // The records the renderer sees are the IPC types; the store is where they are kept.
-export type { ProfileInput, ProfileRecord, ProfileSave, Viewport };
+export type { ProfileInput, ProfileRecord, ProfileSave };
+
+/**
+ * The local store holds per-machine settings only: connection profiles (their passwords are
+ * encrypted with this machine's key, so they could never travel in a project file) and the list of
+ * recently used project files. Project work lives in those files, never here.
+ */
 
 export interface SecretBox {
   encrypt(plain: string): Uint8Array;
   decrypt(blob: Uint8Array): string;
 }
 
-export interface DraftRecord {
-  id: number;
-  projectId: number;
-  questId: number;
-  isNew: boolean;
-  aggregate: QuestAggregate;
-  snapshot: Snapshot | null;
-  fidelity: FidelityReport | null;
-  x: number;
-  y: number;
-  updatedAt: string;
-  lastExportPath: string | null;
-}
-
-export interface DraftInput {
-  projectId: number;
-  questId: number;
-  isNew: boolean;
-  aggregate: QuestAggregate;
-  snapshot: Snapshot | null;
-  fidelity: FidelityReport | null;
-  x?: number;
-  y?: number;
+export interface RecentEntry {
+  path: string;
+  name: string;
+  openedAt: string;
 }
 
 export interface Store {
@@ -59,33 +34,22 @@ export interface Store {
     getWithPassword(id: number): ProfileInput & { id: number };
     remove(id: number): void;
   };
-  projects: {
-    ensureDefault(outputDir: string): Project;
-    get(id: number): Project;
-    update(p: Project): Project;
-  };
-  drafts: {
-    save(input: DraftInput): DraftRecord;
-    get(projectId: number, questId: number): DraftRecord | undefined;
-    list(projectId: number): DraftRecord[];
-    remove(projectId: number, questId: number): void;
-    markExported(projectId: number, questId: number, path: string): void;
-    usedQuestIds(projectId: number): number[];
-    setPositions(projectId: number, moves: readonly { questId: number; x: number; y: number }[]): void;
+  recent: {
+    /** Records a project file as just opened or saved; an existing entry moves to the top. */
+    touch(path: string, name: string, at: Date): void;
+    /** Newest first. */
+    list(): RecentEntry[];
+    forget(path: string): void;
   };
   close(): void;
 }
 
-export const DEFAULT_ID_RANGE = { start: 60000, end: 99999 } as const;
-
-const DEFAULT_VIEWPORT: Viewport = { x: 0, y: 0, zoom: 1 };
+export const RECENT_LIMIT = 10;
 
 /** The repo's `drizzle` directory, resolved from this module's location (src/main/store -> repo root). */
 const defaultMigrationsFolder = (): string => fileURLToPath(new URL('../../../drizzle', import.meta.url));
 
 type ProfileRow = typeof connectionProfiles.$inferSelect;
-type ProjectRow = typeof projects.$inferSelect;
-type DraftRow = typeof drafts.$inferSelect;
 
 const toProfile = (r: ProfileRow): ProfileRecord => ({
   id: r.id,
@@ -97,45 +61,12 @@ const toProfile = (r: ProfileRow): ProfileRecord => ({
   database: r.database,
 });
 
-const toProject = (r: ProjectRow): Project => ({
-  id: r.id,
-  name: r.name,
-  idRangeStart: r.idRangeStart,
-  idRangeEnd: r.idRangeEnd,
-  outputDir: r.outputDir,
-  viewport: JSON.parse(r.viewport) as Viewport,
-});
-
-const toDraft = (r: DraftRow): DraftRecord => ({
-  id: r.id,
-  projectId: r.projectId,
-  questId: r.questId,
-  isNew: r.isNew,
-  aggregate: JSON.parse(r.aggregate) as QuestAggregate,
-  snapshot: r.snapshot === null ? null : (JSON.parse(r.snapshot) as Snapshot),
-  fidelity: r.fidelity === null ? null : (JSON.parse(r.fidelity) as FidelityReport),
-  x: r.x,
-  y: r.y,
-  updatedAt: r.updatedAt,
-  lastExportPath: r.lastExportPath,
-});
-
 export function openStore(path: string, secrets: SecretBox, migrationsFolder: string = defaultMigrationsFolder()): Store {
   const sqlite = new Database(path);
   sqlite.pragma('foreign_keys = ON');
   const db = drizzle(sqlite);
   migrate(db, { migrationsFolder });
 
-  const draftKey = (projectId: number, questId: number) => and(eq(drafts.projectId, projectId), eq(drafts.questId, questId));
-  const getDraft = (projectId: number, questId: number): DraftRecord | undefined => {
-    const row = db.select().from(drafts).where(draftKey(projectId, questId)).get();
-    return row ? toDraft(row) : undefined;
-  };
-  const getProject = (id: number): Project => {
-    const row = db.select().from(projects).where(eq(projects.id, id)).get();
-    if (!row) throw new Error(`Project ${id} does not exist`);
-    return toProject(row);
-  };
   const getProfile = (id: number): ProfileRow => {
     const row = db.select().from(connectionProfiles).where(eq(connectionProfiles.id, id)).get();
     if (!row) throw new Error(`Connection profile ${id} does not exist`);
@@ -164,84 +95,27 @@ export function openStore(path: string, secrets: SecretBox, migrationsFolder: st
         db.delete(connectionProfiles).where(eq(connectionProfiles.id, id)).run();
       },
     },
-    projects: {
-      ensureDefault(outputDir) {
-        const existing = db.select().from(projects).orderBy(asc(projects.id)).limit(1).get();
-        if (existing) return toProject(existing);
-        return toProject(
-          db
-            .insert(projects)
-            .values({
-              name: 'Default project',
-              idRangeStart: DEFAULT_ID_RANGE.start,
-              idRangeEnd: DEFAULT_ID_RANGE.end,
-              outputDir,
-              viewport: JSON.stringify(DEFAULT_VIEWPORT),
-            })
-            .returning()
-            .get(),
-        );
-      },
-      get: getProject,
-      update(p) {
-        const row = db
-          .update(projects)
-          .set({
-            name: p.name,
-            idRangeStart: p.idRangeStart,
-            idRangeEnd: p.idRangeEnd,
-            outputDir: p.outputDir,
-            viewport: JSON.stringify(p.viewport),
-          })
-          .where(eq(projects.id, p.id))
-          .returning()
-          .get();
-        if (!row) throw new Error(`Project ${p.id} does not exist`);
-        return toProject(row);
-      },
-    },
-    drafts: {
-      save(input) {
-        const content = {
-          isNew: input.isNew,
-          aggregate: JSON.stringify(input.aggregate),
-          snapshot: input.snapshot === null ? null : JSON.stringify(input.snapshot),
-          fidelity: input.fidelity === null ? null : JSON.stringify(input.fidelity),
-          updatedAt: new Date().toISOString(),
-        };
-        // A later save keeps the stored position unless x or y is given.
-        const position = { ...(input.x !== undefined && { x: input.x }), ...(input.y !== undefined && { y: input.y }) };
-        const row = db
-          .insert(drafts)
-          .values({ projectId: input.projectId, questId: input.questId, ...content, x: input.x ?? 0, y: input.y ?? 0 })
-          .onConflictDoUpdate({ target: [drafts.projectId, drafts.questId], set: { ...content, ...position } })
-          .returning()
-          .get();
-        return toDraft(row);
-      },
-      get: getDraft,
-      list: (projectId) =>
-        db.select().from(drafts).where(eq(drafts.projectId, projectId)).orderBy(asc(drafts.questId)).all().map(toDraft),
-      remove(projectId, questId) {
-        db.delete(drafts).where(draftKey(projectId, questId)).run();
-      },
-      markExported(projectId, questId, exportPath) {
-        db.update(drafts).set({ lastExportPath: exportPath }).where(draftKey(projectId, questId)).run();
-      },
-      usedQuestIds: (projectId) =>
-        db
-          .select({ questId: drafts.questId })
-          .from(drafts)
-          .where(eq(drafts.projectId, projectId))
-          .orderBy(asc(drafts.questId))
-          .all()
-          .map((r) => r.questId),
-      setPositions(projectId, moves) {
+    recent: {
+      touch(path, name, at) {
         sqlite.transaction(() => {
-          for (const m of moves) {
-            db.update(drafts).set({ x: m.x, y: m.y }).where(draftKey(projectId, m.questId)).run();
-          }
+          const openedAt = at.toISOString();
+          db.insert(recentProjects)
+            .values({ path, name, openedAt })
+            .onConflictDoUpdate({ target: recentProjects.path, set: { name, openedAt } })
+            .run();
+          const keep = db
+            .select({ path: recentProjects.path })
+            .from(recentProjects)
+            .orderBy(desc(recentProjects.openedAt))
+            .limit(RECENT_LIMIT)
+            .all()
+            .map((r) => r.path);
+          db.delete(recentProjects).where(notInArray(recentProjects.path, keep)).run();
         })();
+      },
+      list: () => db.select().from(recentProjects).orderBy(desc(recentProjects.openedAt)).all(),
+      forget(path) {
+        db.delete(recentProjects).where(eq(recentProjects.path, path)).run();
       },
     },
     close: () => {
