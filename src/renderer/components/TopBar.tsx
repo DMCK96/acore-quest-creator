@@ -11,13 +11,16 @@ export function TopBar({
   onNewQuest,
   onAddExisting,
   onFitView,
+  onOpenProject,
 }: {
   store: AppStore;
   onNewQuest: () => void;
   onAddExisting: () => void;
   onFitView: () => void;
+  onOpenProject: () => void;
 }): React.JSX.Element {
   const projectName = store((s) => s.project.name);
+  const dirty = store((s) => s.project.dirty);
   const summary = store((s) => s.summary);
   const profiles = store((s) => s.profiles);
 
@@ -27,7 +30,18 @@ export function TopBar({
     <header className="topbar">
       <div className="topbar__identity">
         <span className="topbar__label">Project</span>
-        <h1 className="topbar__title">{projectName.trim() === '' ? 'Untitled Project' : projectName}</h1>
+        <div className="topbar__name">
+          <h1 className="topbar__title">{projectName.trim() === '' ? 'Untitled Project' : projectName}</h1>
+          {/* Outside the heading, so the heading's name stays the project name alone. */}
+          {dirty && (
+            <span className="topbar__dirty" aria-label="Unsaved changes" title="Unsaved changes">
+              •
+            </span>
+          )}
+          <button type="button" className="btn topbar__project" aria-label="Project" onClick={onOpenProject}>
+            <span aria-hidden="true">📁</span> Project
+          </button>
+        </div>
       </div>
       <div className="topbar__actions">
         <button type="button" className="btn" onClick={onNewQuest}>

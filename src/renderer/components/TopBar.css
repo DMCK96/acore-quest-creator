@@ -31,6 +31,24 @@
   text-overflow: ellipsis;
 }
 
+.topbar__name {
+  display: flex;
+  align-items: center;
+  gap: 0.5em;
+  min-width: 0;
+}
+
+.topbar__dirty {
+  color: var(--amber);
+  font-size: 1.4em;
+  line-height: 1;
+}
+
+.topbar__project {
+  flex-shrink: 0;
+  font-size: 0.85em;
+}
+
 .topbar__actions {
   display: flex;
   align-items: center;

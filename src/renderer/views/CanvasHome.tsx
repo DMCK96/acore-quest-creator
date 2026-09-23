@@ -19,6 +19,8 @@ import { QuestNodeCard } from './QuestNodeCard';
 import { toFlowEdges } from './canvas-edges';
 import { EditorDrawer } from './EditorDrawer';
 import { AddExistingDialog } from './AddExistingDialog';
+import { ProjectDialog } from './ProjectDialog';
+import { RecoveryDialog } from './RecoveryDialog';
 import { TopBar } from '../components/TopBar';
 import { ErrorBanner } from '../components/ErrorBanner';
 import { QuestOrb } from '../components/QuestOrb';
@@ -67,9 +69,11 @@ function CanvasInner({ store }: { store: AppStore }): React.JSX.Element {
   const newQuest = store((s) => s.newQuest);
   const removeNode = store((s) => s.removeNode);
   const addQuestChain = store((s) => s.addQuestChain);
+  const projectEpoch = store((s) => s.projectEpoch);
 
-  const { screenToFlowPosition, fitView } = useReactFlow();
+  const { screenToFlowPosition, fitView, setViewport: setFlowViewport } = useReactFlow();
   const [showAddExisting, setShowAddExisting] = useState(false);
+  const [showProject, setShowProject] = useState(false);
   // `<ReactFlow>` only honours `defaultViewport` at mount, so it stays unmounted until the saved
   // viewport has loaded, then mounts exactly once — never re-keyed, so nodes a test (or the user)
   // is holding a reference to never get silently detached from a remount.
@@ -86,6 +90,35 @@ function CanvasInner({ store }: { store: AppStore }): React.JSX.Element {
     },
     [],
   );
+
+  // Unsaved work a crash left behind is offered once, as soon as the canvas is up.
+  useEffect(() => {
+    void store.getState().loadRecoveries();
+  }, [store]);
+
+  // `<ReactFlow>` only reads `defaultViewport` at mount, so a project switch moves it explicitly.
+  useEffect(() => {
+    if (projectEpoch === 0) return;
+    void setFlowViewport(store.getState().viewport);
+  }, [projectEpoch, setFlowViewport, store]);
+
+  // Ctrl+S saves, Ctrl+Shift+S saves as, Ctrl+O opens: the shortcuts every document app has.
+  useEffect(() => {
+    const onKeyDown = (e: KeyboardEvent): void => {
+      if (!(e.ctrlKey || e.metaKey)) return;
+      const key = e.key.toLowerCase();
+      const { saveProject, saveProjectAs, openProject } = store.getState();
+      if (key === 's') {
+        e.preventDefault();
+        void (e.shiftKey ? saveProjectAs() : saveProject());
+      } else if (key === 'o') {
+        e.preventDefault();
+        void openProject();
+      }
+    };
+    document.addEventListener('keydown', onKeyDown);
+    return () => document.removeEventListener('keydown', onKeyDown);
+  }, [store]);
 
   const scheduleFlush = useCallback(() => {
     if (flushTimer.current) clearTimeout(flushTimer.current);
@@ -123,6 +156,7 @@ function CanvasInner({ store }: { store: AppStore }): React.JSX.Element {
         onNewQuest={() => void newQuest()}
         onAddExisting={() => setShowAddExisting(true)}
         onFitView={() => void fitView()}
+        onOpenProject={() => setShowProject(true)}
       />
       <ErrorBanner store={store} />
       <div className="canvas-body">
@@ -190,6 +224,8 @@ function CanvasInner({ store }: { store: AppStore }): React.JSX.Element {
         {screen === 'edit' && <EditorDrawer store={store} />}
       </div>
       {showAddExisting && <AddExistingDialog store={store} onClose={() => setShowAddExisting(false)} />}
+      {showProject && <ProjectDialog store={store} onClose={() => setShowProject(false)} />}
+      <RecoveryDialog store={store} />
     </div>
   );
 }
