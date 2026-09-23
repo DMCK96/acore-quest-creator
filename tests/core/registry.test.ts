@@ -40,7 +40,6 @@ describe('registry coverage', () => {
     expect(fieldById('quest_template.LogTitle')!.label).toBe('Quest title');
     expect(fieldById('quest_template.QuestDescription')!.group).toBe('story');
     expect(fieldById('quest_template.RewardXPDifficulty')!.control).toBe('xpDifficulty');
-    expect(fieldById('quest_template.RewardMoneyDifficulty')!.control).toBe('moneyDifficulty');
     expect(fieldById('quest_template.AllowableRaces')!.control).toBe('raceMask');
     expect(fieldById('quest_template_addon.AllowableClasses')!.control).toBe('classMask');
     expect(fieldById('quest_template_addon.BreadcrumbForQuestId')!.group).toBe('availability');

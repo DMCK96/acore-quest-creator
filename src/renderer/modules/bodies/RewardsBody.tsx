@@ -5,6 +5,7 @@ import { useNameBook } from '../../state/names';
 import type { ModuleBodyProps } from '../body-props';
 import { FieldSetting } from '../FieldSetting';
 import { ListFieldEditor } from '../ListFieldEditor';
+import { MoneyReward } from './MoneyReward';
 
 type Entry = Record<string, ScalarValue>;
 
@@ -22,8 +23,7 @@ export function RewardsBody({ open, onChange }: ModuleBodyProps): React.JSX.Elem
   return (
     <div>
       <FieldSetting fieldId="quest_template.RewardXPDifficulty" aggregate={aggregate} onChange={onChange} />
-      <FieldSetting fieldId="quest_template.RewardMoney" aggregate={aggregate} onChange={onChange} />
-      <FieldSetting fieldId="quest_template.RewardMoneyDifficulty" aggregate={aggregate} onChange={onChange} />
+      <MoneyReward aggregate={aggregate} onChange={onChange} />
 
       <h3 className="module-section__title">Items</h3>
       <ListFieldEditor fieldId="quest_template.RewardItems" aggregate={aggregate} onChange={onChange}

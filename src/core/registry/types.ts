@@ -27,7 +27,6 @@ export type ControlId =
   | 'raceMask'
   | 'classMask'
   | 'xpDifficulty'
-  | 'moneyDifficulty'
   | 'questSort'
   | 'emote'
   | 'starters'

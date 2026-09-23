@@ -213,17 +213,16 @@ const scalars: ScalarFieldDef[] = [
   scalar({
     column: 'RewardMoney',
     type: { kind: 'money' },
-    label: 'Fixed money reward',
-    help: 'Money given on completion, in copper. A negative value takes money from the player instead.',
+    label: 'Money reward',
+    help: 'Money given when the quest is handed in. Tick the box to take money from the player instead.',
     group: 'rewards',
   }),
   scalar({
     column: 'RewardMoneyDifficulty',
     type: { kind: 'int', min: 0 },
     label: 'Money reward tier',
-    help: 'Makes the money follow the level of the player who completes the quest: pick a tier and the quest pays that tier for their level instead of the fixed amount. The amounts shown are for the level of this quest.',
+    help: 'For a quest any level can do: 1 to 9 pays that column of quest_money_reward for the level of the player handing it in, instead of the money reward. 0 pays the money reward. Any other value is ignored by the server.',
     group: 'rewards',
-    control: 'moneyDifficulty',
   }),
   scalar({
     column: 'RewardDisplaySpell',

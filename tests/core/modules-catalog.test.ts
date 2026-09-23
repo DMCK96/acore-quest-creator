@@ -5,6 +5,7 @@ import {
   isModulePresent, presentModules, offeredModules, resetModule, formatMoney,
 } from '@core/modules/catalog';
 import type { NameBook } from '@core/links/component';
+import { rewardsSummary } from '@core/modules/summaries';
 
 const NAMES: Record<string, string> = {
   'creature:240': 'Marshal Dughan',
@@ -141,5 +142,10 @@ describe('module summaries', () => {
     expect(formatMoney(10000)).toBe('1g');
     expect(formatMoney(150)).toBe('1s 50c');
     expect(formatMoney(-500)).toBe('-5s');
+  });
+  it('sums up scaling money by its tier and ignores a tier column that holds no tier', () => {
+    const money = (tier: number) => ({ 'quest_template.RewardMoney': 74000, 'quest_template.RewardMoneyDifficulty': tier });
+    expect(rewardsSummary(money(5), names)).toEqual(['Money scales with level (tier 5)']);
+    expect(rewardsSummary(money(24750), names)).toEqual(['7g 40s']);
   });
 });

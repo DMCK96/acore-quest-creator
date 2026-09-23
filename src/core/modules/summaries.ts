@@ -90,7 +90,9 @@ export function rewardsSummary(values: Values, names: NameBook): string[] {
   const xp = num(values['quest_template.RewardXPDifficulty']);
   if (xp) lines.push(`XP tier ${xp}`);
   const money = num(values['quest_template.RewardMoney']);
-  if (money) lines.push(formatMoney(money));
+  const moneyTier = num(values['quest_template.RewardMoneyDifficulty']);
+  if (moneyTier >= 1 && moneyTier <= 9 && money >= 0) lines.push(`Money scales with level (tier ${moneyTier})`);
+  else if (money) lines.push(formatMoney(money));
   for (const row of rowsOf(values, 'quest_template.RewardItems')) {
     if (num(row.item) !== 0) lines.push(`${num(row.amount)} × ${itemName(num(row.item), names)}`);
   }

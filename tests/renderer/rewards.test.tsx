@@ -23,17 +23,37 @@ describe('Rewards group', () => {
     await mount({ 'quest_template.QuestLevel': -1 });
     expect(await screen.findByText(/depends on the player's level/i)).toBeInTheDocument();
   });
-  it('shows what a money difficulty pays and that 0 uses the fixed amount', async () => {
+  it('shows only the fixed amount for a quest with a fixed level, whatever the tier column holds', async () => {
+    await mount({ 'quest_template.RewardMoneyDifficulty': 24750 });
+    expect(screen.getByLabelText('Gold')).toBeInTheDocument();
+    expect(screen.queryByRole('radio')).toBeNull();
+    expect(screen.queryByText(/24750/)).toBeNull();
+  });
+  it('offers scaling money for a quest any level can do', async () => {
     const onChange = vi.fn();
-    await mount({ 'quest_template.RewardMoneyDifficulty': 0 }, onChange);
-    expect(await screen.findByRole('option', { name: 'None: pay the fixed amount above' })).toBeInTheDocument();
-    await userEvent.selectOptions(screen.getByRole('combobox', { name: /money reward tier/i }), '1 gold 50 silver (tier 3)');
+    await mount({ 'quest_template.QuestLevel': -1, 'quest_template.RewardMoneyDifficulty': 0 }, onChange);
+    expect(screen.getByRole('radio', { name: 'A fixed amount' })).toBeChecked();
+    expect(screen.getByLabelText('Gold')).toBeInTheDocument();
+    await userEvent.click(screen.getByRole('radio', { name: "Scales with the player's level" }));
+    expect(onChange).toHaveBeenCalledWith('quest_template.RewardMoneyDifficulty', 5);
+  });
+  it('shows what a scaling tier pays across the level range', async () => {
+    const byLevel = makeMockApi({ rewardTables: async (level: number) => okv({ xp, money: money.map((_, n) => level * 100 * n) }) });
+    const onChange = vi.fn();
+    await mountBody('rewards', { 'quest_template.QuestLevel': -1, 'quest_template.RewardMoneyDifficulty': 5 }, { api: byLevel, onChange });
+    expect(screen.getByRole('radio', { name: "Scales with the player's level" })).toBeChecked();
+    expect(screen.queryByLabelText('Gold')).toBeNull();
+    expect(await screen.findByText('Pays 50s at level 10, 2g at level 40, 3g at level 60, 4g at level 80.')).toBeInTheDocument();
+    await userEvent.selectOptions(screen.getByRole('combobox', { name: 'Reward size' }), 'Tier 3: up to 2g 40s');
     expect(onChange).toHaveBeenCalledWith('quest_template.RewardMoneyDifficulty', 3);
   });
-  it('says a stored money value that is not a tier is ignored', async () => {
-    await mount({ 'quest_template.RewardMoneyDifficulty': 24750 });
-    expect(await screen.findByRole('option', { name: 'Not a tier (stored value 24750)' })).toBeInTheDocument();
-    expect(screen.getByText(/stores 24750 here, which is not a tier/)).toBeInTheDocument();
+  it('keeps showing a real tier on a fixed-level quest, since the server scales it', async () => {
+    await mount({ 'quest_template.RewardMoneyDifficulty': 3 });
+    expect(screen.getByRole('radio', { name: "Scales with the player's level" })).toBeChecked();
+  });
+  it('never offers scaling for money taken from the player', async () => {
+    await mount({ 'quest_template.QuestLevel': -1, 'quest_template.RewardMoney': -500 });
+    expect(screen.queryByRole('radio')).toBeNull();
   });
   it('edits the fixed money as gold, silver and copper', async () => {
     const onChange = vi.fn();
@@ -50,6 +70,6 @@ describe('Rewards group', () => {
   it('degrades gracefully when the reference tables are unavailable', async () => {
     const empty = makeMockApi({ rewardTables: async () => okv({ xp: Array(10).fill(null), money: Array(10).fill(null) }) });
     await mountBody('rewards', {}, { api: empty });
-    expect(await screen.findAllByRole('option', { name: 'Tier 1' })).toHaveLength(2); // XP and money
+    expect(await screen.findByRole('option', { name: 'Tier 1' })).toBeInTheDocument();
   });
 });
