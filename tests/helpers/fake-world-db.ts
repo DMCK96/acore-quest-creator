@@ -135,6 +135,11 @@ export class FakeWorldDb implements WorldDb {
     return sorted.map((r) => ({ ...r }));
   }
 
+  async selectNonZero(table: string, column: string): Promise<RawRow[]> {
+    this.checkColumns(table, this.table(table), [column]);
+    return (await this.selectRows(table, {})).filter((row) => row[column] !== null && Number(row[column]) !== 0);
+  }
+
   async searchQuests(text: string, limit: number): Promise<QuestSummary[]> {
     const rows = await this.selectRows('quest_template', {});
     const needle = text.toLowerCase();

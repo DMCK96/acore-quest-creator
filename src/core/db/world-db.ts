@@ -42,6 +42,14 @@ export interface WorldDb {
    * empty array matches nothing. Throws `UnknownTableError` / `UnknownColumnError`.
    */
   selectRows(table: string, where: Where): Promise<RawRow[]>;
+  /**
+   * Every row whose numeric `column` is not zero, in `selectRows`' order and shape. `selectRows` can
+   * only ask for known values, and some reads want "anything set" from a big table with no index on
+   * the column (item starters: a few hundred of half a million items), which must be one pass rather
+   * than an `IN` scan per call. Optional: without it the caller filters a full `selectRows` itself.
+   * Throws `UnknownTableError` / `UnknownColumnError`.
+   */
+  selectNonZero?(table: string, column: string): Promise<RawRow[]>;
   searchQuests(text: string, limit: number): Promise<QuestSummary[]>;
   /** Empty map for kinds outside `LOOKUP_KINDS`. */
   lookupNames(kind: RefKind, ids: readonly number[]): Promise<Map<number, string>>;

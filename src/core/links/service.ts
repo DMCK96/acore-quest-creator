@@ -1,7 +1,7 @@
 import type { WorldDb } from '../db/world-db';
 import type { QuestAggregate } from '../model/aggregate';
 import { factsFromAggregate, readWorldFacts, type QuestFacts } from './facts';
-import { readLinkContext, rowsOrNone } from './context';
+import { readLinkContext, rowsOrNone, type ItemStarter } from './context';
 import { recogniseLinks, type RecognitionResult } from './recognise';
 import { CATALOG } from './catalog';
 import { ACTION } from '../smartai/ids';
@@ -93,11 +93,13 @@ export async function loadLinks(
   scope: readonly number[],
   drafts: ReadonlyMap<number, QuestAggregate>,
   available?: ReadonlySet<ComponentId>,
+  /** The session's item starters (see `readItemStarters`); omitted, `item_template` is read here. */
+  itemStarters?: readonly ItemStarter[],
 ): Promise<LinkSnapshot> {
   const facts = new Map<number, QuestFacts>();
   await factsFor(db, scope, drafts, facts);
 
-  const context = await readLinkContext(db, scope);
+  const context = await readLinkContext(db, scope, itemStarters);
 
   const neighbourIds = new Set<number>();
   for (const scopeId of scope) {

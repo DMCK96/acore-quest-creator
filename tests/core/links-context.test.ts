@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
-import { readLinkContext, questNamedBy } from '@core/links/context';
+import { vi } from 'vitest';
+import { readLinkContext, readItemStarters, questNamedBy } from '@core/links/context';
 import { describeEvent, actionName, sourceName } from '@core/smartai/ids';
 import type { ScriptRow } from '@core/links/model';
 import { forkDb } from '../helpers/fixtures';
@@ -59,6 +60,30 @@ describe('readLinkContext', () => {
     db.insert('creature_template', { entry: '101', name: 'Guard', AIName: '' });
     const ctx = await readLinkContext(db, [500]);
     expect(ctx.aiNames).toEqual([{ sourceType: 0, entry: 100, aiName: 'SmartAI' }, { sourceType: 0, entry: 101, aiName: '' }]);
+  });
+});
+
+describe('item starters', () => {
+  const itemSelects = (spy: { mock: { calls: unknown[][] } }): number =>
+    spy.mock.calls.filter(([table]) => table === 'item_template').length;
+
+  it('reads every item that starts a quest in one pass, and nothing else', async () => {
+    const db = seed();
+    db.insert('item_template', { entry: '26', name: 'Plain', startquest: '0' });
+    db.insert('item_template', { entry: '24', name: 'Note', startquest: '777' });
+    expect(await readItemStarters(db)).toEqual([{ entry: 24, questId: 777 }, { entry: 25, questId: 500 }]);
+  });
+  it('treats a missing item_template table or startquest column as no starters', async () => {
+    const db = seed();
+    db.dropTable('item_template');
+    expect(await readItemStarters(db)).toEqual([]);
+  });
+  it('filters an injected starter list instead of reading item_template again', async () => {
+    const db = seed();
+    const spy = vi.spyOn(db, 'selectRows');
+    const ctx = await readLinkContext(db, [500], [{ entry: 25, questId: 500 }, { entry: 24, questId: 777 }]);
+    expect(ctx.itemStarters).toEqual([{ entry: 25, questId: 500 }]);
+    expect(itemSelects(spy)).toBe(0);
   });
 });
 

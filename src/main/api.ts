@@ -10,12 +10,12 @@ import { allocateQuestId, assertIdFree, collectTakenIds } from '../core/ids/allo
 import { importQuest } from '../core/import/importer';
 import { fetchLinkedContext } from '../core/import/linked-context';
 import { createNewAggregate } from '../core/import/new-quest';
-import { findQuestChain } from '../core/import/quest-chain';
+import { findQuestChain, MAX_CHAIN_QUESTS } from '../core/import/quest-chain';
 import { listUnmodelled } from '../core/import/unmodelled';
 import { componentAvailability, type Availability } from '../core/links/availability';
 import { componentById } from '../core/links/catalog';
 import type { NameBook, NameKind } from '../core/links/component';
-import { CONTEXT_TABLES } from '../core/links/context';
+import { CONTEXT_TABLES, readItemStarters, type ItemStarter } from '../core/links/context';
 import { disconnectedQuests, linkIssues } from '../core/links/issues';
 import { questEdges, type ComponentId, type Endpoint } from '../core/links/model';
 import { loadLinks, type LinkSnapshot } from '../core/links/service';
@@ -77,6 +77,8 @@ interface Session {
   contextTables: Record<string, ColumnInfo[]>;
   /** Which link components this database can carry, decided once so every call agrees. */
   availability: Availability;
+  /** Every quest-starting item, read once here because asking `item_template` per link read is a full scan. */
+  itemStarters: ItemStarter[];
 }
 
 const REGISTRY_TABLES = registry.tables.map((t) => t.table);
@@ -255,7 +257,7 @@ export function createApi(deps: ApiDeps): Api {
     new Map(deps.store.drafts.list(project().id).map((d) => [d.questId, d.aggregate]));
 
   const linksFor = (live: Session, scope: readonly number[]): Promise<LinkSnapshot> =>
-    loadLinks(live.db, scope, draftAggregates(), live.availability.available);
+    loadLinks(live.db, scope, draftAggregates(), live.availability.available, live.itemStarters);
 
   /**
    * A quest's own validation plus what its links say about it. Only for display: the export gate
@@ -416,6 +418,11 @@ export function createApi(deps: ApiDeps): Api {
         // Where the context list and the registry share a table, the registry's reading is the one
         // the rest of the session already trusts, so it wins.
         const availability = componentAvailability({ ...contextSchema.tables, ...schema.tables });
+        // Only asked of a table the schema read says this user can see, so a missing grant on
+        // item_template leaves item starts empty instead of failing the whole connection.
+        const itemStarters = contextSchema.tables.item_template?.some((c) => c.name === 'startquest')
+          ? await readItemStarters(db)
+          : [];
         const drift = diffSchema(schema, registry);
         const blocking = hasBlockingDrift(drift);
         // Swapping connections must not leave the old one open.
@@ -429,6 +436,7 @@ export function createApi(deps: ApiDeps): Api {
           forbiddenTables: drift.forbiddenTables,
           contextTables: contextSchema.tables,
           availability,
+          itemStarters,
         };
         return { profileId, schemaHash: schema.hash, drift, blocking };
       }),
@@ -441,7 +449,7 @@ export function createApi(deps: ApiDeps): Api {
       run(async () => {
         const live = usable();
         const proj = project();
-        const chain = await findQuestChain(live.db, questId);
+        const chain = await findQuestChain(live.db, questId, MAX_CHAIN_QUESTS, undefined, live.itemStarters);
         const slots = layoutChain(chain.questIds, chain.links);
         const rootSlot = slots.get(questId) ?? { column: 0, row: 0 };
 
@@ -526,6 +534,7 @@ export function createApi(deps: ApiDeps): Api {
           canvasIds,
           new Map(drafts.map((d) => [d.questId, d.aggregate])),
           live.availability.available,
+          live.itemStarters,
         );
         const disconnected = disconnectedQuests(canvasIds, snapshot);
         const edges = snapshot.result.instances.flatMap((instance) =>

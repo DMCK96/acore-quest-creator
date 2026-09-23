@@ -37,6 +37,33 @@ export async function rowsOrNone(db: WorldDb, table: string, where: Where): Prom
   }
 }
 
+export type ItemStarter = LinkContext['itemStarters'][number];
+
+const byEntry = (a: ItemStarter, b: ItemStarter): number => a.entry - b.entry;
+
+/**
+ * Every item that starts a quest, read once per connection. `item_template.startquest` has no index
+ * and the table holds half a million rows, so asking it `startquest IN (...)` costs a full scan (about
+ * two seconds on a stock world DB) on every link read and every chain-walk step. The starters
+ * themselves are a few hundred rows, so the session keeps them and `readLinkContext` filters them in
+ * memory instead. A fork without the table or column simply has no item starters.
+ */
+export async function readItemStarters(db: WorldDb): Promise<ItemStarter[]> {
+  let rows: RawRow[];
+  try {
+    rows = db.selectNonZero
+      ? await db.selectNonZero('item_template', 'startquest')
+      : (await db.selectRows('item_template', {})).filter((row) => numberOf(row.startquest) !== 0);
+  } catch (error) {
+    if (error instanceof UnknownTableError || error instanceof UnknownColumnError) return [];
+    throw error;
+  }
+  return rows
+    .map((row) => ({ entry: numberOf(row.entry), questId: numberOf(row.startquest) }))
+    .filter((starter) => starter.questId !== 0)
+    .sort(byEntry);
+}
+
 function toScriptRow(row: RawRow): ScriptRow {
   return {
     entryorguid: numberOf(row.entryorguid),
@@ -89,7 +116,15 @@ async function scriptsForPairs(db: WorldDb, pairs: readonly ScriptPair[]): Promi
   return rows.map(toScriptRow).filter((r) => wanted.has(pairKey(r)));
 }
 
-export async function readLinkContext(db: WorldDb, questIds: readonly number[]): Promise<LinkContext> {
+/**
+ * `itemStarters`, when given, is the session's `readItemStarters` list and replaces the per-call
+ * `item_template` read; without it (tests, one-off reads) the table is asked directly.
+ */
+export async function readLinkContext(
+  db: WorldDb,
+  questIds: readonly number[],
+  itemStarters?: readonly ItemStarter[],
+): Promise<LinkContext> {
   if (questIds.length === 0) return EMPTY_CONTEXT;
 
   const idSet = new Set(questIds);
@@ -159,10 +194,11 @@ export async function readLinkContext(db: WorldDb, questIds: readonly number[]):
     return set !== undefined && set.has(numberOf(row.SourceId));
   });
 
-  const itemRows = await rowsOrNone(db, 'item_template', { startquest: ids });
-  const itemStarters = itemRows
-    .map((row) => ({ entry: numberOf(row.entry), questId: numberOf(row.startquest) }))
-    .sort((a, b) => a.entry - b.entry);
+  const starters = itemStarters
+    ? itemStarters.filter((starter) => idSet.has(starter.questId)).map((starter) => ({ ...starter }))
+    : (await rowsOrNone(db, 'item_template', { startquest: ids }))
+      .map((row) => ({ entry: numberOf(row.entry), questId: numberOf(row.startquest) }));
+  starters.sort(byEntry);
 
   const areatriggerEntries = [...pairsByKey.values()]
     .filter((p) => p.sourceType === SOURCE.areatrigger)
@@ -187,5 +223,5 @@ export async function readLinkContext(db: WorldDb, questIds: readonly number[]):
     ...gameobjectRows.map((row) => ({ sourceType: 1 as const, entry: numberOf(row.entry), aiName: row.AIName ?? '' })),
   ].sort((a, b) => a.sourceType - b.sourceType || a.entry - b.entry);
 
-  return { questRows, scripts, eventConditions, itemStarters, areatriggerScripts, aiNames };
+  return { questRows, scripts, eventConditions, itemStarters: starters, areatriggerScripts, aiNames };
 }

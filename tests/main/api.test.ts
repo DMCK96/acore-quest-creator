@@ -540,6 +540,22 @@ describe('links', () => {
     expect(links.instances.find((i) => i.component === 'start.smartai')!.label).toBe('Offered by a SmartAI script');
     expect(links.unavailable).toEqual([]);
   });
+  it('reads item starters once at connect, not on every link read', async () => {
+    db.insert('item_template', { entry: '26', name: 'Torn Letter', startquest: '60001' });
+    db.insert('quest_template', { ID: '60002', LogTitle: 'More wolves' });
+    db.insert('quest_template_addon', { ID: '60002', PrevQuestID: '60001' });
+    const spy = vi.spyOn(db, 'selectRows');
+    const starterReads = (): number =>
+      spy.mock.calls.filter(([table, where]) => table === 'item_template' && 'startquest' in where).length;
+    const { api } = await connected();
+    const atConnect = starterReads();
+    const open = ok(await api.addQuestChain(60001)).open;
+    ok(await api.validate(open.questId));
+    ok(await api.listNodes());
+    const links = ok(await api.questLinks([60001]));
+    expect(links.instances.some((i) => i.component === 'start.item')).toBe(true);
+    expect(starterReads()).toBe(atConnect);
+  });
   it('lists script rows it does not understand', async () => {
     db.insert('smart_scripts', { entryorguid: '60001', source_type: '5', id: '0', link: '0', event_type: '48', action_type: '12', comment: '' });
     const { api } = await connected();

@@ -1,5 +1,7 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 import { findQuestChain } from '@core/import/quest-chain';
+import { loadLinks } from '@core/links/service';
+import { readItemStarters } from '@core/links/context';
 import { layoutChain } from '@core/canvas/layout';
 import { forkDb } from '../helpers/fixtures';
 import type { FakeWorldDb } from '../helpers/fake-world-db';
@@ -99,5 +101,23 @@ describe('layoutChain', () => {
       { from: 2, to: 1 },
     ]);
     expect(slots.size).toBe(2);
+  });
+
+  it('reads item_template once up front, never per chain step or per link read', async () => {
+    const db = forkDb();
+    for (let id = 1; id <= 6; id++) quest(db, id, id > 1 ? { PrevQuestID: String(id - 1) } : {});
+    db.insert('item_template', { entry: '25', name: 'Letter', startquest: '1' });
+    const spy = vi.spyOn(db, 'selectRows');
+    const itemSelects = (): number => spy.mock.calls.filter(([table]) => table === 'item_template').length;
+
+    const starters = await readItemStarters(db);
+    const afterRead = itemSelects();
+    const chain = await findQuestChain(db, 3, undefined, undefined, starters);
+    const snapshot = await loadLinks(db, chain.questIds, new Map(), undefined, starters);
+
+    expect(sorted(chain.questIds)).toEqual([1, 2, 3, 4, 5, 6]);
+    expect(snapshot.result.instances.some((i) => i.component === 'start.item')).toBe(true);
+    expect(afterRead).toBeLessThanOrEqual(1);
+    expect(itemSelects()).toBe(afterRead);
   });
 });

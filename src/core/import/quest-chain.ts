@@ -2,7 +2,7 @@ import type { RawRow, Where } from '../db/types';
 import { UnknownColumnError, UnknownTableError, type WorldDb } from '../db/world-db';
 import { ACTION } from '../smartai/ids';
 import { readWorldFacts, type QuestFacts } from '../links/facts';
-import { readLinkContext } from '../links/context';
+import { readLinkContext, type ItemStarter } from '../links/context';
 import { recogniseLinks } from '../links/recognise';
 import { questEdges, type ComponentId } from '../links/model';
 import { CATALOG } from '../links/catalog';
@@ -62,6 +62,8 @@ export async function findQuestChain(
   questId: number,
   limit = MAX_CHAIN_QUESTS,
   available?: ReadonlySet<ComponentId>,
+  /** The session's item starters, so a walk of many steps never scans `item_template` per step. */
+  itemStarters?: readonly ItemStarter[],
 ): Promise<QuestChain> {
   const found: number[] = [questId];
   const seen = new Set<number>(found);
@@ -96,7 +98,7 @@ export async function findQuestChain(
       rowsOrNone(db, ADDON, { BreadcrumbForQuestId: ids }),
       rowsOrNone(db, TEMPLATE, { RewardNextQuest: ids }),
       groups.length > 0 ? rowsOrNone(db, ADDON, { ExclusiveGroup: groups.map(String) }) : Promise.resolve([]),
-      readLinkContext(db, frontier),
+      readLinkContext(db, frontier, itemStarters),
     ]);
 
     const referencing = new Set<number>();
