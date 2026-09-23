@@ -1,0 +1,14 @@
+.long-text {
+  display: block;
+  box-sizing: border-box;
+  width: 100%;
+  min-height: 8lh;
+  max-height: 60vh;
+  field-sizing: content;
+  resize: vertical;
+  margin: 4px 0 6px;
+  padding: 8px 10px;
+  font: inherit;
+  line-height: 1.5;
+  white-space: pre-wrap;
+}

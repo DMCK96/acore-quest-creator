@@ -26,13 +26,13 @@ export function XpDifficultyControl(props: ControlProps<number>): React.JSX.Elem
     <div>
       <label htmlFor={id}>{label}</label>
       {help && <p>{help}</p>}
-      {scalesWithPlayer && <p>The XP depends on the player&apos;s level, so no fixed amount can be shown.</p>}
+      {scalesWithPlayer && <p>This quest has no fixed level, so the XP depends on the player&apos;s level and no fixed amount can be shown.</p>}
       <select id={id} value={value} disabled={disabled} onChange={(e) => onChange(Number(e.target.value))}>
         {known.map((n) => {
           const xp = scalesWithPlayer ? null : (tables?.xp[n] ?? null);
           return (
             <option key={n} value={n}>
-              {xp !== null ? `${n} — ${xp} XP` : `${n}`}
+              {optionLabel(n, xp)}
             </option>
           );
         })}
@@ -40,6 +40,12 @@ export function XpDifficultyControl(props: ControlProps<number>): React.JSX.Elem
       {readOnlyReason && <p role="alert">{readOnlyReason}</p>}
     </div>
   );
+}
+
+/** `0` pays nothing; any other tier leads with its XP when the quest level makes it known. */
+function optionLabel(tier: number, xp: number | null): string {
+  if (tier === 0) return 'No XP';
+  return xp !== null ? `${xp} XP (tier ${tier})` : `Tier ${tier}`;
 }
 
 export const XpDifficultyFieldControl = XpDifficultyControl as unknown as FieldControl;

@@ -206,7 +206,7 @@ const scalars: ScalarFieldDef[] = [
     column: 'RewardXPDifficulty',
     type: { kind: 'int', min: 0 },
     label: 'XP reward',
-    help: 'Picks which experience column of QuestXP.dbc to pay at the quest level, so the reward scales with the level rather than being a fixed number. 0 gives no experience.',
+    help: 'How much experience the quest gives. Pick a tier: higher tiers give more, and the amount grows with the quest level. The amounts shown are for the level of this quest; players well above it get less.',
     group: 'rewards',
     control: 'xpDifficulty',
   }),

@@ -16,8 +16,8 @@ async function mount(over: Record<string, any> = {}, onChange = vi.fn()) {
 describe('Rewards group', () => {
   it('labels XP difficulties with the XP they give at the quest level', async () => {
     await mount({ 'quest_template.RewardXPDifficulty': 2 });
-    expect(await screen.findByRole('option', { name: '2 — 300 XP' })).toBeInTheDocument();
-    expect(screen.getByRole('combobox', { name: /XP reward/i })).toHaveDisplayValue('2 — 300 XP');
+    expect(await screen.findByRole('option', { name: '300 XP (tier 2)' })).toBeInTheDocument();
+    expect(screen.getByRole('combobox', { name: /XP reward/i })).toHaveDisplayValue('300 XP (tier 2)');
   });
   it('explains that the XP depends on player level when the quest level is not fixed', async () => {
     await mount({ 'quest_template.QuestLevel': -1 });
@@ -45,6 +45,6 @@ describe('Rewards group', () => {
   it('degrades gracefully when the reference tables are unavailable', async () => {
     const empty = makeMockApi({ rewardTables: async () => okv({ xp: Array(10).fill(null), money: Array(10).fill(null) }) });
     await mountBody('rewards', {}, { api: empty });
-    expect(await screen.findByRole('option', { name: '0' })).toBeInTheDocument();
+    expect(await screen.findByRole('option', { name: 'Tier 1' })).toBeInTheDocument();
   });
 });

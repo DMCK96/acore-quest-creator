@@ -150,6 +150,20 @@ describe('LongTextControl', () => {
     await userEvent.click(screen.getByRole('button', { name: 'Insert $N (player name)' }));
     expect(onChange).toHaveBeenCalledWith('Hello, $N');
   });
+  it('shows $B as line breaks and writes new lines back as $B', async () => {
+    const onChange = vi.fn();
+    render(<LongTextControl {...base} value="Hi$B$BBye" onChange={onChange} type={{ kind: 'text' }} def={{} as any} />);
+    const box = screen.getByLabelText('Field') as HTMLTextAreaElement;
+    expect(box.value).toBe('Hi\n\nBye');
+    await userEvent.type(box, '!');
+    expect(onChange).toHaveBeenLastCalledWith('Hi$B$BBye!');
+  });
+  it('keeps the lower-case $b a text already uses', async () => {
+    const onChange = vi.fn();
+    render(<LongTextControl {...base} value="Hi$bBye" onChange={onChange} type={{ kind: 'text' }} def={{} as any} />);
+    await userEvent.type(screen.getByLabelText('Field'), '{Enter}');
+    expect(onChange).toHaveBeenLastCalledWith('Hi$bBye$b');
+  });
 });
 
 describe('resolveControl', () => {
