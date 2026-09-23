@@ -160,7 +160,7 @@ describe('QuestWorkspace', () => {
     store.getState().setValue('quest_template.LogTitle', 'Edited');
     expect(store.getState().dirty).toBe(true);
     await store.getState().flushSave();
-    expect(api.saveDraft).toHaveBeenCalledWith(expect.objectContaining({ values: expect.objectContaining({ 'quest_template.LogTitle': 'Edited' }) }));
+    expect(api.updateQuest).toHaveBeenCalledWith(expect.objectContaining({ values: expect.objectContaining({ 'quest_template.LogTitle': 'Edited' }) }));
     expect(api.validate).toHaveBeenCalledWith(60001);
     expect(store.getState().dirty).toBe(false);
   });
@@ -169,7 +169,7 @@ describe('QuestWorkspace', () => {
     vi.mocked(api.listNodes).mockClear();
     store.getState().setValue('quest_template_addon.PrevQuestID', 0);
     await waitFor(() => expect(api.listNodes).toHaveBeenCalled());
-    const saved = vi.mocked(api.saveDraft).mock.invocationCallOrder[0];
+    const saved = vi.mocked(api.updateQuest).mock.invocationCallOrder[0];
     expect(vi.mocked(api.listNodes).mock.invocationCallOrder[0]).toBeGreaterThan(saved);
   });
   // A real debounce, so the click lands inside the window the user would actually hit.
@@ -183,7 +183,7 @@ describe('QuestWorkspace', () => {
     expect(store.getState().dirty).toBe(true);
     await userEvent.click(screen.getByRole('button', { name: /Back to quests/ }));
     await waitFor(() => expect(store.getState().screen).toBe('pick'));
-    expect(api.saveDraft).toHaveBeenCalledWith(
+    expect(api.updateQuest).toHaveBeenCalledWith(
       expect.objectContaining({ values: expect.objectContaining({ 'quest_template.LogTitle': 'Edited' }) }),
     );
     expect(store.getState().open).toBeNull();

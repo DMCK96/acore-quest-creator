@@ -17,7 +17,7 @@ export function TopBar({
   onAddExisting: () => void;
   onFitView: () => void;
 }): React.JSX.Element {
-  const projectName = store((s) => s.projectName);
+  const projectName = store((s) => s.project.name);
   const summary = store((s) => s.summary);
   const profiles = store((s) => s.profiles);
 

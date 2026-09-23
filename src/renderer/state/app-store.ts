@@ -13,6 +13,7 @@ import type {
   OpenResult,
   ProfileRecord,
   ProfileSave,
+  ProjectState,
   QuestLinks,
   Result,
   Viewport,
@@ -42,7 +43,7 @@ export interface AppState {
   dirty: boolean;
   nodes: CanvasNode[];
   viewport: Viewport;
-  projectName: string;
+  project: ProjectState;
   preview: Difference[] | null;
   exportResult: ExportResult | null;
   exportError: ApiError | null;
@@ -101,7 +102,7 @@ const missingTablesMessage = (tables: string[], forbidden: string[] = []): strin
 /**
  * The whole renderer's state, built once per `<App>` around one `Api`.
  *
- * `opts.saveDelayMs` (default 400) is the debounce before an edit is written as a draft; `0` in
+ * `opts.saveDelayMs` (default 400) is the debounce before an edit is sent to the open project; `0` in
  * tests still defers to a timer (via `setTimeout`), so `flushSave` is what tests call to force it.
  */
 export function createAppStore(api: Api, opts: { saveDelayMs?: number } = {}): AppStore {
@@ -134,7 +135,7 @@ export function createAppStore(api: Api, opts: { saveDelayMs?: number } = {}): A
     dirty: false,
     nodes: [],
     viewport: { x: 0, y: 0, zoom: 1 },
-    projectName: '',
+    project: { name: '', filePath: null, dirty: false, idRangeStart: 60000, idRangeEnd: 99999, outputDir: '', viewport: { x: 0, y: 0, zoom: 1 } },
     preview: null,
     exportResult: null,
     exportError: null,
@@ -292,7 +293,7 @@ export function createAppStore(api: Api, opts: { saveDelayMs?: number } = {}): A
       const { open } = get();
       if (!open) return;
       set({ saving: true });
-      const saved = await api.saveDraft(open.aggregate);
+      const saved = await api.updateQuest(open.aggregate);
       if (!saved.ok) {
         set({ saving: false, error: saved.error.message });
         return;
@@ -304,7 +305,7 @@ export function createAppStore(api: Api, opts: { saveDelayMs?: number } = {}): A
         issues: issues.ok ? issues.value : get().issues,
         error: issues.ok ? get().error : issues.error.message,
       });
-      // The canvas stays visible behind the editor and draws the draft's links, so an edit to a
+      // The canvas stays visible behind the editor and draws the edited links, so an edit to a
       // chain column must redraw it now rather than when the editor closes.
       await Promise.all([get().loadLinks(), get().loadNodes()]);
     },
@@ -319,12 +320,12 @@ export function createAppStore(api: Api, opts: { saveDelayMs?: number } = {}): A
 
     async loadNodes() {
       const token = ++nodesToken;
-      const [nodesResult, projectResult] = await Promise.all([api.listNodes(), api.getProject()]);
+      const [nodesResult, projectResult] = await Promise.all([api.listNodes(), api.projectState()]);
       if (token !== nodesToken) return;
       if (nodesResult.ok) set({ nodes: nodesResult.value });
       if (projectResult.ok) {
         lastSavedViewport = projectResult.value.viewport;
-        set({ viewport: projectResult.value.viewport, projectName: projectResult.value.name });
+        set({ viewport: projectResult.value.viewport, project: projectResult.value });
       }
     },
 
@@ -367,7 +368,7 @@ export function createAppStore(api: Api, opts: { saveDelayMs?: number } = {}): A
     },
 
     // A failed save is the one thing that must survive closing: clearing `error` first drops a
-    // stale message, and `flushSave` puts a fresh one back if the draft did not reach the store.
+    // stale message, and `flushSave` puts a fresh one back if the edit did not reach the project.
     async closeEditor() {
       set({ error: null });
       await get().flushSave();

@@ -110,7 +110,7 @@ describe('drawer', () => {
     const before = (api.listNodes as any).mock.calls.length;
     await userEvent.click(screen.getByRole('button', { name: 'Close editor' }));
     await waitFor(() => expect(store.getState().screen).toBe('pick'));
-    expect(api.saveDraft).toHaveBeenCalledWith(expect.objectContaining({ values: expect.objectContaining({ 'quest_template.LogTitle': 'Edited' }) }));
+    expect(api.updateQuest).toHaveBeenCalledWith(expect.objectContaining({ values: expect.objectContaining({ 'quest_template.LogTitle': 'Edited' }) }));
     expect((api.listNodes as any).mock.calls.length).toBeGreaterThan(before);
     expect(screen.queryByRole('complementary', { name: 'Quest editor' })).toBeNull();
     expect(screen.getAllByTestId('quest-node').length).toBe(2);
@@ -152,7 +152,7 @@ describe('arranging and removing', () => {
     await screen.findAllByTestId('quest-node');
     await userEvent.click(screen.getByRole('button', { name: 'Remove quest 60001 from canvas' }));
     const dialog = await screen.findByRole('alertdialog');
-    expect(within(dialog).getByText(/removes the draft only\. nothing in your database changes/i)).toBeInTheDocument();
+    expect(within(dialog).getByText(/removes it from this project only\. nothing in your database changes/i)).toBeInTheDocument();
     await userEvent.click(within(dialog).getByRole('button', { name: 'Cancel' }));
     expect(api.removeNode).not.toHaveBeenCalled();
     await userEvent.click(screen.getByRole('button', { name: 'Remove quest 60001 from canvas' }));
@@ -160,7 +160,7 @@ describe('arranging and removing', () => {
     await waitFor(() => expect(api.removeNode).toHaveBeenCalledWith(60001));
   });
   it('restores the saved viewport when the canvas loads', async () => {
-    const { store } = await canvas({ getProject: async () => okv({ id: 1, name: 'p', idRangeStart: 60000, idRangeEnd: 99999, outputDir: 'C:\\out', viewport: { x: -120, y: 40, zoom: 0.6 } }) });
+    const { store } = await canvas({ projectState: async () => okv({ name: 'p', filePath: null, dirty: false, idRangeStart: 60000, idRangeEnd: 99999, outputDir: 'C:\\out', viewport: { x: -120, y: 40, zoom: 0.6 } }) });
     await screen.findAllByTestId('quest-node');
     expect(store.getState().viewport).toEqual({ x: -120, y: 40, zoom: 0.6 });
   });

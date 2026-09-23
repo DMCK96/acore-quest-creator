@@ -1,6 +1,8 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { createApi, type ApiDeps, type DevDb } from '../../src/main/api';
 import { openStore, type SecretBox } from '../../src/main/store/store';
+import { createProjectSession, type ProjectSession } from '../../src/main/project/session';
+import { defaultProjectMeta } from '../../src/main/project/project-file';
 import { forkDb } from '../helpers/fixtures';
 import { FakeWorldDb } from '../helpers/fake-world-db';
 import type { QuestAggregate } from '@core/model/aggregate';
@@ -26,22 +28,23 @@ function seed(): FakeWorldDb {
 }
 function makeApi(overrides: Partial<ApiDeps> = {}) {
   const store = openStore(':memory:', box);
+  const session: ProjectSession = overrides.session ?? createProjectSession(defaultProjectMeta('Untitled Project', 'C:\\out'));
   const dev: DevDb = { execute: async (s) => { executed.push([...s]); }, close: async () => {} };
   const deps: ApiDeps = {
-    store, openWorldDb: async () => db, openDevDb: async () => { devOpened++; return dev; },
+    store, session, openWorldDb: async () => db, openDevDb: async () => { devOpened++; return dev; },
     fs: { writeFile: async (p, t) => { files.set(p, t); }, ensureDir: async () => {}, listDir: async () => [...files.keys()].map((k) => k.split(/[\\/]/).pop()!) },
-    now: () => new Date('2026-09-21T10:00:00Z'), defaultOutputDir: 'C:\\out', ...overrides,
+    now: () => new Date('2026-09-21T10:00:00Z'), ...overrides,
   };
-  return { api: createApi(deps), store };
+  return { api: createApi(deps), store, session };
 }
 beforeEach(() => { gate.throwWith = null; db = seed(); files = new Map(); executed = []; devOpened = 0; });
 const ok = <T>(r: { ok: boolean; value?: T; error?: any }): T => { if (!r.ok) throw new Error(JSON.stringify(r.error)); return r.value as T; };
 
-async function connected() {
-  const { api, store } = makeApi();
-  const rec = ok(await api.saveProfile(profile));
-  ok(await api.connect(rec.id));
-  return { api, store };
+async function connected(overrides: Partial<ApiDeps> = {}) {
+  const made = makeApi(overrides);
+  const rec = ok(await made.api.saveProfile(profile));
+  ok(await made.api.connect(rec.id));
+  return made;
 }
 
 describe('connection', () => {
@@ -105,7 +108,7 @@ describe('quest-giver flag', () => {
     db.insert('creature_template', { entry: '301', name: 'Vendor', npcflag: '128' });
     const { api } = await connected();
     const r = ok(await api.openQuest(60001));
-    ok(await api.saveDraft(edited(r, { creature_queststarter: [{ id: 100 }, { id: 300 }, { id: 301 }, { id: 999 }] })));
+    ok(await api.updateQuest(edited(r, { creature_queststarter: [{ id: 100 }, { id: 300 }, { id: 301 }, { id: 999 }] })));
     const changes = ok(await api.previewChanges(60001));
     expect(changes).toContainEqual({ table: 'creature_template', key: 'entry=300', column: 'npcflag', before: '0', after: '2' });
     expect(changes).toContainEqual({ table: 'creature_template', key: 'entry=301', column: 'npcflag', before: '128', after: '130' });
@@ -121,7 +124,7 @@ describe('quest-giver flag', () => {
     const { api } = await connected();
     ok(await api.saveProfile({ ...profile, name: 'dev', role: 'dev' }));
     const r = ok(await api.openQuest(60001));
-    ok(await api.saveDraft(edited(r, { creature_questender: [{ id: 300 }] })));
+    ok(await api.updateQuest(edited(r, { creature_questender: [{ id: 300 }] })));
     ok(await api.applyToDev(60001, true));
     expect(executed[0].some((s) => s === 'UPDATE `creature_template` SET `npcflag` = `npcflag` | 2 WHERE `entry` = 300;')).toBe(true);
   });
@@ -140,7 +143,7 @@ describe('canvas nodes', () => {
     expect(await api.listNodes()).toMatchObject({ ok: false, error: { code: 'NOT_CONNECTED' } });
     expect(await api.moveNodes([{ questId: 1, x: 0, y: 0 }])).toMatchObject({ ok: false, error: { code: 'NOT_CONNECTED' } });
   });
-  it('places a new draft at the requested position, else at the next free slot, and never moves an existing one', async () => {
+  it('places a new quest at the requested position, else at the next free slot, and never moves an existing one', async () => {
     db.insert('quest_template', { ID: '60002', LogTitle: 'Second' });
     const { api } = await connected();
     ok(await api.openQuest(60001, { x: 500, y: 250 }));
@@ -156,7 +159,7 @@ describe('canvas nodes', () => {
   it('lists nodes with title, level, badges and issue counts', async () => {
     const { api } = await connected();
     const r = ok(await api.openQuest(60001));
-    ok(await api.saveDraft({ ...r.aggregate, values: { ...r.aggregate.values, 'quest_template.QuestLevel': 12, creature_questender: [] } }));
+    ok(await api.updateQuest({ ...r.aggregate, values: { ...r.aggregate.values, 'quest_template.QuestLevel': 12, creature_questender: [] } }));
     ok(await api.exportQuest(60001));
     const [node] = ok(await api.listNodes());
     expect(node).toMatchObject({ questId: 60001, title: 'Wolves', level: 12, isNew: false, exported: true, unsafe: false });
@@ -171,7 +174,7 @@ describe('canvas nodes', () => {
     ok(await api.moveNodes([{ questId: 60001, x: 40.5, y: -20 }, { questId: 12345, x: 1, y: 1 }]));
     expect(ok(await api.listNodes())[0]).toMatchObject({ x: 40.5, y: -20 });
     ok(await api.saveViewport({ x: -10, y: 5, zoom: 0.5 }));
-    expect(ok(await api.getProject()).viewport).toEqual({ x: -10, y: 5, zoom: 0.5 });
+    expect(ok(await api.projectState()).viewport).toEqual({ x: -10, y: 5, zoom: 0.5 });
     ok(await api.removeNode(60001));
     ok(await api.removeNode(60001));
     expect(ok(await api.listNodes())).toEqual([]);
@@ -213,24 +216,24 @@ describe('addQuestChain', () => {
   });
 });
 
-describe('open / draft', () => {
+describe('open', () => {
   it('rejects bad ids and unknown quests', async () => {
     const { api } = await connected();
     for (const bad of [0, -1, 1.5, Number.NaN]) expect(await api.openQuest(bad)).toMatchObject({ ok: false, error: { code: 'INVALID_QUEST_ID' } });
     expect(await api.openQuest(424242)).toMatchObject({ ok: false, error: { code: 'QUEST_NOT_FOUND' } });
   });
-  it('opens a quest with fidelity ok and creates a draft', async () => {
+  it('opens a quest with fidelity ok and adds it to the project', async () => {
     const { api } = await connected();
     const r = ok(await api.openQuest(60001));
     expect(r.fidelity).toEqual({ ok: true });
     expect(r.aggregate.values['quest_template.LogTitle']).toBe('Wolves');
-    expect(r.hasDraft).toBe(false);
-    expect(ok(await api.openQuest(60001)).hasDraft).toBe(true);
+    expect(r.inProject).toBe(false);
+    expect(ok(await api.openQuest(60001)).inProject).toBe(true);
   });
-  it('returns the saved draft edits and flags a stale draft when the DB changed underneath', async () => {
+  it('returns the edits kept in the project and flags them stale when the DB changed underneath', async () => {
     const { api } = await connected();
     const r = ok(await api.openQuest(60001));
-    ok(await api.saveDraft({ ...r.aggregate, values: { ...r.aggregate.values, 'quest_template.LogTitle': 'Edited' } }));
+    ok(await api.updateQuest({ ...r.aggregate, values: { ...r.aggregate.values, 'quest_template.LogTitle': 'Edited' } }));
     let again = ok(await api.openQuest(60001));
     expect(again.aggregate.values['quest_template.LogTitle']).toBe('Edited');
     expect(again.stale).toBe(false);
@@ -252,7 +255,7 @@ describe('linked rows another quest owns', () => {
     const { api } = await connected();
     const r = ok(await api.openQuest(60001));
     // Exactly what the drops UI produces: slot 0, because it cannot see the row that is there.
-    ok(await api.saveDraft(edited(r, {
+    ok(await api.updateQuest(edited(r, {
       creature_loot_template: [{ Entry: 500, Item: 2000, Reference: 0, Chance: 100, QuestRequired: 1, LootMode: 1, GroupId: 0, MinCount: 1, MaxCount: 1, Comment: null }],
       creature_questitem: [{ CreatureEntry: 500, Idx: 0, ItemId: 2000, VerifiedBuild: 0 }],
     })));
@@ -273,7 +276,7 @@ describe('linked rows another quest owns', () => {
     db.insert('creature_loot_template', { Entry: '600', Item: '2000', Chance: '4', QuestRequired: '0', Comment: 'normal drop' });
     const { api } = await connected();
     const r = ok(await api.openQuest(60001));
-    ok(await api.saveDraft(edited(r, {
+    ok(await api.updateQuest(edited(r, {
       creature_loot_template: [{ Entry: 600, Item: 2000, Reference: 0, Chance: 100, QuestRequired: 1, LootMode: 1, GroupId: 0, MinCount: 1, MaxCount: 1, Comment: null }],
     })));
     const e = ok(await api.exportQuest(60001));
@@ -295,7 +298,7 @@ describe('locale rows', () => {
     expect(r.importedText['quest_offer_reward.RewardText']).toBe('Well done.');
     // Numeric and non-translatable fields stay out of it.
     expect(r.importedText['quest_template.QuestLevel']).toBeUndefined();
-    // Reopening onto the existing draft answers from the fresh rows, not the draft.
+    // Reopening a quest already in the project answers from the fresh rows, not the edit.
     expect(ok(await api.openQuest(60001)).locales).toEqual(['deDE', 'frFR']);
   });
   it('reports no locales for a quest that has none, and none for a brand new quest', async () => {
@@ -314,28 +317,28 @@ describe('search and names', () => {
 });
 
 describe('new quest', () => {
-  it('allocates the next free id in the project range and reserves it via a draft', async () => {
+  it('allocates the next free id in the project range and reserves it in the project', async () => {
     const { api } = await connected();
     const a = ok(await api.newQuest()); const b = ok(await api.newQuest());
     expect(a.questId).toBe(60000);
     expect(a.aggregate.isNew).toBe(true);
-    // 60000 is reserved by the first draft and 60001 already exists in the world DB, so the
+    // 60000 is reserved by the first new quest and 60001 already exists in the world DB, so the
     // next free id in the range is 60002: ids are checked against both at assignment.
     expect(b.questId).toBe(60002);
   });
   it('reports a full range', async () => {
-    const { api } = await connected();
-    ok(await api.updateProject({ ...ok(await api.getProject()), idRangeStart: 60000, idRangeEnd: 60000 }));
+    const session = createProjectSession({ ...defaultProjectMeta('Untitled Project', 'C:\\out'), idRangeStart: 60000, idRangeEnd: 60000 });
+    const { api } = await connected({ session });
     ok(await api.newQuest());
     expect(await api.newQuest()).toMatchObject({ ok: false, error: { code: 'RANGE_EXHAUSTED' } });
   });
   // A brand-new quest has no row in the world DB yet, so reopening it (e.g. after closing the
   // editor) must not go through the importer, which would fail with QUEST_NOT_FOUND.
-  it('reopens a never-exported quest from its draft, without importing it', async () => {
+  it('reopens a never-exported quest from the project, without importing it', async () => {
     const { api } = await connected();
     const created = ok(await api.newQuest());
     const reopened = ok(await api.openQuest(created.questId));
-    expect(reopened).toMatchObject({ questId: created.questId, hasDraft: true, stale: false, locales: [] });
+    expect(reopened).toMatchObject({ questId: created.questId, inProject: true, stale: false, locales: [] });
     expect(reopened.aggregate).toEqual(created.aggregate);
   });
 });
@@ -346,7 +349,7 @@ describe('preview, validate, export', () => {
   it('previews only the cells the user changed', async () => {
     const { api } = await connected();
     const r = ok(await api.openQuest(60001));
-    ok(await api.saveDraft(edited(r, { 'quest_template.LogTitle': 'Edited' })));
+    ok(await api.updateQuest(edited(r, { 'quest_template.LogTitle': 'Edited' })));
     expect(ok(await api.previewChanges(60001))).toEqual([{ table: 'quest_template', key: 'ID=60001', column: 'LogTitle', before: 'Wolves', after: 'Edited' }]);
   });
 
@@ -364,7 +367,7 @@ describe('preview, validate, export', () => {
   it('blocks export on validation errors and returns the issues', async () => {
     const { api } = await connected();
     const r = ok(await api.openQuest(60001));
-    ok(await api.saveDraft(edited(r, { 'quest_template.LogTitle': '' })));
+    ok(await api.updateQuest(edited(r, { 'quest_template.LogTitle': '' })));
     const e = await api.exportQuest(60001);
     expect(e).toMatchObject({ ok: false, error: { code: 'VALIDATION' } });
     expect((e as any).error.issues.map((i: any) => i.code)).toContain('NO_TITLE');
@@ -372,11 +375,10 @@ describe('preview, validate, export', () => {
   });
 
   it('blocks export when the quest failed the fidelity gate on open', async () => {
-    const { api, store } = await connected();
+    const { api, session } = await connected();
     ok(await api.openQuest(60001));
-    const project = store.projects.ensureDefault('C:\\out');
-    const d = store.drafts.get(project.id, 60001)!;
-    store.drafts.save({ projectId: project.id, questId: 60001, isNew: false, aggregate: d.aggregate, snapshot: d.snapshot,
+    const d = session.quests.get(60001)!;
+    session.quests.put({ ...d,
       fidelity: { ok: false, differences: [{ table: 'quest_template', key: 'ID=60001', column: 'LogTitle', before: 'a', after: 'b' }] } });
     expect(await api.exportQuest(60001)).toMatchObject({ ok: false, error: { code: 'FIDELITY' } });
   });
@@ -384,7 +386,7 @@ describe('preview, validate, export', () => {
   it('blocks a new quest whose id was taken in the world DB after assignment', async () => {
     const { api } = await connected();
     const n = ok(await api.newQuest());
-    ok(await api.saveDraft({ ...n.aggregate, values: { ...n.aggregate.values, 'quest_template.LogTitle': 'Fresh', creature_queststarter: [{ id: 100 }], creature_questender: [{ id: 100 }] } }));
+    ok(await api.updateQuest({ ...n.aggregate, values: { ...n.aggregate.values, 'quest_template.LogTitle': 'Fresh', creature_queststarter: [{ id: 100 }], creature_questender: [{ id: 100 }] } }));
     db.insert('quest_template', { ID: String(n.questId) });
     expect(await api.exportQuest(n.questId)).toMatchObject({ ok: false, error: { code: 'ID_COLLISION' } });
   });
@@ -411,29 +413,28 @@ describe('apply to dev DB', () => {
 });
 
 describe('fidelity report freshness', () => {
-  it('re-stores the freshly computed report on the draft, so the export gate and the UI agree', async () => {
-    const { api, store } = await connected();
+  it('re-stores the freshly computed report on the quest, so the export gate and the UI agree', async () => {
+    const { api, session } = await connected();
     ok(await api.openQuest(60001));
-    const project = store.projects.ensureDefault('C:\\out');
-    expect(store.drafts.get(project.id, 60001)!.fidelity).toEqual({ ok: true });
+    expect(session.quests.get(60001)!.fidelity).toEqual({ ok: true });
 
-    // The world moves under the draft: the next open recomputes the gate from fresh rows.
+    // The world moves under the edit: the next open recomputes the gate from fresh rows.
     gate.throwWith = new Error('patch failed to apply');
     const again = ok(await api.openQuest(60001));
-    expect(again.hasDraft).toBe(true);
+    expect(again.inProject).toBe(true);
     expect(again.fidelity.ok).toBe(false);
-    expect(store.drafts.get(project.id, 60001)!.fidelity).toEqual(again.fidelity);
-    // The gate reads the draft, so it must refuse now that the UI says unsafe.
+    expect(session.quests.get(60001)!.fidelity).toEqual(again.fidelity);
+    // The gate reads the project's copy, so it must refuse now that the UI says unsafe.
     expect(await api.exportQuest(60001)).toMatchObject({ ok: false, error: { code: 'FIDELITY' } });
   });
 
-  it('keeps the draft aggregate, snapshot and position untouched while refreshing the report', async () => {
-    const { api, store } = await connected();
+  it('keeps the quest aggregate, snapshot and position untouched while refreshing the report', async () => {
+    const { api, session } = await connected();
     const r = ok(await api.openQuest(60001, { x: 77, y: 88 }));
-    ok(await api.saveDraft({ ...r.aggregate, values: { ...r.aggregate.values, 'quest_template.LogTitle': 'Edited' } }));
+    ok(await api.updateQuest({ ...r.aggregate, values: { ...r.aggregate.values, 'quest_template.LogTitle': 'Edited' } }));
     gate.throwWith = new Error('patch failed to apply');
     ok(await api.openQuest(60001));
-    const d = store.drafts.get(store.projects.ensureDefault('C:\\out').id, 60001)!;
+    const d = session.quests.get(60001)!;
     expect(d.aggregate.values['quest_template.LogTitle']).toBe('Edited');
     expect([d.x, d.y]).toEqual([77, 88]);
     expect(d.snapshot).not.toBeNull();
@@ -442,12 +443,12 @@ describe('fidelity report freshness', () => {
 
 describe('round-trip gate throws', () => {
   it('opens the quest as unsafe, stores that fidelity and refuses export', async () => {
-    const { api, store } = await connected();
+    const { api, session } = await connected();
     gate.throwWith = new Error('patch failed to apply');
     const expected = { ok: false, differences: [{ table: '(patch)', key: 'patch failed to apply', column: null, before: undefined, after: undefined }] };
     const r = ok(await api.openQuest(60001));
     expect(r.fidelity).toEqual(expected);
-    const d = store.drafts.get(store.projects.ensureDefault('C:\out').id, 60001)!;
+    const d = session.quests.get(60001)!;
     expect(d.fidelity).toEqual(expected);
     expect(await api.exportQuest(60001)).toMatchObject({ ok: false, error: { code: 'FIDELITY' } });
   });
@@ -506,13 +507,13 @@ describe('links', () => {
     expect(second.starts).toEqual(['backend']);
     expect(nodes.every((n) => !n.notConnected)).toBe(true);
   });
-  it('follows the draft, not the world, once the link is cleared in the editor', async () => {
+  it('follows the edit, not the world, once the link is cleared in the editor', async () => {
     db.insert('quest_template', { ID: '60002', LogTitle: 'More wolves' });
     db.insert('quest_template_addon', { ID: '60002', PrevQuestID: '60001' });
     const { api } = await connected();
     ok(await api.addQuestChain(60001));
     const open = ok(await api.openQuest(60002));
-    ok(await api.saveDraft({ ...open.aggregate, values: { ...open.aggregate.values, 'quest_template_addon.PrevQuestID': 0 } }));
+    ok(await api.updateQuest({ ...open.aggregate, values: { ...open.aggregate.values, 'quest_template_addon.PrevQuestID': 0 } }));
     const nodes = ok(await api.listNodes());
     expect(nodes.find((n) => n.questId === 60001)!.links).toEqual([]);
     expect(nodes.filter((n) => n.notConnected).map((n) => n.questId).sort()).toEqual([60001, 60002]);
@@ -573,5 +574,40 @@ describe('links', () => {
       questId: 60001, key: 'entryorguid=60001,source_type=5,id=0,link=0',
       summary: 'when a quest objective is completed: SmartAI action 12 (Wolves (60001), row 0)',
     }]);
+  });
+});
+
+describe('project session', () => {
+  it('keeps opened quests in the open project', async () => {
+    const { api, session } = await connected();
+    ok(await api.openQuest(60001));
+    expect(session.quests.list().map((q) => q.questId)).toEqual([60001]);
+    expect(session.dirty()).toBe(true);
+  });
+  it('counts edits, moves, exports and removals as unsaved changes, but not the viewport or a reopen', async () => {
+    const { api, session } = await connected();
+    const r = ok(await api.openQuest(60001));
+    session.markSaved('C:\\p.aqc');
+    ok(await api.openQuest(60001));
+    ok(await api.saveViewport({ x: 1, y: 2, zoom: 1 }));
+    expect(session.dirty()).toBe(false);
+    ok(await api.updateQuest({ ...r.aggregate, values: { ...r.aggregate.values, 'quest_template.LogTitle': 'Edited' } }));
+    expect(session.dirty()).toBe(true);
+    const steps: (() => Promise<{ ok: boolean; value?: unknown; error?: any }>)[] = [
+      () => api.moveNodes([{ questId: 60001, x: 5, y: 5 }]), () => api.exportQuest(60001), () => api.removeNode(60001),
+    ];
+    for (const step of steps) {
+      session.markSaved('C:\\p.aqc');
+      ok(await step());
+      expect(session.dirty()).toBe(true);
+    }
+  });
+  it('reports the project state', async () => {
+    const { api, session } = await connected();
+    expect(ok(await api.projectState())).toEqual({
+      name: 'Untitled Project', filePath: null, dirty: false, idRangeStart: 60000, idRangeEnd: 99999, outputDir: 'C:\\out', viewport: { x: 0, y: 0, zoom: 1 },
+    });
+    session.rename('Northshire');
+    expect(ok(await api.projectState())).toMatchObject({ name: 'Northshire', dirty: true });
   });
 });

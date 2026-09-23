@@ -64,12 +64,12 @@ describe('CanvasHome error reporting', () => {
   });
 
   it('shows a failed draft save while the editor drawer is open', async () => {
-    const { store } = await canvas({ saveDraft: async () => errv('UNKNOWN', 'Could not write the draft.') });
+    const { store } = await canvas({ updateQuest: async () => errv('UNKNOWN', 'Could not keep the edit.') });
     await store.getState().openQuest(60001);
     expect(await screen.findByRole('complementary', { name: 'Quest editor' })).toBeInTheDocument();
     store.getState().setValue('quest_template.LogTitle', 'Edited');
     await store.getState().flushSave();
-    expect(await screen.findByRole('alert')).toHaveTextContent('Could not write the draft.');
+    expect(await screen.findByRole('alert')).toHaveTextContent('Could not keep the edit.');
   });
 
   it('reports a failed drag/viewport flush instead of dropping it', async () => {

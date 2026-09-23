@@ -5,11 +5,21 @@ import { drizzle } from 'drizzle-orm/better-sqlite3';
 import { migrate } from 'drizzle-orm/better-sqlite3/migrator';
 import type { QuestAggregate, Snapshot } from '../../core/model/aggregate';
 import type { FidelityReport } from '../../core/roundtrip/verify';
-import type { Project, ProfileInput, ProfileRecord, ProfileSave, Viewport } from '../../shared/ipc';
+import type { ProfileInput, ProfileRecord, ProfileSave, Viewport } from '../../shared/ipc';
+
+/** The single implicit project the store kept before project files; removed with the drafts table. */
+export interface Project {
+  id: number;
+  name: string;
+  idRangeStart: number;
+  idRangeEnd: number;
+  outputDir: string;
+  viewport: Viewport;
+}
 import { connectionProfiles, drafts, projects } from './schema';
 
 // The records the renderer sees are the IPC types; the store is where they are kept.
-export type { Project, ProfileInput, ProfileRecord, ProfileSave, Viewport };
+export type { ProfileInput, ProfileRecord, ProfileSave, Viewport };
 
 export interface SecretBox {
   encrypt(plain: string): Uint8Array;

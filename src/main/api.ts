@@ -42,12 +42,14 @@ import type {
   NodePosition,
   OpenResult,
   ProfileInput,
-  Project,
+  ProjectState,
   QuestLinks,
   Result,
   StartBadge,
 } from '../shared/ipc';
-import type { DraftRecord, Store } from './store/store';
+import type { Store } from './store/store';
+import type { ProjectQuest } from './project/project-file';
+import type { ProjectSession } from './project/session';
 
 export type { DevDb };
 
@@ -61,7 +63,8 @@ export interface ApiDeps {
     listDir(path: string): Promise<string[]>;
   };
   now(): Date;
-  defaultOutputDir: string;
+  /** The open project: every quest on the canvas lives here until the user saves it to a file. */
+  session: ProjectSession;
   /** A profile to connect to on launch (seeded from `.env` in development). */
   startupProfileId?: number | null;
 }
@@ -220,8 +223,6 @@ function nameTarget(endpoint: Endpoint): [NameKind, number] | undefined {
 export function createApi(deps: ApiDeps): Api {
   let session: Session | null = null;
 
-  const project = (): Project => deps.store.projects.ensureDefault(deps.defaultOutputDir);
-
   const connected = (): Session => {
     if (!session) throw fail('NOT_CONNECTED', 'Connect to a world database first.');
     return session;
@@ -245,21 +246,23 @@ export function createApi(deps: ApiDeps): Api {
     );
   };
 
-  const draftOf = (questId: number): DraftRecord => {
-    const draft = deps.store.drafts.get(project().id, questId);
-    if (!draft) throw fail('QUEST_NOT_FOUND', `Quest ${questId} is not open in this project.`);
-    return draft;
+  const quests = deps.session.quests;
+
+  const questOf = (questId: number): ProjectQuest => {
+    const quest = quests.get(questId);
+    if (!quest) throw fail('QUEST_NOT_FOUND', `Quest ${questId} is not in this project.`);
+    return quest;
   };
 
-  const placeAt = (projectId: number, position?: NodePosition): NodePosition =>
-    position ?? nextNodePosition(deps.store.drafts.list(projectId).map((d) => ({ x: d.x, y: d.y })));
+  const placeAt = (position?: NodePosition): NodePosition =>
+    position ?? nextNodePosition(quests.list().map((q) => ({ x: q.x, y: q.y })));
 
-  /** Every draft in the project: links are read from the user's edits, not the world, wherever one exists. */
-  const draftAggregates = (): Map<number, QuestAggregate> =>
-    new Map(deps.store.drafts.list(project().id).map((d) => [d.questId, d.aggregate]));
+  /** Every quest in the project: links are read from the user's edits, not the world, wherever one exists. */
+  const projectAggregates = (): Map<number, QuestAggregate> =>
+    new Map(quests.list().map((q) => [q.questId, q.aggregate]));
 
   const linksFor = (live: Session, scope: readonly number[]): Promise<LinkSnapshot> =>
-    loadLinks(live.db, scope, draftAggregates(), live.availability.available, live.itemStarters);
+    loadLinks(live.db, scope, projectAggregates(), live.availability.available, live.itemStarters);
 
   /**
    * A quest's own validation plus what its links say about it. Only for display: the export gate
@@ -270,23 +273,22 @@ export function createApi(deps: ApiDeps): Api {
     return [...own, ...linkIssues(questId, await linksFor(live, [questId]))];
   }
 
-  /** Opens one quest: its draft if the project has one, otherwise a fresh import placed on the canvas. */
+  /** Opens one quest: the project's copy if it has one, otherwise a fresh import placed on the canvas. */
   async function openOne(questId: number, position?: NodePosition): Promise<OpenResult> {
     const live = usable();
     const refs = refCheckerFor(live.db);
-    const proj = project();
-    const draft = deps.store.drafts.get(proj.id, questId);
+    const quest = quests.get(questId);
 
     // A brand-new quest (never exported) has no row in the live database to import or diff
-    // against — asking the importer for it would fail outright, so the draft alone is opened.
-    if (draft?.isNew) {
+    // against — asking the importer for it would fail outright, so the project's copy alone is opened.
+    if (quest?.isNew) {
       return {
         questId,
-        aggregate: draft.aggregate,
-        fidelity: draft.fidelity ?? { ok: true },
+        aggregate: quest.aggregate,
+        fidelity: quest.fidelity ?? { ok: true },
         unmodelled: [],
-        issues: await issuesOf(live, questId, draft.aggregate, refs),
-        hasDraft: true,
+        issues: await issuesOf(live, questId, quest.aggregate, refs),
+        inProject: true,
         stale: false,
         locales: [],
         importedText: {},
@@ -297,42 +299,35 @@ export function createApi(deps: ApiDeps): Api {
     const fresh = await importQuest(live.db, live.schema, registry, questId);
     const fidelity = roundTripOf(fresh, live.schema);
     const unmodelled = listUnmodelled(live.schema, registry, fresh.snapshot);
-    // Both branches report the translations against the rows just read, never against a draft.
+    // Both branches report the translations against the rows just read, never against the edit.
     const locales = localesInSnapshot(fresh.snapshot);
     const importedText = localizedTextValues(fresh.aggregate, registry);
 
-    if (draft) {
-      // The draft is the user's work: it is returned as it stands, wherever it sits, and only
+    if (quest) {
+      // The project's copy is the user's work: it is returned as it stands, wherever it sits, and only
       // the comparison against the freshly read rows says whether the world moved underneath.
-      const stale = compareTables(draft.snapshot?.tables ?? {}, fresh.snapshot.tables, KEY_COLUMNS).length > 0;
-      // The export gate reads `draft.fidelity`, so the report the UI is about to show has to
+      const stale = compareTables(quest.snapshot?.tables ?? {}, fresh.snapshot.tables, KEY_COLUMNS).length > 0;
+      // The export gate reads `quest.fidelity`, so the report the UI is about to show has to
       // become the stored one: otherwise the button and the gate answer different questions.
-      if (JSON.stringify(draft.fidelity) !== JSON.stringify(fidelity)) {
-        deps.store.drafts.save({
-          projectId: draft.projectId,
-          questId: draft.questId,
-          isNew: draft.isNew,
-          aggregate: draft.aggregate,
-          snapshot: draft.snapshot,
-          fidelity,
-        });
+      if (JSON.stringify(quest.fidelity) !== JSON.stringify(fidelity)) {
+        // Not an edit: the user changed nothing, so the project is not marked unsaved.
+        quests.put({ ...quest, fidelity }, { quiet: true });
       }
       return {
         questId,
-        aggregate: draft.aggregate,
+        aggregate: quest.aggregate,
         fidelity,
         unmodelled,
-        issues: await issuesOf(live, questId, draft.aggregate, refs),
-        hasDraft: true,
+        issues: await issuesOf(live, questId, quest.aggregate, refs),
+        inProject: true,
         stale,
         locales,
         importedText,
       };
     }
 
-    const at = placeAt(proj.id, position);
-    deps.store.drafts.save({
-      projectId: proj.id,
+    const at = placeAt(position);
+    quests.put({
       questId,
       isNew: false,
       aggregate: fresh.aggregate,
@@ -340,6 +335,7 @@ export function createApi(deps: ApiDeps): Api {
       fidelity,
       x: at.x,
       y: at.y,
+      lastExportPath: null,
     });
     return {
       questId,
@@ -347,7 +343,7 @@ export function createApi(deps: ApiDeps): Api {
       fidelity,
       unmodelled,
       issues: await issuesOf(live, questId, fresh.aggregate, refs),
-      hasDraft: false,
+      inProject: false,
       stale: false,
       locales,
       importedText,
@@ -355,40 +351,40 @@ export function createApi(deps: ApiDeps): Api {
   }
 
   /** The three gates every write passes: lossless import, no validation errors, and a free ID. */
-  async function guardWrite(db: WorldDb, draft: DraftRecord): Promise<Issue[]> {
-    if (draft.fidelity !== null && !draft.fidelity.ok) {
+  async function guardWrite(db: WorldDb, quest: ProjectQuest): Promise<Issue[]> {
+    if (quest.fidelity !== null && !quest.fidelity.ok) {
       throw fail(
         'FIDELITY',
-        `Quest ${draft.questId} did not survive the round-trip check, so exporting it could change data the editor never showed.`,
-        { differences: draft.fidelity.differences },
+        `Quest ${quest.questId} did not survive the round-trip check, so exporting it could change data the editor never showed.`,
+        { differences: quest.fidelity.differences },
       );
     }
-    const issues = await validateQuest(draft.aggregate, refCheckerFor(db));
+    const issues = await validateQuest(quest.aggregate, refCheckerFor(db));
     if (issues.some((i) => i.severity === 'error')) {
       throw fail('VALIDATION', 'Fix the errors on this quest before exporting it.', { issues });
     }
-    if (draft.isNew) await assertIdFree(db, draft.questId);
+    if (quest.isNew) await assertIdFree(db, quest.questId);
     return issues;
   }
 
   async function patchFor(
     live: Session,
-    draft: DraftRecord,
+    quest: ProjectQuest,
   ): Promise<{ statements: PatchStatement[]; warnings: PatchWarning[]; fixes: QuestGiverFix[] }> {
-    const fixes = await findQuestGiverFixes(live.db, draft.aggregate.values);
+    const fixes = await findQuestGiverFixes(live.db, quest.aggregate.values);
     // Read the neighbouring linked rows now rather than trusting the ones the import saw: the
-    // draft may name a creature the quest had nothing to do with when it was opened, and those
+    // edit may name a creature the quest had nothing to do with when it was opened, and those
     // are exactly the rows a new drop source would otherwise be allocated on top of.
     const linkedContext = await fetchLinkedContext({
       db: live.db,
       registry,
       schema: live.schema,
-      tables: draft.snapshot?.tables ?? {},
-      values: draft.aggregate.values,
+      tables: quest.snapshot?.tables ?? {},
+      values: quest.aggregate.values,
     });
     const { statements, warnings } = buildPatch({
-      aggregate: draft.aggregate,
-      snapshot: draft.snapshot,
+      aggregate: quest.aggregate,
+      snapshot: quest.snapshot,
       schema: live.schema,
       registry,
       questGiverFixes: fixes.map((f) => f.entry),
@@ -450,17 +446,16 @@ export function createApi(deps: ApiDeps): Api {
     addQuestChain: (questId, position) =>
       run(async () => {
         const live = usable();
-        const proj = project();
         const chain = await findQuestChain(live.db, questId, MAX_CHAIN_QUESTS, undefined, live.itemStarters);
         const slots = layoutChain(chain.questIds, chain.links);
         const rootSlot = slots.get(questId) ?? { column: 0, row: 0 };
 
         // The picked quest lands where it was asked for; with no position, the chain starts in
         // the first column below everything already on the canvas, so it never lands on top of it.
-        const drafts = deps.store.drafts.list(proj.id);
+        const onCanvas = quests.list();
         const origin = position
           ? { x: position.x - rootSlot.column * NODE_GRID.x, y: position.y - rootSlot.row * NODE_GRID.y }
-          : { x: 0, y: drafts.length === 0 ? 0 : Math.max(...drafts.map((d) => d.y)) + NODE_GRID.y };
+          : { x: 0, y: onCanvas.length === 0 ? 0 : Math.max(...onCanvas.map((q) => q.y)) + NODE_GRID.y };
         const at = (id: number): NodePosition => {
           const slot = slots.get(id) ?? rootSlot;
           return { x: origin.x + slot.column * NODE_GRID.x, y: origin.y + slot.row * NODE_GRID.y };
@@ -469,11 +464,10 @@ export function createApi(deps: ApiDeps): Api {
         // The picked quest first: if it cannot be opened, nothing else is added either.
         const open = await openOne(questId, at(questId));
         for (const id of chain.questIds) {
-          if (id === questId || deps.store.drafts.get(proj.id, id)) continue;
+          if (id === questId || quests.get(id)) continue;
           const fresh = await importQuest(live.db, live.schema, registry, id);
           const place = at(id);
-          deps.store.drafts.save({
-            projectId: proj.id,
+          quests.put({
             questId: id,
             isNew: false,
             aggregate: fresh.aggregate,
@@ -481,6 +475,7 @@ export function createApi(deps: ApiDeps): Api {
             fidelity: roundTripOf(fresh, live.schema),
             x: place.x,
             y: place.y,
+            lastExportPath: null,
           });
         }
         return { open, questIds: chain.questIds, truncated: chain.truncated };
@@ -489,17 +484,16 @@ export function createApi(deps: ApiDeps): Api {
     newQuest: (position) =>
       run(async () => {
         const live = usable();
-        const proj = project();
-        const range = { start: proj.idRangeStart, end: proj.idRangeEnd };
-        const taken = await collectTakenIds(live.db, range, deps.store.drafts.usedQuestIds(proj.id));
+        const meta = deps.session.meta();
+        const range = { start: meta.idRangeStart, end: meta.idRangeEnd };
+        const taken = await collectTakenIds(live.db, range, quests.usedQuestIds());
         const questId = allocateQuestId(range, taken);
         const aggregate = createNewAggregate(live.schema, registry, questId);
         const fidelity: FidelityReport = { ok: true };
 
-        const at = placeAt(proj.id, position);
-        // Saving the draft straight away is what reserves the ID against the next allocation.
-        deps.store.drafts.save({
-          projectId: proj.id,
+        const at = placeAt(position);
+        // Adding it to the project straight away is what reserves the ID against the next allocation.
+        quests.put({
           questId,
           isNew: true,
           aggregate,
@@ -507,6 +501,7 @@ export function createApi(deps: ApiDeps): Api {
           fidelity,
           x: at.x,
           y: at.y,
+          lastExportPath: null,
         });
         return {
           questId,
@@ -514,7 +509,7 @@ export function createApi(deps: ApiDeps): Api {
           fidelity,
           unmodelled: [],
           issues: await issuesOf(live, questId, aggregate, refCheckerFor(live.db)),
-          hasDraft: false,
+          inProject: false,
           stale: false,
           // A quest that does not exist yet has no translations to leave behind.
           locales: [],
@@ -527,14 +522,14 @@ export function createApi(deps: ApiDeps): Api {
         const live = connected();
         // One checker for the whole canvas: the same NPC or item is asked about once, not per node.
         const refs = refCheckerFor(live.db);
-        const drafts = deps.store.drafts.list(project().id);
-        const canvasIds = drafts.map((d) => d.questId);
+        const projectQuests = quests.list();
+        const canvasIds = projectQuests.map((d) => d.questId);
         const onCanvas = new Set(canvasIds);
         // One link snapshot for the whole canvas, so the context is read once rather than per node.
         const snapshot = await loadLinks(
           live.db,
           canvasIds,
-          new Map(drafts.map((d) => [d.questId, d.aggregate])),
+          new Map(projectQuests.map((d) => [d.questId, d.aggregate])),
           live.availability.available,
           live.itemStarters,
         );
@@ -553,9 +548,9 @@ export function createApi(deps: ApiDeps): Api {
         const existing = offCanvas.size > 0 ? await live.db.existingIds('quest', [...offCanvas]) : new Set<number>();
 
         const nodes: CanvasNode[] = [];
-        for (const draft of drafts) {
-          const questId = draft.questId;
-          const issues = [...(await validateQuest(draft.aggregate, refs)), ...linkIssues(questId, snapshot)];
+        for (const quest of projectQuests) {
+          const questId = quest.questId;
+          const issues = [...(await validateQuest(quest.aggregate, refs)), ...linkIssues(questId, snapshot)];
           const notConnected = disconnected.has(questId);
 
           const links = new Map<string, NodeLink>();
@@ -587,15 +582,15 @@ export function createApi(deps: ApiDeps): Api {
 
           nodes.push({
             questId,
-            title: textOf(draft.aggregate, TITLE_FIELD),
-            level: numberOf(draft.aggregate, LEVEL_FIELD),
-            isNew: draft.isNew,
-            exported: draft.lastExportPath !== null,
-            unsafe: draft.fidelity !== null && !draft.fidelity.ok,
+            title: textOf(quest.aggregate, TITLE_FIELD),
+            level: numberOf(quest.aggregate, LEVEL_FIELD),
+            isNew: quest.isNew,
+            exported: quest.lastExportPath !== null,
+            unsafe: quest.fidelity !== null && !quest.fidelity.ok,
             errors: issues.filter((i) => i.severity === 'error').length,
             warnings: issues.filter((i) => i.severity === 'warning').length + (notConnected ? 1 : 0),
-            x: draft.x,
-            y: draft.y,
+            x: quest.x,
+            y: quest.y,
             links: [...links.values()].sort((a, b) => a.to - b.to || a.component.localeCompare(b.component, 'en')),
             starts: START_BADGES.filter(([component]) => startedBy.has(component)).map(([, badge]) => badge),
             groups,
@@ -609,7 +604,7 @@ export function createApi(deps: ApiDeps): Api {
     moveNodes: (moves) =>
       run(async () => {
         connected();
-        deps.store.drafts.setPositions(project().id, moves);
+        quests.setPositions(moves);
         return true as const;
       }),
 
@@ -617,14 +612,14 @@ export function createApi(deps: ApiDeps): Api {
       run(async () => {
         connected();
         // Removing a node the user already removed is not an error; the canvas ends up the same.
-        deps.store.drafts.remove(project().id, questId);
+        quests.remove(questId);
         return true as const;
       }),
 
     saveViewport: (viewport) =>
       run(async () => {
         connected();
-        deps.store.projects.update({ ...project(), viewport });
+        deps.session.setViewport(viewport);
         return true as const;
       }),
 
@@ -699,28 +694,20 @@ export function createApi(deps: ApiDeps): Api {
         return { xp, money };
       }),
 
-    saveDraft: (aggregate) =>
+    updateQuest: (aggregate) =>
       run(async () => {
         connected();
-        const draft = draftOf(aggregate.questId);
         // The snapshot and the fidelity report belong to the import, not to the edit.
-        const saved = deps.store.drafts.save({
-          projectId: draft.projectId,
-          questId: draft.questId,
-          isNew: draft.isNew,
-          aggregate,
-          snapshot: draft.snapshot,
-          fidelity: draft.fidelity,
-        });
-        return { updatedAt: saved.updatedAt };
+        quests.put({ ...questOf(aggregate.questId), aggregate });
+        return true as const;
       }),
 
     previewChanges: (questId) =>
       run(async () => {
         const live = connected();
-        const draft = draftOf(questId);
-        const { statements, fixes } = await patchFor(live, draft);
-        const before = draft.snapshot?.tables ?? {};
+        const quest = questOf(questId);
+        const { statements, fixes } = await patchFor(live, quest);
+        const before = quest.snapshot?.tables ?? {};
         const after = applyPatchInMemory(before, statements, KEY_COLUMNS);
         const differences = compareTables(before, after, KEY_COLUMNS);
         // `creature_template` is not part of the snapshot, so the flag updates are named here.
@@ -739,31 +726,31 @@ export function createApi(deps: ApiDeps): Api {
     validate: (questId) =>
       run(async () => {
         const live = connected();
-        return issuesOf(live, questId, draftOf(questId).aggregate, refCheckerFor(live.db));
+        return issuesOf(live, questId, questOf(questId).aggregate, refCheckerFor(live.db));
       }),
 
     exportQuest: (questId) =>
       run(async () => {
         const live = usable();
-        const draft = draftOf(questId);
-        const issues = await guardWrite(live.db, draft);
-        const { statements, warnings } = await patchFor(live, draft);
+        const quest = questOf(questId);
+        const issues = await guardWrite(live.db, quest);
+        const { statements, warnings } = await patchFor(live, quest);
 
         const date = patchDate(deps.now());
         const sql = renderPatch(statements, live.schema, { toolVersion: TOOL_VERSION, questId, date });
 
-        const proj = project();
-        await deps.fs.ensureDir(proj.outputDir);
+        const { outputDir } = deps.session.meta();
+        await deps.fs.ensureDir(outputDir);
         // Several exports of one quest on one day sit side by side, numbered in the order written.
         const marker = `_quest_${questId}_`;
-        const existing = await deps.fs.listDir(proj.outputDir);
+        const existing = await deps.fs.listDir(outputDir);
         const sequence = existing.filter((name) => name.startsWith(`${date}_`) && name.includes(marker)).length;
         const path = join(
-          proj.outputDir,
-          patchFileName({ date, sequence, questId, title: textOf(draft.aggregate, TITLE_FIELD) }),
+          outputDir,
+          patchFileName({ date, sequence, questId, title: textOf(quest.aggregate, TITLE_FIELD) }),
         );
         await deps.fs.writeFile(path, sql);
-        deps.store.drafts.markExported(proj.id, questId, path);
+        quests.markExported(questId, path);
 
         return { path, sql, warnings, issues: issues.filter((i) => i.severity !== 'error') };
       }),
@@ -774,13 +761,13 @@ export function createApi(deps: ApiDeps): Api {
           throw fail('CONFIRMATION_REQUIRED', 'Applying to the dev database changes it; confirm the SQL first.');
         }
         const live = usable();
-        const draft = draftOf(questId);
+        const quest = questOf(questId);
         const devProfile = deps.store.profiles.list().find((p) => p.role === 'dev');
         if (!devProfile) {
           throw fail('NO_DEV_PROFILE', 'Add a dev database profile before applying a patch to it.');
         }
-        await guardWrite(live.db, draft);
-        const { statements } = await patchFor(live, draft);
+        await guardWrite(live.db, quest);
+        const { statements } = await patchFor(live, quest);
         const rendered = statements.map((s) => renderStatement(s, live.schema));
 
         const dev = await deps.openDevDb(deps.store.profiles.getWithPassword(devProfile.id));
@@ -792,17 +779,12 @@ export function createApi(deps: ApiDeps): Api {
         return { statements: rendered.length };
       }),
 
-    getProject: () =>
-      run(async () => {
-        connected();
-        return project();
-      }),
-
-    updateProject: (p) =>
-      run(async () => {
-        connected();
-        return deps.store.projects.update(p);
-      }),
+    projectState: () =>
+      run(async (): Promise<ProjectState> => ({
+        ...deps.session.meta(),
+        filePath: deps.session.filePath(),
+        dirty: deps.session.dirty(),
+      })),
   };
 }
 

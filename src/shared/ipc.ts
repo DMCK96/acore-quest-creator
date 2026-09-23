@@ -87,9 +87,13 @@ export interface Viewport {
   zoom: number;
 }
 
-export interface Project {
-  id: number;
+/** The open project as the renderer sees it: what the title bar and the Project modal show. */
+export interface ProjectState {
   name: string;
+  /** The file the project was last saved to or opened from; null while it has never been saved. */
+  filePath: string | null;
+  /** Changes since the last save. */
+  dirty: boolean;
   idRangeStart: number;
   idRangeEnd: number;
   outputDir: string;
@@ -122,9 +126,9 @@ export interface OpenResult {
   fidelity: FidelityReport;
   unmodelled: UnmodelledColumn[];
   issues: Issue[];
-  /** True when the aggregate came from a draft that already existed, not from this import. */
-  hasDraft: boolean;
-  /** True when the world DB changed under the draft since it was taken. */
+  /** True when the quest was already in the open project, rather than imported by this call. */
+  inProject: boolean;
+  /** True when the world DB changed under the quest since it was imported. */
   stale: boolean;
   /**
    * The locale codes this quest has translated rows for. Non-empty means an enUS edit leaves those
@@ -234,13 +238,13 @@ export interface Api {
   questLinks(questIds: number[]): Promise<Result<QuestLinks>>;
   /** The XP and money a quest of this level rewards, one entry per reward index. */
   rewardTables(level: number): Promise<Result<{ xp: (number | null)[]; money: (number | null)[] }>>;
-  saveDraft(aggregate: QuestAggregate): Promise<Result<{ updatedAt: string }>>;
+  /** Replaces the open project's copy of the quest with the edited aggregate. */
+  updateQuest(aggregate: QuestAggregate): Promise<Result<true>>;
   previewChanges(questId: number): Promise<Result<Difference[]>>;
   validate(questId: number): Promise<Result<Issue[]>>;
   exportQuest(questId: number): Promise<Result<ExportResult>>;
   applyToDev(questId: number, confirm: boolean): Promise<Result<{ statements: number }>>;
-  getProject(): Promise<Result<Project>>;
-  updateProject(p: Project): Promise<Result<Project>>;
+  projectState(): Promise<Result<ProjectState>>;
 }
 
 /**
@@ -316,17 +320,6 @@ const aggregateSchema = z
   })
   .strict();
 
-const projectSchema = z
-  .object({
-    id: z.number().int(),
-    name: z.string(),
-    idRangeStart: z.number().int(),
-    idRangeEnd: z.number().int(),
-    outputDir: z.string(),
-    viewport: viewportSchema,
-  })
-  .strict();
-
 /**
  * One tuple schema per method, in `Api` declaration order.
  *
@@ -352,13 +345,12 @@ const REQUEST_SCHEMAS: Record<keyof Api, z.ZodType<unknown[]>> = {
   lookupNames: z.tuple([z.enum(REF_KINDS), z.array(z.number()).max(MAX_LOOKUP_IDS)]),
   questLinks: z.tuple([z.array(z.number()).max(MAX_LOOKUP_IDS)]),
   rewardTables: z.tuple([z.number()]),
-  saveDraft: z.tuple([aggregateSchema]),
+  updateQuest: z.tuple([aggregateSchema]),
   previewChanges: z.tuple([z.number()]),
   validate: z.tuple([z.number()]),
   exportQuest: z.tuple([z.number()]),
   applyToDev: z.tuple([z.number(), z.boolean()]),
-  getProject: z.tuple([]),
-  updateProject: z.tuple([projectSchema]),
+  projectState: z.tuple([]),
 };
 
 /**

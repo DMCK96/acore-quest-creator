@@ -26,5 +26,7 @@
     "package.json",
     "tests/renderer/**/*",
     "tests/helpers/**/*"
-  ]
+  ],
+  // An in-memory stand-in for the main process's project file system: node-only.
+  "exclude": ["tests/helpers/mem-fs.ts"]
 }

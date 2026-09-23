@@ -23,7 +23,7 @@ export function sampleOpen(overrides: Partial<OpenResult> = {}): OpenResult {
     fidelity: { ok: true },
     unmodelled: [],
     issues: [],
-    hasDraft: false,
+    inProject: false,
     stale: false,
     locales: [],
     importedText: {},
@@ -74,13 +74,12 @@ export function makeMockApi(overrides: Partial<Record<keyof Api, (...args: any[]
     lookupNames: vi.fn(async () => okv({})),
     questLinks: vi.fn(async () => okv({ instances: [], unrecognised: [], unavailable: [] })),
     rewardTables: vi.fn(async () => okv({ xp: [], money: [] })),
-    saveDraft: vi.fn(async () => okv({ updatedAt: new Date(0).toISOString() })),
+    updateQuest: vi.fn(async () => okv(true as const)),
     previewChanges: vi.fn(async () => okv([])),
     validate: vi.fn(async () => okv([])),
     exportQuest: vi.fn(async () => okv({ path: '', sql: '', warnings: [], issues: [] })),
     applyToDev: vi.fn(async () => okv({ statements: 0 })),
-    getProject: vi.fn(async () => okv({ id: 1, name: 'Default project', idRangeStart: 60000, idRangeEnd: 99999, outputDir: 'C:\\out', viewport: { x: 0, y: 0, zoom: 1 } })),
-    updateProject: vi.fn(async () => okv({ id: 1, name: '', idRangeStart: 60000, idRangeEnd: 99999, outputDir: '', viewport: { x: 0, y: 0, zoom: 1 } })),
+    projectState: vi.fn(async () => okv({ name: 'Untitled Project', filePath: null, dirty: false, idRangeStart: 60000, idRangeEnd: 99999, outputDir: 'C:\\out', viewport: { x: 0, y: 0, zoom: 1 } })),
   };
 
   const wrapped = Object.fromEntries(

@@ -22,7 +22,7 @@ function groupByTable(differences: Difference[]): [string, Difference[]][] {
 
 /**
  * A preview of what an export would write: every difference between the live import snapshot and
- * the current draft, grouped by table. Reloads whenever this tab is opened, so it reflects the
+ * the current edit, grouped by table. Reloads whenever this tab is opened, so it reflects the
  * latest edits without the user needing to export first.
  */
 export function ChangesView({ store }: { store: AppStore }): React.JSX.Element | null {

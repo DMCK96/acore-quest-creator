@@ -7,8 +7,8 @@ import type { OpenResult } from '@shared/ipc';
  * edit to the English text leaves every translation saying the old thing. That is invisible in the
  * editor, so it is said here, on the group whose text the user actually changed.
  *
- * `open.importedText` is what the last import read, not what the draft holds, so the notice is
- * right even for a draft edited in an earlier session.
+ * `open.importedText` is what the last import read, not what the edit holds, so the notice is
+ * right even for a quest edited in an earlier session.
  */
 export function LocaleNotice({ open, group }: { open: OpenResult; group: EditorGroup }): React.JSX.Element | null {
   if (open.locales.length === 0) return null;

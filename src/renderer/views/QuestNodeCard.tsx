@@ -106,7 +106,7 @@ export function QuestNodeCard({
       </button>
       {confirming && (
         <div role="alertdialog" className="quest-card__confirm">
-          <p>This removes the draft only. Nothing in your database changes.</p>
+          <p>This removes it from this project only. Nothing in your database changes.</p>
           <div className="quest-card__confirm-actions">
             <button
               type="button"

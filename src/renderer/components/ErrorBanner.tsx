@@ -5,7 +5,7 @@ import './ErrorBanner.css';
  * The one place every API failure past the connection screen becomes visible.
  *
  * `store.error` used to be rendered only by `ConnectionScreen` and the transient `QuestPicker`, so
- * an exhausted ID range, an ID collision, a dropped connection or a failed draft save happened in
+ * an exhausted ID range, an ID collision, a dropped connection or a failed edit save happened in
  * silence once the canvas was up. This sits above the canvas for both the `pick` and `edit`
  * screens, so wherever the user is, the failure is shown and can be dismissed.
  */

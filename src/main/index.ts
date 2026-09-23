@@ -9,6 +9,8 @@ import { createApi, type ApiDeps } from './api';
 import { seedEnvProfiles } from './env-profiles';
 import { createSecretBox } from './secret-box';
 import { openStore, type Store } from './store/store';
+import { DEFAULT_PROJECT_NAME, defaultProjectMeta } from './project/project-file';
+import { createProjectSession, type ProjectSession } from './project/session';
 
 /**
  * The Electron shell: it owns the window, the SQLite store and the IPC surface, and nothing else.
@@ -57,9 +59,10 @@ const unknownError = (error: unknown): { ok: false; error: ApiError } => ({
   error: { code: 'UNKNOWN', message: error instanceof Error ? error.message : String(error) },
 });
 
-function buildDeps(store: Store, startupProfileId: number | null): ApiDeps {
+function buildDeps(store: Store, session: ProjectSession, startupProfileId: number | null): ApiDeps {
   return {
     store,
+    session,
     startupProfileId,
     openWorldDb: (p) => openMysqlWorldDb(p),
     openDevDb: (p) => openMysqlDevDb(p),
@@ -71,7 +74,6 @@ function buildDeps(store: Store, startupProfileId: number | null): ApiDeps {
       listDir: (path) => readdir(path),
     },
     now: () => new Date(),
-    defaultOutputDir: defaultOutputDir(),
   };
 }
 
@@ -129,7 +131,8 @@ void app.whenReady().then(() => {
     // A bad `.env` must not stop the app opening: the connection screen is still there.
     console.error('Ignoring connection settings from the environment:', error);
   }
-  registerIpc(createApi(buildDeps(store, startupProfileId)));
+  const session = createProjectSession(defaultProjectMeta(DEFAULT_PROJECT_NAME, defaultOutputDir()));
+  registerIpc(createApi(buildDeps(store, session, startupProfileId)));
 
   createWindow();
   app.on('activate', () => {
