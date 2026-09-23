@@ -278,8 +278,8 @@ const scalars: ScalarFieldDef[] = [
   scalar({
     column: 'StartItem',
     type: { kind: 'idRef', target: 'item' },
-    label: 'Item that starts the quest',
-    help: 'An item the player is given when accepting the quest, or the item that offers the quest when it is picked up as loot. 0 for none.',
+    label: 'Item given on accept',
+    help: 'An item put in the player\'s bags when they accept the quest, such as a letter to deliver. It does not start the quest: an item that begins a quest is set on the item itself. 0 for none.',
     group: 'availability',
     linksItems: true,
   }),

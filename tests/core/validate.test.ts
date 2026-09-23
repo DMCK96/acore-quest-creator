@@ -24,10 +24,10 @@ describe('validateQuest', () => {
     const issues = await validateQuest(base({ 'quest_template.LogTitle': '  ' }), allExist);
     expect(issues).toContainEqual(expect.objectContaining({ code: 'NO_TITLE', severity: 'error', fieldId: 'quest_template.LogTitle' }));
   });
-  it('flags a missing starter and ender, but not when a start item or trigger exists', async () => {
+  it('flags a missing ender, but not when a trigger ends the quest; starters are checked by the link model', async () => {
     const none = base({ creature_queststarter: [], creature_questender: [] });
-    expect(await codes(none)).toEqual(expect.arrayContaining(['NO_STARTER', 'NO_ENDER']));
-    expect(await codes(base({ creature_queststarter: [], 'quest_template.StartItem': 25 }))).not.toContain('NO_STARTER');
+    expect(await codes(none)).toContain('NO_ENDER');
+    expect(await codes(none)).not.toContain('NO_STARTER');
     expect(await codes(base({ creature_questender: [], areatrigger_involvedrelation: [{ id: 5 }] }))).not.toContain('NO_ENDER');
   });
   it('checks chain references using the absolute value and treats the quest itself as existing', async () => {

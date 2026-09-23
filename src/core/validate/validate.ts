@@ -137,24 +137,11 @@ export async function validateQuest(aggregate: QuestAggregate, refs: RefChecker)
     }
   }
 
-  // Starters and enders
-  const creatureStarters = rowsOf(values, F.creatureStarter);
-  const objectStarters = rowsOf(values, F.objectStarter);
+  // Enders
   const creatureEnders = rowsOf(values, F.creatureEnder);
   const objectEnders = rowsOf(values, F.objectEnder);
   const triggerEnders = rowsOf(values, F.triggerEnder);
 
-  if (has(F.creatureStarter) || has(F.objectStarter)) {
-    const startItem = numberOf(values, F.startItem) ?? 0;
-    if (creatureStarters.length === 0 && objectStarters.length === 0 && startItem === 0) {
-      issues.push({
-        severity: 'warning',
-        code: 'NO_STARTER',
-        fieldId: F.creatureStarter,
-        message: 'Nothing offers this quest: add a creature or object that starts it, or a starting item.',
-      });
-    }
-  }
   if (has(F.creatureEnder) || has(F.objectEnder) || has(F.triggerEnder)) {
     if (creatureEnders.length === 0 && objectEnders.length === 0 && triggerEnders.length === 0) {
       issues.push({
