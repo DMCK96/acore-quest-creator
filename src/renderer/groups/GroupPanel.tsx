@@ -49,7 +49,7 @@ export function GroupPanel({ group, aggregate, onChange }: GroupPanelProps): Rea
     const reason = readOnlyReasons.get(field.id);
     const readOnlyUi = field.shape === 'scalar' && field.readOnlyUi === true;
     return (
-      <div key={field.id}>
+      <div key={field.id} data-field={field.id}>
         <Control
           id={field.id}
           label={field.label}

@@ -1,0 +1,23 @@
+.quest-starts {
+  margin-bottom: 1em;
+}
+
+.quest-starts h3,
+.quest-starts h4 {
+  font-family: var(--font-display);
+  color: var(--text);
+  margin: 0.6em 0 0.3em;
+}
+
+.quest-starts ul {
+  margin: 0 0 0.6em;
+  padding-left: 1.2em;
+}
+
+.quest-starts__reason {
+  color: var(--text-muted);
+}
+
+.quest-starts__inactive {
+  color: var(--amber);
+}

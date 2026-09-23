@@ -7,6 +7,7 @@ import { ExportBar } from './ExportBar';
 import { UnmodelledPanel } from './UnmodelledPanel';
 import { GroupPanel } from '../groups/GroupPanel';
 import { ObjectivesPanel } from '../groups/ObjectivesPanel';
+import { QuestStartsList } from './QuestStartsList';
 import './QuestWorkspace.css';
 
 const GROUP_TABS: { view: EditorGroup; label: string }[] = [
@@ -32,6 +33,7 @@ export function QuestWorkspace({ store }: { store: AppStore }): React.JSX.Elemen
   const setActiveView = store((s) => s.setActiveView);
   const backToPicker = store((s) => s.backToPicker);
   const setValue = store((s) => s.setValue);
+  const links = store((s) => s.links);
 
   if (!open) return null;
 
@@ -70,6 +72,7 @@ export function QuestWorkspace({ store }: { store: AppStore }): React.JSX.Elemen
         {activeView === 'objectives' && (
           <ObjectivesPanel aggregate={open.aggregate} onChange={setValue} />
         )}
+        {activeView === 'availability' && <QuestStartsList links={links} />}
         {GROUP_TABS.some((t) => t.view === activeView) && activeView !== 'objectives' && (
           <GroupPanel group={activeView as EditorGroup} aggregate={open.aggregate} onChange={setValue} />
         )}

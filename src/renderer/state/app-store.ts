@@ -13,6 +13,7 @@ import type {
   OpenResult,
   ProfileRecord,
   ProfileSave,
+  QuestLinks,
   Result,
   Viewport,
 } from '@shared/ipc';
@@ -48,6 +49,7 @@ export interface AppState {
   hasDevProfile: boolean;
   pendingApply: { sql: string } | null;
   appliedCount: number | null;
+  links: QuestLinks | null;
 
   loadProfiles(): Promise<void>;
   /** Launch: lists the saved profiles, then connects straight away if one is set up for it. */
@@ -76,6 +78,7 @@ export interface AppState {
   prepareApply(): Promise<void>;
   confirmApply(): Promise<void>;
   cancelApply(): void;
+  loadLinks(): Promise<void>;
 }
 
 export type AppStore = UseBoundStore<StoreApi<AppState>>;
@@ -138,6 +141,7 @@ export function createAppStore(api: Api, opts: { saveDelayMs?: number } = {}): A
     hasDevProfile: false,
     pendingApply: null,
     appliedCount: null,
+    links: null,
 
     async loadProfiles() {
       const result = await api.listProfiles();
@@ -212,6 +216,7 @@ export function createAppStore(api: Api, opts: { saveDelayMs?: number } = {}): A
         dirty: false,
       });
       await get().loadNodes();
+      await get().loadLinks();
     },
 
     async addQuestChain(id, position) {
@@ -234,6 +239,7 @@ export function createAppStore(api: Api, opts: { saveDelayMs?: number } = {}): A
         dirty: false,
       });
       await get().loadNodes();
+      await get().loadLinks();
     },
 
     async newQuest(position) {
@@ -253,6 +259,7 @@ export function createAppStore(api: Api, opts: { saveDelayMs?: number } = {}): A
         dirty: false,
       });
       await get().loadNodes();
+      await get().loadLinks();
     },
 
     setValue(fieldId, value) {
@@ -297,6 +304,7 @@ export function createAppStore(api: Api, opts: { saveDelayMs?: number } = {}): A
         issues: issues.ok ? issues.value : get().issues,
         error: issues.ok ? get().error : issues.error.message,
       });
+      await get().loadLinks();
     },
 
     // Leaving the editor is a close: the debounced edit still in flight is written first, exactly
@@ -304,7 +312,7 @@ export function createAppStore(api: Api, opts: { saveDelayMs?: number } = {}): A
     async backToPicker() {
       set({ error: null });
       await get().flushSave();
-      set({ screen: 'pick', open: null, dirty: false });
+      set({ screen: 'pick', open: null, dirty: false, links: null });
     },
 
     async loadNodes() {
@@ -361,7 +369,7 @@ export function createAppStore(api: Api, opts: { saveDelayMs?: number } = {}): A
     async closeEditor() {
       set({ error: null });
       await get().flushSave();
-      set({ screen: 'pick', open: null, dirty: false });
+      set({ screen: 'pick', open: null, dirty: false, links: null });
       await get().loadNodes();
     },
 
@@ -407,6 +415,19 @@ export function createAppStore(api: Api, opts: { saveDelayMs?: number } = {}): A
 
     cancelApply() {
       set({ pendingApply: null });
+    },
+
+    // The Availability tab reads from `links`, so every point that changes which quest is open
+    // (or edits it) refreshes it. A response is dropped if the open quest has since moved on, since
+    // otherwise a slow answer for quest A could land after quest B is already open.
+    async loadLinks() {
+      const { open } = get();
+      if (!open) return;
+      const questId = open.questId;
+      const result = await api.questLinks([questId]);
+      if (get().open?.questId !== questId) return;
+      if (result.ok) set({ links: result.value });
+      else set({ error: result.error.message });
     },
   }));
 
