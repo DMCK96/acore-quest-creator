@@ -88,6 +88,32 @@ async function questsPointingAt(
   return [...found].filter((id) => id > 0);
 }
 
+/**
+ * The other members of every exclusive group a scope quest belongs to. A group component is judged
+ * over all its members ("finish all" needs every member's `NextQuestID` to agree), so recognising it
+ * from only the members that happen to be in scope would name a partial group, or call a mixed group
+ * "finish all". One batched world read, plus the drafts, the same way the reverse lookup works.
+ */
+async function groupSiblings(
+  db: WorldDb,
+  scope: readonly number[],
+  facts: ReadonlyMap<number, QuestFacts>,
+  drafts: ReadonlyMap<number, QuestAggregate>,
+): Promise<number[]> {
+  const groups = new Set<number>();
+  for (const id of scope) {
+    const group = facts.get(id)?.exclusiveGroup ?? 0;
+    if (group !== 0) groups.add(group);
+  }
+  if (groups.size === 0) return [];
+  const rows = await rowsOrNone(db, 'quest_template_addon', { ExclusiveGroup: [...groups].map(String) });
+  const found = new Set<number>(rows.map((row) => idOf(row.ID)));
+  for (const [questId, aggregate] of drafts) {
+    if (groups.has(factsFromAggregate(aggregate).exclusiveGroup)) found.add(questId);
+  }
+  return [...found].filter((id) => id > 0);
+}
+
 export async function loadLinks(
   db: WorldDb,
   scope: readonly number[],
@@ -115,7 +141,11 @@ export async function loadLinks(
   }
   // A draft's facts win over its world row, so a world link the user has since cleared finds the
   // quest here but recognises nothing once the draft's facts are read.
-  for (const id of await questsPointingAt(db, scope, drafts)) neighbourIds.add(id);
+  const [pointing, siblings] = await Promise.all([
+    questsPointingAt(db, scope, drafts),
+    groupSiblings(db, scope, facts, drafts),
+  ]);
+  for (const id of [...pointing, ...siblings]) neighbourIds.add(id);
   for (const scopeId of scope) neighbourIds.delete(scopeId);
 
   await factsFor(db, [...neighbourIds], drafts, facts);

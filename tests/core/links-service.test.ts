@@ -41,6 +41,33 @@ describe('loadLinks', () => {
     const snap = await loadLinks(db, [2], new Map([[3, edited]]));
     expect(snap.result.instances.some((i) => i.component === 'unlock.afterTurnIn' && i.owner === 3)).toBe(true);
   });
+  it('loads every member of an exclusive group even when only one member is in scope', async () => {
+    const db = forkDb();
+    for (const id of [21, 22, 23, 30]) db.insert('quest_template', { ID: String(id), LogTitle: `Q${id}` });
+    for (const id of [21, 22, 23]) db.insert('quest_template_addon', { ID: String(id), ExclusiveGroup: '-21', NextQuestID: '30' });
+    const snap = await loadLinks(db, [21], new Map());
+    const group = snap.result.instances.find((i) => i.component === 'group.finishAll');
+    expect(group?.params.members).toEqual([21, 22, 23]);
+  });
+  it('does not say a finish-all group unlocks a quest when an out-of-scope member points elsewhere', async () => {
+    const db = forkDb();
+    for (const id of [21, 22, 23, 30, 31]) db.insert('quest_template', { ID: String(id), LogTitle: `Q${id}` });
+    db.insert('quest_template_addon', { ID: '21', ExclusiveGroup: '-21', NextQuestID: '30' });
+    db.insert('quest_template_addon', { ID: '22', ExclusiveGroup: '-21', NextQuestID: '30' });
+    db.insert('quest_template_addon', { ID: '23', ExclusiveGroup: '-21', NextQuestID: '31' });
+    const snap = await loadLinks(db, [21], new Map());
+    const group = snap.result.instances.find((i) => i.component === 'group.finishAll');
+    expect(group?.params).toMatchObject({ members: [21, 22, 23], then: 0 });
+  });
+  it('finds a draft that joins the group of a quest in scope', async () => {
+    const db = forkDb();
+    for (const id of [21, 22]) db.insert('quest_template', { ID: String(id), LogTitle: `Q${id}` });
+    db.insert('quest_template_addon', { ID: '21', ExclusiveGroup: '21' });
+    const { aggregate } = await importFixture(db, 22);
+    const edited: QuestAggregate = { ...aggregate, values: { ...aggregate.values, 'quest_template_addon.ExclusiveGroup': 21 } };
+    const snap = await loadLinks(db, [21], new Map([[22, edited]]));
+    expect(snap.result.instances.find((i) => i.component === 'group.pickOne')?.params.members).toEqual([21, 22]);
+  });
   it('counts a quest as touched by a group it belongs to', () => {
     const group = { from: { kind: 'group', group: 5 }, to: { kind: 'group', group: 5 }, params: { members: [3, 4] } } as any;
     expect(touches(group, 4)).toBe(true);
