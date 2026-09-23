@@ -35,6 +35,12 @@ describe('QuestNodeCard', () => {
     expect(screen.queryByText(/error/)).toBeNull();
     expect(screen.getByRole('button', { name: 'Quest 60001: (untitled quest)' })).toBeInTheDocument();
   });
+  it('can be dragged by its body, but not by its buttons', () => {
+    render(<QuestNodeCard node={nodeOf({ offCanvasLinks: 1 })} selected={false} />);
+    expect(screen.getByTestId('quest-node')).not.toHaveClass('nodrag');
+    expect(screen.getByRole('button', { name: 'Remove quest 60001 from canvas' })).toHaveClass('nodrag');
+    expect(screen.getByRole('button', { name: /linked quest/ })).toHaveClass('nodrag');
+  });
   it('shows how the quest starts, its groups and whether it is connected', () => {
     render(<QuestNodeCard node={nodeOf({ starts: ['npc', 'script'], groups: [{ group: 5, kind: 'pickOne' }], notConnected: true })} selected={false} />);
     for (const t of ['NPC', 'Script', 'Pick one', 'Not connected']) expect(screen.getByText(t)).toBeInTheDocument();

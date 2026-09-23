@@ -51,7 +51,7 @@ export interface ChainSlot {
 
 /**
  * Lays a quest chain out as columns: each quest sits one column to the right of its deepest parent,
- * and quests sharing a column are stacked in ID order. A cycle cannot push a quest further right
+ * and quests sharing a column are stacked in their parents' order. A cycle cannot push a quest further right
  * than there are quests, so the walk always ends.
  */
 export function layoutChain(
@@ -72,13 +72,27 @@ export function layoutChain(
     if (!changed) break;
   }
 
-  const slots = new Map<number, ChainSlot>();
-  const rows = new Map<number, number>();
-  for (const id of [...questIds].sort((a, b) => a - b)) {
+  // Columns are stacked left to right, each quest ordered by the average row of its parents in
+  // earlier columns (ID breaks ties), so a branch stays level with the quest it follows instead of
+  // crossing its sibling. A quest with no earlier parent (a root, or one on a cycle) sorts last.
+  const columns = new Map<number, number[]>();
+  for (const id of questIds) {
     const column = depth.get(id) ?? 0;
-    const row = rows.get(column) ?? 0;
-    rows.set(column, row + 1);
-    slots.set(id, { column, row });
+    columns.set(column, [...(columns.get(column) ?? []), id]);
+  }
+  const slots = new Map<number, ChainSlot>();
+  const parentRow = (id: number): number => {
+    const column = depth.get(id) ?? 0;
+    const rows = links
+      .filter((l) => l.to === id && (depth.get(l.from) ?? column) < column)
+      .map((l) => slots.get(l.from)?.row ?? 0);
+    return rows.length === 0 ? Infinity : rows.reduce((a, b) => a + b, 0) / rows.length;
+  };
+  for (const column of [...columns.keys()].sort((a, b) => a - b)) {
+    const ids = columns.get(column) ?? [];
+    const keys = new Map(ids.map((id) => [id, parentRow(id)]));
+    ids.sort((a, b) => (keys.get(a) ?? 0) - (keys.get(b) ?? 0) || a - b);
+    ids.forEach((id, row) => slots.set(id, { column, row }));
   }
   return slots;
 }

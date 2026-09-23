@@ -200,9 +200,13 @@ function CanvasInner({ store }: { store: AppStore }): React.JSX.Element {
                 zoomOnDoubleClick={false}
                 defaultViewport={viewport}
                 nodesConnectable={false}
-                onNodeDragStop={(_, node) => {
-                  moveNode(Number(node.id), node.position.x, node.position.y);
-                  scheduleFlush();
+                // The nodes are controlled by the store, so a drag only shows if each step lands there.
+                onNodesChange={(changes) => {
+                  for (const change of changes) {
+                    if (change.type !== 'position') continue;
+                    if (change.position) moveNode(Number(change.id), change.position.x, change.position.y);
+                    if (change.dragging === false) scheduleFlush();
+                  }
                 }}
                 onMoveEnd={(_, vp: RFViewport) => {
                   setViewport(vp);

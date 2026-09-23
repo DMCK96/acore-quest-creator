@@ -43,7 +43,7 @@ export function QuestNodeCard({
   return (
     <div
       data-testid="quest-node"
-      className={`quest-card nodrag nopan ${statusClass}`}
+      className={`quest-card ${statusClass}`}
       role="button"
       tabIndex={0}
       aria-label={label}
@@ -84,7 +84,7 @@ export function QuestNodeCard({
       {node.offCanvasLinks > 0 && (
         <button
           type="button"
-          className="quest-card__more"
+          className="quest-card__more nodrag"
           aria-label={`Add ${node.offCanvasLinks} linked quest${node.offCanvasLinks === 1 ? '' : 's'} not on the canvas`}
           onClick={(e) => {
             e.stopPropagation();
@@ -96,7 +96,7 @@ export function QuestNodeCard({
       )}
       <button
         type="button"
-        className="quest-card__remove"
+        className="quest-card__remove nodrag"
         onClick={(e) => {
           e.stopPropagation();
           setConfirming(true);
@@ -105,7 +105,7 @@ export function QuestNodeCard({
         Remove quest {node.questId} from canvas
       </button>
       {confirming && (
-        <div role="alertdialog" className="quest-card__confirm">
+        <div role="alertdialog" className="quest-card__confirm nodrag nopan">
           <p>This removes it from this project only. Nothing in your database changes.</p>
           <div className="quest-card__confirm-actions">
             <button

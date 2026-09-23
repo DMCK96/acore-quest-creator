@@ -95,6 +95,21 @@ describe('layoutChain', () => {
     expect(slots.get(4)).toEqual({ column: 2, row: 0 });
   });
 
+  it('stacks each column in the order of its parents, so branches do not cross', () => {
+    // The Aldor/Scryers split: 10551 leads to 10554 and 10552 to 10553, so ID order would cross them.
+    const slots = layoutChain([10210, 10211, 10551, 10552, 10553, 10554], [
+      { from: 10210, to: 10211 },
+      { from: 10211, to: 10551 },
+      { from: 10211, to: 10552 },
+      { from: 10551, to: 10554 },
+      { from: 10552, to: 10553 },
+    ]);
+    expect(slots.get(10551)).toEqual({ column: 2, row: 0 });
+    expect(slots.get(10552)).toEqual({ column: 2, row: 1 });
+    expect(slots.get(10554)).toEqual({ column: 3, row: 0 });
+    expect(slots.get(10553)).toEqual({ column: 3, row: 1 });
+  });
+
   it('terminates on a cycle and still places every quest', () => {
     const slots = layoutChain([1, 2], [
       { from: 1, to: 2 },
