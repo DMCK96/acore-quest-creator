@@ -91,6 +91,14 @@ describe('project UI', () => {
     expect(api.saveProjectAs).toHaveBeenCalledTimes(1);
   });
 
+  it('ignores a held-down Ctrl+S, so key repeat does not stack up saves', async () => {
+    const { api } = await home();
+    fireEvent.keyDown(document, { key: 's', ctrlKey: true });
+    fireEvent.keyDown(document, { key: 's', ctrlKey: true, repeat: true });
+    fireEvent.keyDown(document, { key: 's', ctrlKey: true, repeat: true });
+    await waitFor(() => expect(api.saveProject).toHaveBeenCalledTimes(1));
+  });
+
   it('offers to restore unsaved work left by a crash', async () => {
     const { api } = await home({ recoveries: vi.fn().mockResolvedValueOnce(okv([
       { id: 'a', name: 'Northshire rework', recoveredFrom: null, writtenAt: '2026-09-23T14:02:00.000Z', questCount: 12, damaged: false },

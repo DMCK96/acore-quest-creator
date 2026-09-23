@@ -178,7 +178,11 @@ function createWindow(session: ProjectSession, recovery: Recovery, projects: Pro
       ipcMain.once(FLUSH_DONE_CHANNEL, () => resolve());
       win.webContents.send(FLUSH_REQUEST_CHANNEL);
     });
-  const guard = createCloseGuard({ flush, projects });
+  const guard = createCloseGuard({
+    flush,
+    projects,
+    onError: (message) => dialog.showErrorBox('The project was not saved', message),
+  });
   let closing = false;
   win.on('close', (event) => {
     if (closing) return;

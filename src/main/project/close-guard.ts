@@ -17,6 +17,8 @@ export function windowTitle(name: string, dirty: boolean): string {
 export function createCloseGuard(deps: {
   flush(): Promise<void>;
   projects: ProjectController;
+  /** Told why the window stays open when saving on close failed. */
+  onError?(message: string): void;
   timeoutMs?: number;
 }): () => Promise<boolean> {
   return async () => {
@@ -27,7 +29,12 @@ export function createCloseGuard(deps: {
     // A renderer that fails or never answers must not keep the window open forever.
     await Promise.race([deps.flush().catch(() => undefined), timeout]);
     clearTimeout(timer);
-    if (!(await deps.projects.settleUnsaved())) return false;
+    try {
+      if (!(await deps.projects.settleUnsaved())) return false;
+    } catch (error) {
+      deps.onError?.(error instanceof Error ? error.message : String(error));
+      return false;
+    }
     await deps.projects.discardOnQuit();
     return true;
   };

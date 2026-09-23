@@ -227,6 +227,38 @@ describe('ProjectController', () => {
     await after.c.restoreRecovery(entry.id);
     expect(after.c.state()).toMatchObject({ name: 'North', filePath: P, dirty: true });
     expect(after.session.quests.list().map((x) => x.questId)).toEqual([60000]);
+    // The crash copy it came from is gone; only the restored session's own copy is left.
+    expect(recoveryFiles(fs)).toEqual([join(RDIR, `${after.session.id()}.aqc-recovery`)]);
+  });
+
+  it('keeps a recovery copy of restored work on disk straight away, in case of a second crash', async () => {
+    const fs = memFs();
+    const before = setup({}, fs);
+    before.session.quests.put(q(60000));
+    await before.recovery.tick(before.session);
+    const after = setup({}, fs);
+    const [entry] = await after.c.recoveries();
+    await after.c.restoreRecovery(entry.id);
+    const left = await after.c.recoveries();
+    expect(left.map((e) => e.id)).toEqual([after.session.id()]);
+    expect(left[0].questCount).toBe(1);
+  });
+
+  it('two saves at once both succeed instead of racing on the temporary file', async () => {
+    const { c, session } = setup({ save: [P] });
+    session.quests.put(q(60000));
+    await c.save();
+    session.quests.put(q(60001));
+    const results = await Promise.allSettled([c.save(), c.save()]);
+    expect(results.map((r) => r.status)).toEqual(['fulfilled', 'fulfilled']);
+  });
+
+  it('after a clean quit nothing can write the discarded work back as a recovery copy', async () => {
+    const fs = memFs();
+    const a = setup({}, fs);
+    a.session.quests.put(q(1));
+    await a.c.discardOnQuit();
+    expect(await a.recovery.tick(a.session)).toBe(false);
     expect(recoveryFiles(fs)).toEqual([]);
   });
 

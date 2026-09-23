@@ -100,6 +100,31 @@ export function createProjectController(deps: {
     return (await save()).done;
   }
 
+  // One file action at a time: two quick Ctrl+S presses must not race on the same temporary file,
+  // and a second Save As dialog must not open over the first.
+  let queue: Promise<unknown> = Promise.resolve();
+  const serial = <T>(work: () => Promise<T>): Promise<T> => {
+    const run = queue.then(work, work);
+    queue = run.catch(() => undefined);
+    return run;
+  };
+
+  async function open(given?: string): Promise<ProjectActionResult> {
+    if (!(await settleUnsaved())) return { done: false };
+    const path = given ?? (await dialogs.showOpen());
+    if (path === null) return { done: false };
+    let text: string;
+    try {
+      text = await fs.readFile(path);
+    } catch (error) {
+      throw new ProjectFileError('unreadable', `Could not read ${path}: ${messageOf(error)}`);
+    }
+    const doc = parseProject(text);
+    await replaceWith(() => session.load(doc, path, { dirty: false }));
+    recent.touch(path, doc.name, deps.now());
+    return { done: true };
+  }
+
   /** Swaps in new content, then drops the recovery copy of what was open before. */
   async function replaceWith(swap: () => void): Promise<void> {
     const oldId = session.id();
@@ -109,31 +134,18 @@ export function createProjectController(deps: {
 
   return {
     state: () => ({ ...session.meta(), filePath: session.filePath(), dirty: session.dirty() }),
-    settleUnsaved,
-    async newProject(name) {
-      const trimmed = name.trim();
-      if (trimmed === '') throw new InvalidNameError('A project needs a name.');
-      if (!(await settleUnsaved())) return { done: false };
-      await replaceWith(() => session.reset(defaultProjectMeta(trimmed, deps.defaultOutputDir)));
-      return { done: true };
-    },
-    async open(given) {
-      if (!(await settleUnsaved())) return { done: false };
-      const path = given ?? (await dialogs.showOpen());
-      if (path === null) return { done: false };
-      let text: string;
-      try {
-        text = await fs.readFile(path);
-      } catch (error) {
-        throw new ProjectFileError('unreadable', `Could not read ${path}: ${messageOf(error)}`);
-      }
-      const doc = parseProject(text);
-      await replaceWith(() => session.load(doc, path, { dirty: false }));
-      recent.touch(path, doc.name, deps.now());
-      return { done: true };
-    },
-    save,
-    saveAs,
+    settleUnsaved: () => serial(settleUnsaved),
+    newProject: (name) =>
+      serial(async () => {
+        const trimmed = name.trim();
+        if (trimmed === '') throw new InvalidNameError('A project needs a name.');
+        if (!(await settleUnsaved())) return { done: false };
+        await replaceWith(() => session.reset(defaultProjectMeta(trimmed, deps.defaultOutputDir)));
+        return { done: true };
+      }),
+    open: (given) => serial(() => open(given)),
+    save: () => serial(save),
+    saveAs: () => serial(saveAs),
     rename: (name) => session.rename(name),
     async recent() {
       const entries = recent.list();
@@ -141,12 +153,19 @@ export function createProjectController(deps: {
     },
     forgetRecent: (path) => recent.forget(path),
     recoveries: () => recovery.list(),
-    async restoreRecovery(id) {
-      const { doc, recoveredFrom } = await recovery.read(id);
-      await replaceWith(() => session.load(doc, recoveredFrom, { dirty: true }));
-      await recovery.clear(id);
-    },
+    restoreRecovery: (id) =>
+      serial(async () => {
+        const { doc, recoveredFrom } = await recovery.read(id);
+        await replaceWith(() => session.load(doc, recoveredFrom, { dirty: true }));
+        // Write the restored work's own copy before dropping the one it came from, so a second
+        // crash straight after restoring still has something to offer.
+        await recovery.tick(session);
+        await recovery.clear(id);
+      }),
     discardRecovery: (id) => recovery.clear(id),
-    discardOnQuit: () => recovery.clear(session.id()),
+    // The user settled the unsaved changes, so the work is dropped from memory too: nothing is
+    // left for a late timer or window blur to write back as a recovery copy.
+    discardOnQuit: () =>
+      serial(() => replaceWith(() => session.reset(defaultProjectMeta(DEFAULT_PROJECT_NAME, deps.defaultOutputDir)))),
   };
 }

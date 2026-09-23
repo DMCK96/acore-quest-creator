@@ -1,4 +1,5 @@
 import { join } from 'node:path';
+import { isDeepStrictEqual } from 'node:util';
 import { layoutChain, NODE_GRID, nextNodePosition } from '../core/canvas/layout';
 import type { DevDb } from '../core/db/dev-db';
 import type { ColumnInfo, RawRow, RefKind, SchemaInfo } from '../core/db/types';
@@ -703,8 +704,11 @@ export function createApi(deps: ApiDeps): Api {
     updateQuest: (aggregate) =>
       run(async () => {
         connected();
+        const quest = questOf(aggregate.questId);
+        // Closing the editor sends the quest back as it is; that is not an edit to the project.
+        if (isDeepStrictEqual(quest.aggregate, aggregate)) return true as const;
         // The snapshot and the fidelity report belong to the import, not to the edit.
-        quests.put({ ...questOf(aggregate.questId), aggregate });
+        quests.put({ ...quest, aggregate });
         return true as const;
       }),
 

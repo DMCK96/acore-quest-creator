@@ -64,6 +64,33 @@ describe('project actions in the renderer store', () => {
     expect(projectState.mock.calls.length).toBeGreaterThanOrEqual(before + 2);
   });
 
+  it('closing the editor without typing sends nothing, so the project stays saved', async () => {
+    const { api, store } = await connected();
+    await store.getState().openQuest(60001);
+    await store.getState().closeEditor();
+    await store.getState().saveProject();
+    expect(api.updateQuest).not.toHaveBeenCalled();
+  });
+
+  it('moves to the new epoch only once the new project\'s viewport is in the store', async () => {
+    let answer = state({ viewport: { x: 0, y: 0, zoom: 1 } });
+    let release: () => void = () => {};
+    const projectState = vi.fn(async () => {
+      if (answer.name === 'Second') await new Promise<void>((r) => { release = r; });
+      return okv(answer);
+    });
+    const { store } = await connected({ projectState });
+    await store.getState().loadNodes();
+    const seen: unknown[] = [];
+    store.subscribe((s, prev) => { if (s.projectEpoch !== prev.projectEpoch) seen.push(s.viewport); });
+    answer = state({ name: 'Second', viewport: { x: -300, y: 120, zoom: 0.5 } });
+    const pending = store.getState().newProject('Second');
+    await vi.waitFor(() => expect(projectState).toHaveBeenCalledTimes(2));
+    release();
+    await pending;
+    expect(seen).toEqual([{ x: -300, y: 120, zoom: 0.5 }]);
+  });
+
   it('restoring one recovery discards the others', async () => {
     const entries = [
       { id: 'a', name: 'A', recoveredFrom: null, writtenAt: '2026-09-23T15:00:00.000Z', questCount: 2, damaged: false },

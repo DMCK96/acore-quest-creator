@@ -105,7 +105,8 @@ function CanvasInner({ store }: { store: AppStore }): React.JSX.Element {
   // Ctrl+S saves, Ctrl+Shift+S saves as, Ctrl+O opens: the shortcuts every document app has.
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent): void => {
-      if (!(e.ctrlKey || e.metaKey)) return;
+      // A held-down shortcut repeats; one press is one save.
+      if (!(e.ctrlKey || e.metaKey) || e.repeat) return;
       const key = e.key.toLowerCase();
       const { saveProject, saveProjectAs, openProject } = store.getState();
       if (key === 's') {

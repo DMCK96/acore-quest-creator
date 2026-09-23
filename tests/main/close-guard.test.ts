@@ -30,6 +30,16 @@ describe('close guard', () => {
     expect(await createCloseGuard({ flush: async () => {}, projects })()).toBe(false);
     expect(calls).toEqual(['settle']);
   });
+  it('keeps the window open and says why when saving on close fails', async () => {
+    const projects = {
+      settleUnsaved: vi.fn(async () => { throw new Error('Could not save the project to X: EACCES'); }),
+      discardOnQuit: vi.fn(async () => {}),
+    } as unknown as ProjectController;
+    const onError = vi.fn();
+    expect(await createCloseGuard({ flush: async () => {}, projects, onError })()).toBe(false);
+    expect(onError).toHaveBeenCalledWith('Could not save the project to X: EACCES');
+    expect(projects.discardOnQuit).not.toHaveBeenCalled();
+  });
   it('does not wait forever for a renderer that never answers', async () => {
     vi.useFakeTimers();
     try {

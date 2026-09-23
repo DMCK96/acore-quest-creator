@@ -608,6 +608,13 @@ describe('project session', () => {
       expect(session.dirty()).toBe(true);
     }
   });
+  it('sending back a quest unchanged is not an edit', async () => {
+    const { api, session } = await connected();
+    const r = ok(await api.openQuest(60001));
+    session.markSaved('C:\\p.aqc');
+    ok(await api.updateQuest(r.aggregate));
+    expect(session.dirty()).toBe(false);
+  });
   it('reports the project state', async () => {
     const { api, session } = await connected();
     expect(ok(await api.projectState())).toEqual({

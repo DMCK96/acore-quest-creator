@@ -309,12 +309,14 @@ export function createAppStore(api: Api, opts: { saveDelayMs?: number } = {}): A
     },
 
     async flushSave() {
+      // Only an edit is sent: a quest merely looked at must not mark the project unsaved.
+      const pending = saveTimer !== null || get().dirty;
       if (saveTimer) {
         clearTimeout(saveTimer);
         saveTimer = null;
       }
       const { open } = get();
-      if (!open) return;
+      if (!open || !pending) return;
       set({ saving: true });
       const saved = await api.updateQuest(open.aggregate);
       if (!saved.ok) {
@@ -561,7 +563,7 @@ export function createAppStore(api: Api, opts: { saveDelayMs?: number } = {}): A
     }
     pendingMoves.clear();
     pendingViewport = null;
-    store.setState((s) => ({
+    store.setState({
       open: null,
       screen: 'pick',
       links: null,
@@ -569,9 +571,10 @@ export function createAppStore(api: Api, opts: { saveDelayMs?: number } = {}): A
       preview: null,
       exportResult: null,
       exportError: null,
-      projectEpoch: s.projectEpoch + 1,
-    }));
+    });
     await store.getState().loadNodes();
+    // Last, so the canvas applies the new project's viewport rather than the old one's.
+    store.setState((s) => ({ projectEpoch: s.projectEpoch + 1 }));
   }
 
   return store;

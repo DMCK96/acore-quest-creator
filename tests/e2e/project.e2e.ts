@@ -1,4 +1,5 @@
 import { test, expect, _electron as electron, type ElectronApplication } from '@playwright/test';
+import { execFileSync } from 'node:child_process';
 import { existsSync, mkdtempSync, readFileSync, readdirSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -80,7 +81,11 @@ test('new, name, save, reopen from recent, and recover after a crash', async () 
   await modal.getByLabel('Project name').fill('Crashed name');
   await modal.getByLabel('Project name').press('Enter');
   await expect.poll(() => (existsSync(recoveryDir) ? readdirSync(recoveryDir).length : 0), { timeout: 5000 }).toBe(1);
-  app.process().kill('SIGKILL');
+  // A crash takes the whole process tree down; killing only the main process on Windows leaves its
+  // helper processes holding Playwright's pipes open, and the worker then never finishes.
+  const crashed = app.process();
+  if (process.platform === 'win32') execFileSync('taskkill', ['/pid', String(crashed.pid), '/T', '/F']);
+  else crashed.kill('SIGKILL');
 
   app = await launch();
   page = await app.firstWindow();
