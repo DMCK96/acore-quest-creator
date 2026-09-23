@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 import { render, screen, waitFor, fireEvent, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { createAppStore } from '../../src/renderer/state/app-store';
@@ -44,6 +44,18 @@ describe('QuestNodeCard', () => {
   it('shows how the quest starts, its groups and whether it is connected', () => {
     render(<QuestNodeCard node={nodeOf({ starts: ['npc', 'script'], groups: [{ group: 5, kind: 'pickOne' }], notConnected: true })} selected={false} />);
     for (const t of ['NPC', 'Script', 'Pick one', 'Not connected']) expect(screen.getByText(t)).toBeInTheDocument();
+  });
+
+  it('previews on a click that stayed put, but not on the click that ends a drag', () => {
+    const onOpen = vi.fn();
+    render(<QuestNodeCard node={nodeOf()} selected={false} onOpen={onOpen} />);
+    const card = screen.getByTestId('quest-node');
+    fireEvent.mouseDown(card, { clientX: 10, clientY: 10 });
+    fireEvent.click(card, { clientX: 80, clientY: 40 });
+    expect(onOpen).not.toHaveBeenCalled();
+    fireEvent.mouseDown(card, { clientX: 10, clientY: 10 });
+    fireEvent.click(card, { clientX: 11, clientY: 10 });
+    expect(onOpen).toHaveBeenCalledTimes(1);
   });
 });
 
@@ -129,18 +141,12 @@ describe('preview drawer', () => {
   it('clicking a quest card previews it; double-clicking edits it', async () => {
     const { store } = await canvas();
     const [card] = await screen.findAllByTestId('quest-node');
-    await userEvent.click(card);
+    // Plain click events: a synthetic mousedown has no `view`, which React Flow's drag handler reads.
+    fireEvent.click(card);
     expect(await screen.findByRole('complementary', { name: 'Quest preview' })).toBeInTheDocument();
-    await userEvent.dblClick(card);
+    fireEvent.doubleClick(card);
     expect(await screen.findByRole('list', { name: 'Modules' })).toBeInTheDocument();
     expect(store.getState().screen).toBe('edit');
-  });
-  it('ignores the click that ends a drag', async () => {
-    const { api } = await canvas();
-    const [card] = await screen.findAllByTestId('quest-node');
-    fireEvent.mouseDown(card, { clientX: 10, clientY: 10 });
-    fireEvent.click(card, { clientX: 80, clientY: 40 });
-    expect(api.openQuest).not.toHaveBeenCalled();
   });
 });
 
