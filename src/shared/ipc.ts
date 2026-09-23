@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import type { RefKind } from '@core/db/types';
-import type { QuestSummary } from '@core/db/world-db';
+import type { EntityHit, QuestSummary, SearchKind } from '@core/db/world-db';
 import type { PatchWarning } from '@core/export/build-patch';
 import type { UnmodelledColumn } from '@core/import/unmodelled';
 import type { UnavailableComponent } from '@core/links/availability';
@@ -243,6 +243,8 @@ export interface Api {
   startupProfile(): Promise<Result<number | null>>;
   connect(profileId: number): Promise<Result<ConnectSummary>>;
   searchQuests(text: string): Promise<Result<QuestSummary[]>>;
+  /** Items, NPCs, objects or quests whose name contains the text, or whose ID is it. */
+  searchEntities(kind: SearchKind, text: string): Promise<Result<EntityHit[]>>;
   openQuest(questId: number, position?: NodePosition): Promise<Result<OpenResult>>;
   newQuest(position?: NodePosition): Promise<Result<OpenResult>>;
   /** Imports the quest and every quest chained to it; `position` is where the picked quest lands. */
@@ -367,6 +369,7 @@ const REQUEST_SCHEMAS: Record<keyof Api, z.ZodType<unknown[]>> = {
   startupProfile: z.tuple([]),
   connect: z.tuple([z.number()]),
   searchQuests: z.tuple([z.string().max(MAX_SEARCH_TEXT)]),
+  searchEntities: z.tuple([z.enum(['item', 'creature', 'gameobject', 'quest']), z.string().max(MAX_SEARCH_TEXT)]),
   openQuest: z.tuple([z.number(), positionSchema.optional()]),
   newQuest: z.tuple([positionSchema.optional()]),
   addQuestChain: z.tuple([z.number(), positionSchema.optional()]),

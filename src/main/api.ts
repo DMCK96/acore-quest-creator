@@ -95,6 +95,8 @@ const KEY_COLUMNS = keyColumnsByTable(registry);
 const TITLE_FIELD = 'quest_template.LogTitle';
 const LEVEL_FIELD = 'quest_template.QuestLevel';
 const SEARCH_LIMIT = 50;
+/** Picker results: enough to find a name, few enough to scan by eye. */
+const ENTITY_SEARCH_LIMIT = 25;
 
 const REWARD_TIERS = 10;
 const REWARD_LEVEL_MIN = 1;
@@ -447,6 +449,7 @@ export function createApi(deps: ApiDeps): Api {
       }),
 
     searchQuests: (text) => run(async () => connected().db.searchQuests(text, SEARCH_LIMIT)),
+    searchEntities: (kind, text) => run(async () => connected().db.searchEntities(kind, text, ENTITY_SEARCH_LIMIT)),
 
     openQuest: (questId, position) => run(async () => openOne(questId, position)),
 

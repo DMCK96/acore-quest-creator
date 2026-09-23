@@ -16,6 +16,7 @@ export const API_METHODS = [
   'startupProfile',
   'connect',
   'searchQuests',
+  'searchEntities',
   'openQuest',
   'newQuest',
   'addQuestChain',

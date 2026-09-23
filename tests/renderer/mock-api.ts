@@ -64,6 +64,7 @@ export function makeMockApi(overrides: Partial<Record<keyof Api, (...args: any[]
     startupProfile: vi.fn(async () => okv(null)),
     connect: vi.fn(async () => okv({ profileId: 1, schemaHash: '', drift: { missingTables: [], unregistered: [], missingColumns: [], typeMismatches: [], blockingTables: [] }, blocking: false })),
     searchQuests: vi.fn(async () => okv([])),
+    searchEntities: vi.fn(async () => okv([])),
     openQuest: vi.fn(async () => okv(sampleOpen())),
     newQuest: vi.fn(async () => okv(sampleOpen())),
     addQuestChain: vi.fn(async () => okv({ open: sampleOpen(), questIds: [sampleOpen().questId], truncated: false })),

@@ -57,6 +57,7 @@ describe('connection', () => {
   it('refuses quest calls before connecting', async () => {
     const { api } = makeApi();
     expect(await api.searchQuests('x')).toMatchObject({ ok: false, error: { code: 'NOT_CONNECTED' } });
+    expect(await api.searchEntities('creature', 'wolf')).toMatchObject({ ok: false, error: { code: 'NOT_CONNECTED' } });
     expect(await api.openQuest(60001)).toMatchObject({ ok: false, error: { code: 'NOT_CONNECTED' } });
   });
   it('reports drift and blocks when an always-emitted table is missing', async () => {
@@ -319,6 +320,8 @@ describe('search and names', () => {
     const { api } = await connected();
     expect(ok(await api.searchQuests('wolves'))[0]).toMatchObject({ id: 60001, title: 'Wolves' });
     expect(ok(await api.lookupNames('item', [25, 26]))).toEqual({ 25: 'Worn Shortsword' });
+    db.insert('creature_template', { entry: '299', name: 'Diseased Young Wolf', minlevel: '1', maxlevel: '2' });
+    expect(ok(await api.searchEntities('creature', 'wolf'))).toEqual([{ id: 299, name: 'Diseased Young Wolf', detail: 'Level 1–2' }]);
   });
 });
 
