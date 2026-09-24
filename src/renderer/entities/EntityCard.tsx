@@ -1,6 +1,7 @@
 import type { CustomNpc, CustomObject, NpcRank, NpcType, ObjectType, Page, Spawn } from '@core/entities/model';
 import { CheckField, NumberField, SelectField, TextField } from '../scripts/fields';
 import { SpawnList } from './SpawnList';
+import { LootList } from './LootList';
 
 const RANKS: readonly (readonly [NpcRank, string])[] = [
   ['normal', 'Normal'],
@@ -86,6 +87,7 @@ export function NpcCard({
         <NumberField label="Health multiplier" value={npc.healthModifier} onChange={(healthModifier) => onChange({ ...npc, healthModifier })} />
         <NumberField label="Damage multiplier" value={npc.damageModifier} onChange={(damageModifier) => onChange({ ...npc, damageModifier })} />
       </div>
+      <LootList idPrefix={`npc-${npc.entry}`} loot={npc.loot} onChange={(loot) => onChange({ ...npc, loot })} />
       <SpawnList
         idPrefix={`npc-${npc.entry}`}
         spawns={npc.spawns}
@@ -173,6 +175,9 @@ export function ObjectCard({
       )}
       {(object.type === 'text' || object.type === 'goober') && (
         <PageList pages={object.pages} onChange={(pages) => onChange({ ...object, pages })} allocate={allocatePage} />
+      )}
+      {object.type === 'chest' && (
+        <LootList idPrefix={`obj-${object.entry}`} loot={object.loot} onChange={(loot) => onChange({ ...object, loot })} />
       )}
       <SpawnList
         idPrefix={`obj-${object.entry}`}
