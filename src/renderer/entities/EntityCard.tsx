@@ -2,6 +2,7 @@ import type { CustomNpc, CustomObject, NpcRank, NpcType, ObjectType, Page, Spawn
 import { CheckField, NumberField, SelectField, TextField } from '../scripts/fields';
 import { SpawnList } from './SpawnList';
 import { LootList } from './LootList';
+import { FightEditor } from '../combat/FightEditor';
 
 const RANKS: readonly (readonly [NpcRank, string])[] = [
   ['normal', 'Normal'],
@@ -87,6 +88,7 @@ export function NpcCard({
         <NumberField label="Health multiplier" value={npc.healthModifier} onChange={(healthModifier) => onChange({ ...npc, healthModifier })} />
         <NumberField label="Damage multiplier" value={npc.damageModifier} onChange={(damageModifier) => onChange({ ...npc, damageModifier })} />
       </div>
+      <FightEditor idPrefix={`npc-${npc.entry}`} fight={npc.fight} onChange={(fight) => onChange({ ...npc, fight })} />
       <LootList idPrefix={`npc-${npc.entry}`} loot={npc.loot} onChange={(loot) => onChange({ ...npc, loot })} />
       <SpawnList
         idPrefix={`npc-${npc.entry}`}

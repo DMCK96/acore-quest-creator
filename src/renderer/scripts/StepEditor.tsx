@@ -79,7 +79,7 @@ export function defaultStep(kind: StepKind): SceneStep {
 const TOGGLES = [['keep', 'Leave as it is'], ['on', 'On'], ['off', 'Off']] as const;
 
 /** One step's own fields, below its wait. */
-function StepFields({ idPrefix, step, onChange }: { idPrefix: string; step: SceneStep; onChange(next: SceneStep): void }): React.JSX.Element | null {
+export function StepFields({ idPrefix, step, onChange }: { idPrefix: string; step: SceneStep; onChange(next: SceneStep): void }): React.JSX.Element | null {
   switch (step.kind) {
     case 'say':
       return (

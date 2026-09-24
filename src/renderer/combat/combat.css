@@ -1,0 +1,42 @@
+.fight__summary {
+  margin: 0;
+  padding-left: 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  color: var(--text-muted);
+  font-size: 13px;
+  line-height: 1.4;
+}
+
+.fight__start {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 10px;
+}
+
+.fight-item {
+  margin: 0;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.fight-phases {
+  margin: 0;
+  min-width: 0;
+}
+
+.fight-phase {
+  display: flex;
+  align-items: flex-end;
+  gap: 8px;
+}
+
+.fight-phase-checks__list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 12px;
+}
