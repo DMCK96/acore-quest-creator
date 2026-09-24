@@ -64,7 +64,7 @@ export async function readItemStarters(db: WorldDb): Promise<ItemStarter[]> {
     .sort(byEntry);
 }
 
-function toScriptRow(row: RawRow): ScriptRow {
+export function toScriptRow(row: RawRow): ScriptRow {
   return {
     entryorguid: numberOf(row.entryorguid),
     sourceType: numberOf(row.source_type),

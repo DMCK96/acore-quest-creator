@@ -134,6 +134,35 @@ const ACTION_NAMES: Record<number, string> = {
   [ACTION.callRandomRangeTimedList]: 'run a random timed action list',
 };
 
+/** What an action does, in the words the Scripts module lists other people's scripts with. */
+const STEP_NAMES: Record<number, string> = {
+  [ACTION.talk]: 'say a line',
+  [ACTION.playEmote]: 'play an emote',
+  [ACTION.cast]: 'cast a spell',
+  [ACTION.summonCreature]: 'spawn an NPC',
+  [ACTION.areaExploredOrEventHappens]: 'complete an event objective',
+  [ACTION.groupEventHappens]: 'complete an event objective for the group',
+  [ACTION.killedMonster]: 'give kill credit',
+  [ACTION.forceDespawn]: 'despawn',
+  [ACTION.setData]: 'tell another script',
+  [ACTION.summonGo]: 'spawn an object',
+  [ACTION.escortStart]: 'start an escort',
+  [ACTION.addItem]: 'give an item',
+  [ACTION.moveToPos]: 'move',
+  [ACTION.callTimedList]: 'run a sequence',
+  [ACTION.addNpcFlag]: 'change NPC flags',
+  [ACTION.removeNpcFlag]: 'change NPC flags',
+  [ACTION.goSetGoState]: 'change object state',
+};
+
+/** A script action as one step of a sentence, for scripts the tool did not write. */
+export function stepName(actionType: number): string {
+  return STEP_NAMES[actionType] ?? `SmartAI action ${actionType}`;
+}
+
+/** Events that only fire around a fight; the combat wizard, not quest scripting, will own them. */
+export const COMBAT_EVENTS: ReadonlySet<number> = new Set([0, 2, 3, 4, 5, 7, 9, 12, 13, 14, 32, 33]);
+
 /** Plain-English name for a `source_type`, so provenance UI never shows a bare number. */
 export function sourceName(sourceType: number): string {
   return SOURCE_NAMES[sourceType] ?? `source type ${sourceType}`;
@@ -185,6 +214,22 @@ export function describeEvent(row: ScriptRow): string {
       return 'when the player clicks it';
     case EVENT.link:
       return 'as part of a linked action';
+    case EVENT.updateIc:
+      return 'on a timer in combat';
+    case 2:
+      return 'at a health level';
+    case 4:
+      return 'when it enters combat';
+    case EVENT.spellHit:
+      return 'when a spell hits it';
+    case EVENT.oocLos:
+      return 'when a player comes near';
+    case EVENT.dataSet:
+      return 'when told by another script';
+    case EVENT.escortReached:
+      return 'when an escort reaches a point';
+    case EVENT.justSummoned:
+      return 'when it is spawned';
     default:
       return `on SmartAI event ${row.eventType}`;
   }
