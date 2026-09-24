@@ -516,7 +516,7 @@ export function createApi(deps: ApiDeps): Api {
     ]);
     // Only a spell list already loaded: a validation run must not wait for, or start, the big read.
     const spells = live.spellsReady;
-    return entityIssues({ entities, dbNames, questItems: questItemsOf(aggregate), knownSpell: spells ? (id) => spells.get(id) !== undefined : null });
+    return entityIssues({ entities, dbNames, questItems: questItemsOf(aggregate), objectives: objectivesOf(aggregate), knownSpell: spells ? (id) => spells.get(id) !== undefined : null });
   }
 
   /**

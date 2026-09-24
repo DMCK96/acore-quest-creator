@@ -9,6 +9,8 @@ export function entityIssues(input: {
   questItems?: readonly number[];
   /** Whether a spell is in the server's spell list; null when the list is not loaded. */
   knownSpell?: ((id: number) => boolean) | null;
+  /** `RequiredNpcOrGo`, for fights that give quest credit. */
+  objectives?: readonly number[];
 }): Issue[] {
   const questItems = new Set(input.questItems ?? []);
   const issues: Issue[] = [];
@@ -38,7 +40,7 @@ export function entityIssues(input: {
       if (row.chance < 0 || row.chance > 100) add('error', 'LOOT_CHANCE', 'a drop chance must be between 0 and 100%.');
       if (row.min < 1 || row.min > row.max) add('error', 'LOOT_COUNT', 'the least dropped must be at least 1 and no more than the most.');
     }
-    if ('fight' in entity && entity.fight) issues.push(...fightIssues(entity.fight, label, input.knownSpell ?? null));
+    if ('fight' in entity && entity.fight) issues.push(...fightIssues(entity.fight, label, input.knownSpell ?? null, input.objectives ?? null));
     const existing = input.dbNames.get(`${kind}:${entity.entry}`);
     if (existing !== undefined && existing !== entity.name) {
       add('warning', 'ENTITY_TAKEN', `entry ${entity.entry} already holds "${existing}" in the database, which this would replace.`);

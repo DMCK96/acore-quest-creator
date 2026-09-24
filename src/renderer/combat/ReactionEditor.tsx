@@ -87,7 +87,14 @@ export function ReactionEditor({
   onRemove(): void;
 }): React.JSX.Element {
   const { when, steps } = reaction;
-  const setWhen = (next: ReactionWhen): void => onChange({ ...reaction, when: next, phases: PHASED_WHEN.has(next.kind) ? reaction.phases : [] });
+  // Only a hurt-friend reaction has a friend to cast on; other reactions go back to the current target.
+  const setWhen = (next: ReactionWhen): void =>
+    onChange({
+      ...reaction,
+      when: next,
+      phases: PHASED_WHEN.has(next.kind) ? reaction.phases : [],
+      steps: next.kind === 'friendHealthBelow' ? steps : steps.map((s) => (s.kind === 'cast' && s.target === 'hurtFriend' ? { ...s, target: 'victim' as const } : s)),
+    });
   const setStep = (i: number, step: FightStep): void => onChange({ ...reaction, steps: steps.map((s, j) => (j === i ? step : s)) });
   const move = (i: number, by: -1 | 1): void => {
     const next = [...steps];
@@ -196,9 +203,20 @@ function FightStepFields({
   switch (step.kind) {
     case 'say':
     case 'emote':
-    case 'credit':
       // The same fields as the scene steps of these kinds.
       return <StepFields idPrefix={idPrefix} step={step as SceneStep} onChange={(next) => onChange(next as FightStep)} />;
+    case 'credit':
+      return (
+        <>
+          <SelectField
+            label="Objective"
+            value={String(step.objective) as '1' | '2' | '3' | '4'}
+            options={[['1', 'Objective 1'], ['2', 'Objective 2'], ['3', 'Objective 3'], ['4', 'Objective 4']] as const}
+            onChange={(o) => onChange({ ...step, objective: Number(o) as 1 | 2 | 3 | 4 })}
+          />
+          <p className="scene-hint">Goes to whoever tagged it, and their group.</p>
+        </>
+      );
     case 'cast': {
       const targets = reaction.when.kind === 'friendHealthBelow' ? [...TARGET_OPTIONS, ['hurtFriend', 'The hurt friend'] as const] : TARGET_OPTIONS;
       return (
@@ -225,7 +243,11 @@ function FightStepFields({
             onChange={(where) => onChange({ ...step, at: where === 'aroundMe' ? 'aroundMe' : { x: 0, y: 0, z: 0, o: 0 } })}
           />
           {step.at !== 'aroundMe' && <PositionInput idPrefix={`${idPrefix}-at`} value={step.at} onChange={(at) => onChange({ ...step, at })} />}
-          <CheckField label="Attack right away" value={step.attack} onChange={(attack) => onChange({ ...step, attack })} />
+          {step.at === 'aroundMe' ? (
+            <CheckField label="Appear at its target and attack right away" value={step.attack} onChange={(attack) => onChange({ ...step, attack })} />
+          ) : (
+            <p className="scene-hint">Adds at a point attack players who come near.</p>
+          )}
         </>
       );
     case 'despawnAdds':

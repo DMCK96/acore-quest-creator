@@ -5,7 +5,8 @@ import { entityIssues } from '../../src/core/entities/validate';
 import { newNpc } from '../../src/core/entities/model';
 
 const a = { ...newAbility(emptyFight()), spellId: 116 };
-const codes = (f: Fight, known: ((id: number) => boolean) | null = null) => fightIssues(f, 'NPC "Hela"', known).map((i) => `${i.severity}:${i.code}`);
+const codes = (f: Fight, known: ((id: number) => boolean) | null = null, objectives: readonly number[] | null = null) =>
+  fightIssues(f, 'NPC "Hela"', known, objectives).map((i) => `${i.severity}:${i.code}`);
 const react = (steps: FightStep[], when: Fight['reactions'][number]['when'] = { kind: 'healthBelow', pct: 50 }, phases: number[] = []): Fight =>
   ({ ...emptyFight(), reactions: [{ id: 'r1', when, phases, steps }] });
 
@@ -42,6 +43,16 @@ describe('fightIssues', () => {
     expect(codes({ ...emptyFight(), abilities: [{ ...a, repeatMinS: 1, repeatMaxS: 3 }] })).toEqual(['warning:FIGHT_TOO_FAST']);
     expect(codes(react([{ kind: 'flee', waitMs: 0 }, { kind: 'surrender', waitMs: 1000 }], { kind: 'death' }))).toEqual(['warning:FIGHT_DEATH_WAIT']);
     expect(codes(react([{ kind: 'despawnAdds', entry: 0, waitMs: 0 }], { kind: 'evade' }))).toEqual(['warning:FIGHT_NOTHING_TO_DESPAWN']);
+  });
+  it('flags a cast on the hurt friend outside a friend-is-hurt reaction', () => {
+    expect(codes(react([{ kind: 'cast', spellId: 2054, target: 'hurtFriend', waitMs: 0 }]))).toEqual(['error:FIGHT_HURT_FRIEND']);
+    expect(codes(react([{ kind: 'cast', spellId: 2054, target: 'hurtFriend', waitMs: 0 }], { kind: 'friendHealthBelow', pct: 40, range: 30 }))).toEqual([]);
+  });
+  it('flags credit for an objective that is not an NPC objective, once the objectives are known', () => {
+    const credit = react([{ kind: 'credit', objective: 2, group: false, waitMs: 0 }]);
+    expect(codes(credit, null, [5, 0, 0, 0])).toEqual(['error:FIGHT_CREDIT_EMPTY']);
+    expect(codes(credit, null, [5, 6, 0, 0])).toEqual([]);
+    expect(codes(credit, null, null)).toEqual([]);
   });
   it('runs as part of the entity checks, named after the NPC', () => {
     const npc = { ...newNpc(1), name: 'Hela', displayId: 1, spawns: [{ guid: 1, map: 0, x: 1, y: 1, z: 1, o: 0, respawnSecs: 300, wander: 0 }], fight: { ...emptyFight(), abilities: [{ ...a, spellId: 0 }] } };

@@ -68,7 +68,8 @@ export function describeFightStep(s: FightStep, fight: Fight, spell?: SpellName)
     case 'cast':
       return `cast ${spellWord(s.spellId, spell)} on ${TARGET_WORDS[s.target]}`;
     case 'summonAdds':
-      return `summon ${s.count} × NPC ${s.entry}${s.at === 'aroundMe' ? ' around itself' : ' at a point'}${s.attack ? ' to attack' : ''}`;
+      if (s.at !== 'aroundMe') return `summon ${s.count} × NPC ${s.entry} at a point`;
+      return s.attack ? `summon ${s.count} × NPC ${s.entry} at its current target to attack` : `summon ${s.count} × NPC ${s.entry} around itself`;
     case 'despawnAdds':
       return s.entry === 0 ? 'despawn its adds' : `despawn its adds of NPC ${s.entry}`;
     case 'goToPhase':

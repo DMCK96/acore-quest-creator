@@ -61,7 +61,12 @@ describe('emitTrigger', () => {
       ['500', '9', '0', '0', '0', '1', 'T: d'],
       ['500', '9', '1', '0', '2000', '11', 'T: cast'],
     ]);
-    expect(out.rows[0]).toMatchObject({ action_param1: '500', action_param3: '2', target_type: '1' });
+    // SMART_ACTION_CALL_TIMED_ACTIONLIST is [id, timerType, allowOverride]: timer 2 runs in and out of combat.
+    expect(out.rows[0]).toMatchObject({ action_param1: '500', action_param2: '2', action_param3: '0', target_type: '1' });
+  });
+  it('lets a later list take over a running one when asked', () => {
+    const out = emitTrigger({ ...base, alloc: createAllocator({ smartScripts: [], creatureText: [] }), actions: [act(1), act(2)], shape: 'list', listOverride: true })!;
+    expect(out.rows[0]).toMatchObject({ action_param2: '2', action_param3: '1' });
   });
   it('chains actions with links when asked, ignoring waits', () => {
     const out = emitTrigger({ ...base, alloc: createAllocator({ smartScripts: [], creatureText: [] }), actions: [act(1), act(33, 500)], shape: 'link' })!;

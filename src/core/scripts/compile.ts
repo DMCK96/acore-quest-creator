@@ -13,7 +13,7 @@ import {
 import type { ScriptContext } from './context';
 import { describeGate, describeStep } from './describe';
 import { triggerHasPlayer, type QuestScene, type SceneGate, type SceneStep } from './model';
-import { createAllocator, emitTrigger, type Row, type SmartAction } from './rows';
+import { createAllocator, emitTrigger, textComment, type Row, type SmartAction } from './rows';
 import { isOurs, sceneFromComment, sceneIdOf, sceneTag, triggerComment } from './tag';
 
 /**
@@ -270,7 +270,7 @@ export function compileScenes(input: CompileInput): CompiledScripts {
             row: {
               CreatureID: text(entryorguid), GroupID: text(group), ID: '0', Text: step.text, Type: text(type), Language: '0',
               Probability: '100', Emote: '0', Duration: '0', Sound: '0', BroadcastTextId: '0', TextRange: '0',
-              comment: `${tag}: ${describe}`,
+              comment: textComment(tag, describe),
             },
           });
           return one(ACTION.talk, [group, 0, hasPlayer ? 1 : 0], hasPlayer ? TARGET.invoker : TARGET.self);

@@ -55,7 +55,7 @@ describe('compileFights: reactions', () => {
     })]);
     expect(smart(out)).toEqual([expect.objectContaining({
       id: '0', event_type: '2', event_param1: '0', event_param2: '30', event_flags: '1',
-      action_type: '1', action_param1: '0', action_param3: '1', target_type: '7',
+      action_type: '1', action_param1: '0', action_param3: '0', target_type: '1',
       comment: `${TAG}: At 30% health: yell "Enough!"`,
     })]);
   });
@@ -63,7 +63,7 @@ describe('compileFights: reactions', () => {
   it('runs several steps through a timed list', () => {
     const out = compile([npc(fight({ reactions: [reaction({ kind: 'aggro' }, [yell('Die!'), { kind: 'cast', spellId: 8269, target: 'self', waitMs: 2000 }])] }))]);
     const rows = smart(out);
-    expect(rows[0]).toMatchObject({ source_type: '0', event_type: '4', action_type: '80', action_param1: '1200000100', action_param3: '2' });
+    expect(rows[0]).toMatchObject({ source_type: '0', event_type: '4', action_type: '80', action_param1: '1200000100', action_param2: '2', action_param3: '1' });
     expect(rows.slice(1).map((r) => [r.entryorguid, r.source_type, r.id, r.event_param1, r.action_type, r.action_param1, r.target_type])).toEqual([
       ['1200000100', '9', '0', '0', '1', '0', '7'],
       ['1200000100', '9', '1', '2000', '11', '8269', '1'],
@@ -74,7 +74,7 @@ describe('compileFights: reactions', () => {
     const out = compile([npc(fight({ reactions: [reaction({ kind: 'death' }, [yell('No...'), { kind: 'credit', objective: 1, group: false, waitMs: 500 }])] }))]);
     expect(smart(out).map((r) => [r.source_type, r.id, r.link, r.event_type, r.action_type, r.action_param1, r.target_type])).toEqual([
       ['0', '0', '1', '6', '1', '0', '7'],
-      ['0', '1', '0', '61', '33', '12000001', '7'],
+      ['0', '1', '0', '61', '33', '12000001', '1'],
     ]);
   });
 
@@ -120,26 +120,29 @@ describe('compileFights: adds and surrender', () => {
     const out = compile([npc(fight({ reactions: [reaction({ kind: 'healthBelow', pct: 50 }, [{ kind: 'summonAdds', entry: 12000002, count: 2, at: 'aroundMe', attack: true, waitMs: 0 }])] }))]);
     const list = smart(out).filter((r) => r.source_type === '9');
     expect(list.map((r) => [r.action_type, r.action_param1, r.action_param2, r.action_param3, r.action_param4, r.target_type])).toEqual([
-      ['12', '12000002', '6', '10000', '1', '1'],
-      ['12', '12000002', '6', '10000', '1', '1'],
+      ['12', '12000002', '6', '10000', '1', '2'],
+      ['12', '12000002', '6', '10000', '1', '2'],
     ]);
+    // I5: only this NPC's own summons (SMART_TARGET_SUMMONED_CREATURES), never every creature of the entry.
     const evade = smart(out).find((r) => r.event_type === '7')!;
-    expect(evade).toMatchObject({ action_type: '41', target_type: '9', target_param1: '12000002', target_param2: '0', target_param3: '100', comment: `${TAG}: When it resets: despawn its adds (added automatically)` });
+    expect(evade).toMatchObject({ action_type: '41', target_type: '204', target_param1: '0', comment: `${TAG}: When it resets: despawn its adds (added automatically)` });
   });
 
-  it('turns "despawn its adds" into one row per summoned NPC, never an entry-0 despawn', () => {
+  it('despawns only its own adds, never every creature of an entry in range', () => {
     const out = compile([npc(fight({ reactions: [
-      reaction({ kind: 'healthBelow', pct: 50 }, [
-        { kind: 'summonAdds', entry: 7, count: 1, at: 'aroundMe', attack: true, waitMs: 0 },
-        { kind: 'summonAdds', entry: 8, count: 1, at: 'aroundMe', attack: true, waitMs: 0 },
-      ]),
+      reaction({ kind: 'healthBelow', pct: 50 }, [{ kind: 'summonAdds', entry: 7, count: 1, at: 'aroundMe', attack: false, waitMs: 0 }]),
       reaction({ kind: 'evade' }, [{ kind: 'despawnAdds', entry: 0, waitMs: 0 }], { id: 'r2' }),
+      reaction({ kind: 'death' }, [{ kind: 'despawnAdds', entry: 7, waitMs: 0 }], { id: 'r3' }),
     ] }))]);
     const despawns = smart(out).filter((r) => r.action_type === '41');
-    expect(despawns.map((r) => r.target_param1)).toEqual(['7', '8']);
+    expect(despawns.map((r) => [r.event_type, r.target_type, r.target_param1])).toEqual([['7', '204', '0'], ['6', '204', '7']]);
+    expect(smart(out).some((r) => r.target_type === '9')).toBe(false);
     expect(smart(out).filter((r) => r.event_type === '7')).toHaveLength(1);
-    const lonely = compile([npc(fight({ reactions: [reaction({ kind: 'evade' }, [{ kind: 'despawnAdds', entry: 0, waitMs: 0 }])] }))]);
-    expect(smart(lonely).some((r) => r.action_type === '41' && r.target_param1 === '0')).toBe(false);
+  });
+
+  it('summons adds that do not attack where it stands', () => {
+    const out = compile([npc(fight({ reactions: [reaction({ kind: 'healthBelow', pct: 50 }, [{ kind: 'summonAdds', entry: 7, count: 1, at: 'aroundMe', attack: false, waitMs: 0 }])] }))]);
+    expect(smart(out).find((r) => r.action_type === '12')).toMatchObject({ action_param4: '0', target_type: '1' });
   });
 
   it('surrenders by turning friendly and resetting, and turns hostile again out of combat', () => {
@@ -150,6 +153,23 @@ describe('compileFights: adds and surrender', () => {
       event_param1: '120000', event_param2: '120000', event_param3: '120000', event_param4: '120000', action_type: '2', action_param1: '0', target_type: '1',
       comment: `${TAG}: Out of combat: turns hostile again within two minutes of surrendering (added automatically)`,
     });
+  });
+});
+
+describe('compileFights: server rules', () => {
+  it('runs a friend-is-hurt reaction through a list unless its one action is on itself or the friend', () => {
+    const on = (target: 'victim' | 'hurtFriend') => compile([npc(fight({ reactions: [reaction({ kind: 'friendHealthBelow', pct: 40, range: 30 }, [{ kind: 'cast', spellId: 2054, target, waitMs: 0 }])] }))]);
+    expect(smart(on('victim'))[0]).toMatchObject({ event_type: '74', action_type: '80' });
+    expect(smart(on('hurtFriend'))[0]).toMatchObject({ event_type: '74', action_type: '11', target_type: '7' });
+  });
+
+  it('keeps a long line\'s text comment within the 255 characters the column holds', () => {
+    const long = 'A'.repeat(400);
+    const out = compile([npc(fight({ reactions: [reaction({ kind: 'aggro' }, [yell(long)])] }))]);
+    const row = out.inserts.creature_text![0]!;
+    expect(row.Text).toBe(long);
+    expect(row.comment!.length).toBeLessThanOrEqual(255);
+    expect(row.comment!.startsWith(`${TAG}: yell "AAA`)).toBe(true);
   });
 });
 

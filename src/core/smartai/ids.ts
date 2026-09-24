@@ -100,6 +100,8 @@ export const TARGET = {
   invokerParty: 16,
   closestCreature: 19,
   closestGameobject: 20,
+  /** `SMART_TARGET_SUMMONED_CREATURES`: the owner's own summons, of one entry or (0) all. */
+  summonedCreatures: 204,
 } as const;
 
 /** `CONDITION_*` from `ConditionMgr.h`: what a condition row checks. */

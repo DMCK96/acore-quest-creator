@@ -22,8 +22,20 @@ export interface SmartAction {
 }
 
 const LIST_SLOTS = 100;
-/** `SMART_ACTION_CALL_TIMED_ACTIONLIST`'s timer type that runs whether or not the owner is fighting. */
+/**
+ * `SMART_ACTION_CALL_TIMED_ACTIONLIST` takes `[id, timerType, allowOverride]`; timer type 2 runs the
+ * list whether or not the owner is fighting. `allowOverride` is a boolean the server checks at load:
+ * any other value and it skips the row.
+ */
 const LIST_TIMER_ALWAYS = 2;
+/** `creature_text.comment` is a varchar(255); a longer comment fails the whole patch in strict mode. */
+const TEXT_COMMENT_MAX = 255;
+
+/** A `creature_text` comment cut to what the column holds; the full line is in `Text`. */
+export function textComment(tag: string, describe: string): string {
+  const comment = `${tag}: ${describe}`;
+  return comment.length <= TEXT_COMMENT_MAX ? comment : `${comment.slice(0, TEXT_COMMENT_MAX - 1)}…`;
+}
 
 const text = (n: number): string => String(n);
 const num = (raw: string | null | undefined): number => {
@@ -138,10 +150,14 @@ export function emitTrigger(input: {
   shape: 'list' | 'link';
   phaseMask?: number;
   eventFlags?: number;
+  /** Whether this list replaces one the owner is still running, rather than being dropped. */
+  listOverride?: boolean;
+  /** False when the event cannot carry this action on its own row, so even one action goes in a list. */
+  allowSingle?: boolean;
 }): { rows: Row[]; triggerId: number } | null {
   const { alloc, entryorguid, source, eventType, eventParams, actions, header, tag, phaseMask, eventFlags } = input;
   const flags = { phaseMask, eventFlags };
-  if (actions.length === 1 && actions[0]!.waitMs === 0) {
+  if ((input.allowSingle ?? true) && actions.length === 1 && actions[0]!.waitMs === 0) {
     const triggerId = alloc.takeId(entryorguid, source);
     return { triggerId, rows: [smartRow({ entryorguid, source, id: triggerId, link: 0, eventType, eventParams, action: actions[0]!, comment: header, ...flags })] };
   }
@@ -158,7 +174,9 @@ export function emitTrigger(input: {
   const list = alloc.takeList(entryorguid);
   if (list === null) return null;
   const triggerId = alloc.takeId(entryorguid, source);
-  const call: SmartAction = { type: ACTION.callTimedList, params: [list, 0, LIST_TIMER_ALWAYS], target: TARGET.self, targetParams: [], waitMs: 0, describe: '' };
+  const call: SmartAction = {
+    type: ACTION.callTimedList, params: [list, LIST_TIMER_ALWAYS, input.listOverride ? 1 : 0], target: TARGET.self, targetParams: [], waitMs: 0, describe: '',
+  };
   const rows = [smartRow({ entryorguid, source, id: triggerId, link: 0, eventType, eventParams, action: call, comment: header, ...flags })];
   actions.forEach((action, i) =>
     rows.push(smartRow({

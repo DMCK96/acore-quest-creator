@@ -34,7 +34,7 @@ describe('compileScenes: shapes', () => {
       { kind: 'despawn', entry: 0, range: 0, waitMs: 2000 },
     ] })]);
     const rows = smart(out);
-    expect(rows[0]).toMatchObject({ source_type: '0', action_type: '80', action_param1: '29900', action_param3: '2', target_type: '1' });
+    expect(rows[0]).toMatchObject({ source_type: '0', action_type: '80', action_param1: '29900', action_param2: '2', action_param3: '0', target_type: '1' });
     const list = rows.filter((r) => r.source_type === '9');
     expect(list.map((r) => [r.entryorguid, r.id, r.event_type, r.event_param1, r.event_param2, r.action_type])).toEqual([
       ['29900', '0', '0', '0', '0', '33'],

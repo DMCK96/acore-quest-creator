@@ -77,6 +77,15 @@ describe('Fight editor', () => {
     expect(onChange.mock.calls.filter(([k]) => k === ENTITIES_FIELD)).toHaveLength(0);
   });
 
+  it('moves a cast on the hurt friend back to the current target when the reaction stops being about a hurt friend', async () => {
+    const onChange = vi.fn();
+    const f: Fight = { ...emptyFight(), reactions: [{ id: 'r1', when: { kind: 'friendHealthBelow', pct: 40, range: 30 }, phases: [], steps: [{ kind: 'cast', spellId: 2054, target: 'hurtFriend', waitMs: 0 }] }] };
+    await mountBody('entities', { [ENTITIES_FIELD]: writeEntities(withFight(f)) }, { onChange, api: spellApi() });
+    const reaction = within(fightRegion()).getByRole('group', { name: 'Reaction 1' });
+    await userEvent.selectOptions(within(reaction).getByLabelText('When'), 'At a health %');
+    expect(last(onChange).npcs[0]!.fight!.reactions[0]!.steps[0]).toMatchObject({ kind: 'cast', target: 'victim' });
+  });
+
   it('falls back to a spell ID when there is no server data folder', async () => {
     const onChange = vi.fn();
     const api = makeMockApi({ spellFacts: vi.fn(async () => okv({ available: false, reason: 'Spell names need the server data folder.', spells: {} })) });

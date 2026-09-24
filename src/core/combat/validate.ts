@@ -6,7 +6,13 @@ import { summonedEntries, type Fight } from './model';
  * What is wrong with a new NPC's fight. Each problem is reported once per fight, prefixed with the
  * NPC's label, and routed to the NPCs & objects module like the other entity issues.
  */
-export function fightIssues(fight: Fight, label: string, knownSpell: ((id: number) => boolean) | null): Issue[] {
+export function fightIssues(
+  fight: Fight,
+  label: string,
+  knownSpell: ((id: number) => boolean) | null,
+  /** `RequiredNpcOrGo` of the quest, to check credit steps against; null when not known. */
+  objectives: readonly number[] | null = null,
+): Issue[] {
   const issues: Issue[] = [];
   const seen = new Set<string>();
   const add = (severity: Issue['severity'], code: string, message: string): void => {
@@ -36,6 +42,16 @@ export function fightIssues(fight: Fight, label: string, knownSpell: ((id: numbe
     ...steps.flatMap((s) => (s.kind === 'holdAtHealth' ? [s.pct] : [])),
   ];
   if (pcts.some(badPct)) add('error', 'FIGHT_HEALTH_PCT', 'a health percentage must be between 1 and 99.');
+  if (fight.reactions.some((r) => r.when.kind !== 'friendHealthBelow' && r.steps.some((s) => s.kind === 'cast' && s.target === 'hurtFriend'))) {
+    add('error', 'FIGHT_HURT_FRIEND', 'only a "When a friend is hurt" reaction has a hurt friend to cast on.');
+  }
+  if (objectives) {
+    for (const step of steps) {
+      if (step.kind === 'credit' && !((objectives[step.objective - 1] ?? 0) > 0)) {
+        add('error', 'FIGHT_CREDIT_EMPTY', `objective ${step.objective} is not an NPC objective of this quest.`);
+      }
+    }
+  }
   if (steps.some((s) => s.kind === 'summonAdds' && s.entry <= 0)) add('error', 'FIGHT_NO_ADD', 'a summon step has no NPC; pick the add.');
   if (
     fight.abilities.some((a) => missingPhase(a.phases)) ||

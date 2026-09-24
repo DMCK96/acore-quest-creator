@@ -33,7 +33,7 @@ describe('describe', () => {
     expect(d({ kind: 'say', text: 'Die!', style: 'yell', waitMs: 0 })).toBe('yell "Die!"');
     expect(d({ kind: 'credit', objective: 1, group: false, waitMs: 0 })).toBe('give the player credit for objective 1');
     expect(d({ kind: 'cast', spellId: 116, target: 'hurtFriend', waitMs: 0 })).toBe('cast Frostbolt on the hurt friend');
-    expect(d({ kind: 'summonAdds', entry: 7, count: 2, at: 'aroundMe', attack: true, waitMs: 0 })).toBe('summon 2 × NPC 7 around itself to attack');
+    expect(d({ kind: 'summonAdds', entry: 7, count: 2, at: 'aroundMe', attack: true, waitMs: 0 })).toBe('summon 2 × NPC 7 at its current target to attack');
     expect(d({ kind: 'summonAdds', entry: 7, count: 1, at: { x: 1, y: 2, z: 3, o: 0 }, attack: false, waitMs: 0 })).toBe('summon 1 × NPC 7 at a point');
     expect(d({ kind: 'despawnAdds', entry: 0, waitMs: 0 })).toBe('despawn its adds');
     expect(d({ kind: 'despawnAdds', entry: 7, waitMs: 0 })).toBe('despawn its adds of NPC 7');
@@ -54,7 +54,7 @@ describe('describe', () => {
         { id: 'r3', when: { kind: 'kill' }, phases: [], steps: [] },
       ],
     };
-    expect(describeReaction(fight.reactions[0]!, fight)).toBe('At 50% health (in Ground): yell "Enough!", then go to phase 2: Air, then summon 1 × NPC 7 around itself to attack');
+    expect(describeReaction(fight.reactions[0]!, fight)).toBe('At 50% health (in Ground): yell "Enough!", then go to phase 2: Air, then summon 1 × NPC 7 at its current target to attack');
     expect(describeReaction(fight.reactions[2]!, fight)).toBe('When it kills a player: nothing yet');
     expect(AUTO_LINES.phaseStart(fight)).toBe('When it enters combat: go to phase 1: Ground (added automatically)');
     expect(AUTO_LINES.cleanup).toBe('When it resets: despawn its adds (added automatically)');

@@ -2,12 +2,12 @@ import type { RawRow } from '../db/types';
 import type { CustomNpc } from '../entities/model';
 import type { CompiledScripts } from '../scripts/compile';
 import type { ScriptContext } from '../scripts/context';
-import { createAllocator, emitTrigger, type Row, type SmartAction, type SmartAllocator } from '../scripts/rows';
+import { createAllocator, emitTrigger, textComment, type Row, type SmartAction, type SmartAllocator } from '../scripts/rows';
 import { fightEntryOf, fightTag } from '../scripts/tag';
 import { ACTION, EVENT, SOURCE, TARGET, TEXT_TYPE } from '../smartai/ids';
 import { AUTO_LINES, describeAbility, describeFightStep, describeReaction } from './describe';
 import {
-  autoCleanupEntries, fightIsEmpty, hasSurrender, phaseMask, PHASED_WHEN, summonedEntries,
+  autoCleanupEntries, fightIsEmpty, hasSurrender, phaseMask, PHASED_WHEN,
   type CastTarget, type Fight, type FightStep, type Reaction, type ReactionKind, type ReactionWhen,
 } from './model';
 
@@ -38,11 +38,15 @@ const NOT_REPEATABLE = 1;
 /** `TEMPSUMMON_CORPSE_TIMED_DESPAWN`, and how long a dead add's corpse stays. */
 const SUMMON_CORPSE_TIMED = 6;
 const ADD_CORPSE_MS = 10000;
-const DESPAWN_RANGE = 100;
 const FRIENDLY_FACTION = 35;
 const RESTORE_MS = 120000;
-/** Triggers whose invoker is a player the NPC fights, so a line can name them. */
-const PLAYER_INVOKER: ReadonlySet<ReactionKind> = new Set(['aggro', 'healthBelow', 'kill', 'death']);
+/**
+ * Triggers the server runs with a player behind them, so a line can name them: the attacker, the
+ * player killed, the killer. A health threshold has none, so its lines are spoken without a target.
+ */
+const PLAYER_INVOKER: ReadonlySet<ReactionKind> = new Set(['aggro', 'kill', 'death']);
+/** Targets `SMART_EVENT_FRIENDLY_HEALTH_PCT` accepts on its own row (plus creature searches); others need a list. */
+const FRIEND_ROW_TARGETS: ReadonlySet<number> = new Set([TARGET.self, TARGET.invoker]);
 
 const text = (n: number): string => String(n);
 const keyOf = (row: RawRow, columns: readonly string[]): Row => Object.fromEntries(columns.map((c) => [c, row[c] ?? '0']));
@@ -104,9 +108,15 @@ function compileOne(entry: number, fight: Fight, sink: Sink): void {
   const { alloc, insert } = sink;
   const tag = fightTag(sink.questId, entry);
   const source = SOURCE.creature;
-  const emit = (eventType: number, eventParams: readonly number[], actions: SmartAction[], header: string, extra: { shape?: 'list' | 'link'; phaseMask?: number; eventFlags?: number } = {}): void => {
+  type Extra = { shape?: 'list' | 'link'; phaseMask?: number; eventFlags?: number; allowSingle?: boolean };
+  const emit = (eventType: number, eventParams: readonly number[], actions: SmartAction[], header: string, extra: Extra = {}): void => {
     if (actions.length === 0) return;
-    const emitted = emitTrigger({ alloc, entryorguid: entry, source, eventType, eventParams, actions, header: `${tag}: ${header}`, tag, shape: extra.shape ?? 'list', phaseMask: extra.phaseMask, eventFlags: extra.eventFlags });
+    // A later reaction's list takes over from one still running: a surrender must not be dropped
+    // because an aggro yell is still playing.
+    const emitted = emitTrigger({
+      alloc, entryorguid: entry, source, eventType, eventParams, actions, header: `${tag}: ${header}`, tag, shape: extra.shape ?? 'list',
+      phaseMask: extra.phaseMask, eventFlags: extra.eventFlags, allowSingle: extra.allowSingle, listOverride: true,
+    });
     if (emitted === null) {
       sink.warn(`No free timed action list id for NPC ${entry}.`);
       return;
@@ -141,19 +151,20 @@ function compileOne(entry: number, fight: Fight, sink: Sink): void {
       shape: reaction.when.kind === 'death' ? 'link' : 'list',
       phaseMask: PHASED_WHEN.has(reaction.when.kind) ? phaseMask(reaction.phases) : 0,
       eventFlags: reaction.when.kind === 'healthBelow' ? NOT_REPEATABLE : 0,
+      allowSingle: reaction.when.kind !== 'friendHealthBelow' || actions.every((a) => FRIEND_ROW_TARGETS.has(a.target)),
     });
   }
 
-  const cleanup = autoCleanupEntries(fight);
-  if (cleanup.length > 0) {
-    emit(EVENT.evade, [], cleanup.map((e) => despawn(e, 'despawn its adds')), AUTO_LINES.cleanup, { shape: 'link' });
+  if (autoCleanupEntries(fight).length > 0) {
+    emit(EVENT.evade, [], [despawn(0, 'despawn its adds')], AUTO_LINES.cleanup);
   }
   if (hasSurrender(fight)) {
     emit(EVENT.updateOoc, [RESTORE_MS, RESTORE_MS, RESTORE_MS, RESTORE_MS], [action(ACTION.setFaction, [0], TARGET.self)], AUTO_LINES.restore);
   }
 
+  /** Its own summons of one entry, or all of them for 0; never other creatures that share the entry. */
   function despawn(addEntry: number, describe: string): SmartAction {
-    return action(ACTION.forceDespawn, [0], TARGET.creatureRange, { targetParams: [addEntry, 0, DESPAWN_RANGE], describe });
+    return action(ACTION.forceDespawn, [0], TARGET.summonedCreatures, { targetParams: [addEntry], describe });
   }
 
   function stepActions(step: FightStep, reaction: Reaction): SmartAction[] {
@@ -166,7 +177,7 @@ function compileOne(entry: number, fight: Fight, sink: Sink): void {
         insert('creature_text', {
           CreatureID: text(entry), GroupID: text(group), ID: '0', Text: step.text, Type: text(type), Language: '0',
           Probability: '100', Emote: '0', Duration: '0', Sound: '0', BroadcastTextId: '0', TextRange: '0',
-          comment: `${tag}: ${describe}`,
+          comment: textComment(tag, describe),
         });
         const named = PLAYER_INVOKER.has(reaction.when.kind);
         return first([action(ACTION.talk, [group, 0, named ? 1 : 0], named ? TARGET.invoker : TARGET.self)]);
@@ -174,21 +185,24 @@ function compileOne(entry: number, fight: Fight, sink: Sink): void {
       case 'emote':
         return first([action(ACTION.playEmote, [step.emote], TARGET.self)]);
       case 'credit':
-        return first([action(ACTION.killedMonster, [sink.objectives[step.objective - 1] ?? 0], step.group ? TARGET.invokerParty : TARGET.invoker)]);
+        // Whoever tagged the NPC and their group: a health threshold has no player behind it, and
+        // `KILLEDMONSTER` on itself credits the loot recipient.
+        return first([action(ACTION.killedMonster, [sink.objectives[step.objective - 1] ?? 0], TARGET.self)]);
       case 'cast':
         return first([action(ACTION.cast, [step.spellId, 0], TARGET_OF[step.target])]);
       case 'summonAdds': {
-        const params = [step.entry, SUMMON_CORPSE_TIMED, ADD_CORPSE_MS, step.attack ? 1 : 0];
-        const one = step.at === 'aroundMe'
-          ? action(ACTION.summonCreature, params, TARGET.self)
-          : action(ACTION.summonCreature, params, TARGET.position, { at: step.at });
+        // `attackInvoker` makes the add attack the summon's target, so adds that attack appear at the
+        // NPC's current target; beside the NPC they would attack the NPC. Adds at a point attack
+        // whoever comes near, like any hostile NPC.
+        const attack = step.attack && step.at === 'aroundMe';
+        const params = [step.entry, SUMMON_CORPSE_TIMED, ADD_CORPSE_MS, attack ? 1 : 0];
+        const one = step.at !== 'aroundMe'
+          ? action(ACTION.summonCreature, params, TARGET.position, { at: step.at })
+          : action(ACTION.summonCreature, params, attack ? TARGET.victim : TARGET.self);
         return first(Array.from({ length: step.count }, () => one));
       }
-      case 'despawnAdds': {
-        // Entry 0 must never reach the row: a creature-range target with entry 0 is every creature.
-        const targets = step.entry > 0 ? [step.entry] : summonedEntries(fight);
-        return first(targets.map((e) => despawn(e, describe)));
-      }
+      case 'despawnAdds':
+        return first([despawn(step.entry, describe)]);
       case 'goToPhase':
         return first([action(ACTION.setEventPhase, [step.phase], TARGET.self)]);
       case 'flee':
