@@ -23,6 +23,22 @@ export interface TerrainFile {
   v8: ArrayLike<number>;
   /** 16 × 16 cells of 4 × 4 hole bits, or null when the grid has none. */
   holes: Uint16Array | null;
+  /** The grid's water, or null when it has none. */
+  liquid: LiquidData | null;
+}
+
+/** `LoadedLiquidData` in the fork: a level (global or per point) and which 8 × 8-cell blocks have water. */
+export interface LiquidData {
+  globalFlags: number;
+  globalLevel: number;
+  offX: number;
+  offY: number;
+  width: number;
+  height: number;
+  /** 16 × 16 block flags; null when the file has none and the global flags apply everywhere. */
+  flags: Uint8Array | null;
+  /** `width × height` levels; null when the file has none and the global level applies. */
+  levels: Float32Array | null;
 }
 
 /** `SIZE_OF_GRIDS`: yards per grid, 64 grids across a map. */
@@ -35,6 +51,8 @@ const MAP_VERSION = 9;
 const HEIGHT_NO_HEIGHT = 0x1;
 const HEIGHT_AS_INT16 = 0x2;
 const HEIGHT_AS_INT8 = 0x4;
+const LIQUID_NO_TYPE = 0x1;
+const LIQUID_NO_HEIGHT = 0x2;
 
 const HOLETAB_H = [0x1111, 0x2222, 0x4444, 0x8888];
 const HOLETAB_V = [0x000f, 0x00f0, 0x0f00, 0xf000];
@@ -58,6 +76,7 @@ export function parseMapFile(bytes: Uint8Array): TerrainFile {
   const version = view.getUint32(4, true);
   if (version !== MAP_VERSION) throw new TerrainFormatError(`This map file is version ${version}; the server reads version ${MAP_VERSION}.`);
   const heightOffset = view.getUint32(20, true);
+  const liquidOffset = view.getUint32(28, true);
   const holesOffset = view.getUint32(36, true);
   const holesSize = view.getUint32(40, true);
 
@@ -68,13 +87,15 @@ export function parseMapFile(bytes: Uint8Array): TerrainFile {
     for (let k = 0; k < 256; k++) holes[k] = view.getUint16(holesOffset + k * 2, true);
   }
 
-  if (heightOffset === 0) return { kind: 'flat', gridHeight: Number.NaN, multiplier: 0, v9: [], v8: [], holes };
+  const liquid = liquidOffset > 0 ? parseLiquid(bytes, view, liquidOffset) : null;
+
+  if (heightOffset === 0) return { kind: 'flat', gridHeight: Number.NaN, multiplier: 0, v9: [], v8: [], holes, liquid };
   if (fourcc(bytes, heightOffset) !== 'MHGT') throw new TerrainFormatError('The map file has no height section.');
   const flags = view.getUint32(heightOffset + 4, true);
   const gridHeight = view.getFloat32(heightOffset + 8, true);
   const gridMaxHeight = view.getFloat32(heightOffset + 12, true);
   const data = heightOffset + 16;
-  if (flags & HEIGHT_NO_HEIGHT) return { kind: 'flat', gridHeight, multiplier: 0, v9: [], v8: [], holes };
+  if (flags & HEIGHT_NO_HEIGHT) return { kind: 'flat', gridHeight, multiplier: 0, v9: [], v8: [], holes, liquid };
 
   const read = (size: number, count: number, at: number, get: (offset: number) => number): number[] => {
     if (at + size * count > bytes.length) throw new TerrainFormatError('The map file ends inside its height data.');
@@ -83,16 +104,61 @@ export function parseMapFile(bytes: Uint8Array): TerrainFile {
   if (flags & HEIGHT_AS_INT16) {
     const v9 = read(2, V9, data, (o) => view.getUint16(o, true));
     const v8 = read(2, V8, data + V9 * 2, (o) => view.getUint16(o, true));
-    return { kind: 'uint16', gridHeight, multiplier: (gridMaxHeight - gridHeight) / 65535, v9, v8, holes };
+    return { kind: 'uint16', gridHeight, multiplier: (gridMaxHeight - gridHeight) / 65535, v9, v8, holes, liquid };
   }
   if (flags & HEIGHT_AS_INT8) {
     const v9 = read(1, V9, data, (o) => view.getUint8(o));
     const v8 = read(1, V8, data + V9, (o) => view.getUint8(o));
-    return { kind: 'uint8', gridHeight, multiplier: (gridMaxHeight - gridHeight) / 255, v9, v8, holes };
+    return { kind: 'uint8', gridHeight, multiplier: (gridMaxHeight - gridHeight) / 255, v9, v8, holes, liquid };
   }
   const v9 = read(4, V9, data, (o) => view.getFloat32(o, true));
   const v8 = read(4, V8, data + V9 * 4, (o) => view.getFloat32(o, true));
-  return { kind: 'float', gridHeight, multiplier: 1, v9, v8, holes };
+  return { kind: 'float', gridHeight, multiplier: 1, v9, v8, holes, liquid };
+}
+
+function parseLiquid(bytes: Uint8Array, view: DataView, at: number): LiquidData | null {
+  if (at + 16 > bytes.length) throw new TerrainFormatError('The map file ends before its water.');
+  if (fourcc(bytes, at) !== 'MLIQ') return null;
+  const headerFlags = view.getUint8(at + 4);
+  const liquid: LiquidData = {
+    globalFlags: view.getUint8(at + 5),
+    offX: view.getUint8(at + 8),
+    offY: view.getUint8(at + 9),
+    width: view.getUint8(at + 10),
+    height: view.getUint8(at + 11),
+    globalLevel: view.getFloat32(at + 12, true),
+    flags: null,
+    levels: null,
+  };
+  let o = at + 16;
+  if (!(headerFlags & LIQUID_NO_TYPE)) {
+    if (o + 512 + 256 > bytes.length) throw new TerrainFormatError('The map file ends inside its water.');
+    o += 512; // the liquid type of each block, which the map does not need
+    liquid.flags = bytes.slice(o, o + 256);
+    o += 256;
+  }
+  if (!(headerFlags & LIQUID_NO_HEIGHT)) {
+    const count = liquid.width * liquid.height;
+    if (o + count * 4 > bytes.length) throw new TerrainFormatError('The map file ends inside its water levels.');
+    liquid.levels = new Float32Array(count);
+    for (let k = 0; k < count; k++) liquid.levels[k] = view.getFloat32(o + k * 4, true);
+  }
+  return liquid;
+}
+
+/** The water level at a point of this grid, or null where there is no water; as the server reads it. */
+export function liquidLevel(file: TerrainFile, x: number, y: number): number | null {
+  const liquid = file.liquid;
+  if (!liquid) return null;
+  const cx = Math.trunc(MAP_RESOLUTION * (CENTER_GRID_ID - x / SIZE_OF_GRIDS)) & (MAP_RESOLUTION - 1);
+  const cy = Math.trunc(MAP_RESOLUTION * (CENTER_GRID_ID - y / SIZE_OF_GRIDS)) & (MAP_RESOLUTION - 1);
+  const wet = liquid.flags ? liquid.flags[(cx >> 3) * 16 + (cy >> 3)] !== 0 : liquid.globalFlags !== 0;
+  if (!wet) return null;
+  if (!liquid.levels) return liquid.globalLevel;
+  const i = cx - liquid.offY;
+  const j = cy - liquid.offX;
+  if (i < 0 || i >= liquid.height || j < 0 || j >= liquid.width) return null;
+  return liquid.levels[i * liquid.width + j]!;
 }
 
 function isHole(holes: Uint16Array | null, row: number, col: number): boolean {
