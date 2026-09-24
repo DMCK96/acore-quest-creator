@@ -64,4 +64,28 @@ describe('map tiles', () => {
     broken.setDataDir('/data');
     expect(alphaAt(await broken.tile(0, 6, 32, 32), 100, 100)).toBe(0);
   });
+  it('reads a grid once when the same tile is asked for twice at the same time', async () => {
+    const { tiles, reads } = setup();
+    tiles.setDataDir('/data');
+    await Promise.all([tiles.tile(0, 6, 32, 32), tiles.tile(0, 6, 32, 32)]);
+    expect(reads()).toBe(1);
+  });
+  it('builds a zoomed-out tile from the tiles already drawn, not from the grids again', async () => {
+    const grid = buildMapFile({ kind: 'flat', gridHeight: 50 });
+    let reads = 0;
+    const files: ServerDataFiles = { isDir: async () => true, read: async (_d, name) => { reads += 1; return name === '0003232.map' ? grid : null; } };
+    const stored = new Map<string, Uint8Array>();
+    const cache = { read: async (p: string) => stored.get(p) ?? null, write: async (p: string, b: Uint8Array) => void stored.set(p, b) };
+    const first = createMapTiles({ files, cacheRoot: '/cache', cache });
+    first.setDataDir('/data');
+    for (const [tx, ty] of [[32, 32], [33, 32], [32, 33], [33, 33]] as const) await first.tile(0, 6, tx, ty);
+    // A later session: nothing in memory, the drawn tiles on disk.
+    const later = createMapTiles({ files, cacheRoot: '/cache', cache });
+    later.setDataDir('/data');
+    const before = reads;
+    const png = await later.tile(0, 5, 16, 16);
+    expect(reads).toBe(before);
+    expect(alphaAt(png, 10, 10)).toBe(255);
+    expect(alphaAt(png, 200, 200)).toBe(0);
+  });
 });

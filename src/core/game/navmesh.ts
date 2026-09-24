@@ -124,6 +124,7 @@ export function floorsAt(tile: NavTile, x: number, y: number): number[] {
     };
     for (let t = 0; t < mesh.triCount; t++) {
       const at = (mesh.triBase + t) * 4;
+      if (at + 3 > tile.detailTris.length) break;
       const a = vertex(tile.detailTris[at]!);
       const b = vertex(tile.detailTris[at + 1]!);
       const c = vertex(tile.detailTris[at + 2]!);
@@ -133,7 +134,9 @@ export function floorsAt(tile: NavTile, x: number, y: number): number[] {
       const l2 = ((c[2] - a[2]) * (rx - c[0]) + (a[0] - c[0]) * (rz - c[2])) / det;
       const l3 = 1 - l1 - l2;
       if (l1 < -1e-4 || l2 < -1e-4 || l3 < -1e-4) continue;
-      heights.push(l1 * a[1] + l2 * b[1] + l3 * c[1]);
+      const height = l1 * a[1] + l2 * b[1] + l3 * c[1];
+      // A damaged tile can hold impossible numbers; a floor that is not a number is no floor.
+      if (Number.isFinite(height)) heights.push(height);
       break;
     }
   });

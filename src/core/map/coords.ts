@@ -55,3 +55,14 @@ export function pixelInGrid(gx: number, gy: number, col: number, row: number, si
   const { north, west } = gridBounds(gx, gy);
   return { x: north - ((row + 0.5) * GRID_SIZE) / size, y: west - ((col + 0.5) * GRID_SIZE) / size };
 }
+
+/**
+ * An area's edge as points: Leaflet sizes a circle from the x axis, which this map mirrors, so a
+ * circle would draw at 1 px; a polygon through these points draws at the true radius.
+ */
+export function circleOutline(x: number, y: number, radius: number, points = 48): { x: number; y: number }[] {
+  return Array.from({ length: points }, (_, i) => {
+    const angle = (2 * Math.PI * i) / points;
+    return { x: x + radius * Math.cos(angle), y: y + radius * Math.sin(angle) };
+  });
+}

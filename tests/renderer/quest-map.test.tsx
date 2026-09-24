@@ -1,5 +1,6 @@
 // @vitest-environment jsdom
 import { describe, expect, it, vi } from 'vitest';
+import { useState } from 'react';
 import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import type { LeafletMapProps } from '../../src/renderer/map/LeafletMap';
@@ -33,7 +34,7 @@ describe('quest map', () => {
     expect(await screen.findByRole('dialog', { name: 'Quest map' })).toBeTruthy();
     expect(within(screen.getByRole('list', { name: 'Map markers' })).getByText('Hela · spawn 1')).toBeTruthy();
     expect(lastProps!.map).toBe(0);
-    expect(lastProps!.center).toEqual({ x: -8900, y: -160 });
+    expect(lastProps!.view).toMatchObject({ x: -8900, y: -160 });
   });
 
   it('keeps a dragged spawn on the floor nearest where it was', async () => {
@@ -52,11 +53,11 @@ describe('quest map', () => {
     const api = makeMockApi();
     const view = render(<NamesProvider api={api}><QuestMapView open={openWith()} onChange={vi.fn()} focusId={null} onClose={vi.fn()} /></NamesProvider>);
     await screen.findByRole('dialog', { name: 'Quest map' });
-    expect(lastProps!.center).toEqual({ x: -8900, y: -160 });
+    expect(lastProps!.view).toMatchObject({ x: -8900, y: -160 });
     const moved = { ...hela, spawns: [{ ...hela.spawns[0]!, x: -8950, y: -170 }] };
     view.rerender(<NamesProvider api={api}><QuestMapView open={openWith([moved])} onChange={vi.fn()} focusId={null} onClose={vi.fn()} /></NamesProvider>);
     expect(lastProps!.markers.find((m) => m.id === 'spawn:npc:12000001:900')).toMatchObject({ x: -8950 });
-    expect(lastProps!.center).toEqual({ x: -8900, y: -160 });
+    expect(lastProps!.view).toMatchObject({ x: -8900, y: -160 });
   });
 
   it('moves a spawn without touching Z when there is no floor data, and says so', async () => {
@@ -93,5 +94,54 @@ describe('quest map', () => {
     mount(api);
     expect(await within(screen.getByRole('list', { name: 'Map markers' })).findByText('Marshal McBride (quest giver)')).toBeTruthy();
     expect(lastProps!.markers.find((m) => m.label === 'Marshal McBride (quest giver)')!.draggable).toBe(false);
+  });
+
+  it('keeps both of two quick drags, whatever order their floors come back in', async () => {
+    const two = { ...hela, spawns: [...hela.spawns, { ...newSpawn(901), map: 0, x: -8800, y: -150, z: 70 }] };
+    const pending: ((v: unknown) => void)[] = [];
+    const api = makeMockApi({ mapFloors: vi.fn(() => new Promise((resolve) => pending.push(resolve))) as never });
+    let latest: Record<string, unknown> = {};
+    function Live() {
+      const start = openWith([two]);
+      const [values, setValues] = useState(start.aggregate.values);
+      latest = values;
+      return <QuestMapView open={{ ...start, aggregate: { ...start.aggregate, values } }} onChange={(f, v) => setValues((prev) => ({ ...prev, [f]: v }))} focusId={null} onClose={vi.fn()} />;
+    }
+    render(<NamesProvider api={api}><Live /></NamesProvider>);
+    await screen.findByRole('dialog', { name: 'Quest map' });
+    lastProps!.onMarkerMoved('spawn:npc:12000001:900', { x: -8901, y: -161 });
+    lastProps!.onMarkerMoved('spawn:npc:12000001:901', { x: -8801, y: -151 });
+    await waitFor(() => expect(pending).toHaveLength(2));
+    pending[1]!(okv({ floors: [71], ground: null }));
+    await waitFor(() => expect(readEntities(latest).npcs[0]!.spawns[1]).toMatchObject({ x: -8801 }));
+    pending[0]!(okv({ floors: [83], ground: null }));
+    await waitFor(() => expect(readEntities(latest).npcs[0]!.spawns[0]).toMatchObject({ x: -8901, z: 83 }));
+    expect(readEntities(latest).npcs[0]!.spawns[1]).toMatchObject({ x: -8801, z: 71 });
+  });
+
+  it('lists positions on the other maps it shows, and switches to them', async () => {
+    const kal = { ...newNpc(12000002), name: 'Kal', spawns: [{ ...newSpawn(950), map: 1, x: 100, y: 200, z: 5 }] };
+    mount(makeMockApi(), vi.fn(), openWith([hela, kal]));
+    await screen.findByRole('dialog', { name: 'Quest map' });
+    expect(screen.getByText('On Kalimdor')).toBeTruthy();
+    await userEvent.click(screen.getByRole('button', { name: 'Kal · spawn 1' }));
+    expect(lastProps!.map).toBe(1);
+    expect(lastProps!.view).toMatchObject({ x: 100, y: 200 });
+  });
+
+  it('flies to a position every time it is picked from the list', async () => {
+    mount();
+    await screen.findByRole('dialog', { name: 'Quest map' });
+    const before = lastProps!.view.seq;
+    await userEvent.click(within(screen.getByRole('list', { name: 'Quest positions' })).getByRole('button', { name: 'Hela · spawn 1' }));
+    const once = lastProps!.view.seq;
+    await userEvent.click(within(screen.getByRole('list', { name: 'Quest positions' })).getByRole('button', { name: 'Hela · spawn 1' }));
+    expect(once).toBeGreaterThan(before);
+    expect(lastProps!.view.seq).toBeGreaterThan(once);
+  });
+
+  it('says why there is no terrain without a server data folder', async () => {
+    render(<NamesProvider api={makeMockApi()}><QuestMapView open={openWith()} onChange={vi.fn()} focusId={null} onClose={vi.fn()} hasServerData={false} /></NamesProvider>);
+    expect(await screen.findByText('Set the server data folder on the connection to see the terrain and floors.')).toBeTruthy();
   });
 });

@@ -1,12 +1,12 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { readEntities } from '@core/entities/model';
-import { chooseZ, floorCandidates } from '@core/map/floors';
+import { addZ, chooseZ, floorCandidates } from '@core/map/floors';
 import { addSpawn, moveMarker, questMarkers } from '@core/map/positions';
 import type { FieldValue } from '@core/registry/types';
 import type { MapBox, MapInfo, OpenResult, QuestMapRef, SpawnDot } from '@shared/ipc';
 import { EntityPicker } from '../controls/EntityPicker';
 import { useApi } from '../state/names';
-import { LeafletMap, type MapMarkerView } from './LeafletMap';
+import { LeafletMap, type MapMarkerView, type MapView } from './LeafletMap';
 import './map.css';
 
 /**
@@ -32,19 +32,28 @@ interface Floors {
   candidates: number[];
 }
 
+type FloorResult = { floors: number[]; ground: number | null };
+
 export function QuestMapView({
   open,
   onChange,
   focusId,
   onClose,
+  hasServerData = true,
 }: {
   open: OpenResult;
   onChange(fieldId: string, value: FieldValue): void;
   focusId: string | null;
   onClose(): void;
+  /** Whether the connection names a server data folder; without one there is no terrain or floors. */
+  hasServerData?: boolean;
 }): React.JSX.Element {
   const api = useApi();
   const values = open.aggregate.values;
+  // Edits are built after awaiting the server, from the values as they are then: a second drag made
+  // while the first waited must not be undone by it.
+  const valuesRef = useRef(values);
+  valuesRef.current = values;
   const [maps, setMaps] = useState<MapInfo[]>(CONTINENTS);
   const [refs, setRefs] = useState<QuestMapRef[]>([]);
   const [dots, setDots] = useState<SpawnDot[]>([]);
@@ -53,12 +62,13 @@ export function QuestMapView({
   const [floors, setFloors] = useState<Floors | null>(null);
   const [notes, setNotes] = useState<Record<string, string>>({});
   const [clickAt, setClickAt] = useState<{ x: number; y: number } | null>(null);
+  const [adding, setAdding] = useState(false);
   const [searchKind, setSearchKind] = useState<'creature' | 'gameobject'>('creature');
   const [searchEntry, setSearchEntry] = useState(0);
   const [message, setMessage] = useState<string | null>(null);
-  /** The map and centre the author chose; until then, where the quest's positions are. */
+  /** The map the author chose, and where the map was last asked to look; until then, the quest's positions. */
   const [mapId, setMapId] = useState<number | null>(null);
-  const [center, setCenter] = useState<{ x: number; y: number } | null>(null);
+  const [view, setView] = useState<MapView | null>(null);
   const viewTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
@@ -89,25 +99,33 @@ export function QuestMapView({
   const firstShown = markers.find((m) => m.map !== null && shownIds.has(m.map));
   const currentMap = mapId ?? (focus && focus.map !== null && shownIds.has(focus.map) ? focus.map : (firstShown?.map ?? 0));
   const onThisMap = markers.filter((m) => m.map === currentMap || m.map === null);
+  const otherMaps = maps
+    .filter((m) => m.id !== currentMap)
+    .map((m) => ({ map: m, markers: markers.filter((k) => k.map === m.id) }))
+    .filter((g) => g.markers.length > 0);
   const offView = markers.filter((m) => m.map !== null && !shownIds.has(m.map));
   const start = focus && onThisMap.includes(focus) ? focus : onThisMap[0];
-  const shownCenter = center ?? (start ? { x: start.x, y: start.y } : { x: 0, y: 0 });
+  const shownView: MapView = view ?? (start ? { x: start.x, y: start.y, seq: 0 } : { x: 0, y: 0, seq: 0 });
+  const mapInfo = maps.find((m) => m.id === currentMap);
+
   // The view starts on the quest's first position and then stays put: following the positions would
   // recentre the map on every marker the author drags.
   const startX = start?.x;
   const startY = start?.y;
   useEffect(() => {
-    if (center === null && startX !== undefined && startY !== undefined) setCenter({ x: startX, y: startY });
-  }, [center, startX, startY]);
-  const mapInfo = maps.find((m) => m.id === currentMap);
+    if (view === null && startX !== undefined && startY !== undefined) setView({ x: startX, y: startY, seq: 0 });
+  }, [view, startX, startY]);
 
-  /** The floors at a point: their candidates, or why there are none. */
-  async function floorsAt(x: number, y: number): Promise<{ candidates: number[]; reason: string | null }> {
-    if (!api) return { candidates: [], reason: null };
-    const result = await api.mapFloors(currentMap, x, y);
-    if (!result.ok) return { candidates: [], reason: result.error.message };
-    if ('reason' in result.value) return { candidates: [], reason: result.value.reason };
-    return { candidates: floorCandidates(result.value), reason: null };
+  /** Looks at a point; a new `seq` each time, so picking the same position twice still flies there. */
+  const flyTo = (x: number, y: number): void => setView((v) => ({ x, y, seq: (v?.seq ?? 0) + 1 }));
+
+  /** The floors at a point, or why there are none. */
+  async function floorsAt(map: number, x: number, y: number): Promise<{ result: FloorResult | null; reason: string | null }> {
+    if (!api) return { result: null, reason: null };
+    const answer = await api.mapFloors(map, x, y);
+    if (!answer.ok) return { result: null, reason: answer.error.message };
+    if ('reason' in answer.value) return { result: null, reason: answer.value.reason };
+    return { result: answer.value, reason: null };
   }
 
   function noteZ(id: string, candidates: number[], reason: string | null): void {
@@ -122,9 +140,10 @@ export function QuestMapView({
   async function moved(id: string, at: { x: number; y: number }): Promise<void> {
     const marker = markers.find((m) => m.id === id);
     if (!marker || !marker.draggable) return;
-    const { candidates, reason } = await floorsAt(at.x, at.y);
+    const { result, reason } = await floorsAt(currentMap, at.x, at.y);
+    const candidates = result ? floorCandidates(result) : [];
     const z = chooseZ(candidates, marker.z) ?? marker.z;
-    const edit = moveMarker(values, id, { x: at.x, y: at.y, z });
+    const edit = moveMarker(valuesRef.current, id, { x: at.x, y: at.y, z });
     if (!edit) return;
     onChange(edit.field, edit.value);
     setSelectedId(id);
@@ -135,28 +154,36 @@ export function QuestMapView({
 
   function pickFloor(z: number): void {
     if (!floors) return;
-    const edit = moveMarker(values, floors.id, { x: floors.x, y: floors.y, z });
+    const edit = moveMarker(valuesRef.current, floors.id, { x: floors.x, y: floors.y, z });
     if (edit) onChange(edit.field, edit.value);
   }
 
   async function addHere(kind: 'npc' | 'object', entry: number): Promise<void> {
-    if (!api || !clickAt) return;
-    const allocated = await api.allocateIds(kind === 'npc' ? 'creatureSpawn' : 'gameobjectSpawn', 1);
-    if (!allocated.ok || allocated.value.length === 0) {
-      setMessage(allocated.ok ? 'No free spawn ID could be found.' : allocated.error.message);
-      return;
+    if (!api || !clickAt || adding) return;
+    const spot = clickAt;
+    const map = currentMap;
+    setAdding(true);
+    try {
+      const allocated = await api.allocateIds(kind === 'npc' ? 'creatureSpawn' : 'gameobjectSpawn', 1);
+      if (!allocated.ok || allocated.value.length === 0) {
+        setMessage(allocated.ok ? 'No free spawn ID could be found.' : allocated.error.message);
+        return;
+      }
+      const guid = allocated.value[0]!;
+      const { result, reason } = await floorsAt(map, spot.x, spot.y);
+      const candidates = result ? floorCandidates(result) : [];
+      const z = (result ? addZ(result) : null) ?? 0;
+      const edit = addSpawn(valuesRef.current, { kind, entry }, { guid, map, x: spot.x, y: spot.y, z, o: 0 });
+      if (!edit) return;
+      onChange(edit.field, edit.value);
+      const id = `spawn:${kind === 'npc' ? 'npc' : 'obj'}:${entry}:${guid}`;
+      setSelectedId(id);
+      setFloors({ id, x: spot.x, y: spot.y, candidates });
+      noteZ(id, candidates, reason);
+      setClickAt(null);
+    } finally {
+      setAdding(false);
     }
-    const guid = allocated.value[0]!;
-    const { candidates, reason } = await floorsAt(clickAt.x, clickAt.y);
-    const z = chooseZ(candidates, null) ?? 0;
-    const edit = addSpawn(values, { kind, entry }, { guid, map: currentMap, x: clickAt.x, y: clickAt.y, z, o: 0 });
-    if (!edit) return;
-    onChange(edit.field, edit.value);
-    const id = `spawn:${kind === 'npc' ? 'npc' : 'obj'}:${entry}:${guid}`;
-    setSelectedId(id);
-    setFloors({ id, x: clickAt.x, y: clickAt.y, candidates });
-    noteZ(id, candidates, reason);
-    setClickAt(null);
   }
 
   function viewChanged(box: MapBox): void {
@@ -170,6 +197,12 @@ export function QuestMapView({
     }, VIEW_DELAY_MS);
   }
 
+  function showMarker(m: MapMarkerView): void {
+    if (m.map !== null && m.map !== currentMap) setMapId(m.map);
+    setSelectedId(m.id);
+    flyTo(m.x, m.y);
+  }
+
   async function jumpTo(entry: number): Promise<void> {
     setSearchEntry(entry);
     if (!api || entry <= 0) return;
@@ -181,11 +214,18 @@ export function QuestMapView({
     }
     setMessage(null);
     setMapId(spot.map);
-    setCenter({ x: spot.x, y: spot.y });
+    flyTo(spot.x, spot.y);
   }
 
   const { npcs, objects } = readEntities(values);
   const selected = markers.find((m) => m.id === selectedId);
+  const item = (m: MapMarkerView): React.JSX.Element => (
+    <li key={m.id}>
+      <button type="button" className={`quest-map__item${m.id === selectedId ? ' quest-map__item--selected' : ''}`} onClick={() => showMarker(m)}>
+        {m.label}
+      </button>
+    </li>
+  );
 
   return (
     <div role="dialog" aria-label="Quest map" className="quest-map">
@@ -193,7 +233,13 @@ export function QuestMapView({
         <h2 className="quest-map__title">Quest map</h2>
         <label className="scene-field">
           <span>Map</span>
-          <select value={currentMap} onChange={(e) => { setMapId(Number(e.target.value)); setCenter(null); }}>
+          <select
+            value={currentMap}
+            onChange={(e) => {
+              setMapId(Number(e.target.value));
+              setView(null);
+            }}
+          >
             {maps.map((m) => (
               <option key={m.id} value={m.id}>
                 {m.name}
@@ -218,7 +264,7 @@ export function QuestMapView({
       <div className="quest-map__body">
         <LeafletMap
           map={currentMap}
-          center={shownCenter}
+          view={shownView}
           zoom={START_ZOOM}
           markers={onThisMap}
           dots={dots}
@@ -234,6 +280,7 @@ export function QuestMapView({
           onViewChanged={(box) => viewChanged(box)}
         />
         <aside className="quest-map__side">
+          {!hasServerData && <p className="scene-warning">Set the server data folder on the connection to see the terrain and floors.</p>}
           {message && <p className="scene-warning">{message}</p>}
           {capped && <p className="scene-hint">Zoom in to see every spawn here.</p>}
           {selected && (
@@ -262,12 +309,12 @@ export function QuestMapView({
               </p>
               {npcs.length + objects.length === 0 && <p className="scene-hint">Add an NPC or object in NPCs &amp; objects to place it here.</p>}
               {npcs.map((n) => (
-                <button key={`n${n.entry}`} type="button" className="entry-card__btn" onClick={() => void addHere('npc', n.entry)}>
+                <button key={`n${n.entry}`} type="button" className="entry-card__btn" disabled={adding} onClick={() => void addHere('npc', n.entry)}>
                   Add a spawn here for {n.name.trim() || `New NPC ${n.entry}`}
                 </button>
               ))}
               {objects.map((o) => (
-                <button key={`o${o.entry}`} type="button" className="entry-card__btn" onClick={() => void addHere('object', o.entry)}>
+                <button key={`o${o.entry}`} type="button" className="entry-card__btn" disabled={adding} onClick={() => void addHere('object', o.entry)}>
                   Add a spawn here for {o.name.trim() || `New object ${o.entry}`}
                 </button>
               ))}
@@ -275,21 +322,16 @@ export function QuestMapView({
           )}
           <h3 className="scene-section__title">Positions</h3>
           <ul aria-label="Quest positions" className="quest-map__list">
-            {onThisMap.map((m) => (
-              <li key={m.id}>
-                <button
-                  type="button"
-                  className={`quest-map__item${m.id === selectedId ? ' quest-map__item--selected' : ''}`}
-                  onClick={() => {
-                    setSelectedId(m.id);
-                    setCenter({ x: m.x, y: m.y });
-                  }}
-                >
-                  {m.label}
-                </button>
-              </li>
-            ))}
+            {onThisMap.map(item)}
           </ul>
+          {otherMaps.map((group) => (
+            <div key={group.map.id}>
+              <h3 className="scene-section__title">On {group.map.name}</h3>
+              <ul aria-label={`Positions on ${group.map.name}`} className="quest-map__list">
+                {group.markers.map(item)}
+              </ul>
+            </div>
+          ))}
           {offView.map((m) => (
             <p key={m.id} className="scene-hint">
               {m.label} is on a map this view does not show yet.

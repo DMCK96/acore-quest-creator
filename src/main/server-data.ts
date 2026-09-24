@@ -55,30 +55,60 @@ export async function loadServerData(dir: string, files: ServerDataFiles): Promi
   return { status, questXp };
 }
 
-export const nodeServerDataFiles: ServerDataFiles = {
-  async read(dir, fileName) {
-    let names: string[];
+/**
+ * The data folder on disk. With `listingTtlMs`, each folder's listing is reused: the map folders
+ * hold thousands of files and the quest map asks for hundreds at a time, many of them absent. A name
+ * not in the listing is looked for again once the listing is older than that, so files added later
+ * still appear. Without it every read lists the folder, as connecting needs.
+ */
+export function createServerDataFiles(options: { listingTtlMs?: number; now?: () => number; onList?: (dir: string) => void } = {}): ServerDataFiles {
+  const now = options.now ?? Date.now;
+  const ttl = options.listingTtlMs ?? 0;
+  const listings = new Map<string, { names: string[]; at: number }>();
+  const list = async (dir: string): Promise<string[] | null> => {
     try {
-      names = await readdir(dir);
+      const names = await readdir(dir);
+      options.onList?.(dir);
+      listings.set(dir, { names, at: now() });
+      return names;
     } catch {
+      listings.delete(dir);
       return null;
     }
-    // A Linux server's files keep their case, a copy made on Windows may not.
-    const match = names.find((n) => n.toLowerCase() === fileName.toLowerCase());
-    return match ? new Uint8Array(await readFile(join(dir, match))) : null;
-  },
-  async list(dir) {
-    try {
-      return await readdir(dir);
-    } catch {
-      return [];
-    }
-  },
-  async isDir(dir) {
-    try {
-      return (await stat(dir)).isDirectory();
-    } catch {
-      return false;
-    }
-  },
-};
+  };
+  // A Linux server's files keep their case, a copy made on Windows may not.
+  const find = (names: readonly string[], fileName: string): string | undefined =>
+    names.find((n) => n.toLowerCase() === fileName.toLowerCase());
+  return {
+    async read(dir, fileName) {
+      const known = listings.get(dir);
+      let match = known ? find(known.names, fileName) : undefined;
+      if (!match && (!known || now() - known.at >= ttl)) {
+        const names = await list(dir);
+        match = names ? find(names, fileName) : undefined;
+      }
+      if (!match) return null;
+      try {
+        return new Uint8Array(await readFile(join(dir, match)));
+      } catch {
+        listings.delete(dir);
+        return null;
+      }
+    },
+    async list(dir) {
+      return (await list(dir)) ?? [];
+    },
+    async isDir(dir) {
+      try {
+        return (await stat(dir)).isDirectory();
+      } catch {
+        return false;
+      }
+    },
+  };
+}
+
+export const nodeServerDataFiles: ServerDataFiles = createServerDataFiles();
+
+/** For the quest map's grid and navmesh reads: listings kept for a minute. */
+export const mapDataFiles: ServerDataFiles = createServerDataFiles({ listingTtlMs: 60_000 });

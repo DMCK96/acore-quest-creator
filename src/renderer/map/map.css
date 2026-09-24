@@ -169,3 +169,10 @@
   white-space: nowrap;
   pointer-events: none;
 }
+
+/* The plain grid under the relief: one tile's edges, one grid at full zoom. */
+.quest-map__gridline {
+  box-sizing: border-box;
+  border-right: 1px solid rgba(255, 255, 255, 0.08);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+}

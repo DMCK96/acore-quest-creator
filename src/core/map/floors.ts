@@ -22,3 +22,10 @@ export function chooseZ(candidates: readonly number[], previousZ: number | null)
   for (const z of sorted) if (Math.abs(z - previousZ) < Math.abs(best - previousZ)) best = z;
   return best;
 }
+
+/** Where a new marker lands: on the ground (or the floor that is the ground) when there is ground, else the lowest floor. */
+export function addZ(result: { floors: number[]; ground: number | null }): number | null {
+  const ground = result.ground;
+  if (ground !== null) return result.floors.find((z) => Math.abs(z - ground) <= SAME_FLOOR) ?? ground;
+  return chooseZ(result.floors, null);
+}

@@ -35,4 +35,8 @@ describe('navmesh', () => {
     const floors = floorsAt(parseNavTile(new Uint8Array(readFileSync(real))), -8902.59, -162.606);
     expect(floors.some((z) => Math.abs(z - 82.02) < 0.5)).toBe(true);
   });
+  it('never reports a floor it cannot compute', () => {
+    const tile = parseNavTile(buildNavTile([{ verts: square(Number.NaN) }, { verts: square(40) }]));
+    expect(floorsAt(tile, -50, -50)).toEqual([40]);
+  });
 });

@@ -8,7 +8,7 @@ import { FLUSH_DONE_CHANNEL, FLUSH_REQUEST_CHANNEL } from '../shared/api-methods
 import { API_METHODS, channelFor, parseRequest, type Api, type ApiError } from '../shared/ipc';
 import { createApi, type ApiDeps } from './api';
 import { seedEnvProfiles } from './env-profiles';
-import { nodeServerDataFiles } from './server-data';
+import { mapDataFiles, nodeServerDataFiles } from './server-data';
 import { createMapTiles, parseTileUrl, type MapTiles } from './map-tiles';
 import { createSecretBox } from './secret-box';
 import { openStore, type Store } from './store/store';
@@ -103,6 +103,7 @@ function buildDeps(
     },
     now: () => new Date(),
     serverDataFiles: nodeServerDataFiles,
+    mapDataFiles,
     async chooseDirectory() {
       const parent = BrowserWindow.getFocusedWindow() ?? BrowserWindow.getAllWindows()[0];
       const options = { title: 'Server data folder', properties: ['openDirectory' as const] };
@@ -252,7 +253,7 @@ void app.whenReady().then(() => {
     now: () => new Date(),
   });
   const tiles = createMapTiles({
-    files: nodeServerDataFiles,
+    files: mapDataFiles,
     cacheRoot: join(app.getPath('userData'), 'map-tiles'),
     cache: {
       async read(path) {

@@ -1,4 +1,4 @@
-import { deflateSync } from 'node:zlib';
+import { deflateSync, inflateSync } from 'node:zlib';
 
 /** RGBA pixels as a PNG file: one IDAT, no filtering. Main process only (it needs `node:zlib`). */
 
@@ -50,4 +50,41 @@ export function encodePng(width: number, height: number, rgba: Uint8Array): Uint
     o += p.length;
   }
   return out;
+}
+
+/** Pixels of a PNG this file wrote (8-bit RGBA, no filtering), or null for anything else. */
+export function decodeOwnPng(png: Uint8Array): { width: number; height: number; rgba: Uint8Array } | null {
+  if (png.length < 33 || png[0] !== 137 || png[1] !== 80) return null;
+  const view = new DataView(png.buffer, png.byteOffset, png.byteLength);
+  const width = view.getUint32(16);
+  const height = view.getUint32(20);
+  if (png[24] !== 8 || png[25] !== 6) return null;
+  const idat: Uint8Array[] = [];
+  let at = 8;
+  while (at + 8 <= png.length) {
+    const length = view.getUint32(at);
+    const type = String.fromCharCode(png[at + 4]!, png[at + 5]!, png[at + 6]!, png[at + 7]!);
+    if (type === 'IDAT') idat.push(png.subarray(at + 8, at + 8 + length));
+    at += 12 + length;
+  }
+  const joined = new Uint8Array(idat.reduce((n, c) => n + c.length, 0));
+  let o = 0;
+  for (const c of idat) {
+    joined.set(c, o);
+    o += c.length;
+  }
+  let raw: Uint8Array;
+  try {
+    raw = new Uint8Array(inflateSync(joined));
+  } catch {
+    return null; // a damaged cache file: the caller draws the tile again
+  }
+  const stride = width * 4;
+  if (raw.length !== height * (1 + stride)) return null;
+  const rgba = new Uint8Array(height * stride);
+  for (let row = 0; row < height; row++) {
+    if (raw[row * (1 + stride)] !== 0) return null;
+    rgba.set(raw.subarray(row * (1 + stride) + 1, (row + 1) * (1 + stride)), row * stride);
+  }
+  return { width, height, rgba };
 }

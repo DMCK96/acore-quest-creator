@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { chooseZ, floorCandidates } from '../../src/core/map/floors';
+import { addZ, chooseZ, floorCandidates } from '../../src/core/map/floors';
 
 describe('floors', () => {
   it('adds the terrain ground unless a floor already covers it', () => {
@@ -15,5 +15,11 @@ describe('floors', () => {
   it('puts a new marker on the lowest floor, and gives nothing without data', () => {
     expect(chooseZ([82.18, 98.12], null)).toBe(82.18);
     expect(chooseZ([], 50)).toBeNull();
+  });
+  it('puts a new marker on the ground when there is ground, not in a cave below it', () => {
+    expect(addZ({ floors: [40.5, 82.18], ground: 82.1 })).toBe(82.18);
+    expect(addZ({ floors: [40.5], ground: 82.1 })).toBe(82.1);
+    expect(addZ({ floors: [40.5, 60], ground: null })).toBe(40.5);
+    expect(addZ({ floors: [], ground: null })).toBeNull();
   });
 });

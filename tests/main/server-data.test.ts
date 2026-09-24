@@ -2,7 +2,7 @@ import { mkdtemp, mkdir, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { loadServerData, nodeServerDataFiles } from '../../src/main/server-data';
+import { createServerDataFiles, loadServerData, nodeServerDataFiles } from '../../src/main/server-data';
 import { questXpDbc } from '../helpers/dbc';
 
 let dir: string;
@@ -40,5 +40,23 @@ describe('loadServerData', () => {
     const broken = await loadServerData(dir, nodeServerDataFiles);
     expect(broken?.questXp).toBeNull();
     expect(broken?.status.problems[0]).toMatch(/^QuestXP\.dbc could not be read: .*not a WDBC file/);
+  });
+});
+
+describe('reading the server data folder', () => {
+  it('lists a folder once for many reads, and looks again for a missing file after a while', async () => {
+    let now = 0;
+    let listings = 0;
+    const files = createServerDataFiles({ listingTtlMs: 60_000, now: () => now, onList: () => { listings += 1; } });
+    await writeFile(join(dir, 'a.map'), 'A');
+    expect(await files.read(dir, 'a.map')).not.toBeNull();
+    expect(await files.read(dir, 'missing.map')).toBeNull();
+    expect(await files.read(dir, 'A.MAP')).not.toBeNull();
+    expect(listings).toBe(1);
+    await writeFile(join(dir, 'b.map'), 'B');
+    expect(await files.read(dir, 'b.map')).toBeNull();
+    now += 61_000;
+    expect(await files.read(dir, 'b.map')).not.toBeNull();
+    expect(listings).toBe(2);
   });
 });

@@ -29,6 +29,7 @@ export function QuestFlowView({ store }: { store: AppStore }): React.JSX.Element
   const addModule = store((s) => s.addModule);
   const removeModule = store((s) => s.removeModule);
   const setValue = store((s) => s.setValue);
+  const hasServerData = store((s) => Boolean(s.summary?.serverData?.dir));
   const backToChain = store((s) => s.backToChain);
   const names = useNameBook();
   const [menuOpen, setMenuOpen] = useState(false);
@@ -128,6 +129,7 @@ export function QuestFlowView({ store }: { store: AppStore }): React.JSX.Element
           open={open}
           onChange={setValue}
           focusId={mapFocus}
+          hasServerData={hasServerData}
           onClose={() => {
             setMapFocus(null);
             setOpenPanel(null);

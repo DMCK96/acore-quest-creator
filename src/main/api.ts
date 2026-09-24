@@ -97,6 +97,8 @@ export interface ApiDeps {
   serverDataFiles?: ServerDataFiles;
   /** The native folder picker; null when cancelled. */
   chooseDirectory?(): Promise<string | null>;
+  /** The data folder for the quest map's grid and navmesh reads (listings cached); `serverDataFiles` otherwise. */
+  mapDataFiles?: ServerDataFiles;
   /** Told the connection's server data folder at every connect (null when it names none), for the map tiles. */
   onServerDataDir?(dir: string | null): void;
 }
@@ -551,7 +553,7 @@ export function createApi(deps: ApiDeps): Api {
     const key = `${dir}|${name}`;
     const cached = terrainCache.get(key);
     if (cached !== undefined) return { file: cached };
-    const files = deps.serverDataFiles ?? NO_SERVER_DATA_FILES;
+    const files = deps.mapDataFiles ?? deps.serverDataFiles ?? NO_SERVER_DATA_FILES;
     let file: TerrainFile | null = null;
     // The folder may be the server's DataDir or its dbc folder; maps/ sits in the one, beside the other.
     for (const folder of [join(dir, 'maps'), join(dir, '..', 'maps')]) {
@@ -580,7 +582,7 @@ export function createApi(deps: ApiDeps): Api {
       cache.set(name, tile);
       return tile;
     }
-    const files = deps.serverDataFiles ?? NO_SERVER_DATA_FILES;
+    const files = deps.mapDataFiles ?? deps.serverDataFiles ?? NO_SERVER_DATA_FILES;
     let tile: NavTile | null = null;
     for (const folder of [join(dir, 'mmaps'), join(dir, '..', 'mmaps')]) {
       const bytes = await files.read(folder, name);

@@ -53,10 +53,12 @@ export function reliefPixels(file: TerrainFile | null, gx: number, gy: number): 
   const size = TILE_PX;
   const heights = new Float64Array(size * size);
   const known = new Uint8Array(size * size);
+  // Each pixel's world X depends only on its row and Y only on its column.
+  const xs = Array.from({ length: size }, (_, row) => pixelInGrid(gx, gy, 0, row, size).x);
+  const ys = Array.from({ length: size }, (_, col) => pixelInGrid(gx, gy, col, 0, size).y);
   for (let row = 0; row < size; row++) {
     for (let col = 0; col < size; col++) {
-      const { x, y } = pixelInGrid(gx, gy, col, row, size);
-      const h = terrainHeight(file, x, y);
+      const h = terrainHeight(file, xs[row]!, ys[col]!);
       if (h !== null && Number.isFinite(h)) {
         heights[row * size + col] = h;
         known[row * size + col] = 1;
@@ -78,8 +80,7 @@ export function reliefPixels(file: TerrainFile | null, gx: number, gy: number): 
       const len = Math.hypot(nx, ny, 1);
       const light = (nx * LIGHT[0] + ny * LIGHT[1] + LIGHT[2]) / len;
       const shade = SHADE_MIN + (SHADE_SPAN * (light + 1)) / 2;
-      const { x, y } = pixelInGrid(gx, gy, col, row, size);
-      const water = liquidLevel(file, x, y);
+      const water = liquidLevel(file, xs[row]!, ys[col]!);
       const base = water !== null && water > h ? WATER : tint(h);
       const lit = water !== null && water > h ? 0.85 + 0.15 * shade : shade;
       out.set([clamp(base[0] * lit), clamp(base[1] * lit), clamp(base[2] * lit), 255], k * 4);

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { GRID_SIZE, gridBounds, gridOf, LEAFLET_TRANSFORM, MAX_ZOOM, MIN_ZOOM, pixel0ToWorld, pixelInGrid, tileGrids, TILE_PX, worldToPixel0 } from '../../src/core/map/coords';
+import { circleOutline, GRID_SIZE, gridBounds, gridOf, LEAFLET_TRANSFORM, MAX_ZOOM, MIN_ZOOM, pixel0ToWorld, pixelInGrid, tileGrids, TILE_PX, worldToPixel0 } from '../../src/core/map/coords';
 
 describe('map coordinates', () => {
   it('puts the world origin in the middle of the zoom-0 map, north up and west left', () => {
@@ -42,5 +42,10 @@ describe('map coordinates', () => {
     expect(LEAFLET_TRANSFORM[0]).toBeCloseTo(-k, 12);
     expect(LEAFLET_TRANSFORM[1]).toBeCloseTo(32 * GRID_SIZE * k, 9);
     expect([MIN_ZOOM, MAX_ZOOM]).toEqual([2, 6]);
+  });
+  it('outlines an area as points at its radius, since circles do not draw on a mirrored map', () => {
+    const points = circleOutline(10, 20, 5, 48);
+    expect(points).toHaveLength(48);
+    for (const p of points) expect(Math.hypot(p.x - 10, p.y - 20)).toBeCloseTo(5, 9);
   });
 });

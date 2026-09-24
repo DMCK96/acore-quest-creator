@@ -1,7 +1,7 @@
 import { useEffect, useRef } from 'react';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
-import { GRID_SIZE, LEAFLET_TRANSFORM, MAX_ZOOM, MIN_ZOOM } from '@core/map/coords';
+import { circleOutline, GRID_SIZE, LEAFLET_TRANSFORM, MAX_ZOOM, MIN_ZOOM } from '@core/map/coords';
 import type { QuestMarker } from '@core/map/positions';
 import type { MapBox, SpawnDot } from '@shared/ipc';
 
@@ -13,9 +13,16 @@ import type { MapBox, SpawnDot } from '@shared/ipc';
 
 export type MapMarkerView = QuestMarker & { readOnlyRole?: 'giver' | 'ender' | 'objective' };
 
+/** Where the map is asked to look; each new `seq` moves it, even to the same point again. */
+export interface MapView {
+  x: number;
+  y: number;
+  seq: number;
+}
+
 export interface LeafletMapProps {
   map: number;
-  center: { x: number; y: number };
+  view: MapView;
   zoom: number;
   markers: MapMarkerView[];
   dots: SpawnDot[];
@@ -31,6 +38,15 @@ const HALF = 32 * GRID_SIZE;
 const CRS = L.extend({}, L.CRS.Simple, { transformation: new L.Transformation(...LEAFLET_TRANSFORM) }) as L.CRS;
 /** Beyond the tiles' own zoom the relief is scaled up, for placing things precisely. */
 const OVERZOOM = 8;
+
+/** Each tile's edges drawn as faint lines: at full zoom one tile is one of the server's grids. */
+const GridLines = L.GridLayer.extend({
+  createTile(): HTMLElement {
+    const tile = document.createElement('div');
+    tile.className = 'quest-map__gridline';
+    return tile;
+  },
+}) as unknown as new (options: L.GridLayerOptions) => L.GridLayer;
 
 const escapeHtml = (text: string): string =>
   text.replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]!);
@@ -68,7 +84,9 @@ export function LeafletMap(props: LeafletMapProps): React.JSX.Element {
       latest.current.onViewChanged({ minX: b.getSouth(), maxX: b.getNorth(), minY: b.getWest(), maxY: b.getEast() }, map.getZoom());
     });
     // After the handlers, so the first view is reported too and its spawns load without a pan.
-    map.setView([latest.current.center.x, latest.current.center.y], latest.current.zoom);
+    map.setView([latest.current.view.x, latest.current.view.y], latest.current.zoom);
+    // Grid lines under the relief, so a map without terrain (no server data folder) still has a scale.
+    new GridLines({ tileSize: 256, minZoom: MIN_ZOOM, maxZoom: OVERZOOM, maxNativeZoom: MAX_ZOOM, noWrap: true }).addTo(map);
     dotLayer.current = L.layerGroup().addTo(map);
     zoneLayer.current = L.layerGroup().addTo(map);
     mapRef.current = map;
@@ -91,9 +109,11 @@ export function LeafletMap(props: LeafletMapProps): React.JSX.Element {
     }).addTo(map);
   }, [props.map]);
 
+  const { seq } = props.view;
   useEffect(() => {
-    mapRef.current?.setView([props.center.x, props.center.y], props.zoom);
-  }, [props.center.x, props.center.y, props.zoom]);
+    const { x, y } = latest.current.view;
+    mapRef.current?.setView([x, y], mapRef.current.getZoom() || latest.current.zoom);
+  }, [seq]);
 
   // Markers are kept by id and updated in place, so a drag does not redraw the others.
   useEffect(() => {
@@ -135,8 +155,9 @@ export function LeafletMap(props: LeafletMapProps): React.JSX.Element {
       if (layer.shape === shape) continue;
       layer.shape = shape;
       layer.extra?.remove();
+      // An area as a polygon: Leaflet sizes circles from the x axis, which this map mirrors.
       layer.extra = m.radius
-        ? L.circle([m.x, m.y], { radius: m.radius, className: 'quest-map__area' }).addTo(map)
+        ? L.polygon(circleOutline(m.x, m.y, m.radius).map((p) => [p.x, p.y] as [number, number]), { className: 'quest-map__area' }).addTo(map)
         : m.outline
           ? L.polygon(m.outline.map((p) => [p.x, p.y] as [number, number]), { className: 'quest-map__poi' }).addTo(map)
           : null;
