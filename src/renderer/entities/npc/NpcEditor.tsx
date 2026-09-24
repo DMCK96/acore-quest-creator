@@ -15,8 +15,11 @@ export function NpcEditor({
   allocateSpawn,
   tab,
   onTab,
+  others,
 }: {
   npc: CustomNpc;
+  /** This quest's other new NPCs, which "Look like…" can copy before the database has them. */
+  others?: readonly CustomNpc[];
   onChange(next: CustomNpc): void;
   allocateSpawn(): Promise<number | null>;
   tab?: string;
@@ -29,7 +32,7 @@ export function NpcEditor({
       onTab={onTab}
       tabs={[
         { id: 'basics', label: 'Basics', render: () => <NpcBasics npc={npc} onChange={onChange} /> },
-        { id: 'look', label: 'Look & gear', render: () => <NpcLook npc={npc} onChange={onChange} /> },
+        { id: 'look', label: 'Look & gear', render: () => <NpcLook npc={npc} onChange={onChange} others={others} /> },
         {
           id: 'fight',
           label: 'Fight',

@@ -40,6 +40,8 @@ export function QuestFlowView({ store }: { store: AppStore }): React.JSX.Element
   /** What the map was opened to do, and the panel to go back to when it closes. */
   const [mapRequest, setMapRequest] = useState<MapRequest | null>(null);
   const [mapReturn, setMapReturn] = useState<typeof openPanel>(null);
+  const mapReturnRef = useRef(mapReturn);
+  mapReturnRef.current = mapReturn;
   /** The NPC or object editor, open over whichever panel opened it; kept while the map is open. */
   const [editor, setEditor] = useState<EditorState | null>(null);
   const editorRef = useRef(editor);
@@ -60,8 +62,10 @@ export function QuestFlowView({ store }: { store: AppStore }): React.JSX.Element
     const onKeyDown = (e: KeyboardEvent): void => {
       if (e.key !== 'Escape') return;
       const state = store.getState();
-      // The editor sits on top of the panel that opened it, so it closes first.
-      if (editorRef.current && state.openPanel !== 'map') setEditor(null);
+      // The map goes back to where it was opened from, like its Close button; the editor sits on top
+      // of the panel that opened it, so it closes before that panel.
+      if (state.openPanel === 'map') state.setOpenPanel(mapReturnRef.current);
+      else if (editorRef.current) setEditor(null);
       else if (state.openPanel !== null) state.setOpenPanel(null);
       else void state.backToChain();
     };

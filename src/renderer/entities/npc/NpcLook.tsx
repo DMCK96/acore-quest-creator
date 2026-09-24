@@ -12,18 +12,31 @@ const NO_WEAPONS = { mainHand: 0, offHand: 0, ranged: 0 };
  * browsing the server's displays, or typed as an id. Armour is part of the look; only its three
  * weapons are items.
  */
-export function NpcLook({ npc, onChange }: { npc: CustomNpc; onChange(next: CustomNpc): void }): React.JSX.Element {
+export function NpcLook({ npc, onChange, others = [] }: {
+  npc: CustomNpc;
+  onChange(next: CustomNpc): void;
+  /** This quest's other new NPCs: the search offers them, but the database does not have them yet. */
+  others?: readonly CustomNpc[];
+}): React.JSX.Element {
   const api = useApi();
   const [from, setFrom] = useState(0);
+  const [lookError, setLookError] = useState<string | null>(null);
   const [withWeapons, setWithWeapons] = useState(true);
   const [otherWays, setOtherWays] = useState(false);
 
   async function lookLike(entry: number): Promise<void> {
     setFrom(entry);
-    if (!api || entry <= 0) return;
-    const result = await api.entityTemplate('creature', entry);
-    if (!result.ok || !result.value || !('displayId' in result.value)) return;
-    const source = result.value as Partial<CustomNpc>;
+    setLookError(null);
+    if (entry <= 0) return;
+    let source: Partial<CustomNpc> | undefined = others.find((o) => o.entry === entry);
+    if (!source && api) {
+      const result = await api.entityTemplate('creature', entry);
+      if (result.ok && result.value && 'displayId' in result.value) source = result.value as Partial<CustomNpc>;
+    }
+    if (!source) {
+      setLookError('Its look could not be read.');
+      return;
+    }
     onChange({
       ...npc,
       displayId: source.displayId ?? npc.displayId,
@@ -41,6 +54,7 @@ export function NpcLook({ npc, onChange }: { npc: CustomNpc; onChange(next: Cust
     <div className="scripts-body">
       <LookLine kind="creatureDisplay" displayId={npc.displayId} />
       <EntityPicker id={`npc-${npc.entry}-look-like`} label="Look like…" kind="creature" value={from} onChange={(entry) => void lookLike(entry)} />
+      {lookError && <p className="scene-warning">{lookError}</p>}
       <CheckField label="and its weapons" value={withWeapons} onChange={setWithWeapons} />
       <button type="button" className="entry-card__btn" aria-expanded={otherWays} onClick={() => setOtherWays((v) => !v)}>
         Other ways

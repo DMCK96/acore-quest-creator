@@ -103,4 +103,18 @@ describe('the editor in the quest flow', () => {
     const back = await screen.findByRole('dialog', { name: 'New NPC' });
     expect(within(back).getByRole('tab', { name: 'Placement' })).toHaveAttribute('aria-selected', 'true');
   });
+
+  it('Escape on the map goes back to the editor over the module it came from', async () => {
+    await mountFlow();
+    await userEvent.click(within(screen.getByRole('list', { name: 'Modules' })).getByRole('button', { name: /^Quest Giver/ }));
+    await userEvent.click(screen.getByRole('button', { name: 'New NPC for starts at 1' }));
+    const editor = await screen.findByRole('dialog', { name: 'New NPC' });
+    await userEvent.click(within(editor).getByRole('tab', { name: 'Placement' }));
+    await userEvent.click(within(editor).getByRole('button', { name: 'Place on map' }));
+    await screen.findByRole('dialog', { name: 'Quest map' });
+    await userEvent.keyboard('{Escape}');
+    expect(screen.queryByRole('dialog', { name: 'Quest map' })).toBeNull();
+    expect(await screen.findByRole('dialog', { name: 'New NPC' })).toBeTruthy();
+    expect(screen.getByRole('dialog', { name: 'Quest Giver' })).toBeTruthy();
+  });
 });

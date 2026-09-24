@@ -110,7 +110,10 @@ export function EntityEditorHost({
 
   return (
     <PanelFrame title={title} onClose={onClose} footer={footer}>
-      {npc && <NpcEditor npc={npc} onChange={saveNpc} allocateSpawn={() => allocate('creatureSpawn')} tab={state.tab} onTab={onTab} />}
+      {npc && (
+        <NpcEditor npc={npc} onChange={saveNpc} allocateSpawn={() => allocate('creatureSpawn')} tab={state.tab} onTab={onTab}
+          others={entities.npcs.filter((n) => n.entry !== npc.entry)} />
+      )}
       {object && (
         <ObjectEditor object={object} onChange={saveObject} allocateSpawn={() => allocate('gameobjectSpawn')} allocatePage={() => allocate('page')}
           tab={state.tab} onTab={onTab} />

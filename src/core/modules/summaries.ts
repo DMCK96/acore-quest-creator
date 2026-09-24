@@ -31,8 +31,19 @@ export function itemName(id: number, names: NameBook): string {
   return names('item', id) ?? `item #${id}`;
 }
 
-const giverName = (t: GiverTarget, names: NameBook): string =>
-  t.kind === 'creature' ? creatureName(t.id, names) : objectName(t.id, names);
+/**
+ * A new NPC's or object's name as the quest holds it now. The name book cannot know it: the world
+ * database does not have it yet, and a name looked up while it was still blank would stay blank.
+ */
+function ownName(values: Values, kind: GiverTarget['kind'], id: number): string | undefined {
+  const entities = readEntities(values);
+  const own = kind === 'creature' ? entities.npcs.find((n) => n.entry === id) : entities.objects.find((o) => o.entry === id);
+  if (!own) return undefined;
+  return own.name.trim() || `${kind === 'creature' ? 'New NPC' : 'New object'} ${id}`;
+}
+
+const giverName = (t: GiverTarget, names: NameBook, values: Values): string =>
+  ownName(values, t.kind, t.id) ?? (t.kind === 'creature' ? creatureName(t.id, names) : objectName(t.id, names));
 
 /** Copper as `1g 50s 25c`, leaving out the zero parts; zero itself is `0c`. */
 export function formatMoney(copper: number): string {
@@ -50,7 +61,7 @@ export function giverSummary(values: Values, names: NameBook): string[] {
   const lines: string[] = [];
   for (const [role, label] of [['start', 'Starts'], ['end', 'Ends']] as const) {
     const targets = readGivers(values, role).filter((t) => t.id !== 0);
-    if (targets.length > 0) lines.push(`${label}: ${targets.map((t) => giverName(t, names)).join(', ')}`);
+    if (targets.length > 0) lines.push(`${label}: ${targets.map((t) => giverName(t, names, values)).join(', ')}`);
   }
   return lines;
 }
@@ -62,8 +73,8 @@ export function objectivesSummary(values: Values, names: NameBook): string[] {
     if (!target || target.id === 0) continue;
     lines.push(
       target.target === 'creature'
-        ? `Kill ${num(row.count)} × ${creatureName(target.id, names)}`
-        : `Use ${num(row.count)} × ${objectName(target.id, names)}`,
+        ? `Kill ${num(row.count)} × ${ownName(values, 'creature', target.id) ?? creatureName(target.id, names)}`
+        : `Use ${num(row.count)} × ${ownName(values, 'gameobject', target.id) ?? objectName(target.id, names)}`,
     );
   }
   for (const row of rowsOf(values, 'quest_template.RequiredItems')) {

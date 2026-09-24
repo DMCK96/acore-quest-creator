@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { describe, expect, it, vi } from 'vitest';
 import { useState } from 'react';
-import { render, screen, waitFor, within } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { NpcEditor } from '../../src/renderer/entities/npc/NpcEditor';
 import { NamesProvider } from '../../src/renderer/state/names';
@@ -14,6 +14,11 @@ function Live({ api, start }: { api: Api; start: CustomNpc }) {
   const [npc, setNpc] = useState(start);
   current = npc;
   return <NamesProvider api={api}><NpcEditor npc={npc} onChange={(n) => { current = n; setNpc(n); }} allocateSpawn={async () => 900} /></NamesProvider>;
+}
+function NpcEditorLive({ start, others }: { start: CustomNpc; others: CustomNpc[] }) {
+  const [npc, setNpc] = useState(start);
+  current = npc;
+  return <NpcEditor npc={npc} onChange={(n) => { current = n; setNpc(n); }} allocateSpawn={async () => 900} others={others} />;
 }
 const tab = (name: string) => userEvent.click(screen.getByRole('tab', { name }));
 
@@ -111,5 +116,39 @@ describe('NPC editor', () => {
     await tab('Placement');
     await userEvent.click(screen.getByRole('button', { name: 'Add spawn' }));
     await waitFor(() => expect(current.spawns).toHaveLength(1));
+  });
+
+  it('sets a faction by id when the search finds nothing, and never clears it to none', async () => {
+    render(<Live api={makeMockApi()} start={{ ...newNpc(12000001), faction: 11 }} />);
+    // One change: clearing the field on the way would ask for faction 0, which is never taken.
+    fireEvent.change(screen.getByLabelText('Faction ID'), { target: { value: '1078' } });
+    expect(current.faction).toBe(1078);
+    await userEvent.click(screen.getByRole('button', { name: 'Clear Faction' }));
+    expect(current.faction).toBe(1078);
+  });
+
+  it('looks like one of this quest\'s own NPCs, which the database does not have yet', async () => {
+    const other = { ...newNpc(12000009), name: 'First Guard', displayId: 555, scale: 2, equipment: { mainHand: 7, offHand: 0, ranged: 0 } };
+    const api = makeMockApi({
+      searchEntities: vi.fn(async () => okv([{ id: 12000009, name: 'First Guard', detail: 'new' }])),
+      entityTemplate: vi.fn(async () => okv(null)),
+    });
+    render(<NamesProvider api={api}><NpcEditorLive start={newNpc(12000001)} others={[other]} /></NamesProvider>);
+    await tab('Look & gear');
+    await userEvent.type(screen.getByRole('combobox', { name: 'Look like…' }), 'first');
+    await userEvent.click(await screen.findByRole('option', { name: /First Guard/ }));
+    await waitFor(() => expect(current).toMatchObject({ displayId: 555, scale: 2, equipment: { mainHand: 7, offHand: 0, ranged: 0 } }));
+  });
+
+  it('says so when a look could not be read', async () => {
+    const api = makeMockApi({
+      searchEntities: vi.fn(async () => okv([{ id: 68, name: 'Stormwind City Guard' }])),
+      entityTemplate: vi.fn(async () => okv(null)),
+    });
+    render(<Live api={api} start={newNpc(12000001)} />);
+    await tab('Look & gear');
+    await userEvent.type(screen.getByRole('combobox', { name: 'Look like…' }), 'guard');
+    await userEvent.click(await screen.findByRole('option', { name: /Stormwind City Guard/ }));
+    expect(await screen.findByText('Its look could not be read.')).toBeTruthy();
   });
 });

@@ -34,8 +34,9 @@ export function NpcBasics({ npc, onChange }: { npc: CustomNpc; onChange(next: Cu
         <NumberField label="Min level" value={npc.minLevel} min={1} onChange={(minLevel) => onChange({ ...npc, minLevel: Math.round(minLevel) })} />
         <NumberField label="Max level" value={npc.maxLevel} min={1} onChange={(maxLevel) => onChange({ ...npc, maxLevel: Math.round(maxLevel) })} />
       </div>
+      {/* Every NPC has a faction: clearing the search keeps the one it has. */}
       <EntityPicker id={`npc-${npc.entry}-faction`} label="Faction" kind="factionTemplate" value={npc.faction}
-        onChange={(faction) => onChange({ ...npc, faction })} />
+        onChange={(faction) => faction > 0 && onChange({ ...npc, faction })} />
       <div className="scene-row" aria-label="Common factions">
         {COMMON_FACTIONS.map((f) => (
           <button key={f.id} type="button" aria-pressed={npc.faction === f.id}
@@ -44,6 +45,9 @@ export function NpcBasics({ npc, onChange }: { npc: CustomNpc; onChange(next: Cu
           </button>
         ))}
       </div>
+      {/* Without the server data folder there is no faction search, so the id can always be typed. */}
+      <NumberField label="Faction ID" value={npc.faction} min={1}
+        onChange={(faction) => Math.round(faction) > 0 && onChange({ ...npc, faction: Math.round(faction) })} />
       <div className="scene-row">
         <SelectField label="Rank" value={npc.rank} options={RANKS} onChange={(rank) => onChange({ ...npc, rank })} />
         <SelectField label="Type" value={npc.type} options={NPC_TYPES} onChange={(type) => onChange({ ...npc, type })} />
