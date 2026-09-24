@@ -33,4 +33,9 @@ describe('gmCommands', () => {
       { command: '.go xyz -8913.25 -136.5 80.5 0', label: 'Scout Hela' },
     ]);
   });
+  it('reloads patrol routes and says a new patrol needs a restart', () => {
+    const out = gmCommands({ questId: 60001, tables: new Set(['creature', 'creature_addon', 'waypoint_data']), creatureTemplates: [], hasStarter: false, spawns: [], newObjectTemplates: false, escorts: false });
+    expect(out.reload).toContainEqual({ command: '.reload waypoint_data', label: 'Patrol routes' });
+    expect(out.restart).toContainEqual({ reason: 'A new or changed patrol starts after a server restart: the server reads which spawn walks which route when it starts.' });
+  });
 });

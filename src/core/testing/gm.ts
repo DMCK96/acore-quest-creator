@@ -42,6 +42,7 @@ const QUEST_TABLES = [
 const RELOADS: readonly { tables: readonly string[]; command: string; label: string }[] = [
   { tables: QUEST_TABLES, command: '.reload all quest', label: 'Quest text, rewards and givers' },
   { tables: ['smart_scripts'], command: '.reload smart_scripts', label: 'Scripts' },
+  { tables: ['waypoint_data'], command: '.reload waypoint_data', label: 'Patrol routes' },
   { tables: ['creature_text'], command: '.reload creature_text', label: 'What NPCs say' },
   { tables: ['conditions'], command: '.reload conditions', label: 'Conditions' },
   { tables: ['gossip_menu', 'gossip_menu_option', 'npc_text'], command: '.reload all gossips', label: 'Talk options' },
@@ -59,6 +60,9 @@ export function gmCommands(input: GmInput): TestCommands {
   const restart: GmRestart[] = [];
   if (tables.has('creature') || tables.has('gameobject')) {
     restart.push({ reason: 'New spawns appear after a server restart: the server loads spawns when it starts.' });
+  }
+  if (tables.has('creature_addon')) {
+    restart.push({ reason: 'A new or changed patrol starts after a server restart: the server reads which spawn walks which route when it starts.' });
   }
   if (input.newObjectTemplates) {
     restart.push({ reason: 'New objects appear after a server restart: object templates cannot be reloaded.' });
