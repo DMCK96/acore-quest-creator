@@ -1207,7 +1207,7 @@ export function createApi(deps: ApiDeps): Api {
           entityStatements.flatMap((s) => (s.table === table && s.kind !== 'update' && s.kind !== 'set-flag' ? [String((s.kind === 'insert' ? s.row : s.key)[column] ?? '')] : []));
         const entityBefore: Record<string, RawRow[]> = Object.fromEntries(
           await Promise.all(
-            ([['creature_template', 'entry'], ['creature_template_model', 'CreatureID'], ['creature', 'guid'], ['gameobject_template', 'entry'], ['gameobject', 'guid'], ['page_text', 'ID'], ['creature_loot_template', 'Entry'], ['gameobject_loot_template', 'Entry']] as const)
+            ([['creature_template', 'entry'], ['creature_template_model', 'CreatureID'], ['creature', 'guid'], ['gameobject_template', 'entry'], ['gameobject', 'guid'], ['page_text', 'ID'], ['creature_loot_template', 'Entry'], ['gameobject_loot_template', 'Entry'], ['creature_addon', 'guid'], ['waypoint_data', 'id']] as const)
               .map(async ([table, column]) => [table, await rowsOrNone(live.db, table, { [column]: [...new Set(keysOf(table, column))] })] as const),
           ),
         );

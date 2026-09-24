@@ -2,7 +2,7 @@ import { fightIsEmpty } from '../combat/model';
 import type { CompiledScripts } from '../scripts/compile';
 import { questTagPrefix } from '../scripts/tag';
 import type { EntityContext } from './context';
-import { NPC_TYPE_VALUE, OBJECT_TYPE_VALUE, RANK_VALUE, type LootRow, type QuestEntities } from './model';
+import { NPC_TYPE_VALUE, OBJECT_TYPE_VALUE, RANK_VALUE, type LootRow, type Patrol, type QuestEntities } from './model';
 
 /**
  * New NPCs and objects to template and spawn rows, in the same shape as compiled scripts so one
@@ -21,6 +21,28 @@ const UNIT_CLASS = 1;
 const GO_READY = 1;
 const ANIM_FULL = 100;
 const RANDOM_MOVEMENT = 1;
+/** `WAYPOINT_MOTION_TYPE`: the spawn walks the path its `creature_addon` names. */
+const WAYPOINT_MOVEMENT = 2;
+const PACE_MOVE_TYPE = { walk: 0, run: 1 } as const;
+
+/** A patrol with a route to walk; one point alone is no route. */
+const walking = (patrol: Patrol | null): patrol is Patrol => patrol !== null && patrol.points.length >= 2;
+
+/** One `waypoint_data` row per point; each row's pace is the one it walks there at. */
+function routeRows(patrol: Patrol): Record<string, string>[] {
+  let pace = patrol.startPace;
+  return patrol.points.map((point, i) => {
+    const row: Record<string, string> = {
+      id: String(patrol.pathId), point: String(i + 1), position_x: String(point.x), position_y: String(point.y), position_z: String(point.z),
+      delay: String(Math.round(point.waitSecs * 1000)), move_type: String(PACE_MOVE_TYPE[pace]), action: '0', action_chance: '100', wpguid: '0',
+      velocity: '0', smoothTransition: '0',
+    };
+    // Left out, the column stays NULL and the server does not turn the NPC.
+    if (point.facing !== null) row.orientation = String(point.facing);
+    if (point.paceFromHere !== null) pace = point.paceFromHere;
+    return row;
+  });
+}
 
 const text = (n: number): string => String(n);
 const round6 = (n: number): number => Math.round(n * 1e6) / 1e6;
@@ -92,13 +114,20 @@ export function compileEntities(input: {
     });
     for (const spawn of npc.spawns) {
       creatureGuids.add(spawn.guid);
+      const patrol = walking(spawn.patrol) ? spawn.patrol : null;
       insert('creature', {
         // Stock AzerothCore calls the spawn's NPC `id1`, older forks `id`; the export keeps the one the database has.
         guid: text(spawn.guid), id: text(npc.entry), id1: text(npc.entry), map: text(spawn.map), spawnMask: '1', phaseMask: '1',
         position_x: text(spawn.x), position_y: text(spawn.y), position_z: text(spawn.z), orientation: text(spawn.o),
-        spawntimesecs: text(spawn.respawnSecs), wander_distance: text(spawn.wander), MovementType: text(spawn.wander > 0 ? RANDOM_MOVEMENT : 0),
+        spawntimesecs: text(spawn.respawnSecs),
+        wander_distance: text(patrol ? 0 : spawn.wander),
+        MovementType: text(patrol ? WAYPOINT_MOVEMENT : spawn.wander > 0 ? RANDOM_MOVEMENT : 0),
         Comment: `${questTagPrefix(questId)}npc${npc.entry}`,
       });
+      if (patrol) {
+        insert('creature_addon', { guid: text(spawn.guid), path_id: text(patrol.pathId) });
+        for (const row of routeRows(patrol)) insert('waypoint_data', row);
+      }
     }
   }
 
@@ -153,6 +182,21 @@ export function compileEntities(input: {
   add('gameobject_template', sorted(entities.objects.map((o) => o.entry)).map((e) => ({ entry: text(e) })));
   add('gameobject', sorted(objectGuids).map((g) => ({ guid: text(g) })));
   add('page_text', sorted(entities.objects.flatMap((o) => o.pages.map((p) => p.id))).map((id) => ({ ID: text(id) })));
+  // Patrols: the addon and route of every spawn this quest has or had, whether it still patrols or not.
+  const addonGuids = new Set<number>((out.inserts.creature_addon ?? []).map((r) => num(r.guid)));
+  const ownedPaths = new Set<number>();
+  for (const npc of entities.npcs) for (const spawn of npc.spawns) if (spawn.patrol) ownedPaths.add(spawn.patrol.pathId);
+  for (const row of context.addons) {
+    if (!creatureGuids.has(num(row.guid))) continue;
+    addonGuids.add(num(row.guid));
+    if (num(row.path_id) > 0) ownedPaths.add(num(row.path_id));
+  }
+  add('creature_addon', sorted(addonGuids).map((g) => ({ guid: text(g) })));
+  const points = new Map<string, Row>();
+  for (const row of [...context.waypointRows.filter((r) => ownedPaths.has(num(r.id))), ...(out.inserts.waypoint_data ?? [])]) {
+    points.set(`${num(row.id)}/${num(row.point)}`, { id: text(num(row.id)), point: text(num(row.point)) });
+  }
+  add('waypoint_data', [...points.values()].sort((a, b) => num(a.id) - num(b.id) || num(a.point) - num(b.point)));
   // Loot rows written before and since removed, for NPCs and chests the project still has.
   const npcEntries = new Set(entities.npcs.map((n) => n.entry));
   const chestEntries = new Set(entities.objects.filter((o) => o.type === 'chest').map((o) => o.entry));

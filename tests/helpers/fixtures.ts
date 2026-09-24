@@ -19,6 +19,8 @@ const LOOKUP_TABLES = [
   'creature_text', 'waypoints', 'gossip_menu', 'gossip_menu_option', 'npc_text', 'areatrigger',
   // Where new NPCs and objects are written (slice D).
   'creature_template_model', 'creature', 'gameobject', 'page_text',
+  // Patrol routes of new NPCs (slice L).
+  'creature_addon', 'waypoint_data',
 ] as const;
 
 /** An empty in-memory world DB whose tables carry the fork's real DDL. */
