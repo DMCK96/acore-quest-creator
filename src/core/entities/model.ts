@@ -14,7 +14,7 @@ const int = z.number().int();
 const num = z.number().finite();
 
 const PACES = ['walk', 'run'] as const;
-const action = <T extends z.ZodRawShape>(kind: string, shape: T) =>
+const action = <K extends string, T extends z.ZodRawShape>(kind: K, shape: T) =>
   z.object({ id: z.string(), afterSecs: num.min(0), kind: z.literal(kind), ...shape });
 
 /** What a patrolling NPC does on reaching a point of its route, each `afterSecs` after arriving. */
