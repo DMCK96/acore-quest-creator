@@ -12,7 +12,7 @@ export interface NameResult {
 }
 
 /** The `RefKind`s the world DB can actually resolve a display name for. */
-const SUPPORTED_KINDS: readonly RefKind[] = ['item', 'creature', 'gameobject', 'quest', 'spell'];
+const SUPPORTED_KINDS: readonly RefKind[] = ['item', 'creature', 'gameobject', 'quest', 'spell', 'sound', 'creatureDisplay', 'objectDisplay', 'factionTemplate'];
 
 function isSupported(kind: RefKind): boolean {
   return SUPPORTED_KINDS.includes(kind);

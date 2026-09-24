@@ -1,0 +1,30 @@
+.editor-tabs__list {
+  display: flex;
+  gap: 2px;
+  border-bottom: 1px solid var(--border);
+  margin-bottom: 12px;
+}
+
+.editor-tabs__tab {
+  padding: 7px 14px;
+  background: none;
+  border: 0;
+  border-bottom: 2px solid transparent;
+  color: var(--text-muted);
+  font: inherit;
+  cursor: pointer;
+}
+
+.editor-tabs__tab:hover {
+  color: var(--text);
+}
+
+.editor-tabs__tab--on {
+  color: var(--text);
+  border-bottom-color: var(--accent);
+}
+
+.editor-tabs__tab:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+}
