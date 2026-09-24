@@ -49,7 +49,9 @@ import type {
   StartBadge,
 } from '../shared/ipc';
 import type { Store } from './store/store';
-import { compileScenes, type CompiledScripts } from '../core/scripts/compile';
+import { compileScenes, mergeCompiled, type CompiledScripts } from '../core/scripts/compile';
+import { compileFights } from '../core/combat/compile';
+import { fightIsEmpty } from '../core/combat/model';
 import { SCRIPT_KEYS, SCRIPT_TABLES, listIdsOf, readScriptContext, taggedRows, type ScriptContext } from '../core/scripts/context';
 import { foreignScenes, scenesFromRows } from '../core/scripts/decompile';
 import { SCRIPTS_FIELD, readScenes, writeScenes, type QuestScene, type SceneOwner } from '../core/scripts/model';
@@ -509,12 +511,20 @@ export function createApi(deps: ApiDeps): Api {
     return entityIssues({ entities, dbNames, questItems: questItemsOf(aggregate) });
   }
 
-  /** The quest's scenes compiled against the rows in the world DB right now. */
+  /**
+   * Every SmartAI row of the quest compiled against the world DB right now: its scenes, then the
+   * fights of its new NPCs around them. Every project NPC goes to the fight compiler, so the rows of
+   * a fight since removed are deleted.
+   */
   async function compileFor(live: Session, aggregate: QuestAggregate): Promise<{ context: ScriptContext; compiled: CompiledScripts }> {
     const scenes = readScenes(aggregate.values);
-    const context = await readScriptContext(live.db, aggregate.questId, scenes);
-    const compiled = compileScenes({ questId: aggregate.questId, scenes, objectives: objectivesOf(aggregate), context });
-    return { context, compiled };
+    const { npcs } = readEntities(aggregate.values);
+    const fighters = npcs.filter((n) => !fightIsEmpty(n.fight)).map((n) => n.entry);
+    const context = await readScriptContext(live.db, aggregate.questId, scenes, fighters);
+    const objectives = objectivesOf(aggregate);
+    const sceneRows = compileScenes({ questId: aggregate.questId, scenes, objectives, context });
+    const fightRows = compileFights({ questId: aggregate.questId, npcs, objectives, context, taken: sceneRows });
+    return { context, compiled: mergeCompiled(sceneRows, fightRows) };
   }
 
   /**

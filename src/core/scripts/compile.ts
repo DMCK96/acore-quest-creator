@@ -47,6 +47,22 @@ export interface CompiledScripts {
   warnings: string[];
 }
 
+/** Two compilers' rows as one output, in order: the first's rows before the second's. */
+export function mergeCompiled(a: CompiledScripts, b: CompiledScripts): CompiledScripts {
+  const tables = (x: Record<string, Row[]>, y: Record<string, Row[]>): Record<string, Row[]> => {
+    const out: Record<string, Row[]> = {};
+    for (const table of new Set([...Object.keys(x), ...Object.keys(y)])) out[table] = [...(x[table] ?? []), ...(y[table] ?? [])];
+    return out;
+  };
+  return {
+    inserts: tables(a.inserts, b.inserts),
+    deletes: tables(a.deletes, b.deletes),
+    updates: [...a.updates, ...b.updates],
+    flags: [...a.flags, ...b.flags],
+    warnings: [...a.warnings, ...b.warnings],
+  };
+}
+
 export interface CompileInput {
   questId: number;
   scenes: readonly QuestScene[];

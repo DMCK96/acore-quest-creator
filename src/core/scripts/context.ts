@@ -140,7 +140,13 @@ export function listIdsOf(entries: Iterable<number>): string[] {
  * batched queries: the rows the quest wrote before (by tag, wherever they are), everything else on
  * the owners those rows and the current scenes use, and the highest global numbers in use.
  */
-export async function readScriptContext(db: WorldDb, questId: number, scenes: readonly QuestScene[]): Promise<ScriptContext> {
+export async function readScriptContext(
+  db: WorldDb,
+  questId: number,
+  scenes: readonly QuestScene[],
+  /** Creatures with a fight (slice I): their rows, lists and text are read as a scene owner's are. */
+  extraCreatures: readonly number[] = [],
+): Promise<ScriptContext> {
   const [taggedSmart, taggedText, taggedConditions, taggedWaypoints] = await Promise.all([
     taggedRows(db, 'smart_scripts', 'comment', questId),
     taggedRows(db, 'creature_text', 'comment', questId),
@@ -148,7 +154,7 @@ export async function readScriptContext(db: WorldDb, questId: number, scenes: re
     taggedRows(db, 'waypoints', 'point_comment', questId),
   ]);
 
-  const creatures = new Set<number>();
+  const creatures = new Set<number>(extraCreatures.filter((e) => e > 0));
   const gameobjects = new Set<number>();
   const areas = new Set<number>();
   for (const scene of scenes) {
