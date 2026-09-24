@@ -1,7 +1,9 @@
 import type { RawRow } from './types';
 
 /** The world entities the editor can find by name. */
-export type SearchKind = 'item' | 'creature' | 'gameobject' | 'quest';
+export type DbSearchKind = 'item' | 'creature' | 'gameobject' | 'quest';
+/** What a picker can search: the database's kinds, plus spells from the server's spell list. */
+export type SearchKind = DbSearchKind | 'spell';
 
 /** One search result: the entity, its name, and a short fact that tells similar names apart. */
 export interface EntityHit {
@@ -11,7 +13,7 @@ export interface EntityHit {
 }
 
 /** Where each kind lives, and the extra columns its `detail` is read from. */
-export const ENTITY_TABLES: Record<SearchKind, { table: string; id: string; name: string; detail: readonly string[] }> = {
+export const ENTITY_TABLES: Record<DbSearchKind, { table: string; id: string; name: string; detail: readonly string[] }> = {
   item: { table: 'item_template', id: 'entry', name: 'name', detail: ['Quality'] },
   creature: { table: 'creature_template', id: 'entry', name: 'name', detail: ['minlevel', 'maxlevel'] },
   gameobject: { table: 'gameobject_template', id: 'entry', name: 'name', detail: [] },
@@ -24,7 +26,7 @@ const QUALITIES = ['Poor', 'Common', 'Uncommon', 'Rare', 'Epic', 'Legendary', 'A
 export const ID_TEXT = /^\d+$/;
 
 /** The detail line for one row; `undefined` when its columns are missing or say nothing. */
-export function hitDetail(kind: SearchKind, row: RawRow): string | undefined {
+export function hitDetail(kind: DbSearchKind, row: RawRow): string | undefined {
   switch (kind) {
     case 'item': {
       const q = row.Quality;
@@ -42,7 +44,7 @@ export function hitDetail(kind: SearchKind, row: RawRow): string | undefined {
 }
 
 /** Builds a hit from a row of `ENTITY_TABLES[kind]`. */
-export function toHit(kind: SearchKind, row: RawRow): EntityHit {
+export function toHit(kind: DbSearchKind, row: RawRow): EntityHit {
   const spec = ENTITY_TABLES[kind];
   const detail = hitDetail(kind, row);
   const hit: EntityHit = { id: Number(row[spec.id]), name: row[spec.name] ?? '' };

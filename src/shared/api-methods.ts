@@ -34,6 +34,7 @@ export const API_METHODS = [
   'questScripts',
   'testCommands',
   'groundHeight',
+  'spellFacts',
   'allocateIds',
   'entityTemplate',
   'exportQuest',

@@ -46,6 +46,7 @@ import type {
   ProjectState,
   QuestLinks,
   Result,
+  SpellFactsResult,
   StartBadge,
 } from '../shared/ipc';
 import type { Store } from './store/store';
@@ -63,7 +64,8 @@ import { ENTITIES_FIELD, NPC_TYPE_VALUE, OBJECT_TYPE_VALUE, RANK_VALUE, readEnti
 import { entityIssues } from '../core/entities/validate';
 import { gmCommands } from '../core/testing/gm';
 import { TerrainFormatError, gridFileName, parseMapFile, terrainHeight, type TerrainFile } from '../core/game/terrain';
-import { loadServerData, type ServerData, type ServerDataFiles } from './server-data';
+import { loadServerData, readServerDataFile, type ServerData, type ServerDataFiles } from './server-data';
+import { CAST_TIMES_FILE, RANGE_FILE, readSpellIndex, SPELL_FILE, spellDetail, spellLabel, type SpellIndex } from '../core/game/spells';
 import type { ProjectQuest } from './project/project-file';
 import type { ProjectSession } from './project/session';
 import type { ProjectController } from './project/controller';
@@ -113,6 +115,10 @@ interface Session {
   serverData: ServerData | null;
   /** The tables quest scripting writes, as this database has them. */
   scriptSchema: SchemaInfo;
+  /** The spell list, loaded on the first spell search or lookup; a reason when there is none. */
+  spells?: Promise<SpellIndex | { reason: string }>;
+  /** The spell list once loaded, for checks that must not wait for or start a load. */
+  spellsReady?: SpellIndex;
 }
 
 const REGISTRY_TABLES = registry.tables.map((t) => t.table);
@@ -508,7 +514,36 @@ export function createApi(deps: ApiDeps): Api {
       ...creatures.map((r) => [`creature:${r.entry}`, r.name ?? ''] as [string, string]),
       ...objects.map((r) => [`gameobject:${r.entry}`, r.name ?? ''] as [string, string]),
     ]);
-    return entityIssues({ entities, dbNames, questItems: questItemsOf(aggregate) });
+    // Only a spell list already loaded: a validation run must not wait for, or start, the big read.
+    const spells = live.spellsReady;
+    return entityIssues({ entities, dbNames, questItems: questItemsOf(aggregate), knownSpell: spells ? (id) => spells.get(id) !== undefined : null });
+  }
+
+  /**
+   * The server's spell list for this session, read on first use rather than at connect: the file
+   * is large and only fights need it. A missing folder or file becomes a reason, never a failure.
+   */
+  function spellsOf(live: Session): Promise<SpellIndex | { reason: string }> {
+    live.spells ??= (async () => {
+      const dir = live.serverData?.status.dir;
+      if (!dir) return { reason: 'Spell names need the server data folder.' };
+      const files = deps.serverDataFiles ?? NO_SERVER_DATA_FILES;
+      try {
+        const spell = await readServerDataFile(dir, SPELL_FILE, files);
+        if (!spell) return { reason: `${SPELL_FILE} is not in ${dir} or its dbc folder.` };
+        const [castTimes, ranges, overrides] = await Promise.all([
+          readServerDataFile(dir, CAST_TIMES_FILE, files),
+          readServerDataFile(dir, RANGE_FILE, files),
+          rowsOrNone(live.db, 'spell_dbc', {}),
+        ]);
+        const index = readSpellIndex({ spell, castTimes, ranges, overrides });
+        live.spellsReady = index;
+        return index;
+      } catch (error) {
+        return { reason: `${SPELL_FILE} could not be read: ${error instanceof Error ? error.message : String(error)}` };
+      }
+    })();
+    return live.spells;
   }
 
   /**
@@ -662,6 +697,11 @@ export function createApi(deps: ApiDeps): Api {
     searchQuests: (text) => run(async () => connected().db.searchQuests(text, SEARCH_LIMIT)),
     searchEntities: (kind, text) =>
       run(async () => {
+        if (kind === 'spell') {
+          const spells = await spellsOf(connected());
+          if ('reason' in spells) return [];
+          return spells.search(text, ENTITY_SEARCH_LIMIT).map((f) => ({ id: f.id, name: spellLabel(f), detail: spellDetail(f) }));
+        }
         const found = await connected().db.searchEntities(kind, text, ENTITY_SEARCH_LIMIT);
         if (kind !== 'creature' && kind !== 'gameobject') return found;
         const { npcs, objects } = projectEntities();
@@ -918,6 +958,16 @@ export function createApi(deps: ApiDeps): Api {
 
     lookupNames: (kind: RefKind, ids) =>
       run(async () => {
+        if (kind === 'spell') {
+          const spells = await spellsOf(connected());
+          const names: Record<number, string> = {};
+          if ('reason' in spells) return names;
+          for (const id of ids) {
+            const spell = spells.get(id);
+            if (spell) names[id] = spellLabel(spell);
+          }
+          return names;
+        }
         const found = await connected().db.lookupNames(kind, ids);
         // New NPCs and objects are not in the database until the quest is applied.
         const { npcs, objects } = projectEntities();
@@ -1054,6 +1104,18 @@ export function createApi(deps: ApiDeps): Api {
           });
         }
         return differences;
+      }),
+
+    spellFacts: (ids) =>
+      run(async (): Promise<SpellFactsResult> => {
+        const spells = await spellsOf(connected());
+        if ('reason' in spells) return { available: false, reason: spells.reason, spells: {} };
+        const found: SpellFactsResult['spells'] = {};
+        for (const id of ids) {
+          const spell = spells.get(id);
+          if (spell) found[id] = spell;
+        }
+        return { available: true, spells: found };
       }),
 
     groundHeight: (map, x, y) =>

@@ -9,7 +9,7 @@ describe('parseRequest', () => {
     expect([...API_METHODS].sort()).toEqual([
       'addQuestChain', 'applyToDev', 'chooseServerDataDir', 'connect', 'exportQuest', 'projectState', 'listNodes', 'listProfiles', 'lookupNames', 'moveNodes', 'newQuest',
       'openQuest', 'previewChanges', 'questLinks', 'removeNode', 'rewardTables', 'updateQuest', 'saveProfile', 'saveViewport', 'searchQuests', 'searchEntities', 'startupProfile',
-      'testConnection', 'validate', 'questScripts', 'testCommands', 'groundHeight', 'allocateIds', 'entityTemplate',
+      'testConnection', 'validate', 'questScripts', 'testCommands', 'groundHeight', 'spellFacts', 'allocateIds', 'entityTemplate',
       'renameProject', 'newProject', 'openProject', 'saveProject', 'saveProjectAs', 'recentProjects', 'forgetRecent', 'recoveries', 'restoreRecovery', 'discardRecovery',
     ].sort());
   });
@@ -18,7 +18,8 @@ describe('parseRequest', () => {
     expect(parseRequest('addQuestChain', [60001, { x: 1, y: 2 }]).ok).toBe(true);
     expect(parseRequest('searchQuests', ['wolves']).ok).toBe(true);
     expect(parseRequest('searchEntities', ['creature', 'wolf']).ok).toBe(true);
-    expect(parseRequest('searchEntities', ['spell', 'wolf']).ok).toBe(false);
+    expect(parseRequest('searchEntities', ['spell', 'frost']).ok).toBe(true);
+    expect(parseRequest('searchEntities', ['map', 'wolf']).ok).toBe(false);
     expect(parseRequest('applyToDev', [60001, true]).ok).toBe(true);
     expect(parseRequest('saveProfile', [profile]).ok).toBe(true);
     expect(parseRequest('saveProfile', [{ ...profile, id: 1, password: undefined }]).ok).toBe(true);

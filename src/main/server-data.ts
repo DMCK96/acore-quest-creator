@@ -22,6 +22,11 @@ export interface ServerData {
   questXp: Map<number, number[]> | null;
 }
 
+/** A file of the server data folder: in its `dbc` folder (the folder is the server's `DataDir`), or in the folder itself. */
+export async function readServerDataFile(dir: string, fileName: string, files: ServerDataFiles): Promise<Uint8Array | null> {
+  return (await files.read(join(dir, 'dbc'), fileName)) ?? (await files.read(dir, fileName));
+}
+
 export async function loadServerData(dir: string, files: ServerDataFiles): Promise<ServerData | null> {
   if (dir.trim() === '') return null;
   const status: ServerDataStatus = { dir, loaded: [], problems: [] };
@@ -31,8 +36,7 @@ export async function loadServerData(dir: string, files: ServerDataFiles): Promi
   }
 
   // `DataDir` holds `dbc/`; accept the `dbc` folder itself as well.
-  const read = async (name: string): Promise<Uint8Array | null> =>
-    (await files.read(join(dir, 'dbc'), name)) ?? (await files.read(dir, name));
+  const read = (name: string): Promise<Uint8Array | null> => readServerDataFile(dir, name, files);
 
   let questXp: Map<number, number[]> | null = null;
   try {

@@ -3,7 +3,7 @@ import type { Pool, Field } from 'mysql2/promise';
 import { ident } from '../sql/render';
 import type { ColumnInfo, RawRow, RawValue, RefKind, Where } from './types';
 import { isNumericColumn } from './types';
-import { ENTITY_TABLES, ID_TEXT, toHit, type EntityHit, type SearchKind } from './entity-search';
+import { ENTITY_TABLES, ID_TEXT, toHit, type DbSearchKind, type EntityHit } from './entity-search';
 import { LOOKUP_KINDS, UnknownColumnError, UnknownTableError, type QuestSummary, type WorldDb } from './world-db';
 
 export interface MysqlWorldDbOptions {
@@ -327,7 +327,7 @@ class MysqlWorldDb implements WorldDb {
     return rows.map((r) => ({ id: Number(r.ID), title: r.LogTitle ?? '', level: Number(r.QuestLevel) }));
   }
 
-  async searchEntities(kind: SearchKind, text: string, limit: number): Promise<EntityHit[]> {
+  async searchEntities(kind: DbSearchKind, text: string, limit: number): Promise<EntityHit[]> {
     const needle = text.trim();
     if (needle === '') return [];
     const spec = ENTITY_TABLES[kind];

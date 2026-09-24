@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import type { RefKind } from '@core/db/types';
 import type { EntityHit, QuestSummary, SearchKind } from '@core/db/world-db';
+import type { SpellFacts } from '@core/game/spells';
 import type { PatchWarning } from '@core/export/build-patch';
 import type { UnmodelledColumn } from '@core/import/unmodelled';
 import type { UnavailableComponent } from '@core/links/availability';
@@ -46,6 +47,13 @@ export type ErrorCode =
   | 'SAVE_FAILED'
   | 'INVALID_NAME'
   | 'UNKNOWN';
+
+/** What `spellFacts` answers: the spells found, or why spell names are not available. */
+export interface SpellFactsResult {
+  available: boolean;
+  reason?: string;
+  spells: Record<number, SpellFacts>;
+}
 
 export interface ApiError {
   code: ErrorCode;
@@ -301,6 +309,8 @@ export interface Api {
   entityTemplate(kind: 'creature' | 'gameobject', entry: number): Promise<Result<EntityTemplate | null>>;
   /** The terrain height at a point, from the server data folder's map files, or why there is none. */
   groundHeight(map: number, x: number, y: number): Promise<Result<{ z: number } | { reason: string }>>;
+  /** Facts of the spells the server's spell list has, or why there is no list (no server data folder, unreadable file). */
+  spellFacts(ids: number[]): Promise<Result<SpellFactsResult>>;
   /** The GM commands to try the quest in game after applying it: reloads, restarts, travel and quest commands. */
   testCommands(questId: number): Promise<Result<TestCommands>>;
   /** The scripts around the quest that the Scripts module lists read-only. */
@@ -414,7 +424,7 @@ const REQUEST_SCHEMAS: Record<keyof Api, z.ZodType<unknown[]>> = {
   chooseServerDataDir: z.tuple([]),
   connect: z.tuple([z.number()]),
   searchQuests: z.tuple([z.string().max(MAX_SEARCH_TEXT)]),
-  searchEntities: z.tuple([z.enum(['item', 'creature', 'gameobject', 'quest']), z.string().max(MAX_SEARCH_TEXT)]),
+  searchEntities: z.tuple([z.enum(['item', 'creature', 'gameobject', 'quest', 'spell']), z.string().max(MAX_SEARCH_TEXT)]),
   openQuest: z.tuple([z.number(), positionSchema.optional()]),
   newQuest: z.tuple([positionSchema.optional()]),
   addQuestChain: z.tuple([z.number(), positionSchema.optional()]),
@@ -433,6 +443,7 @@ const REQUEST_SCHEMAS: Record<keyof Api, z.ZodType<unknown[]>> = {
   questScripts: z.tuple([z.number()]),
   testCommands: z.tuple([z.number()]),
   groundHeight: z.tuple([z.number().int(), z.number(), z.number()]),
+  spellFacts: z.tuple([z.array(z.number().int()).max(MAX_LOOKUP_IDS)]),
   allocateIds: z.tuple([z.enum(['creature', 'gameobject', 'creatureSpawn', 'gameobjectSpawn', 'page']), z.number().int().min(1).max(50)]),
   entityTemplate: z.tuple([z.enum(['creature', 'gameobject']), z.number().int()]),
   exportQuest: z.tuple([z.number()]),
