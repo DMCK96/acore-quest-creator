@@ -2,8 +2,8 @@ import type { RawRow } from './types';
 
 /** The world entities the editor can find by name. */
 export type DbSearchKind = 'item' | 'creature' | 'gameobject' | 'quest';
-/** What a picker can search: the database's kinds, plus spells from the server's spell list. */
-export type SearchKind = DbSearchKind | 'spell';
+/** What a picker can search: the database's kinds, plus spells and sounds from the server data folder. */
+export type SearchKind = DbSearchKind | 'spell' | 'sound';
 
 /** One search result: the entity, its name, and a short fact that tells similar names apart. */
 export interface EntityHit {

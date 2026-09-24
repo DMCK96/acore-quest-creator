@@ -72,6 +72,7 @@ import { gmCommands } from '../core/testing/gm';
 import { TerrainFormatError, gridFileName, parseMapFile, terrainHeight, type TerrainFile } from '../core/game/terrain';
 import { loadServerData, readServerDataFile, type ServerData, type ServerDataFiles } from './server-data';
 import { CAST_TIMES_FILE, RANGE_FILE, readSpellIndex, SPELL_FILE, spellDetail, spellLabel, type SpellIndex } from '../core/game/spells';
+import { readSoundIndex, SOUND_FILE, type SoundIndex } from '../core/game/sounds';
 import type { ProjectQuest } from './project/project-file';
 import type { ProjectSession } from './project/session';
 import type { ProjectController } from './project/controller';
@@ -131,6 +132,8 @@ interface Session {
   spells?: Promise<SpellIndex | { reason: string }>;
   /** The spell list once loaded, for checks that must not wait for or start a load. */
   spellsReady?: SpellIndex;
+  /** Sound names, loaded on the first sound search or lookup; a reason when there are none. */
+  sounds?: Promise<SoundIndex | { reason: string }>;
   /** Parsed navmesh tiles by file name (null when missing or unreadable), most recent last. */
   navTiles?: Map<string, NavTile | null>;
   /** The quest map's maps and zone names, read once per connection. */
@@ -668,6 +671,21 @@ export function createApi(deps: ApiDeps): Api {
     return live.spells;
   }
 
+  /** The server's sound names for this session, read on first use like the spell list. */
+  function soundsOf(live: Session): Promise<SoundIndex | { reason: string }> {
+    live.sounds ??= (async () => {
+      const dir = live.serverData?.status.dir;
+      if (!dir) return { reason: 'Sound names need the server data folder.' };
+      try {
+        const bytes = await readServerDataFile(dir, SOUND_FILE, deps.serverDataFiles ?? NO_SERVER_DATA_FILES);
+        return bytes ? readSoundIndex(bytes) : { reason: `${SOUND_FILE} is not in ${dir} or its dbc folder.` };
+      } catch (error) {
+        return { reason: `${SOUND_FILE} could not be read: ${error instanceof Error ? error.message : String(error)}` };
+      }
+    })();
+    return live.sounds;
+  }
+
   /**
    * Every SmartAI row of the quest compiled against the world DB right now: its scenes, then the
    * fights of its new NPCs around them. Every project NPC goes to the fight compiler, so the rows of
@@ -825,6 +843,10 @@ export function createApi(deps: ApiDeps): Api {
     searchQuests: (text) => run(async () => connected().db.searchQuests(text, SEARCH_LIMIT)),
     searchEntities: (kind, text) =>
       run(async () => {
+        if (kind === 'sound') {
+          const sounds = await soundsOf(connected());
+          return 'reason' in sounds ? [] : sounds.search(text, ENTITY_SEARCH_LIMIT);
+        }
         if (kind === 'spell') {
           const spells = await spellsOf(connected());
           if ('reason' in spells) return [];
@@ -1107,6 +1129,16 @@ export function createApi(deps: ApiDeps): Api {
 
     lookupNames: (kind: RefKind, ids) =>
       run(async () => {
+        if (kind === 'sound') {
+          const sounds = await soundsOf(connected());
+          const names: Record<number, string> = {};
+          if ('reason' in sounds) return names;
+          for (const id of ids) {
+            const name = sounds.get(id);
+            if (name !== undefined) names[id] = name;
+          }
+          return names;
+        }
         if (kind === 'spell') {
           const spells = await spellsOf(connected());
           const names: Record<number, string> = {};

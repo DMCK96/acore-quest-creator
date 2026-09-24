@@ -13,6 +13,7 @@ export type RefKind =
   | 'gameobject'
   | 'quest'
   | 'spell'
+  | 'sound'
   | 'faction'
   | 'title'
   | 'areatrigger'
