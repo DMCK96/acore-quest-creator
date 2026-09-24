@@ -13,7 +13,7 @@ export const SCRIPTS_FIELD = 'scripts';
 const int = z.number().int();
 const num = z.number().finite();
 
-const positionSchema = z.object({ x: num, y: num, z: num, o: num });
+export const positionSchema = z.object({ x: num, y: num, z: num, o: num });
 const areaSchema = z.object({ map: int, x: num, y: num, z: num, radius: num });
 
 const ownerSchema = z.discriminatedUnion('kind', [

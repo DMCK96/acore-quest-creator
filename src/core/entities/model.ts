@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import type { FieldValue } from '../registry/types';
+import { fightSchema } from '../combat/model';
 
 /**
  * New NPCs and objects a quest needs, and where they stand. Stored in the quest's values under
@@ -60,6 +61,8 @@ const npcSchema = z.object({
   spawns: z.array(spawnSchema),
   // Added with loot (slice H); the default keeps NPCs saved before then as they were.
   loot: z.array(lootSchema).default([]),
+  // Added with fights (slice I); null keeps NPCs saved before then as they were.
+  fight: fightSchema.nullable().default(null),
 });
 
 const pageSchema = z.object({ id: int, text: z.string() });
@@ -129,6 +132,7 @@ export function newNpc(entry: number): CustomNpc {
     damageModifier: 1,
     spawns: [],
     loot: [],
+    fight: null,
   };
 }
 
