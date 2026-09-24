@@ -24,8 +24,11 @@ export const SOURCE = {
 export const EVENT = {
   updateIc: 0,
   updateOoc: 1,
+  healthPct: 2,
+  aggro: 4,
   kill: 5,
   death: 6,
+  evade: 7,
   spellHit: 8,
   oocLos: 10,
   acceptedQuest: 19,
@@ -45,7 +48,9 @@ export const EVENT = {
   gossipHello: 64,
   gameEventStart: 68,
   goStateChanged: 70,
+  friendlyHealthPct: 74,
   spellClick: 73,
+  summonedUnitDies: 82,
 } as const;
 
 export const ACTION = {
@@ -54,10 +59,15 @@ export const ACTION = {
   playEmote: 5,
   failQuest: 6,
   offerQuest: 7,
+  setEventPhase: 22,
+  evade: 24,
+  fleeForAssist: 25,
   cast: 11,
   summonCreature: 12,
   areaExploredOrEventHappens: 15,
   groupEventHappens: 26,
+  callForHelp: 39,
+  setInvincibilityHpLevel: 42,
   killedMonster: 33,
   forceDespawn: 41,
   setData: 45,
@@ -79,6 +89,10 @@ export const ACTION = {
 /** `SMART_TARGET_*`: who an action applies to. */
 export const TARGET = {
   self: 1,
+  victim: 2,
+  secondAggro: 3,
+  hostileRandom: 5,
+  hostileRandomNotTop: 6,
   invoker: 7,
   position: 8,
   creatureRange: 9,
