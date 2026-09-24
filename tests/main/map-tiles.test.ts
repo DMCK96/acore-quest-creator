@@ -200,6 +200,41 @@ describe('map tiles from the game client', () => {
     expect([...stored.keys()].some((k) => k.includes('/r3/'))).toBe(true);
     expect([...stored.keys()].some((k) => k.includes('/r2/'))).toBe(true);
   });
+  it('does not cache a tile whose client folder changed while it was drawn', async () => {
+    let release!: () => void;
+    const gate = new Promise<void>((resolve) => (release = resolve));
+    const { tiles, stored } = setupWithClient({
+      minimap: async () => {
+        await gate;
+        return solidTile(10, 20, 30);
+      },
+    });
+    tiles.setClientDir('/client');
+    const pending = tiles.tile(0, 6, 32, 32);
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    tiles.setClientDir('/elsewhere');
+    release();
+    await pending;
+    expect([...stored.keys()].filter((k) => k.includes('/r3/'))).toEqual([]);
+  });
+  it('draws with the new client when the folder changes while the old one is still opening', async () => {
+    let release!: () => void;
+    const gate = new Promise<void>((resolve) => (release = resolve));
+    const clientB: MapImagery = { minimap: async () => solidTile(90, 90, 90), art: async () => null, close: async () => {} };
+    const { tiles, imagery } = setupWithClient({}, async (dir) => {
+      if (dir === '/client') {
+        await gate;
+        return imagery;
+      }
+      return clientB;
+    });
+    tiles.setClientDir('/client');
+    const pending = tiles.tile(0, 6, 32, 32);
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    tiles.setClientDir('/b');
+    release();
+    expect(rgbaAt(await pending, 5, 5)).toEqual([90, 90, 90, 255]);
+  });
   it('falls back to the relief when the client cannot be opened', async () => {
     const { tiles } = setupWithClient({}, async () => {
       throw new Error('disk on fire');

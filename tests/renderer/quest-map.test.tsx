@@ -196,6 +196,18 @@ describe('quest map dots and zoom', () => {
     await waitFor(() => expect(lastProps!.dots).toHaveLength(1));
   });
 
+  it('ignores a spawn reply that arrives after zooming out', async () => {
+    let reply!: (value: unknown) => void;
+    const api = makeMockApi({ mapSpawns: vi.fn(() => new Promise((resolve) => (reply = resolve))) as never });
+    mount(api);
+    await screen.findByRole('dialog', { name: 'Quest map' });
+    act(() => lastProps!.onViewChanged(box, 8));
+    await waitFor(() => expect(api.mapSpawns).toHaveBeenCalled());
+    act(() => lastProps!.onViewChanged(box, 5));
+    await act(async () => reply(okv({ dots: [dot], capped: false })));
+    await settle();
+    expect(lastProps!.dots).toEqual([]);
+  });
   it('asks for the game client folder when the connection has none', async () => {
     render(<NamesProvider api={makeMockApi()}><QuestMapView open={openWith()} onChange={vi.fn()} focusId={null} onClose={vi.fn()} hasClient={false} /></NamesProvider>);
     expect(await screen.findByText('Set the game client folder on the connection to see the in-game map art.')).toBeTruthy();

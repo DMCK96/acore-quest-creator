@@ -67,6 +67,8 @@ export function createMapTiles(deps: {
   let clientDir: string | null = null;
   let clientKey = '';
   let imagery: Promise<MapImagery | null> | null = null;
+  /** Raised whenever a folder changes: a tile drawn across a change is served but never cached. */
+  let generation = 0;
   const transparent = encodePng(TILE_PX, TILE_PX, emptyPixels());
   const rgbaCache = new Map<string, Drawn>();
   const gridCache = new Map<string, Promise<TerrainFile | null>>();
@@ -127,6 +129,7 @@ export function createMapTiles(deps: {
     if (remembered !== undefined) return Promise.resolve(remembered);
     const pending = inFlight.get(key);
     if (pending) return pending;
+    const started = generation;
     const work = (async (): Promise<Drawn> => {
       const stored = await deps.cache.read(path);
       const decoded = stored ? decodeOwnPng(stored) : null;
@@ -134,14 +137,15 @@ export function createMapTiles(deps: {
       const drawnPixels = await draw();
       const pixels = drawnPixels && hasPixels(drawnPixels) ? drawnPixels : null;
       const png = pixels ? encodePng(TILE_PX, TILE_PX, pixels) : transparent;
-      await deps.cache.write(path, png);
+      // Drawn partly from folders that have since changed (or archives since closed): not kept.
+      if (started === generation) await deps.cache.write(path, png);
       return { png, pixels };
     })();
     inFlight.set(key, work);
     return work.then(
       (result) => {
         inFlight.delete(key);
-        remember(key, result);
+        if (started === generation) remember(key, result);
         return result;
       },
       (error: unknown) => {
@@ -235,6 +239,8 @@ export function createMapTiles(deps: {
   }
 
   const forget = (): void => {
+    generation += 1;
+    inFlight.clear();
     rgbaCache.clear();
     gridCache.clear();
     areaCache.clear();
@@ -259,7 +265,10 @@ export function createMapTiles(deps: {
     async tile(map, zoom, tx, ty) {
       if (!dir && !clientDir) return transparent;
       try {
+        const asked = generation;
         const client = await ensureImagery();
+        // A folder changed while the client was opening: draw with what is set now.
+        if (asked !== generation) return await this.tile(map, zoom, tx, ty);
         if (client) return (await picture(client, map, zoom, tx, ty)).png;
         return dir ? (await relief(map, zoom, tx, ty)).png : transparent;
       } catch (error) {

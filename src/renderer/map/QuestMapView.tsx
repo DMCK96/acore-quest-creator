@@ -69,6 +69,8 @@ export function QuestMapView({
   const [zoomedOut, setZoomedOut] = useState(false);
   const [questOnly, setQuestOnly] = useState(questOnlyForSession);
   const lastView = useRef<{ box: MapBox; zoom: number } | null>(null);
+  /** Only the reply to the latest view is used: a slow one must not bring dots back after zooming out. */
+  const spawnRequest = useRef(0);
   const [selectedId, setSelectedId] = useState<string | null>(focusId);
   const [floors, setFloors] = useState<Floors | null>(null);
   const [notes, setNotes] = useState<Record<string, string>>({});
@@ -199,6 +201,7 @@ export function QuestMapView({
 
   function viewChanged(box: MapBox, zoom: number, onlyQuest = questOnly): void {
     lastView.current = { box, zoom };
+    const request = ++spawnRequest.current;
     if (viewTimer.current) clearTimeout(viewTimer.current);
     setZoomedOut(zoom < DOT_ZOOM);
     if (onlyQuest || zoom < DOT_ZOOM) {
@@ -208,7 +211,7 @@ export function QuestMapView({
     }
     viewTimer.current = setTimeout(() => {
       void api?.mapSpawns(currentMap, box).then((r) => {
-        if (!r.ok) return;
+        if (!r.ok || request !== spawnRequest.current) return;
         setDots(r.value.dots);
         setCapped(r.value.capped);
       });
