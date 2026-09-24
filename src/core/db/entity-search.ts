@@ -3,7 +3,9 @@ import type { RawRow } from './types';
 /** The world entities the editor can find by name. */
 export type DbSearchKind = 'item' | 'creature' | 'gameobject' | 'quest';
 /** What a picker can search: the database's kinds, plus spells and sounds from the server data folder. */
-export type SearchKind = DbSearchKind | 'spell' | 'sound';
+export type SearchKind = DbSearchKind | 'spell' | 'sound' | LookKind;
+/** Looks and factions for new NPCs and objects, read from the server data folder (slice M). */
+export type LookKind = 'creatureDisplay' | 'objectDisplay' | 'factionTemplate';
 
 /** One search result: the entity, its name, and a short fact that tells similar names apart. */
 export interface EntityHit {

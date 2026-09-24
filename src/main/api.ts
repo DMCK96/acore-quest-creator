@@ -73,6 +73,9 @@ import { TerrainFormatError, gridFileName, parseMapFile, terrainHeight, type Ter
 import { loadServerData, readServerDataFile, type ServerData, type ServerDataFiles } from './server-data';
 import { CAST_TIMES_FILE, RANGE_FILE, readSpellIndex, SPELL_FILE, spellDetail, spellLabel, type SpellIndex } from '../core/game/spells';
 import { readSoundIndex, SOUND_FILE, type SoundIndex } from '../core/game/sounds';
+import { DISPLAY_FILES, readCreatureDisplays, readObjectDisplays, type DisplayIndex } from '../core/game/displays';
+import { FACTION_TEMPLATE_FILES, readFactionTemplates, type FactionTemplateIndex } from '../core/game/faction-templates';
+import type { EntityHit, LookKind } from '../core/db/entity-search';
 import type { ProjectQuest } from './project/project-file';
 import type { ProjectSession } from './project/session';
 import type { ProjectController } from './project/controller';
@@ -134,6 +137,8 @@ interface Session {
   spellsReady?: SpellIndex;
   /** Sound names, loaded on the first sound search or lookup; a reason when there are none. */
   sounds?: Promise<SoundIndex | { reason: string }>;
+  /** Looks and factions for new NPCs and objects, each loaded on first use. */
+  looks?: Partial<Record<LookKind, Promise<DisplayIndex | FactionTemplateIndex | { reason: string }>>>;
   /** Parsed navmesh tiles by file name (null when missing or unreadable), most recent last. */
   navTiles?: Map<string, NavTile | null>;
   /** The quest map's maps and zone names, read once per connection. */
@@ -686,6 +691,71 @@ export function createApi(deps: ApiDeps): Api {
     return live.sounds;
   }
 
+  /** One of the look or faction indexes, read from the server data folder on first use. */
+  function lookOf(live: Session, kind: LookKind): Promise<DisplayIndex | FactionTemplateIndex | { reason: string }> {
+    const looks = (live.looks ??= {});
+    looks[kind] ??= (async () => {
+      const dir = live.serverData?.status.dir;
+      if (!dir) return { reason: 'Looks and factions need the server data folder.' };
+      const files = deps.serverDataFiles ?? NO_SERVER_DATA_FILES;
+      const read = async (name: string): Promise<Uint8Array> => {
+        const bytes = await readServerDataFile(dir, name, files);
+        if (!bytes) throw new Error(`${name} is not in ${dir} or its dbc folder.`);
+        return bytes;
+      };
+      try {
+        if (kind === 'objectDisplay') return readObjectDisplays(await read(DISPLAY_FILES.objectDisplays));
+        if (kind === 'factionTemplate') {
+          const [templates, factions] = await Promise.all([read(FACTION_TEMPLATE_FILES.templates), read(FACTION_TEMPLATE_FILES.factions)]);
+          return readFactionTemplates({ templates, factions });
+        }
+        const [displays, models, extras, races] = await Promise.all([
+          read(DISPLAY_FILES.creatureDisplays), read(DISPLAY_FILES.creatureModels), read(DISPLAY_FILES.displayExtras), read(DISPLAY_FILES.races),
+        ]);
+        return readCreatureDisplays({ displays, models, extras, races });
+      } catch (error) {
+        return { reason: error instanceof Error ? error.message : String(error) };
+      }
+    })();
+    return looks[kind]!;
+  }
+
+  const LOOK_KINDS: ReadonlySet<string> = new Set<LookKind>(['creatureDisplay', 'objectDisplay', 'factionTemplate']);
+  const isLookKind = (kind: string): kind is LookKind => LOOK_KINDS.has(kind);
+  /** How many names a look's "used by" lists. */
+  const USED_BY_NAMES = 3;
+
+  /** A look's hits, each with up to three NPCs or objects in the world that use it. */
+  async function lookHits(live: Session, kind: LookKind, text: string): Promise<EntityHit[]> {
+    const index = await lookOf(live, kind);
+    if ('reason' in index) return [];
+    if (kind === 'factionTemplate') return (index as FactionTemplateIndex).search(text, ENTITY_SEARCH_LIMIT);
+    const hits = (index as DisplayIndex).search(text, ENTITY_SEARCH_LIMIT);
+    if (hits.length === 0) return [];
+    const ids = hits.map((h) => String(h.id));
+    const users = new Map<number, string[]>();
+    const note = (display: number, name: string): void => {
+      const names = users.get(display) ?? [];
+      if (names.length < USED_BY_NAMES && name) names.push(name);
+      users.set(display, names);
+    };
+    if (kind === 'creatureDisplay') {
+      const models = await rowsOrNone(live.db, 'creature_template_model', { CreatureDisplayID: ids });
+      const entries = [...new Set(models.map((m) => Number(m.CreatureID)))].sort((a, b) => a - b);
+      const names = await live.db.lookupNames('creature', entries);
+      for (const entry of entries) {
+        for (const m of models) if (Number(m.CreatureID) === entry) note(Number(m.CreatureDisplayID), names.get(entry) ?? '');
+      }
+    } else {
+      const objects = await rowsOrNone(live.db, 'gameobject_template', { displayId: ids });
+      for (const o of [...objects].sort((a, b) => Number(a.entry) - Number(b.entry))) note(Number(o.displayId), o.name ?? '');
+    }
+    return hits.map((h) => {
+      const names = users.get(h.id) ?? [];
+      return names.length > 0 ? { ...h, detail: `used by ${names.join(', ')}` } : h;
+    });
+  }
+
   /**
    * Every SmartAI row of the quest compiled against the world DB right now: its scenes, then the
    * fights of its new NPCs around them. Every project NPC goes to the fight compiler, so the rows of
@@ -847,6 +917,7 @@ export function createApi(deps: ApiDeps): Api {
           const sounds = await soundsOf(connected());
           return 'reason' in sounds ? [] : sounds.search(text, ENTITY_SEARCH_LIMIT);
         }
+        if (isLookKind(kind)) return lookHits(connected(), kind, text);
         if (kind === 'spell') {
           const spells = await spellsOf(connected());
           if ('reason' in spells) return [];
@@ -1131,6 +1202,16 @@ export function createApi(deps: ApiDeps): Api {
 
     lookupNames: (kind: RefKind, ids) =>
       run(async () => {
+        if (isLookKind(kind)) {
+          const index = await lookOf(connected(), kind);
+          const names: Record<number, string> = {};
+          if ('reason' in index) return names;
+          for (const id of ids) {
+            const found = index.get(id);
+            if (found !== undefined) names[id] = typeof found === 'string' ? found : found.name;
+          }
+          return names;
+        }
         if (kind === 'sound') {
           const sounds = await soundsOf(connected());
           const names: Record<number, string> = {};
