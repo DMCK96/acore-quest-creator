@@ -177,6 +177,15 @@ export interface ConnectSummary {
   serverData: ServerDataStatus | null;
   /** The profile's game client folder, trimmed; null when it names none. */
   clientDir: string | null;
+  /** What was read from the game client folder; null when the profile names none. */
+  client: ClientStatus | null;
+}
+
+/** The optional game client folder: the archives read from it and what went wrong. */
+export interface ClientStatus {
+  dir: string;
+  archives: string[];
+  problems: string[];
 }
 
 /** The optional server data folder: the files read from it and what went wrong with the rest. */

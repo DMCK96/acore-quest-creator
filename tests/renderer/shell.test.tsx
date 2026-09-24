@@ -5,6 +5,7 @@ import userEvent from '@testing-library/user-event';
 import { createAppStore } from '../../src/renderer/state/app-store';
 import { ConnectionScreen } from '../../src/renderer/views/ConnectionScreen';
 import { QuestPicker } from '../../src/renderer/views/QuestPicker';
+import { TopBar } from '../../src/renderer/components/TopBar';
 import { renderFlow } from './module-harness';
 import { makeMockApi, okv, errv, sampleOpen } from './mock-api';
 
@@ -60,7 +61,7 @@ describe('ConnectionScreen', () => {
     const api = makeMockApi({ saveProfile: async () => okv(profileRec), connect: async () => okv(summary), chooseServerDataDir: async () => okv('/srv/acore/data') });
     const store = createAppStore(api);
     render(<ConnectionScreen store={store} />);
-    await userEvent.click(screen.getByRole('button', { name: 'Browse…' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Browse for the server data folder' }));
     await waitFor(() => expect(screen.getByLabelText('Server data folder (optional)')).toHaveValue('/srv/acore/data'));
     await userEvent.click(screen.getByRole('button', { name: 'Save and connect' }));
     await waitFor(() => expect(store.getState().screen).toBe('pick'));
@@ -74,6 +75,14 @@ describe('ConnectionScreen', () => {
     expect(screen.getByText('The folder with Wow.exe. The map uses its zone art and minimap.')).toBeTruthy();
     await userEvent.click(screen.getByRole('button', { name: 'Save and connect' }));
     await waitFor(() => expect(api.saveProfile).toHaveBeenCalledWith(expect.objectContaining({ clientDir: 'E:/Games/WoW' })));
+  });
+  it('browses for the game client folder', async () => {
+    const api = makeMockApi({ saveProfile: async () => okv(profileRec), connect: async () => okv(summary), chooseServerDataDir: async () => okv('E:\Games\WoW') });
+    const store = createAppStore(api);
+    render(<ConnectionScreen store={store} />);
+    await userEvent.click(screen.getByRole('button', { name: 'Browse for the game client folder' }));
+    await waitFor(() => expect(screen.getByLabelText('Game client folder (optional)')).toHaveValue('E:\Games\WoW'));
+    expect(screen.getByLabelText('Server data folder (optional)')).toHaveValue('');
   });
   it('shows a readable error when the server is unreachable', async () => {
     const api = makeMockApi({ saveProfile: async () => okv(profileRec), connect: async () => errv('CONNECTION', 'Cannot reach h:3306 (ECONNREFUSED)') });
@@ -214,5 +223,29 @@ describe('Quest flow view', () => {
     renderFlow(store, api);
     expect(screen.getByText('The quest needs a title.')).toBeInTheDocument();
     expect(screen.getByText('Nobody can turn this quest in.')).toBeInTheDocument();
+  });
+});
+
+describe('game client pill', () => {
+  const connectWith = async (client: unknown) => {
+    const api = makeMockApi({ listProfiles: async () => okv([profileRec]), connect: async () => okv({ ...summary, clientDir: 'E:/WoW', client }) });
+    const store = createAppStore(api);
+    await store.getState().loadProfiles();
+    await store.getState().connectProfile(1);
+    render(<TopBar store={store} onNewQuest={() => {}} onAddExisting={() => {}} onFitView={() => {}} onOpenProject={() => {}} />);
+  };
+  it('shows the client folder read cleanly', async () => {
+    await connectWith({ dir: 'E:/WoW', archives: ['common.MPQ', 'patch.MPQ'], problems: [] });
+    expect(screen.getByText('Game client')).toHaveAttribute('title', expect.stringContaining('Read 2 archives'));
+  });
+  it('warns when the folder is not a game client', async () => {
+    await connectWith({ dir: 'E:/Downloads', archives: [], problems: ['No game archives were found in this folder.'] });
+    const pill = screen.getByText('Game client: 1 problem');
+    expect(pill).toHaveClass('status-pill--warning');
+    expect(pill).toHaveAttribute('title', expect.stringContaining('No game archives'));
+  });
+  it('is not shown without a client folder', async () => {
+    await connectWith(null);
+    expect(screen.queryByText(/Game client/)).toBeNull();
   });
 });

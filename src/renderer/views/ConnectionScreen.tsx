@@ -42,9 +42,9 @@ export function ConnectionScreen({ store }: { store: AppStore }): React.JSX.Elem
     setClientDir(profile.clientDir ?? '');
   };
 
-  const browse = async (): Promise<void> => {
+  const browse = async (set: (dir: string) => void): Promise<void> => {
     const chosen = await chooseServerDataDir();
-    if (chosen !== null) setDbcDir(chosen);
+    if (chosen !== null) set(chosen);
   };
 
   return (
@@ -103,7 +103,7 @@ export function ConnectionScreen({ store }: { store: AppStore }): React.JSX.Elem
           placeholder="e.g. /home/acore/server/data"
           onChange={(e) => setDbcDir(e.target.value)}
         />
-        <button type="button" onClick={() => void browse()}>
+        <button type="button" aria-label="Browse for the server data folder" onClick={() => void browse(setDbcDir)}>
           Browse…
         </button>
 
@@ -116,6 +116,9 @@ export function ConnectionScreen({ store }: { store: AppStore }): React.JSX.Elem
           placeholder="e.g. E:\Games\World of Warcraft"
           onChange={(e) => setClientDir(e.target.value)}
         />
+        <button type="button" aria-label="Browse for the game client folder" onClick={() => void browse(setClientDir)}>
+          Browse…
+        </button>
 
         <button type="submit">Save and connect</button>
       </form>

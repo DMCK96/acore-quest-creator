@@ -20,6 +20,8 @@ export interface ClientFiles {
   locale: string;
   /** The archives that opened, relative to `dataDir`, lowest priority first. */
   archives: string[];
+  /** The archives' names, sizes and times: another value means the client was patched. */
+  fingerprint: string;
   read(path: string): Promise<Uint8Array | null>;
   close(): Promise<void>;
 }
@@ -102,11 +104,14 @@ export async function openClient(dir: string, fs: ClientFs, onProblem?: (message
     for (const inner of await fs.list(`${dataDir}/${entry.name}`)) if (!inner.isDir && isMpq(inner.name)) found.push(`${entry.name}/${inner.name}`);
   }
 
-  const opened: { path: string; mpq: MpqArchive }[] = [];
+  const opened: { path: string; mpq: MpqArchive; stamp: string }[] = [];
   for (const path of archiveOrder(found, locale)) {
+    let source: ByteSource | null = null;
     try {
-      opened.push({ path, mpq: await openMpq(await fs.open(`${dataDir}/${path}`), path) });
+      source = await fs.open(`${dataDir}/${path}`);
+      opened.push({ path, mpq: await openMpq(source, path), stamp: `${path}:${source.size}:${source.modified ?? 0}` });
     } catch (error) {
+      await source?.close?.().catch(() => {});
       onProblem?.(`${path} could not be opened: ${message(error)}`);
     }
   }
@@ -119,6 +124,7 @@ export async function openClient(dir: string, fs: ClientFs, onProblem?: (message
     dataDir,
     locale,
     archives: opened.map((o) => o.path),
+    fingerprint: opened.map((o) => o.stamp).join('|'),
     async read(path) {
       for (const { path: archive, mpq } of byPriority) {
         const entry = mpq.find(path);

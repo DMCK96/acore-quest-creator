@@ -19,6 +19,12 @@ export interface MapImagery {
   minimap(map: number, gx: number, gy: number): Promise<Uint8Array | null>;
   art(map: number, tx: number, ty: number, areaAt: AreaLookup): Promise<Uint8Array | null>;
   close(): Promise<void>;
+  /** The archives read, lowest priority first. */
+  archives: string[];
+  /** Changes whenever the client's archives do, so pictures drawn from the old ones are not reused. */
+  fingerprint: string;
+  /** What could not be read while opening: archives, and the tables the map needs. */
+  problems: string[];
 }
 
 /** Zone art images kept decoded: about the zones around the view. */
@@ -34,9 +40,10 @@ export const nodeClientFs: ClientFs = {
   },
   async open(path) {
     const handle = await open(path, 'r');
-    const { size } = await handle.stat();
+    const { size, mtimeMs } = await handle.stat();
     return {
       size,
+      modified: Math.round(mtimeMs),
       async read(offset, length) {
         const buffer = new Uint8Array(Math.max(0, Math.min(length, size - offset)));
         const { bytesRead } = await handle.read(buffer, 0, buffer.length, offset);
@@ -57,13 +64,19 @@ export const nodeClientFs: ClientFs = {
 const message = (error: unknown): string => (error instanceof Error ? error.message : String(error));
 
 export async function createClientImagery(dir: string, fs: ClientFs, log: (message: string) => void = () => {}): Promise<MapImagery | null> {
-  const files = await openClient(dir, fs, log);
+  // Problems met while opening are kept for the status; later ones only go to the log.
+  let problems: string[] | null = [];
+  const report = (text: string): void => {
+    problems?.push(text);
+    log(text);
+  };
+  const files = await openClient(dir, fs, report);
   if (!files) return null;
   const reported = new Set<string>();
   const once = (key: string, text: string): void => {
     if (reported.has(key)) return;
     reported.add(key);
-    log(text);
+    report(text);
   };
   const parse = async <T>(path: string, how: (bytes: Uint8Array) => T): Promise<T | null> => {
     const bytes = await files.read(path);
@@ -85,6 +98,9 @@ export async function createClientImagery(dir: string, fs: ClientFs, log: (messa
     parse('DBFilesClient\\AreaTable.dbc', parseAreaParents),
     parse('Textures\\Minimap\\md5translate.trs', (b) => parseMd5Translate(new TextDecoder('latin1').decode(b))),
   ]);
+
+  const opening = problems;
+  problems = null;
 
   const finders = new Map<number, ReturnType<typeof zoneFinder>>();
   const finderFor = (map: number): ReturnType<typeof zoneFinder> => {
@@ -148,5 +164,8 @@ export async function createClientImagery(dir: string, fs: ClientFs, log: (messa
       });
     },
     close: () => files.close(),
+    archives: files.archives,
+    fingerprint: files.fingerprint,
+    problems: opening,
   };
 }

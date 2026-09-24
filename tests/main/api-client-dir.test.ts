@@ -8,16 +8,19 @@ import { forkDb } from '../helpers/fixtures';
 
 const box = { encrypt: (s: string) => Uint8Array.from(Buffer.from(s)), decrypt: (b: Uint8Array) => Buffer.from(b).toString() };
 
+const STATUS = { dir: 'E:/Games/WoW', archives: ['common.MPQ'], problems: [] };
+
 async function connectWith(clientDir: string | undefined) {
   const onClientDir = vi.fn();
+  const clientStatus = vi.fn(async () => STATUS);
   const api = createApi({
     store: openStore(':memory:', box), openWorldDb: async () => forkDb(), openDevDb: async () => { throw new Error('x'); },
     fs: { writeFile: async () => {}, ensureDir: async () => {}, listDir: async () => [] }, now: () => new Date(),
-    session: createProjectSession(defaultProjectMeta('P', 'C:\\out')), projects: {} as ProjectController, onClientDir,
+    session: createProjectSession(defaultProjectMeta('P', 'C:\\out')), projects: {} as ProjectController, onClientDir, clientStatus,
   });
   const rec: any = await api.saveProfile({ name: 'w', role: 'world', host: 'h', port: 1, user: 'u', database: 'd', password: 'p', ...(clientDir === undefined ? {} : { clientDir }) });
   const summary: any = await api.connect(rec.value.id);
-  return { onClientDir, summary: summary.value };
+  return { onClientDir, clientStatus, summary: summary.value };
 }
 
 describe('game client folder', () => {
@@ -25,10 +28,12 @@ describe('game client folder', () => {
     const { onClientDir, summary } = await connectWith(' E:/Games/WoW ');
     expect(onClientDir).toHaveBeenCalledWith('E:/Games/WoW');
     expect(summary.clientDir).toBe('E:/Games/WoW');
+    expect(summary.client).toEqual(STATUS);
   });
   it('reports no client folder when the profile names none', async () => {
     const { onClientDir, summary } = await connectWith(undefined);
     expect(onClientDir).toHaveBeenCalledWith(null);
     expect(summary.clientDir).toBeNull();
+    expect(summary.client).toBeNull();
   });
 });

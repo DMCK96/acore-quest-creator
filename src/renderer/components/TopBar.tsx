@@ -1,4 +1,4 @@
-import type { ServerDataStatus } from '@shared/ipc';
+import type { ClientStatus, ServerDataStatus } from '@shared/ipc';
 import type { AppStore } from '../state/app-store';
 import './TopBar.css';
 
@@ -62,6 +62,7 @@ export function TopBar({
           {connectedDatabase ? `Connected: ${connectedDatabase}` : 'Not connected'}
         </span>
         {connectedDatabase && summary?.serverData && <ServerDataPill status={summary.serverData} />}
+        {connectedDatabase && summary?.client && <ClientPill status={summary.client} />}
         <button type="button" className="btn btn--icon" aria-label="Settings" title="Settings">
           ⚙
         </button>
@@ -75,6 +76,20 @@ function ServerDataPill({ status }: { status: ServerDataStatus }): React.JSX.Ele
   const problems = status.problems.length;
   const label = problems === 0 ? 'Server data' : `Server data: ${problems} ${problems === 1 ? 'problem' : 'problems'}`;
   const detail = [`Folder: ${status.dir}`, ...status.loaded.map((f) => `Read ${f}`), ...status.problems].join('\n');
+  return (
+    <span className={`status-pill ${problems === 0 ? 'status-pill--connected' : 'status-pill--warning'}`} title={detail}>
+      <span className="status-pill__dot" />
+      {label}
+    </span>
+  );
+}
+
+/** The optional game client folder: the archives the map reads, or why it reads none. */
+function ClientPill({ status }: { status: ClientStatus }): React.JSX.Element {
+  const problems = status.problems.length;
+  const label = problems === 0 ? 'Game client' : `Game client: ${problems} ${problems === 1 ? 'problem' : 'problems'}`;
+  const read = status.archives.length === 1 ? 'Read 1 archive' : `Read ${status.archives.length} archives`;
+  const detail = [`Folder: ${status.dir}`, ...(status.archives.length > 0 ? [read] : []), ...status.problems].join('\n');
   return (
     <span className={`status-pill ${problems === 0 ? 'status-pill--connected' : 'status-pill--warning'}`} title={detail}>
       <span className="status-pill__dot" />

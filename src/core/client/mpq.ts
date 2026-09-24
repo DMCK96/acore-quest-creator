@@ -10,6 +10,8 @@ import { decryptBlock, fileKey, hashString, HASH_FILE_KEY, HASH_NAME_A, HASH_NAM
 
 export interface ByteSource {
   size: number;
+  /** When the file last changed, in ms; 0 or absent when unknown. */
+  modified?: number;
   read(offset: number, length: number): Promise<Uint8Array>;
   close?(): Promise<void>;
 }

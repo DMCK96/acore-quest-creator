@@ -30,6 +30,14 @@ function client(minimapSize = 256) {
 }
 
 describe('client imagery', () => {
+  it('reports its archives, its fingerprint and what it could not read when it opened', async () => {
+    const whole = (await createClientImagery('/wow', client()))!;
+    expect(whole.archives).toEqual(['common.MPQ']);
+    expect(whole.fingerprint).not.toBe('');
+    expect(whole.problems).toEqual([]);
+    const bare = (await createClientImagery('/wow', memClient({ '/wow/Data/common.MPQ': buildMpq([storedFile('x', text('x'))]) })))!;
+    expect(bare.problems.some((p) => p.includes('WorldMapArea.dbc'))).toBe(true);
+  });
   it('gives the minimap tile of a grid', async () => {
     const imagery = (await createClientImagery('/wow', client()))!;
     const tile = (await imagery.minimap(0, 48, 32))!;

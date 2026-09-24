@@ -73,6 +73,20 @@ describe('client files', () => {
     expect(onProblem).toHaveBeenCalledTimes(1);
     expect(onProblem.mock.calls[0]![0]).toMatch(/patch-Z\.MPQ/);
   });
+  it('closes an archive it could not open', async () => {
+    const fs = memClient({ '/c/Data/common.MPQ': one('A', 'fine'), '/c/Data/patch-Z.MPQ': text('garbage, not an archive') });
+    await openClient('/c', fs, () => {});
+    expect(fs.closed).toEqual(['/c/Data/patch-Z.MPQ']);
+  });
+  it('fingerprints its archives by name, size and time, so a patched client reads as another', async () => {
+    const files = { '/c/Data/common.MPQ': one('A', 'x'), '/c/Data/patch.MPQ': one('B', 'y') };
+    const print = async (f: Record<string, Uint8Array>, times: Record<string, number> = {}): Promise<string> =>
+      (await openClient('/c', memClient(f, times)))!.fingerprint;
+    expect(await print(files)).toBe(await print(files));
+    expect(await print(files)).not.toBe(await print({ ...files, '/c/Data/patch.MPQ': one('B', 'a longer body') }));
+    expect(await print(files)).not.toBe(await print(files, { '/c/Data/patch.MPQ': 1_700_000_000_000 }));
+    expect(await print(files)).not.toBe(await print({ ...files, '/c/Data/patch-2.MPQ': one('C', 'z') }));
+  });
   it('reports a file it cannot decode once and treats it as missing', async () => {
     const onProblem = vi.fn();
     const fs = memClient({ '/c/Data/common.MPQ': buildMpq([{ name: 'w.wav', size: 10, stored: [Uint8Array.from([0x40, 1, 2])], flags: 0x200 }]) });

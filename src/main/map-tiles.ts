@@ -4,6 +4,7 @@ import { areaAt, parseMapArea, parseMapFile, type AreaData, type TerrainFile } f
 import { ART_ZOOM, gridOf, MAX_ZOOM, MIN_ZOOM, TILE_PX, tileGrids } from '../core/map/coords';
 import { decodeOwnPng, encodePng } from '../core/map/png';
 import { downsample, emptyPixels, reliefPixels } from '../core/map/relief';
+import type { ClientStatus } from '../shared/ipc';
 import type { AreaLookup, MapImagery } from './client-imagery';
 import type { ServerDataFiles } from './server-data';
 
@@ -20,6 +21,8 @@ import type { ServerDataFiles } from './server-data';
 export interface MapTiles {
   setDataDir(dir: string | null): void;
   setClientDir(dir: string | null): void;
+  /** The client folder opened (now, if not yet): its archives and what went wrong; null without one. */
+  clientStatus(): Promise<ClientStatus | null>;
   tile(map: number, zoom: number, tx: number, ty: number): Promise<Uint8Array>;
 }
 
@@ -53,7 +56,13 @@ export function parseTileUrl(url: string): { map: number; zoom: number; tx: numb
   return { map, zoom, tx, ty };
 }
 
-const keyOf = (dir: string | null): string => (dir ? createHash('sha1').update(dir).digest('hex').slice(0, 12) : '');
+/** One spelling per folder, so `E:\WoW\` and `e:/wow` share their tiles; Windows ignores case. */
+const samePath = (dir: string): string => {
+  const path = dir.replace(/\\/g, '/').replace(/(.)\/+$/, '$1');
+  return process.platform === 'win32' ? path.toLowerCase() : path;
+};
+const hash = (text: string): string => createHash('sha1').update(text).digest('hex').slice(0, 12);
+const keyOf = (dir: string | null): string => (dir ? hash(samePath(dir)) : '');
 const hasPixels = (rgba: Uint8Array): boolean => rgba.some((v, i) => i % 4 === 3 && v !== 0);
 
 export function createMapTiles(deps: {
@@ -65,8 +74,10 @@ export function createMapTiles(deps: {
   let dir: string | null = null;
   let folderKey = '';
   let clientDir: string | null = null;
-  let clientKey = '';
-  let imagery: Promise<MapImagery | null> | null = null;
+  /** The client being opened for `clientDir`, with the reason when it could not be. */
+  let imagery: Promise<{ opened: MapImagery | null; problem: string | null }> | null = null;
+  /** Each client's cache key: its folder and its archives, so a patched client draws afresh. */
+  const clientKeys = new WeakMap<MapImagery, string>();
   /** Raised whenever a folder changes: a tile drawn across a change is served but never cached. */
   let generation = 0;
   const transparent = encodePng(TILE_PX, TILE_PX, emptyPixels());
@@ -183,6 +194,12 @@ export function createMapTiles(deps: {
 
   /** The client's picture over the relief, keyed by both folders. */
   function picture(client: MapImagery, map: number, zoom: number, tx: number, ty: number): Promise<Drawn> {
+    let clientKey = clientKeys.get(client);
+    if (!clientKey) {
+      clientKey = hash(`${clientDir ? samePath(clientDir) : ''}
+${client.fingerprint}`);
+      clientKeys.set(client, clientKey);
+    }
     const both = `${folderKey}+${clientKey}`;
     const path = `${deps.cacheRoot}/${both}/${PICTURE_VERSION}/${map}/${zoom}/${tx}/${ty}.png`;
     return cached(`picture/${both}/${map}/${zoom}/${tx}/${ty}`, path, async () => {
@@ -220,23 +237,25 @@ export function createMapTiles(deps: {
     });
   }
 
-  function ensureImagery(): Promise<MapImagery | null> {
-    if (!clientDir || !deps.openImagery) return Promise.resolve(null);
+  function openClient(): Promise<{ opened: MapImagery | null; problem: string | null }> {
+    if (!clientDir || !deps.openImagery) return Promise.resolve({ opened: null, problem: null });
     if (!imagery) {
       const opening = clientDir;
+      const failed = (problem: string): { opened: null; problem: string } => {
+        warnOnce(`client:${opening}`, `Game client: ${problem}`);
+        return { opened: null, problem };
+      };
       imagery = deps.openImagery(opening).then(
-        (opened) => {
-          if (!opened) warnOnce(`client:${opening}`, `Game client: no archives found in ${opening}; the map shows the relief.`);
-          return opened;
-        },
-        (error: unknown) => {
-          warnOnce(`client:${opening}`, `Game client: ${opening} could not be opened: ${error instanceof Error ? error.message : String(error)}`);
-          return null;
-        },
+        (opened) =>
+          opened
+            ? { opened, problem: null }
+            : failed('No game archives were found in this folder. Choose the folder holding Wow.exe, or its Data folder; the map shows the relief until then.'),
+        (error: unknown) => failed(`The folder could not be opened: ${error instanceof Error ? error.message : String(error)}`),
       );
     }
     return imagery;
   }
+  const ensureImagery = async (): Promise<MapImagery | null> => (await openClient()).opened;
 
   const forget = (): void => {
     generation += 1;
@@ -257,10 +276,15 @@ export function createMapTiles(deps: {
       if (normalised === clientDir) return;
       const old = imagery;
       imagery = null;
-      void old?.then((opened) => opened?.close()).catch(() => {});
+      void old?.then(({ opened }) => opened?.close()).catch(() => {});
       clientDir = normalised;
-      clientKey = keyOf(clientDir);
       forget();
+    },
+    async clientStatus() {
+      const dirNow = clientDir;
+      if (!dirNow) return null;
+      const { opened, problem } = await openClient();
+      return { dir: dirNow, archives: opened?.archives ?? [], problems: opened ? opened.problems : problem ? [problem] : [] };
     },
     async tile(map, zoom, tx, ty) {
       if (!dir && !clientDir) return transparent;

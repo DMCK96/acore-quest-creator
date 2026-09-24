@@ -107,13 +107,16 @@ function solidTile(r: number, g: number, b: number, cols = 256): Uint8Array {
   return px;
 }
 
-function setupWithClient(overrides: Partial<MapImagery> = {}, open?: (dir: string) => Promise<MapImagery | null>) {
+function setupWithClient(
+  overrides: Partial<MapImagery> = {},
+  open?: (dir: string) => Promise<MapImagery | null>,
+  stored = new Map<string, Uint8Array>(),
+) {
   const grid = buildMapFile({ kind: 'flat', gridHeight: 50, area: { gridArea: 12 } });
   const files: ServerDataFiles = {
     isDir: async (d) => d === '/data',
     read: async (d, name) => (d.replace(/\\/g, '/') === '/data/maps' && name === '0003232.map' ? grid : null),
   };
-  const stored = new Map<string, Uint8Array>();
   const areas: (number | null)[] = [];
   let opened = 0;
   const imagery: MapImagery = {
@@ -123,6 +126,9 @@ function setupWithClient(overrides: Partial<MapImagery> = {}, open?: (dir: strin
       return solidTile(200, 0, 0, 64);
     },
     close: vi.fn(async () => {}),
+    archives: ['common.MPQ'],
+    fingerprint: 'common.MPQ:100:0',
+    problems: [],
     ...overrides,
   };
   const tiles = createMapTiles({
@@ -220,7 +226,7 @@ describe('map tiles from the game client', () => {
   it('draws with the new client when the folder changes while the old one is still opening', async () => {
     let release!: () => void;
     const gate = new Promise<void>((resolve) => (release = resolve));
-    const clientB: MapImagery = { minimap: async () => solidTile(90, 90, 90), art: async () => null, close: async () => {} };
+    const clientB: MapImagery = { minimap: async () => solidTile(90, 90, 90), art: async () => null, close: async () => {}, archives: [], fingerprint: 'b', problems: [] };
     const { tiles, imagery } = setupWithClient({}, async (dir) => {
       if (dir === '/client') {
         await gate;
@@ -242,5 +248,51 @@ describe('map tiles from the game client', () => {
     tiles.setDataDir('/data');
     tiles.setClientDir('/client');
     expect(alphaAt(await tiles.tile(0, 6, 32, 32), 100, 100)).toBe(255);
+  });
+  it('shares the cache between spellings of the same client folder', async () => {
+    const stored = new Map<string, Uint8Array>();
+    const first = setupWithClient({}, undefined, stored);
+    first.tiles.setClientDir('/client');
+    await first.tiles.tile(0, 6, 32, 32);
+    const minimap = vi.fn(async () => solidTile(1, 2, 3));
+    const second = setupWithClient({ minimap }, async (dir) => (dir.replace(/\\/g, '/').replace(/\/+$/, '') === '/client' ? second.imagery : null), stored);
+    second.tiles.setClientDir('\\client\\');
+    expect(rgbaAt(await second.tiles.tile(0, 6, 32, 32), 5, 5)).toEqual([10, 20, 30, 255]);
+    expect(minimap).not.toHaveBeenCalled();
+  });
+  it('draws the picture afresh once the client is patched', async () => {
+    const stored = new Map<string, Uint8Array>();
+    const before = setupWithClient({}, undefined, stored);
+    before.tiles.setClientDir('/client');
+    await before.tiles.tile(0, 6, 32, 32);
+    const after = setupWithClient({ minimap: async () => solidTile(1, 2, 3), fingerprint: 'patch-4.MPQ:9:1' }, undefined, stored);
+    after.tiles.setClientDir('/client');
+    expect(rgbaAt(await after.tiles.tile(0, 6, 32, 32), 5, 5)).toEqual([1, 2, 3, 255]);
+  });
+});
+
+describe('game client status', () => {
+  it('is null without a client folder', async () => {
+    const { tiles } = setupWithClient();
+    expect(await tiles.clientStatus()).toBeNull();
+  });
+  it('lists the archives read and any problems', async () => {
+    const { tiles } = setupWithClient({ problems: ['patch-Z.MPQ could not be opened'] });
+    tiles.setClientDir('/client');
+    expect(await tiles.clientStatus()).toEqual({ dir: '/client', archives: ['common.MPQ'], problems: ['patch-Z.MPQ could not be opened'] });
+  });
+  it('says so when the folder holds no game archives', async () => {
+    const { tiles } = setupWithClient();
+    tiles.setClientDir('/elsewhere');
+    const status = (await tiles.clientStatus())!;
+    expect(status.archives).toEqual([]);
+    expect(status.problems[0]).toMatch(/No game archives/);
+  });
+  it('says so when the client cannot be opened', async () => {
+    const { tiles } = setupWithClient({}, async () => {
+      throw new Error('disk on fire');
+    });
+    tiles.setClientDir('/client');
+    expect((await tiles.clientStatus())!.problems[0]).toMatch(/disk on fire/);
   });
 });

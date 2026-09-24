@@ -37,6 +37,7 @@ import type {
   Api,
   ApiError,
   CanvasNode,
+  ClientStatus,
   ErrorCode,
   NodeGroup,
   NodeLink,
@@ -108,6 +109,8 @@ export interface ApiDeps {
   onServerDataDir?(dir: string | null): void;
   /** Told the connection's game client folder at every connect (null when it names none), for the map tiles. */
   onClientDir?(dir: string | null): void;
+  /** What the game client folder given to `onClientDir` holds; the folder is opened now if it was not yet. */
+  clientStatus?(): Promise<ClientStatus | null>;
 }
 
 const NO_SERVER_DATA_FILES: ServerDataFiles = { read: async () => null, isDir: async () => false };
@@ -895,6 +898,7 @@ export function createApi(deps: ApiDeps): Api {
         deps.onServerDataDir?.(profile.dbcDir?.trim() || null);
         const clientDir = profile.clientDir?.trim() || null;
         deps.onClientDir?.(clientDir);
+        const client = clientDir ? ((await deps.clientStatus?.()) ?? null) : null;
         const scriptSchema = await loadSchema(db, [...new Set<string>([...SCRIPT_TABLES, ...ENTITY_TABLES])]);
         // Swapping connections must not leave the old one open.
         if (session && session.db !== db) await session.db.close();
@@ -911,7 +915,7 @@ export function createApi(deps: ApiDeps): Api {
           serverData,
           scriptSchema,
         };
-        return { profileId, schemaHash: schema.hash, drift, blocking, serverData: serverData?.status ?? null, clientDir };
+        return { profileId, schemaHash: schema.hash, drift, blocking, serverData: serverData?.status ?? null, clientDir, client };
       }),
 
     chooseServerDataDir: () => run(async () => (deps.chooseDirectory ? await deps.chooseDirectory() : null)),

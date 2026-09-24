@@ -91,6 +91,7 @@ function buildDeps(
     store,
     onServerDataDir: (dir) => tiles.setDataDir(dir),
     onClientDir: (dir) => tiles.setClientDir(dir),
+    clientStatus: () => tiles.clientStatus(),
     session,
     projects,
     startupProfileId,
@@ -108,7 +109,7 @@ function buildDeps(
     mapDataFiles,
     async chooseDirectory() {
       const parent = BrowserWindow.getFocusedWindow() ?? BrowserWindow.getAllWindows()[0];
-      const options = { title: 'Server data folder', properties: ['openDirectory' as const] };
+      const options = { title: 'Choose a folder', properties: ['openDirectory' as const] };
       const r = parent ? await dialog.showOpenDialog(parent, options) : await dialog.showOpenDialog(options);
       return r.canceled || r.filePaths.length === 0 ? null : r.filePaths[0]!;
     },
