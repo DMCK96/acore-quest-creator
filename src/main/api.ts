@@ -865,6 +865,27 @@ export function createApi(deps: ApiDeps): Api {
         return Array.from({ length: count }, (_, i) => base + i + 1);
       }),
 
+    patrolPathId: (guid) =>
+      run(async () => {
+        const live = connected();
+        const { npcs } = projectEntities();
+        const spawns = npcs.flatMap((n) => n.spawns);
+        const pinned = spawns.find((s) => s.guid === guid)?.patrol;
+        if (pinned) return pinned.pathId;
+        const projectPaths = spawns.flatMap((s) => (s.patrol ? [s.patrol.pathId] : []));
+        // The database's own convention: a spawn's path is its guid times ten.
+        const candidate = guid * 10;
+        const inDb = (await rowsOrNone(live.db, 'waypoint_data', { id: [String(candidate)] })).length > 0;
+        if (!inDb && !projectPaths.includes(candidate)) return candidate;
+        let dbMax = 0;
+        try {
+          dbMax = (await live.db.selectMax?.('waypoint_data', 'id')) ?? 0;
+        } catch {
+          dbMax = 0;
+        }
+        return Math.max(dbMax, ...projectPaths, 0) + 1;
+      }),
+
     entityTemplate: (kind, entry) =>
       run(async () => {
         const live = connected();

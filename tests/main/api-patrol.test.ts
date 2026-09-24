@@ -40,3 +40,21 @@ describe('patrols through the API', () => {
     expect(preview.value.some((d: any) => d.table === 'creature_addon')).toBe(true);
   });
 });
+describe('patrol path ids', () => {
+  it('uses the spawn guid times ten when it is free', async () => {
+    const { api } = await setup();
+    expect(((await api.patrolPathId(5300701)) as any).value).toBe(53007010);
+  });
+  it('goes above the database and the project when guid times ten is taken', async () => {
+    const { api, db } = await setup();
+    db.insert('waypoint_data', { id: '53007010', point: '1' });
+    db.insert('waypoint_data', { id: '60000000', point: '1' });
+    expect(((await api.patrolPathId(5300701)) as any).value).toBe(60000001);
+    const opened: any = await api.newQuest();
+    const aggregate = opened.value.aggregate;
+    aggregate.values[ENTITIES_FIELD] = writeEntities({ npcs: [{ ...newNpc(11000240), spawns: [{ ...newSpawn(5300702), patrol: newPatrol(53007020) }, { ...newSpawn(5300703), patrol: newPatrol(70000000) }] }], objects: [] });
+    await api.updateQuest(aggregate);
+    expect(((await api.patrolPathId(5300702)) as any).value).toBe(53007020);   // its own pinned id comes back
+    expect(((await api.patrolPathId(7000000)) as any).value).toBe(70000001);   // guid*10 = 70000000 is a project path
+  });
+});

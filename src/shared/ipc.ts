@@ -329,6 +329,8 @@ export interface Api {
   validate(questId: number): Promise<Result<Issue[]>>;
   /** Fresh IDs for new NPCs, objects or their spawns: above the database and every quest in the project. */
   allocateIds(kind: AllocKind, count: number): Promise<Result<number[]>>;
+  /** The `waypoint_data` path a new NPC's spawn patrols: guid × 10 when free, else above every path in use. */
+  patrolPathId(guid: number): Promise<Result<number>>;
   /** The look and stats of an existing NPC or object, to start a new one from; null when there is none. */
   entityTemplate(kind: 'creature' | 'gameobject', entry: number): Promise<Result<EntityTemplate | null>>;
   /** The terrain height at a point, from the server data folder's map files, or why there is none. */
@@ -485,6 +487,7 @@ const REQUEST_SCHEMAS: Record<keyof Api, z.ZodType<unknown[]>> = {
   entitySpawns: z.tuple([z.enum(['creature', 'gameobject']), z.number().int()]),
   questMapRefs: z.tuple([z.number()]),
   allocateIds: z.tuple([z.enum(['creature', 'gameobject', 'creatureSpawn', 'gameobjectSpawn', 'page']), z.number().int().min(1).max(50)]),
+  patrolPathId: z.tuple([z.number().int().min(1)]),
   entityTemplate: z.tuple([z.enum(['creature', 'gameobject']), z.number().int()]),
   exportQuest: z.tuple([z.number()]),
   applyToDev: z.tuple([z.number(), z.boolean()]),

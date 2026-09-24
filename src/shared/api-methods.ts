@@ -41,6 +41,7 @@ export const API_METHODS = [
   'entitySpawns',
   'questMapRefs',
   'allocateIds',
+  'patrolPathId',
   'entityTemplate',
   'exportQuest',
   'applyToDev',
