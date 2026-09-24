@@ -1,0 +1,67 @@
+// @vitest-environment jsdom
+import { describe, it, expect, vi } from 'vitest';
+import { createAppStore } from '../../src/renderer/state/app-store';
+import { draftFromProfiles, emptyDev } from '../../src/renderer/connection/draft';
+import type { ConnectSummary } from '@shared/ipc';
+import type { SchemaDiff } from '@core/schema/diff';
+import { makeMockApi, okv, errv, sampleOpen } from './mock-api';
+
+const drift = { missingTables: [], forbiddenTables: [], unregistered: [], missingColumns: [], typeMismatches: [] } as unknown as SchemaDiff;
+const summary = (profileId = 1, blocking = false): ConnectSummary => ({ profileId, schemaHash: 'h', drift, blocking, serverData: null, clientDir: null, client: null });
+const rec = (id: number, role: 'world' | 'dev') => ({ id, name: role === 'world' ? 'World' : 'Dev', role, host: 'h', port: 3306, user: 'u', database: 'd', dbcDir: '', clientDir: '', lastConnectedAt: null });
+
+describe('saveConnection', () => {
+  it('saves world then dev, removes a removed dev, reloads profiles, and returns the world id', async () => {
+    const calls: string[] = [];
+    const api = makeMockApi({
+      saveProfile: async (p) => { calls.push(`save ${p.role}`); return okv(rec(p.role === 'world' ? 1 : 9, p.role)); },
+      deleteProfile: async (id) => { calls.push(`delete ${id}`); return okv(null); },
+      listProfiles: async () => { calls.push('list'); return okv([rec(1, 'world'), rec(9, 'dev')]); },
+    });
+    const store = createAppStore(api);
+    const original = draftFromProfiles([rec(1, 'world'), rec(2, 'dev')]);
+    const draft = { ...original, dev: { ...emptyDev(), host: 'x', user: 'u', database: 'd' } };
+    expect(await store.getState().saveConnection(draft, original)).toEqual({ ok: true, worldId: 1 });
+    expect(calls).toEqual(['save world', 'save dev', 'delete 2', 'list']);
+    expect(store.getState().hasDevProfile).toBe(true);
+  });
+  it('stops at the first failure and returns its message without touching the store error', async () => {
+    const api = makeMockApi({ saveProfile: async () => errv('VALIDATION', 'bad port') });
+    const store = createAppStore(api);
+    const original = draftFromProfiles([]);
+    expect(await store.getState().saveConnection(original, original)).toEqual({ ok: false, error: 'bad port' });
+    expect(api.listProfiles).not.toHaveBeenCalled();
+    expect(store.getState().error).toBeNull();
+  });
+});
+
+describe('reconnect', () => {
+  async function editing() {
+    const api = makeMockApi({ connect: vi.fn(async (id: number) => okv(summary(id))), openQuest: async () => okv(sampleOpen()) });
+    const store = createAppStore(api);
+    await store.getState().connectProfile(1);
+    await store.getState().openQuest(60001);
+    return { api, store };
+  }
+  it('connects, closes the open quest, and returns null', async () => {
+    const { api, store } = await editing();
+    expect(await store.getState().reconnect(2)).toBeNull();
+    expect(api.connect).toHaveBeenLastCalledWith(2);
+    expect(store.getState()).toMatchObject({ screen: 'pick', open: null, error: null, summary: { profileId: 2 } });
+  });
+  it('leaves everything as it was when the connect fails', async () => {
+    const { api, store } = await editing();
+    vi.mocked(api.connect).mockResolvedValueOnce(errv('CONNECTION', 'Access denied for user'));
+    const before = store.getState();
+    expect(await store.getState().reconnect(2)).toBe('Access denied for user');
+    expect(store.getState()).toMatchObject({ screen: before.screen, open: before.open, summary: { profileId: 1 }, error: null });
+  });
+  it('reconnect to a blocking database goes to the login screen', async () => {
+    const { api, store } = await editing();
+    vi.mocked(api.connect).mockResolvedValueOnce(okv({ ...summary(2, true), drift: { ...drift, missingTables: ['quest_offer_reward'] } }));
+    expect(await store.getState().reconnect(2)).toBeNull();
+    expect(store.getState().screen).toBe('connect');
+    expect(store.getState().open).toBeNull();
+    expect(store.getState().error).toMatch(/quest_offer_reward/);
+  });
+});

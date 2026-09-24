@@ -22,6 +22,7 @@ import type {
 } from '@shared/ipc';
 import type { ModuleId } from '@core/modules/model';
 import { resetModule } from '@core/modules/catalog';
+import { draftToSaves, type ConnectionDraft } from '../connection/draft';
 
 export interface AppState {
   screen: 'connect' | 'pick' | 'preview' | 'edit';
@@ -58,6 +59,13 @@ export interface AppState {
   connect(input: ProfileSave): Promise<void>;
   /** Connects with a saved profile and its stored password. */
   connectProfile(profileId: number): Promise<void>;
+  /** Saves the draft's rows (world, then dev, then removes a dev row the user removed) and reloads the profiles. */
+  saveConnection(draft: ConnectionDraft, original: ConnectionDraft): Promise<{ ok: true; worldId: number } | { ok: false; error: string }>;
+  /**
+   * Connects with a saved profile from inside the app. Returns the error to show, or null. A failed
+   * connect leaves everything as it was; a database with blocking drift goes to the login screen.
+   */
+  reconnect(profileId: number): Promise<string | null>;
   /** Asks for the server data folder with the native picker; null when cancelled or it failed. */
   chooseServerDataDir(): Promise<string | null>;
   search(text: string): Promise<void>;
@@ -211,14 +219,38 @@ export function createAppStore(api: Api, opts: { saveDelayMs?: number } = {}): A
       }
       const summary = connected.value;
       if (summary.blocking) {
-        set({
-          error: missingTablesMessage(summary.drift.missingTables, summary.drift.forbiddenTables ?? []),
-          screen: 'connect',
-          summary,
-        });
+        set(blockedBy(summary));
         return;
       }
       set({ summary, error: null, screen: 'pick' });
+    },
+
+    async saveConnection(draft, original) {
+      const saves = draftToSaves(draft, original);
+      const world = await api.saveProfile(saves.world);
+      if (!world.ok) return { ok: false, error: world.error.message };
+      if (saves.dev) {
+        const dev = await api.saveProfile(saves.dev);
+        if (!dev.ok) return { ok: false, error: dev.error.message };
+      }
+      if (saves.removeDevId !== null) {
+        const removed = await api.deleteProfile(saves.removeDevId);
+        if (!removed.ok) return { ok: false, error: removed.error.message };
+      }
+      await get().loadProfiles();
+      return { ok: true, worldId: world.value.id };
+    },
+
+    async reconnect(profileId) {
+      // Pending edits are written first, so switching databases cannot lose one.
+      await get().flushAll();
+      const connected = await api.connect(profileId);
+      if (!connected.ok) return connected.error.message;
+      const summary = connected.value;
+      const closed = { open: null, dirty: false, links: null, openPanel: null };
+      // The session has already switched, so a blocked database leaves the editor for the login screen.
+      set(summary.blocking ? { ...blockedBy(summary), ...closed } : { summary, error: null, screen: 'pick', ...closed });
+      return null;
     },
 
     async search(text) {
@@ -627,6 +659,15 @@ export function createAppStore(api: Api, opts: { saveDelayMs?: number } = {}): A
   }
 
   return store;
+}
+
+/** What a connect to a database with blocking drift shows: the login screen and why. */
+function blockedBy(summary: ConnectSummary): Pick<AppState, 'error' | 'screen' | 'summary'> {
+  return {
+    error: missingTablesMessage(summary.drift.missingTables, summary.drift.forbiddenTables ?? []),
+    screen: 'connect',
+    summary,
+  };
 }
 
 function dedupeProfiles(profiles: ProfileRecord[], profile: ProfileRecord): ProfileRecord[] {
