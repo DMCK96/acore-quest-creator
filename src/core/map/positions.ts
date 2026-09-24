@@ -1,5 +1,6 @@
 import { ENTITIES_FIELD, newSpawn, readEntities, writeEntities, type QuestEntities } from '../entities/model';
 import type { FieldValue } from '../registry/types';
+import { movePoint, setPatrol } from './patrol';
 import { readScenes, SCRIPTS_FIELD, writeScenes, type Position, type QuestScene, type SceneStep } from '../scripts/model';
 
 /**
@@ -8,7 +9,7 @@ import { readScenes, SCRIPTS_FIELD, writeScenes, type Position, type QuestScene,
  * exactly that one value.
  */
 
-export type MarkerKind = 'npcSpawn' | 'objectSpawn' | 'scenePoint' | 'escortPoint' | 'fightPoint' | 'area' | 'poi';
+export type MarkerKind = 'npcSpawn' | 'objectSpawn' | 'patrolPoint' | 'scenePoint' | 'escortPoint' | 'fightPoint' | 'area' | 'poi';
 
 export interface QuestMarker {
   id: string;
@@ -61,6 +62,11 @@ export function questMarkers(values: Values, knownMaps: ReadonlyMap<string, numb
     npc.spawns.forEach((s, i) =>
       point({ id: `spawn:npc:${npc.entry}:${s.guid}`, kind: 'npcSpawn', label: `${npcName(npc.name, npc.entry)} · spawn ${i + 1}`, map: s.map, draggable: true }, s),
     );
+    for (const s of npc.spawns) {
+      s.patrol?.points.forEach((p, i) =>
+        point({ id: `patrol:${npc.entry}:${s.guid}:${i}`, kind: 'patrolPoint', label: `${npcName(npc.name, npc.entry)} · patrol point ${i + 1}`, map: s.map, draggable: true }, p),
+      );
+    }
   }
   for (const object of entities.objects) {
     object.spawns.forEach((s, i) =>
@@ -115,6 +121,29 @@ export function questMarkers(values: Values, knownMaps: ReadonlyMap<string, numb
   return markers;
 }
 
+/** A new NPC spawn's patrol as a line: from where it stands through each point, looping back. */
+export interface QuestRoute {
+  id: string;
+  map: number;
+  points: { x: number; y: number }[];
+  facings: { x: number; y: number; o: number }[];
+}
+
+export function questRoutes(values: Values): QuestRoute[] {
+  return readEntities(values).npcs.flatMap((npc) =>
+    npc.spawns.flatMap((s) => {
+      const points = s.patrol?.points ?? [];
+      if (points.length === 0) return [];
+      return [{
+        id: `patrol:${npc.entry}:${s.guid}`,
+        map: s.map,
+        points: [{ x: s.x, y: s.y }, ...points.map((p) => ({ x: p.x, y: p.y }))],
+        facings: points.flatMap((p) => (p.facing === null ? [] : [{ x: p.x, y: p.y, o: p.facing }])),
+      }];
+    }),
+  );
+}
+
 type To = { x: number; y: number; z: number };
 const moved = (p: Position, to: To): Position => ({ ...p, x: to.x, y: to.y, z: to.z });
 
@@ -131,6 +160,15 @@ export function moveMarker(values: Values, id: string, to: To): Edit {
       list.map((e) => (e.entry !== entry ? e : { ...e, spawns: e.spawns.map((s) => (s.guid === guid ? { ...s, x: to.x, y: to.y, z: to.z } : s)) }));
     const next = kind === 'npc' ? { ...entities, npcs: move(entities.npcs) } : { ...entities, objects: move(entities.objects) };
     return { field: ENTITIES_FIELD, value: writeEntities(next) };
+  }
+  if (parts[0] === 'patrol') {
+    const [, entryText, guidText, indexText] = parts;
+    const entry = Number(entryText);
+    const guid = Number(guidText);
+    const index = Number(indexText);
+    const patrol = readEntities(values).npcs.find((n) => n.entry === entry)?.spawns.find((s) => s.guid === guid)?.patrol;
+    if (!patrol || !Number.isInteger(index) || index < 0 || index >= patrol.points.length) return null;
+    return setPatrol(values, entry, guid, movePoint(patrol, index, to));
   }
   if (parts[0] === 'scene' || parts[0] === 'area') {
     const scenes = readScenes(values);

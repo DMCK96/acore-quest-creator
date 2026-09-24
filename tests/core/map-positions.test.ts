@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { addSpawn, moveMarker, questMarkers } from '../../src/core/map/positions';
+import { addSpawn, moveMarker, questMarkers, questRoutes } from '../../src/core/map/positions';
+import { addPoint, newPatrol, updatePoint } from '../../src/core/map/patrol';
 import { ENTITIES_FIELD, newNpc, newObject, newSpawn, readEntities, writeEntities } from '../../src/core/entities/model';
 import { SCRIPTS_FIELD, readScenes, writeScenes, type QuestScene } from '../../src/core/scripts/model';
 import { emptyFight } from '../../src/core/combat/model';
@@ -75,5 +76,27 @@ describe('addSpawn', () => {
     const out = addSpawn(values, { kind: 'npc', entry: 12000001 }, { guid: 901, map: 0, x: 1, y: 2, z: 3, o: 0 })!;
     expect(readEntities({ [ENTITIES_FIELD]: out.value }).npcs[0]!.spawns[1]).toEqual({ ...newSpawn(901), map: 0, x: 1, y: 2, z: 3, o: 0 });
     expect(addSpawn(values, { kind: 'object', entry: 1 }, { guid: 1, map: 0, x: 0, y: 0, z: 0, o: 0 })).toBeNull();
+  });
+});
+
+describe('patrol markers', () => {
+  const walker = () => {
+    const patrol = updatePoint(addPoint(addPoint(newPatrol(9000), { x: 1, y: 2, z: 3 }), { x: 4, y: 5, z: 6 }), 1, { facing: 0.5, waitSecs: 3 });
+    return { ...newNpc(12000001), name: 'Hela', spawns: [{ ...newSpawn(900), map: 1, x: 0, y: 0, z: 0, patrol }] };
+  };
+  const vals = () => ({ [ENTITIES_FIELD]: writeEntities({ npcs: [walker()], objects: [] }) });
+  it('marks each patrol point', () => {
+    expect(questMarkers(vals()).filter((m) => m.kind === 'patrolPoint')).toEqual([
+      expect.objectContaining({ id: 'patrol:12000001:900:0', label: 'Hela · patrol point 1', map: 1, x: 1, y: 2, z: 3, draggable: true }),
+      expect.objectContaining({ id: 'patrol:12000001:900:1', label: 'Hela · patrol point 2', map: 1, x: 4, y: 5, z: 6, draggable: true }),
+    ]);
+  });
+  it('draws each route from its spawn, with where it faces', () => {
+    expect(questRoutes(vals())).toEqual([{ id: 'patrol:12000001:900', map: 1, points: [{ x: 0, y: 0 }, { x: 1, y: 2 }, { x: 4, y: 5 }], facings: [{ x: 4, y: 5, o: 0.5 }] }]);
+  });
+  it('moves one patrol point', () => {
+    const edit = moveMarker(vals(), 'patrol:12000001:900:1', { x: 9, y: 9, z: 9 })!;
+    expect(readEntities({ [ENTITIES_FIELD]: edit.value }).npcs[0]!.spawns[0]!.patrol!.points[1]).toMatchObject({ x: 9, y: 9, z: 9, waitSecs: 3 });
+    expect(moveMarker(vals(), 'patrol:12000001:900:7', { x: 9, y: 9, z: 9 })).toBeNull();
   });
 });
