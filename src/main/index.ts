@@ -9,6 +9,7 @@ import { API_METHODS, channelFor, parseRequest, type Api, type ApiError } from '
 import { createApi, type ApiDeps } from './api';
 import { seedEnvProfiles } from './env-profiles';
 import { mapDataFiles, nodeServerDataFiles } from './server-data';
+import { createClientImagery, nodeClientFs } from './client-imagery';
 import { createMapTiles, parseTileUrl, type MapTiles } from './map-tiles';
 import { createSecretBox } from './secret-box';
 import { openStore, type Store } from './store/store';
@@ -255,6 +256,7 @@ void app.whenReady().then(() => {
   const tiles = createMapTiles({
     files: mapDataFiles,
     cacheRoot: join(app.getPath('userData'), 'map-tiles'),
+    openImagery: (dir) => createClientImagery(dir, nodeClientFs, (m) => console.warn(`Game client: ${m}`)),
     cache: {
       async read(path) {
         try {

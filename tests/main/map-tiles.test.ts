@@ -1,5 +1,6 @@
 import { inflateSync } from 'node:zlib';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
+import type { MapImagery } from '../../src/main/client-imagery';
 import { createMapTiles, parseTileUrl } from '../../src/main/map-tiles';
 import type { ServerDataFiles } from '../../src/main/server-data';
 import { buildMapFile } from '../helpers/map-file';
@@ -87,5 +88,117 @@ describe('map tiles', () => {
     expect(reads).toBe(before);
     expect(alphaAt(png, 10, 10)).toBe(255);
     expect(alphaAt(png, 200, 200)).toBe(0);
+  });
+});
+
+function rgbaAt(png: Uint8Array, col: number, row: number): number[] {
+  const view = new DataView(png.buffer, png.byteOffset);
+  const width = view.getUint32(16);
+  const idat = png.indexOf(0x49, 33);
+  const raw = inflateSync(png.slice(idat + 4, idat + 4 + view.getUint32(idat - 4)));
+  const at = row * (1 + width * 4) + 1 + col * 4;
+  return Array.from(raw.subarray(at, at + 4));
+}
+
+/** A 256 px tile of one colour in columns [0, cols). */
+function solidTile(r: number, g: number, b: number, cols = 256): Uint8Array {
+  const px = new Uint8Array(256 * 256 * 4);
+  for (let row = 0; row < 256; row++) for (let col = 0; col < cols; col++) px.set([r, g, b, 255], (row * 256 + col) * 4);
+  return px;
+}
+
+function setupWithClient(overrides: Partial<MapImagery> = {}, open?: (dir: string) => Promise<MapImagery | null>) {
+  const grid = buildMapFile({ kind: 'flat', gridHeight: 50, area: { gridArea: 12 } });
+  const files: ServerDataFiles = {
+    isDir: async (d) => d === '/data',
+    read: async (d, name) => (d.replace(/\\/g, '/') === '/data/maps' && name === '0003232.map' ? grid : null),
+  };
+  const stored = new Map<string, Uint8Array>();
+  const areas: (number | null)[] = [];
+  let opened = 0;
+  const imagery: MapImagery = {
+    minimap: async (_map, gx, gy) => (gx === 32 && gy === 32 ? solidTile(10, 20, 30) : null),
+    art: async (_map, _tx, _ty, areaAt) => {
+      areas.push(areaAt(-10, -10), areaAt(-600, -10));
+      return solidTile(200, 0, 0, 64);
+    },
+    close: vi.fn(async () => {}),
+    ...overrides,
+  };
+  const tiles = createMapTiles({
+    files,
+    cacheRoot: '/cache',
+    cache: { read: async (p) => stored.get(p) ?? null, write: async (p, b) => void stored.set(p, b) },
+    openImagery: open ?? (async (dir) => {
+      opened += 1;
+      return dir === '/client' ? imagery : null;
+    }),
+  });
+  return { tiles, stored, areas, imagery, opened: () => opened };
+}
+
+describe('map tiles from the game client', () => {
+  it('draws the minimap at zoom 6', async () => {
+    const { tiles } = setupWithClient();
+    tiles.setDataDir('/data');
+    tiles.setClientDir('/client');
+    expect(rgbaAt(await tiles.tile(0, 6, 32, 32), 100, 100)).toEqual([10, 20, 30, 255]);
+  });
+  it('draws the relief where a grid has no minimap tile', async () => {
+    const withClient = setupWithClient({ minimap: async () => null });
+    withClient.tiles.setDataDir('/data');
+    withClient.tiles.setClientDir('/client');
+    const reliefOnly = setup();
+    reliefOnly.tiles.setDataDir('/data');
+    expect(rgbaAt(await withClient.tiles.tile(0, 6, 32, 32), 100, 100)).toEqual(rgbaAt(await reliefOnly.tiles.tile(0, 6, 32, 32), 100, 100));
+  });
+  it('lays the painted art over the relief at zoom 5 and tells it the areas', async () => {
+    const { tiles, areas } = setupWithClient();
+    tiles.setDataDir('/data');
+    tiles.setClientDir('/client');
+    const png = await tiles.tile(0, 5, 16, 16);
+    expect(rgbaAt(png, 10, 10)).toEqual([200, 0, 0, 255]);
+    expect(rgbaAt(png, 100, 100)[3]).toBe(255);
+    expect(rgbaAt(png, 100, 100)).not.toEqual([200, 0, 0, 255]);
+    expect(rgbaAt(png, 200, 200)[3]).toBe(0);
+    expect(areas).toEqual([12, null]);
+  });
+  it('builds zoom 4 from the painted tiles', async () => {
+    const { tiles } = setupWithClient();
+    tiles.setDataDir('/data');
+    tiles.setClientDir('/client');
+    expect(rgbaAt(await tiles.tile(0, 4, 8, 8), 2, 2)).toEqual([200, 0, 0, 255]);
+  });
+  it('serves the minimap without a server data folder', async () => {
+    const { tiles } = setupWithClient();
+    tiles.setClientDir('/client');
+    expect(rgbaAt(await tiles.tile(0, 6, 32, 32), 5, 5)).toEqual([10, 20, 30, 255]);
+    expect(alphaAt(await tiles.tile(0, 6, 0, 0), 5, 5)).toBe(0);
+  });
+  it('opens the client once however many tiles are asked for at once', async () => {
+    const { tiles, opened } = setupWithClient();
+    tiles.setClientDir('/client');
+    await Promise.all([tiles.tile(0, 6, 32, 32), tiles.tile(0, 6, 31, 32), tiles.tile(0, 6, 32, 31), tiles.tile(0, 5, 16, 16)]);
+    expect(opened()).toBe(1);
+  });
+  it('closes the old client and draws fresh tiles when the folder changes', async () => {
+    const { tiles, stored, imagery } = setupWithClient();
+    tiles.setDataDir('/data');
+    tiles.setClientDir('/client');
+    expect(rgbaAt(await tiles.tile(0, 6, 32, 32), 5, 5)).toEqual([10, 20, 30, 255]);
+    tiles.setClientDir('/elsewhere');
+    await Promise.resolve();
+    expect(imagery.close).toHaveBeenCalledTimes(1);
+    expect(rgbaAt(await tiles.tile(0, 6, 32, 32), 5, 5)).not.toEqual([10, 20, 30, 255]);
+    expect([...stored.keys()].some((k) => k.includes('/r3/'))).toBe(true);
+    expect([...stored.keys()].some((k) => k.includes('/r2/'))).toBe(true);
+  });
+  it('falls back to the relief when the client cannot be opened', async () => {
+    const { tiles } = setupWithClient({}, async () => {
+      throw new Error('disk on fire');
+    });
+    tiles.setDataDir('/data');
+    tiles.setClientDir('/client');
+    expect(alphaAt(await tiles.tile(0, 6, 32, 32), 100, 100)).toBe(255);
   });
 });
