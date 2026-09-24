@@ -61,6 +61,7 @@ export function makeMockApi(overrides: Partial<Record<keyof Api, (...args: any[]
     testConnection: vi.fn(async () => okv({ ok: true as const })),
     saveProfile: vi.fn(async () => okv({ id: 1, name: '', role: 'world', host: '', port: 3306, user: '', database: '', dbcDir: '', clientDir: '', lastConnectedAt: null })),
     listProfiles: vi.fn(async () => okv([])),
+    deleteProfile: vi.fn(async () => okv(null)),
     startupProfile: vi.fn(async () => okv(null)),
     chooseServerDataDir: vi.fn(async () => okv(null)),
     connect: vi.fn(async () => okv({ profileId: 1, schemaHash: '', drift: { missingTables: [], unregistered: [], missingColumns: [], typeMismatches: [], blockingTables: [] }, blocking: false, serverData: null })),

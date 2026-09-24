@@ -13,6 +13,7 @@ export const API_METHODS = [
   'testConnection',
   'saveProfile',
   'listProfiles',
+  'deleteProfile',
   'startupProfile',
   'connect',
   'chooseServerDataDir',

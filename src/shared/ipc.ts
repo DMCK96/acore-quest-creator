@@ -313,6 +313,8 @@ export interface Api {
   testConnection(i: ProfileInput): Promise<Result<{ ok: true }>>;
   saveProfile(i: ProfileSave): Promise<Result<ProfileRecord>>;
   listProfiles(): Promise<Result<ProfileRecord[]>>;
+  /** Removes a saved profile; refused for the one the session is connected with. */
+  deleteProfile(id: number): Promise<Result<null>>;
   /** The profile to connect to without asking, seeded from `.env` in development; else null. */
   startupProfile(): Promise<Result<number | null>>;
   connect(profileId: number): Promise<Result<ConnectSummary>>;
@@ -472,6 +474,7 @@ const REQUEST_SCHEMAS: Record<keyof Api, z.ZodType<unknown[]>> = {
   testConnection: z.tuple([profileInputSchema]),
   saveProfile: z.tuple([profileSaveSchema]),
   listProfiles: z.tuple([]),
+  deleteProfile: z.tuple([z.number().int()]),
   startupProfile: z.tuple([]),
   chooseServerDataDir: z.tuple([]),
   connect: z.tuple([z.number()]),

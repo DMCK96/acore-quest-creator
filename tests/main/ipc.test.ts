@@ -7,7 +7,7 @@ const aggregate = { questId: 1, isNew: false, values: { a: 1 }, readOnly: [], sh
 describe('parseRequest', () => {
   it('knows every API method', () => {
     expect([...API_METHODS].sort()).toEqual([
-      'addQuestChain', 'applyToDev', 'chooseServerDataDir', 'connect', 'exportQuest', 'projectState', 'listNodes', 'listProfiles', 'lookupNames', 'moveNodes', 'newQuest',
+      'addQuestChain', 'applyToDev', 'chooseServerDataDir', 'connect', 'exportQuest', 'projectState', 'listNodes', 'listProfiles', 'deleteProfile', 'lookupNames', 'moveNodes', 'newQuest',
       'openQuest', 'previewChanges', 'questLinks', 'removeNode', 'rewardTables', 'updateQuest', 'saveProfile', 'saveViewport', 'searchQuests', 'searchEntities', 'startupProfile',
       'testConnection', 'validate', 'questScripts', 'testCommands', 'groundHeight', 'spellFacts', 'mapList', 'mapFloors', 'mapSpawns', 'entitySpawns', 'questMapRefs', 'allocateIds', 'entityTemplate',
       'patrolPathId', 'renameProject', 'newProject', 'openProject', 'saveProject', 'saveProjectAs', 'recentProjects', 'forgetRecent', 'recoveries', 'restoreRecovery', 'discardRecovery',
@@ -22,6 +22,8 @@ describe('parseRequest', () => {
     expect(parseRequest('searchEntities', ['map', 'wolf']).ok).toBe(false);
     expect(parseRequest('applyToDev', [60001, true]).ok).toBe(true);
     expect(parseRequest('saveProfile', [profile]).ok).toBe(true);
+    expect(parseRequest('deleteProfile', [3]).ok).toBe(true);
+    expect(parseRequest('deleteProfile', ['3']).ok).toBe(false);
     expect(parseRequest('saveProfile', [{ ...profile, id: 1, password: undefined }]).ok).toBe(true);
     expect(parseRequest('updateQuest', [aggregate]).ok).toBe(true);
     expect(parseRequest('lookupNames', ['item', [1, 2]]).ok).toBe(true);

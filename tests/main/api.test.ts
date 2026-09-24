@@ -682,3 +682,21 @@ describe('project files over the API', () => {
     expect(ok(await api.listNodes()).map((n) => n.questId)).toEqual([60001]);
   });
 });
+
+describe('deleteProfile', () => {
+  it('removes a profile that is not connected', async () => {
+    const { api } = makeApi();
+    const world = ok(await api.saveProfile(profile));
+    const dev = ok(await api.saveProfile({ ...profile, role: 'dev', name: 'Dev' }));
+    ok(await api.connect(world.id));
+    ok(await api.deleteProfile(dev.id));
+    expect(ok(await api.listProfiles()).map((p) => p.id)).toEqual([world.id]);
+  });
+  it('refuses to remove the connected profile', async () => {
+    const { api } = makeApi();
+    const world = ok(await api.saveProfile(profile));
+    ok(await api.connect(world.id));
+    expect(await api.deleteProfile(world.id)).toMatchObject({ ok: false, error: { code: 'VALIDATION' } });
+    expect(ok(await api.listProfiles())).toHaveLength(1);
+  });
+});

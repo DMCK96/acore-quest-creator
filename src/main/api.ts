@@ -876,6 +876,13 @@ export function createApi(deps: ApiDeps): Api {
 
     listProfiles: () => run(async () => deps.store.profiles.list()),
 
+    deleteProfile: (id) =>
+      run(async () => {
+        if (session?.profileId === id) throw fail('VALIDATION', 'This connection is in use. Connect with another before removing it.');
+        deps.store.profiles.remove(id);
+        return null;
+      }),
+
     startupProfile: () => run(async () => deps.startupProfileId ?? null),
 
     connect: (profileId) =>
