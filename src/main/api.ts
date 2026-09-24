@@ -454,6 +454,13 @@ export function createApi(deps: ApiDeps): Api {
     });
   }
 
+  /** The items the quest asks for: their drops are set in Objectives, never by a loot list. */
+  function questItemsOf(aggregate: QuestAggregate): number[] {
+    const rows = aggregate.values['quest_template.RequiredItems'];
+    if (!Array.isArray(rows)) return [];
+    return (rows as Array<Record<string, unknown>>).flatMap((r) => (typeof r.item === 'number' && r.item > 0 ? [r.item] : []));
+  }
+
   /** Every new NPC and object in the project, from every quest. */
   function projectEntities(): QuestEntities {
     const all: QuestEntities = { npcs: [], objects: [] };
@@ -499,7 +506,7 @@ export function createApi(deps: ApiDeps): Api {
       ...creatures.map((r) => [`creature:${r.entry}`, r.name ?? ''] as [string, string]),
       ...objects.map((r) => [`gameobject:${r.entry}`, r.name ?? ''] as [string, string]),
     ]);
-    return entityIssues({ entities, dbNames });
+    return entityIssues({ entities, dbNames, questItems: questItemsOf(aggregate) });
   }
 
   /** The quest's scenes compiled against the rows in the world DB right now. */
@@ -572,7 +579,10 @@ export function createApi(deps: ApiDeps): Api {
     const givers = [...relationOwners(quest.aggregate, 'starter'), ...relationOwners(quest.aggregate, 'ender')]
       .flatMap((o) => (o.kind === 'creature' ? [o.entry] : []));
     const entityContext = await readEntityContext(live.db, quest.questId, entities);
-    const newEntities = scriptStatements(compileEntities({ questId: quest.questId, entities, givers, context: entityContext }), exportSchema(live));
+    const newEntities = scriptStatements(
+      compileEntities({ questId: quest.questId, entities, givers, questItems: questItemsOf(quest.aggregate), context: entityContext }),
+      exportSchema(live),
+    );
     const of = (list: readonly PatchStatement[], kind: PatchStatement['kind']) => list.filter((s) => s.kind === kind);
     // Deletes before anything is written; new NPCs and objects before the flags and updates quest
     // scripting puts on them; the quest's and the scenes' rows last.
@@ -1013,7 +1023,7 @@ export function createApi(deps: ApiDeps): Api {
           entityStatements.flatMap((s) => (s.table === table && s.kind !== 'update' && s.kind !== 'set-flag' ? [String((s.kind === 'insert' ? s.row : s.key)[column] ?? '')] : []));
         const entityBefore: Record<string, RawRow[]> = Object.fromEntries(
           await Promise.all(
-            ([['creature_template', 'entry'], ['creature_template_model', 'CreatureID'], ['creature', 'guid'], ['gameobject_template', 'entry'], ['gameobject', 'guid'], ['page_text', 'ID']] as const)
+            ([['creature_template', 'entry'], ['creature_template_model', 'CreatureID'], ['creature', 'guid'], ['gameobject_template', 'entry'], ['gameobject', 'guid'], ['page_text', 'ID'], ['creature_loot_template', 'Entry'], ['gameobject_loot_template', 'Entry']] as const)
               .map(async ([table, column]) => [table, await rowsOrNone(live.db, table, { [column]: [...new Set(keysOf(table, column))] })] as const),
           ),
         );

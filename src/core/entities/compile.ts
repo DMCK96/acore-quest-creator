@@ -1,7 +1,7 @@
 import type { CompiledScripts } from '../scripts/compile';
 import { questTagPrefix } from '../scripts/tag';
 import type { EntityContext } from './context';
-import { NPC_TYPE_VALUE, OBJECT_TYPE_VALUE, RANK_VALUE, type QuestEntities } from './model';
+import { NPC_TYPE_VALUE, OBJECT_TYPE_VALUE, RANK_VALUE, type LootRow, type QuestEntities } from './model';
 
 /**
  * New NPCs and objects to template and spawn rows, in the same shape as compiled scripts so one
@@ -33,9 +33,33 @@ export function compileEntities(input: {
   entities: QuestEntities;
   /** Creature entries that start or end this quest. */
   givers: readonly number[];
+  /** Items the quest requires: their drops belong to Objectives, so loot lists never write them. */
+  questItems?: readonly number[];
   context: EntityContext;
 }): CompiledScripts {
   const { questId, entities, givers, context } = input;
+  const questItems = new Set(input.questItems ?? []);
+  const lootTag = `${questTagPrefix(questId)}loot`;
+  const lootKeys: Record<'creature_loot_template' | 'gameobject_loot_template', Map<string, Row>> = {
+    creature_loot_template: new Map(),
+    gameobject_loot_template: new Map(),
+  };
+  const writeLoot = (table: 'creature_loot_template' | 'gameobject_loot_template', entry: number, loot: readonly LootRow[], label: string): number => {
+    let written = 0;
+    for (const row of loot) {
+      if (questItems.has(row.item)) {
+        out.warnings.push(`${label}: item ${row.item} is one this quest asks for, so its drops are set in Objectives, not in the loot list.`);
+        continue;
+      }
+      insert(table, {
+        Entry: text(entry), Item: text(row.item), Reference: '0', Chance: text(row.chance), QuestRequired: row.questOnly ? '1' : '0',
+        LootMode: '1', GroupId: '0', MinCount: text(row.min), MaxCount: text(row.max), Comment: lootTag,
+      });
+      lootKeys[table].set(`${entry}/${row.item}`, { Entry: text(entry), Item: text(row.item) });
+      written += 1;
+    }
+    return written;
+  };
   const out: CompiledScripts = { inserts: {}, deletes: {}, updates: [], flags: [], warnings: [] };
   const insert = (table: string, row: Row): void => {
     (out.inserts[table] ??= []).push(row);
@@ -48,6 +72,7 @@ export function compileEntities(input: {
 
   for (const npc of entities.npcs) {
     const existing = creatureRows.get(npc.entry);
+    const lootWritten = writeLoot('creature_loot_template', npc.entry, npc.loot, `NPC "${npc.name || npc.entry}"`);
     const npcflag =
       (npc.questGiver || givers.includes(npc.entry) ? QUEST_GIVER_BIT : 0) |
       (npc.gossip ? GOSSIP_BIT : 0) |
@@ -57,6 +82,8 @@ export function compileEntities(input: {
       faction: text(npc.faction), npcflag: text(npcflag), rank: text(RANK_VALUE[npc.rank]), type: text(NPC_TYPE_VALUE[npc.type]),
       HealthModifier: text(npc.healthModifier), DamageModifier: text(npc.damageModifier), unit_class: text(UNIT_CLASS),
       AIName: existing?.AIName ?? '', gossip_menu_id: existing?.gossip_menu_id ?? '0',
+      // Creature loot is looked up by `lootid`; the NPC's own entry keeps its loot rows its own.
+      ...(lootWritten > 0 ? { lootid: text(npc.entry) } : {}),
     });
     insert('creature_template_model', {
       CreatureID: text(npc.entry), Idx: '0', CreatureDisplayID: text(npc.displayId), DisplayScale: text(npc.scale), Probability: '1',
@@ -88,6 +115,8 @@ export function compileEntities(input: {
     if (object.onlyDuringQuest && object.type === 'goober') row.Data1 = text(questId);
     if (object.onlyDuringQuest && object.type === 'chest') row.Data8 = text(questId);
     insert('gameobject_template', row);
+    if (object.type === 'chest') writeLoot('gameobject_loot_template', object.entry, object.loot, `Object "${object.name || object.entry}"`);
+    else if (object.loot.length > 0) out.warnings.push(`Object "${object.name || object.entry}": only a chest can be looted, so its loot list is not written.`);
     object.pages.forEach((page, i) => {
       insert('page_text', { ID: text(page.id), Text: page.text, NextPageID: text(object.pages[i + 1]?.id ?? 0) });
     });
@@ -121,5 +150,19 @@ export function compileEntities(input: {
   add('gameobject_template', sorted(entities.objects.map((o) => o.entry)).map((e) => ({ entry: text(e) })));
   add('gameobject', sorted(objectGuids).map((g) => ({ guid: text(g) })));
   add('page_text', sorted(entities.objects.flatMap((o) => o.pages.map((p) => p.id))).map((id) => ({ ID: text(id) })));
+  // Loot rows written before and since removed, for NPCs and chests the project still has.
+  const npcEntries = new Set(entities.npcs.map((n) => n.entry));
+  const chestEntries = new Set(entities.objects.filter((o) => o.type === 'chest').map((o) => o.entry));
+  for (const [table, rows, owned] of [
+    ['creature_loot_template', context.taggedLoot.creature, npcEntries],
+    ['gameobject_loot_template', context.taggedLoot.gameobject, chestEntries],
+  ] as const) {
+    for (const r of rows) {
+      if (r.Comment !== lootTag || !owned.has(num(r.Entry))) continue;
+      lootKeys[table].set(`${num(r.Entry)}/${num(r.Item)}`, { Entry: text(num(r.Entry)), Item: text(num(r.Item)) });
+    }
+    const keys = [...lootKeys[table].values()].sort((a, b) => num(a.Entry) - num(b.Entry) || num(a.Item) - num(b.Item));
+    add(table, keys);
+  }
   return out;
 }

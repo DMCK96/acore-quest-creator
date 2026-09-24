@@ -12,7 +12,9 @@ const DELETE_ORDER = [
   'gossip_menu_option',
   'areatrigger_scripts',
   'areatrigger',
-  // New NPCs and objects (slice D): spawns before the templates they place.
+  // New NPCs and objects (slice D): loot and spawns before the templates they belong to.
+  'creature_loot_template',
+  'gameobject_loot_template',
   'creature',
   'gameobject',
   'creature_template_model',
@@ -29,6 +31,8 @@ const INSERT_ORDER = [
   'gameobject_template',
   'creature',
   'gameobject',
+  'creature_loot_template',
+  'gameobject_loot_template',
   'areatrigger',
   'areatrigger_scripts',
   'npc_text',

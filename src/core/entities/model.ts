@@ -40,6 +40,8 @@ export const OBJECT_TYPE_VALUE = { questGiver: 2, chest: 3, generic: 5, text: 9,
 
 const keysOf = <T extends Record<string, number>>(o: T) => Object.keys(o) as [keyof T & string, ...(keyof T & string)[]];
 
+const lootSchema = z.object({ item: int, chance: num, min: int, max: int, questOnly: z.boolean() });
+
 const npcSchema = z.object({
   entry: int,
   name: z.string(),
@@ -56,6 +58,8 @@ const npcSchema = z.object({
   healthModifier: num,
   damageModifier: num,
   spawns: z.array(spawnSchema),
+  // Added with loot (slice H); the default keeps NPCs saved before then as they were.
+  loot: z.array(lootSchema).default([]),
 });
 
 const pageSchema = z.object({ id: int, text: z.string() });
@@ -70,10 +74,12 @@ const objectSchema = z.object({
   // Added with readable objects (slice E); defaults keep objects saved before then as they were.
   pages: z.array(pageSchema).default([]),
   onlyDuringQuest: z.boolean().default(false),
+  loot: z.array(lootSchema).default([]),
 });
 
 export type Spawn = z.infer<typeof spawnSchema>;
 export type Page = z.infer<typeof pageSchema>;
+export type LootRow = z.infer<typeof lootSchema>;
 export type CustomNpc = z.infer<typeof npcSchema>;
 export type CustomObject = z.infer<typeof objectSchema>;
 export type NpcRank = CustomNpc['rank'];
@@ -122,11 +128,12 @@ export function newNpc(entry: number): CustomNpc {
     healthModifier: 1,
     damageModifier: 1,
     spawns: [],
+    loot: [],
   };
 }
 
 export function newObject(entry: number): CustomObject {
-  return { entry, name: '', type: 'goober', displayId: 0, size: 1, spawns: [], pages: [], onlyDuringQuest: false };
+  return { entry, name: '', type: 'goober', displayId: 0, size: 1, spawns: [], pages: [], onlyDuringQuest: false, loot: [] };
 }
 
 export function newSpawn(guid: number): Spawn {
