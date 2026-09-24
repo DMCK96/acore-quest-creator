@@ -40,6 +40,7 @@ export function QuestMapView({
   focusId,
   onClose,
   hasServerData = true,
+  hasClient = true,
 }: {
   open: OpenResult;
   onChange(fieldId: string, value: FieldValue): void;
@@ -47,6 +48,8 @@ export function QuestMapView({
   onClose(): void;
   /** Whether the connection names a server data folder; without one there is no terrain or floors. */
   hasServerData?: boolean;
+  /** Whether the connection names a game client folder; without one the map shows the relief, not the client's art. */
+  hasClient?: boolean;
 }): React.JSX.Element {
   const api = useApi();
   const values = open.aggregate.values;

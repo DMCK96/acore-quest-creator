@@ -90,6 +90,7 @@ function buildDeps(
   return {
     store,
     onServerDataDir: (dir) => tiles.setDataDir(dir),
+    onClientDir: (dir) => tiles.setClientDir(dir),
     session,
     projects,
     startupProfileId,

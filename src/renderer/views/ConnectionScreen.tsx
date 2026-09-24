@@ -18,10 +18,11 @@ export function ConnectionScreen({ store }: { store: AppStore }): React.JSX.Elem
   const [database, setDatabase] = useState('');
   const [password, setPassword] = useState('');
   const [dbcDir, setDbcDir] = useState('');
+  const [clientDir, setClientDir] = useState('');
 
   const submit = (e: React.FormEvent): void => {
     e.preventDefault();
-    const fields = { name, role, host, port: Number(port) || 0, user, database, dbcDir: dbcDir.trim() };
+    const fields = { name, role, host, port: Number(port) || 0, user, database, dbcDir: dbcDir.trim(), clientDir: clientDir.trim() };
     // Editing a saved profile with the password left blank keeps the stored password.
     void connect(editingId !== undefined && password === '' ? { ...fields, id: editingId } : { ...fields, id: editingId, password });
   };
@@ -38,6 +39,7 @@ export function ConnectionScreen({ store }: { store: AppStore }): React.JSX.Elem
     setDatabase(profile.database);
     setPassword('');
     setDbcDir(profile.dbcDir ?? '');
+    setClientDir(profile.clientDir ?? '');
   };
 
   const browse = async (): Promise<void> => {
@@ -104,6 +106,16 @@ export function ConnectionScreen({ store }: { store: AppStore }): React.JSX.Elem
         <button type="button" onClick={() => void browse()}>
           Browse…
         </button>
+
+        <label htmlFor="conn-client-dir">Game client folder (optional)</label>
+        <p id="conn-client-dir-help">The folder with Wow.exe. The map uses its zone art and minimap.</p>
+        <input
+          id="conn-client-dir"
+          aria-describedby="conn-client-dir-help"
+          value={clientDir}
+          placeholder="e.g. E:\Games\World of Warcraft"
+          onChange={(e) => setClientDir(e.target.value)}
+        />
 
         <button type="submit">Save and connect</button>
       </form>

@@ -66,6 +66,15 @@ describe('ConnectionScreen', () => {
     await waitFor(() => expect(store.getState().screen).toBe('pick'));
     expect(api.saveProfile).toHaveBeenCalledWith(expect.objectContaining({ dbcDir: '/srv/acore/data' }));
   });
+  it('saves the game client folder with the profile', async () => {
+    const api = makeMockApi({ saveProfile: async () => okv(profileRec), connect: async () => okv(summary) });
+    const store = createAppStore(api);
+    render(<ConnectionScreen store={store} />);
+    await userEvent.type(screen.getByLabelText('Game client folder (optional)'), 'E:/Games/WoW');
+    expect(screen.getByText('The folder with Wow.exe. The map uses its zone art and minimap.')).toBeTruthy();
+    await userEvent.click(screen.getByRole('button', { name: 'Save and connect' }));
+    await waitFor(() => expect(api.saveProfile).toHaveBeenCalledWith(expect.objectContaining({ clientDir: 'E:/Games/WoW' })));
+  });
   it('shows a readable error when the server is unreachable', async () => {
     const api = makeMockApi({ saveProfile: async () => okv(profileRec), connect: async () => errv('CONNECTION', 'Cannot reach h:3306 (ECONNREFUSED)') });
     const store = createAppStore(api);

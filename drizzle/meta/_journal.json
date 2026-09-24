@@ -29,6 +29,13 @@
       "when": 1790201106989,
       "tag": "0003_profile_dbc_dir",
       "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "6",
+      "when": 1790275320138,
+      "tag": "0004_profile_client_dir",
+      "breakpoints": true
     }
   ]
 }

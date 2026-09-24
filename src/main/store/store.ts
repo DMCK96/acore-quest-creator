@@ -60,6 +60,7 @@ const toProfile = (r: ProfileRow): ProfileRecord => ({
   user: r.user,
   database: r.database,
   dbcDir: r.dbcDir,
+  clientDir: r.clientDir,
 });
 
 export function openStore(path: string, secrets: SecretBox, migrationsFolder: string = defaultMigrationsFolder()): Store {

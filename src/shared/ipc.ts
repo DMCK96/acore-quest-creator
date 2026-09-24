@@ -96,6 +96,8 @@ export interface ProfileInput {
   password: string;
   /** The server's data folder (`DataDir`, holding `dbc/`), optional; '' or absent for none. */
   dbcDir?: string;
+  /** The game client folder (holding Wow.exe and Data/), optional; '' or absent for none. */
+  clientDir?: string;
 }
 
 /** Saving a profile: an update (`id` given) may leave `password` out to keep the stored one. */
@@ -111,6 +113,8 @@ export interface ProfileRecord {
   database: string;
   /** '' when the profile names no server data folder. */
   dbcDir: string;
+  /** '' when the profile names no game client folder. */
+  clientDir: string;
 }
 
 export interface NodePosition {
@@ -171,6 +175,8 @@ export interface ConnectSummary {
   blocking: boolean;
   /** What was read from the profile's server data folder; null when it names none. */
   serverData: ServerDataStatus | null;
+  /** The profile's game client folder, trimmed; null when it names none. */
+  clientDir: string | null;
 }
 
 /** The optional server data folder: the files read from it and what went wrong with the rest. */
@@ -419,6 +425,7 @@ const profileFields = {
   database: z.string(),
   password: z.string(),
   dbcDir: z.string().optional(),
+  clientDir: z.string().optional(),
 };
 // Strict: a misspelled key must be a loud error, never a silently unsaved connection setting.
 const profileInputSchema = z.object(profileFields).strict();

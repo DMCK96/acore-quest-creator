@@ -38,6 +38,9 @@ describe('store', () => {
     expect(store.profiles.list()[0]!.dbcDir).toBe('');
     store.profiles.save({ id: a.id, name: 'kept', role: 'world', host: 'h', port: 1, user: 'u', database: 'd', dbcDir: '/srv/data' });
     expect(store.profiles.getWithPassword(a.id)).toMatchObject({ dbcDir: '/srv/data', password: 'p2' });
+    expect(store.profiles.list()[0]!.clientDir).toBe('');
+    store.profiles.save({ id: a.id, name: 'kept', role: 'world', host: 'h', port: 1, user: 'u', database: 'd', dbcDir: '/srv/data', clientDir: 'E:/Games/WoW' });
+    expect(store.profiles.getWithPassword(a.id)).toMatchObject({ dbcDir: '/srv/data', clientDir: 'E:/Games/WoW', password: 'p2' });
     store.profiles.remove(a.id);
     expect(store.profiles.list()).toEqual([]);
   });

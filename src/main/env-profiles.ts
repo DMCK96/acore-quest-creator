@@ -9,7 +9,8 @@ import type { Store } from './store/store';
  *   ACQC_DEV_DB_HOST,   _PORT, _USER, _PASSWORD, _DATABASE   (optional dev database)
  *
  * A role is only configured when HOST, USER and DATABASE are all set; PORT defaults to 3306 and
- * PASSWORD to empty. The world role may also name the server's data folder in ACQC_WORLD_DB_DBC_DIR.
+ * PASSWORD to empty. The world role may also name the server's data folder in ACQC_WORLD_DB_DBC_DIR, and the
+ * game client's folder (for the map's pictures) in ACQC_WORLD_DB_CLIENT_DIR.
  */
 
 type Env = Record<string, string | undefined>;
@@ -29,7 +30,7 @@ export function profileFromEnv(env: Env, role: 'world' | 'dev'): ProfileInput | 
   }
   // The password is not trimmed: surrounding spaces could be part of it.
   const password = env[PREFIX[role] + 'PASSWORD'] ?? '';
-  return { name: NAME[role], role, host, port, user, database, password, dbcDir: role === 'world' ? read('DBC_DIR') : '' };
+  return { name: NAME[role], role, host, port, user, database, password, dbcDir: role === 'world' ? read('DBC_DIR') : '', clientDir: role === 'world' ? read('CLIENT_DIR') : '' };
 }
 
 /**

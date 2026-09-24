@@ -10,6 +10,7 @@ export const connectionProfiles = sqliteTable('connection_profiles', {
   database: text('database').notNull(),
   passwordEnc: blob('password_enc', { mode: 'buffer' }).notNull(),
   dbcDir: text('dbc_dir').notNull().default(''),
+  clientDir: text('client_dir').notNull().default(''),
 });
 
 /** Project files the user opened or saved lately, newest first by `openedAt`; the files hold the work. */
