@@ -69,12 +69,19 @@ export function parseCreateTable(sql: string): ColumnInfo[] {
   return columns;
 }
 
-/** Reads `<acSqlDir>/base/db_world/<table>.sql` for each table. */
+/** Each table's columns, parsed once per test file: the dumps hold their data too, some tens of MB. */
+const forkColumns = new Map<string, ColumnInfo[]>();
+
+/** Reads `<acSqlDir>/base/db_world/<table>.sql` for each table; copies, so a test may change its own. */
 export function loadFork(tables: string[]): Record<string, ColumnInfo[]> {
   const out: Record<string, ColumnInfo[]> = {};
   for (const table of tables) {
-    const file = join(acSqlDir(), 'base', 'db_world', `${table}.sql`);
-    out[table] = parseCreateTable(readFileSync(file, 'utf8'));
+    let columns = forkColumns.get(table);
+    if (!columns) {
+      columns = parseCreateTable(readFileSync(join(acSqlDir(), 'base', 'db_world', `${table}.sql`), 'utf8'));
+      forkColumns.set(table, columns);
+    }
+    out[table] = columns.map((c) => ({ ...c }));
   }
   return out;
 }
