@@ -14,6 +14,8 @@ export interface ServerDataFiles {
   /** The file's bytes, found by name in any letter case; null when the folder has no such file. */
   read(dir: string, fileName: string): Promise<Uint8Array | null>;
   isDir(dir: string): Promise<boolean>;
+  /** The file names in a folder; empty when it cannot be read. */
+  list?(dir: string): Promise<string[]>;
 }
 
 export interface ServerData {
@@ -64,6 +66,13 @@ export const nodeServerDataFiles: ServerDataFiles = {
     // A Linux server's files keep their case, a copy made on Windows may not.
     const match = names.find((n) => n.toLowerCase() === fileName.toLowerCase());
     return match ? new Uint8Array(await readFile(join(dir, match))) : null;
+  },
+  async list(dir) {
+    try {
+      return await readdir(dir);
+    } catch {
+      return [];
+    }
   },
   async isDir(dir) {
     try {

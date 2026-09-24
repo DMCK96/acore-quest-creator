@@ -61,3 +61,19 @@ export function parseQuestXp(bytes: Uint8Array): Map<number, number[]> {
   }
   return new Map(table.records.map((r) => [r[0]!, r.slice(1, 1 + QUEST_XP_TIERS)]));
 }
+
+/** The string a string field points at: its value is an offset into the block after the records. */
+export function dbcString(bytes: Uint8Array, offset: number): string {
+  const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+  const start = HEADER_SIZE + view.getUint32(4, true) * view.getUint32(12, true) + offset;
+  let end = start;
+  while (end < bytes.length && bytes[end] !== 0) end += 1;
+  return new TextDecoder().decode(bytes.subarray(start, end));
+}
+
+/** A float field's value from the raw bits `parseDbc` returns. */
+export function dbcFloat(bits: number): number {
+  const view = new DataView(new ArrayBuffer(4));
+  view.setUint32(0, bits, true);
+  return view.getFloat32(0, true);
+}

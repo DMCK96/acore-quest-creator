@@ -92,6 +92,8 @@ export interface ApiDeps {
   serverDataFiles?: ServerDataFiles;
   /** The native folder picker; null when cancelled. */
   chooseDirectory?(): Promise<string | null>;
+  /** Told the connection's server data folder at every connect (null when it names none), for the map tiles. */
+  onServerDataDir?(dir: string | null): void;
 }
 
 const NO_SERVER_DATA_FILES: ServerDataFiles = { read: async () => null, isDir: async () => false };
@@ -673,6 +675,7 @@ export function createApi(deps: ApiDeps): Api {
         const drift = diffSchema(schema, registry);
         const blocking = hasBlockingDrift(drift);
         const serverData = await loadServerData(profile.dbcDir ?? '', deps.serverDataFiles ?? NO_SERVER_DATA_FILES);
+        deps.onServerDataDir?.(profile.dbcDir?.trim() || null);
         const scriptSchema = await loadSchema(db, [...new Set<string>([...SCRIPT_TABLES, ...ENTITY_TABLES])]);
         // Swapping connections must not leave the old one open.
         if (session && session.db !== db) await session.db.close();

@@ -1,7 +1,7 @@
-import { app, BrowserWindow, dialog, ipcMain, safeStorage } from 'electron';
+import { app, BrowserWindow, dialog, ipcMain, protocol, safeStorage } from 'electron';
 import { existsSync } from 'node:fs';
-import { mkdir, readdir, writeFile } from 'node:fs/promises';
-import { join } from 'node:path';
+import { mkdir, readdir, readFile, writeFile } from 'node:fs/promises';
+import { dirname, join } from 'node:path';
 import { openMysqlDevDb } from '../core/db/mysql-dev-db';
 import { openMysqlWorldDb } from '../core/db/mysql-world-db';
 import { FLUSH_DONE_CHANNEL, FLUSH_REQUEST_CHANNEL } from '../shared/api-methods';
@@ -9,6 +9,7 @@ import { API_METHODS, channelFor, parseRequest, type Api, type ApiError } from '
 import { createApi, type ApiDeps } from './api';
 import { seedEnvProfiles } from './env-profiles';
 import { nodeServerDataFiles } from './server-data';
+import { createMapTiles, parseTileUrl, type MapTiles } from './map-tiles';
 import { createSecretBox } from './secret-box';
 import { openStore, type Store } from './store/store';
 import { DEFAULT_PROJECT_NAME, PROJECT_EXTENSION, defaultProjectMeta } from './project/project-file';
@@ -65,14 +66,29 @@ const unknownError = (error: unknown): { ok: false; error: ApiError } => ({
   error: { code: 'UNKNOWN', message: error instanceof Error ? error.message : String(error) },
 });
 
+// The quest map's relief tiles come from the main process; the scheme must be known before `ready`.
+protocol.registerSchemesAsPrivileged([{ scheme: 'acqc-map', privileges: { standard: true, secure: true, supportFetchAPI: true } }]);
+
+/** Serves `acqc-map://tile/...` from the tile service; anything else is not found. */
+function registerMapTiles(tiles: MapTiles): void {
+  protocol.handle('acqc-map', async (request) => {
+    const address = parseTileUrl(request.url);
+    if (!address) return new Response(null, { status: 404 });
+    const png = await tiles.tile(address.map, address.zoom, address.tx, address.ty);
+    return new Response(png, { headers: { 'content-type': 'image/png', 'cache-control': 'no-cache' } });
+  });
+}
+
 function buildDeps(
   store: Store,
   session: ProjectSession,
   projects: ProjectController,
   startupProfileId: number | null,
+  tiles: MapTiles,
 ): ApiDeps {
   return {
     store,
+    onServerDataDir: (dir) => tiles.setDataDir(dir),
     session,
     projects,
     startupProfileId,
@@ -235,7 +251,25 @@ void app.whenReady().then(() => {
     defaultOutputDir: defaultOutputDir(),
     now: () => new Date(),
   });
-  registerIpc(createApi(buildDeps(store, session, projects, startupProfileId)));
+  const tiles = createMapTiles({
+    files: nodeServerDataFiles,
+    cacheRoot: join(app.getPath('userData'), 'map-tiles'),
+    cache: {
+      async read(path) {
+        try {
+          return new Uint8Array(await readFile(path));
+        } catch {
+          return null;
+        }
+      },
+      async write(path, bytes) {
+        await mkdir(dirname(path), { recursive: true });
+        await writeFile(path, bytes);
+      },
+    },
+  });
+  registerMapTiles(tiles);
+  registerIpc(createApi(buildDeps(store, session, projects, startupProfileId, tiles)));
 
   createWindow(session, recovery, projects);
   app.on('activate', () => {

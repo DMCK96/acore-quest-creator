@@ -14,10 +14,10 @@ const files: ServerDataFiles = {
   read: async (d, name) => (d.replace(/\\/g, '/') === '/data/maps' && name === '0004832.map' ? buildMapFile({ kind: 'flat', gridHeight: 80.456 }) : null),
 };
 
-async function apiWith(dbcDir: string) {
+async function apiWith(dbcDir: string, onServerDataDir?: (dir: string | null) => void) {
   const api = createApi({ store: openStore(':memory:', box), openWorldDb: async () => FakeWorldDb.fromFork(['quest_template']), openDevDb: async () => { throw new Error('x'); },
     fs: { writeFile: async () => {}, ensureDir: async () => {}, listDir: async () => [] }, now: () => new Date(),
-    session: createProjectSession(defaultProjectMeta('P', 'C:\\out')), projects: {} as ProjectController, serverDataFiles: files });
+    session: createProjectSession(defaultProjectMeta('P', 'C:\\out')), projects: {} as ProjectController, serverDataFiles: files, onServerDataDir });
   const rec: any = await api.saveProfile({ name: 'w', role: 'world', host: 'h', port: 1, user: 'u', database: 'd', password: 'p', dbcDir });
   await api.connect(rec.value.id);
   return api;
@@ -31,5 +31,11 @@ describe('groundHeight', () => {
   it('explains why there is no height', async () => {
     expect(((await (await apiWith('')).groundHeight(0, 1, 1)) as any).value.reason).toMatch(/server data folder/);
     expect(((await (await apiWith('/data')).groundHeight(1, 1, 1)) as any).value.reason).toMatch(/No map file/);
+  });
+  it('tells the map tiles which server data folder the connection names', async () => {
+    const seen: (string | null)[] = [];
+    await apiWith('/data', (dir) => seen.push(dir));
+    await apiWith('', (dir) => seen.push(dir));
+    expect(seen).toEqual(['/data', null]);
   });
 });
