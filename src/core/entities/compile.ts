@@ -1,4 +1,5 @@
 import { fightIsEmpty } from '../combat/model';
+import { hasPointActions } from '../patrol/compile';
 import type { CompiledScripts } from '../scripts/compile';
 import { questTagPrefix } from '../scripts/tag';
 import type { EntityContext } from './context';
@@ -104,8 +105,8 @@ export function compileEntities(input: {
       entry: text(npc.entry), name: npc.name, subname: npc.subname, minlevel: text(npc.minLevel), maxlevel: text(npc.maxLevel),
       faction: text(npc.faction), npcflag: text(npcflag), rank: text(RANK_VALUE[npc.rank]), type: text(NPC_TYPE_VALUE[npc.type]),
       HealthModifier: text(npc.healthModifier), DamageModifier: text(npc.damageModifier), unit_class: text(UNIT_CLASS),
-      // A fight runs on SmartAI; otherwise keep what quest scripting may have set.
-      AIName: fightIsEmpty(npc.fight) ? (existing?.AIName ?? '') : 'SmartAI', gossip_menu_id: existing?.gossip_menu_id ?? '0',
+      // A fight or things to do on its patrol run on SmartAI; otherwise keep what quest scripting may have set.
+      AIName: fightIsEmpty(npc.fight) && !hasPointActions(npc) ? (existing?.AIName ?? '') : 'SmartAI', gossip_menu_id: existing?.gossip_menu_id ?? '0',
       // Creature loot is looked up by `lootid`; the NPC's own entry keeps its loot rows its own.
       ...(lootWritten > 0 ? { lootid: text(npc.entry) } : {}),
     });

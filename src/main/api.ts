@@ -64,6 +64,7 @@ import { SCRIPTS_FIELD, readScenes, writeScenes, type QuestScene, type SceneOwne
 import { scriptStatements } from '../core/scripts/statements';
 import { sceneIssues } from '../core/scripts/validate';
 import { compileEntities } from '../core/entities/compile';
+import { compilePatrols, hasPointActions } from '../core/patrol/compile';
 import { ENTITY_KEYS, ENTITY_TABLES, readEntityContext } from '../core/entities/context';
 import { ENTITIES_FIELD, NPC_TYPE_VALUE, OBJECT_TYPE_VALUE, RANK_VALUE, readEntities, writeEntities, type QuestEntities } from '../core/entities/model';
 import { entityIssues } from '../core/entities/validate';
@@ -675,12 +676,15 @@ export function createApi(deps: ApiDeps): Api {
   async function compileFor(live: Session, aggregate: QuestAggregate): Promise<{ context: ScriptContext; compiled: CompiledScripts }> {
     const scenes = readScenes(aggregate.values);
     const { npcs } = readEntities(aggregate.values);
-    const fighters = npcs.filter((n) => !fightIsEmpty(n.fight)).map((n) => n.entry);
+    const fighters = npcs.filter((n) => !fightIsEmpty(n.fight) || hasPointActions(n)).map((n) => n.entry);
     const context = await readScriptContext(live.db, aggregate.questId, scenes, fighters);
     const objectives = objectivesOf(aggregate);
     const sceneRows = compileScenes({ questId: aggregate.questId, scenes, objectives, context });
     const fightRows = compileFights({ questId: aggregate.questId, npcs, objectives, context, taken: sceneRows });
-    return { context, compiled: mergeCompiled(sceneRows, fightRows) };
+    const before = mergeCompiled(sceneRows, fightRows);
+    // Every project NPC goes in, so the rows of point actions since removed are deleted.
+    const patrolRows = compilePatrols({ questId: aggregate.questId, npcs, context, taken: before });
+    return { context, compiled: mergeCompiled(before, patrolRows) };
   }
 
   /**

@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest';
 import { compileEntities } from '../../src/core/entities/compile';
 import { EMPTY_ENTITY_CONTEXT } from '../../src/core/entities/context';
 import { newNpc, newSpawn, type Patrol } from '../../src/core/entities/model';
-import { addPoint, newPatrol, updatePoint, setStartPace } from '../../src/core/map/patrol';
+import { addAction, addPoint, newPatrol, updatePoint, setStartPace } from '../../src/core/map/patrol';
 
 const Q = 60001;
 const three = (): Patrol => {
@@ -60,5 +60,10 @@ describe('patrol export', () => {
     const out = compile(null, context);
     expect(out.deletes.creature_addon).toBeUndefined();
     expect(out.deletes.waypoint_data).toBeUndefined();
+  });
+  it('runs an NPC with point actions on SmartAI', () => {
+    const p = addAction(three(), 0, { id: 'a1', afterSecs: 0, kind: 'emote', emote: 3 });
+    expect(compile(p).inserts.creature_template![0]!.AIName).toBe('SmartAI');
+    expect(compile(three()).inserts.creature_template![0]!.AIName).toBe('');
   });
 });
