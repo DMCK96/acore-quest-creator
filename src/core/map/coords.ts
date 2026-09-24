@@ -12,6 +12,10 @@ export const TILE_PX = 256;
 /** Zoom 6 is one grid per tile; below 2 a tile would need hundreds of grids. */
 export const MIN_ZOOM = 2;
 export const MAX_ZOOM = 6;
+/** The zoom the painted zone art is drawn at; zoomed-out tiles are shrunk from it. */
+export const ART_ZOOM = 5;
+/** How far the author may zoom in: past MAX_ZOOM the tiles are enlarged. */
+export const MAX_VIEW_ZOOM = 11;
 
 /** Pixels per yard at zoom 0. */
 const K = TILE_PX / (GRIDS * GRID_SIZE);
