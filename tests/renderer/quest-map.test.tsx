@@ -48,6 +48,17 @@ describe('quest map', () => {
     expect(await screen.findByRole('button', { name: 'Floor 98.12' })).toBeTruthy();
   });
 
+  it('keeps the view where it is when a moved marker comes back in new values', async () => {
+    const api = makeMockApi();
+    const view = render(<NamesProvider api={api}><QuestMapView open={openWith()} onChange={vi.fn()} focusId={null} onClose={vi.fn()} /></NamesProvider>);
+    await screen.findByRole('dialog', { name: 'Quest map' });
+    expect(lastProps!.center).toEqual({ x: -8900, y: -160 });
+    const moved = { ...hela, spawns: [{ ...hela.spawns[0]!, x: -8950, y: -170 }] };
+    view.rerender(<NamesProvider api={api}><QuestMapView open={openWith([moved])} onChange={vi.fn()} focusId={null} onClose={vi.fn()} /></NamesProvider>);
+    expect(lastProps!.markers.find((m) => m.id === 'spawn:npc:12000001:900')).toMatchObject({ x: -8950 });
+    expect(lastProps!.center).toEqual({ x: -8900, y: -160 });
+  });
+
   it('moves a spawn without touching Z when there is no floor data, and says so', async () => {
     const api = makeMockApi({ mapFloors: vi.fn(async () => okv({ reason: 'Set the server data folder on the connection to read floors.' })) });
     const { onChange } = mount(api);

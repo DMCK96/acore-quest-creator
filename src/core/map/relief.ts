@@ -69,10 +69,12 @@ export function reliefPixels(file: TerrainFile | null, gx: number, gy: number): 
       const k = row * size + col;
       if (!known[k]) continue;
       const h = heights[k]!;
-      const east = col + 1 < size && known[k + 1] ? heights[k + 1]! : h;
-      const south = row + 1 < size && known[k + size] ? heights[k + size]! : h;
-      const nx = -(east - h) / step;
-      const ny = -(south - h) / step;
+      // The slope towards the next pixel east and south; on the grid's last column or row (or next to
+      // a hole) the slope from the pixel before, so grid edges shade like the ground either side.
+      const slope = (next: number, prev: number, hasNext: boolean, hasPrev: boolean): number =>
+        hasNext ? heights[next]! - h : hasPrev ? h - heights[prev]! : 0;
+      const nx = -slope(k + 1, k - 1, col + 1 < size && known[k + 1] === 1, col > 0 && known[k - 1] === 1) / step;
+      const ny = -slope(k + size, k - size, row + 1 < size && known[k + size] === 1, row > 0 && known[k - size] === 1) / step;
       const len = Math.hypot(nx, ny, 1);
       const light = (nx * LIGHT[0] + ny * LIGHT[1] + LIGHT[2]) / len;
       const shade = SHADE_MIN + (SHADE_SPAN * (light + 1)) / 2;

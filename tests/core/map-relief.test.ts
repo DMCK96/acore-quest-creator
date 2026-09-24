@@ -33,6 +33,11 @@ describe('relief', () => {
     // v9(i, j): i grows southward, j eastward. Rising to the south-east means the face looks north-west.
     expect(brightness(reliefPixels(graded(1), 32, 32))).toBeGreaterThan(brightness(reliefPixels(graded(-1), 32, 32)));
   });
+  it('shades the last row and column of a grid like the rest of an even slope, so grid edges do not show', () => {
+    const rgba = reliefPixels(graded(1), 32, 32);
+    expect(px(rgba, 255, 100)).toEqual(px(rgba, 254, 100));
+    expect(px(rgba, 100, 255)).toEqual(px(rgba, 100, 254));
+  });
   it('draws water above the ground in blue', () => {
     const file = parseMapFile(buildMapFile({ kind: 'flat', gridHeight: 10, liquid: { flags: 1, level: 12 } }));
     const [r, g, b] = px(reliefPixels(file, 32, 32), 100, 100);

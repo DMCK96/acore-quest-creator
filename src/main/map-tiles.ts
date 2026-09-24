@@ -24,6 +24,8 @@ export interface TileCache {
 }
 
 const TILE_URL = /^acqc-map:\/\/tile\/(\d+)\/(\d+)\/(\d+)\/(\d+)\.png$/;
+/** Part of every cached tile's path: raise it when tiles are drawn differently, so old ones are redrawn. */
+const RELIEF_VERSION = 'r2';
 /** Rendered pixel buffers kept while zoomed-out tiles are built from their children. */
 const RGBA_CACHE_SIZE = 256;
 
@@ -100,7 +102,7 @@ export function createMapTiles(deps: { files: ServerDataFiles; cache: TileCache;
       if (!dir) return transparent;
       try {
         // Joined with '/', which every platform accepts, so cache paths look the same everywhere.
-        const path = `${deps.cacheRoot}/${folderKey}/${map}/${zoom}/${tx}/${ty}.png`;
+        const path = `${deps.cacheRoot}/${folderKey}/${RELIEF_VERSION}/${map}/${zoom}/${tx}/${ty}.png`;
         const cached = await deps.cache.read(path);
         if (cached) return cached;
         const pixels = await rgba(map, zoom, tx, ty);

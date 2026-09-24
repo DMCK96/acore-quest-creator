@@ -49,7 +49,7 @@ export function LeafletMap(props: LeafletMapProps): React.JSX.Element {
   const host = useRef<HTMLDivElement | null>(null);
   const mapRef = useRef<L.Map | null>(null);
   const tiles = useRef<L.TileLayer | null>(null);
-  const markerLayers = useRef(new Map<string, { marker: L.Marker; extra: L.Layer | null }>());
+  const markerLayers = useRef(new Map<string, { marker: L.Marker; extra: L.Layer | null; look: string; shape: string }>());
   const dotLayer = useRef<L.LayerGroup | null>(null);
   const zoneLayer = useRef<L.LayerGroup | null>(null);
   // Leaflet keeps the handlers it was given; these always call the latest props.
@@ -62,14 +62,15 @@ export function LeafletMap(props: LeafletMapProps): React.JSX.Element {
       crs: CRS, minZoom: MIN_ZOOM, maxZoom: OVERZOOM, zoomSnap: 1, attributionControl: false,
       maxBounds: L.latLngBounds([-HALF, -HALF], [HALF, HALF]),
     });
-    map.setView([latest.current.center.x, latest.current.center.y], latest.current.zoom);
-    dotLayer.current = L.layerGroup().addTo(map);
-    zoneLayer.current = L.layerGroup().addTo(map);
     map.on('click', (e: L.LeafletMouseEvent) => latest.current.onMapClick({ x: e.latlng.lat, y: e.latlng.lng }));
     map.on('moveend', () => {
       const b = map.getBounds();
       latest.current.onViewChanged({ minX: b.getSouth(), maxX: b.getNorth(), minY: b.getWest(), maxY: b.getEast() }, map.getZoom());
     });
+    // After the handlers, so the first view is reported too and its spawns load without a pan.
+    map.setView([latest.current.center.x, latest.current.center.y], latest.current.zoom);
+    dotLayer.current = L.layerGroup().addTo(map);
+    zoneLayer.current = L.layerGroup().addTo(map);
     mapRef.current = map;
     const layers = markerLayers.current;
     return () => {
@@ -108,6 +109,10 @@ export function LeafletMap(props: LeafletMapProps): React.JSX.Element {
     }
     for (const m of props.markers) {
       const selected = m.id === props.selectedId;
+      // Replacing a marker's icon replaces its element, which would drop a drag in progress, so the
+      // icon and the area or outline drawn with it change only when what they show changes.
+      const look = `${m.kind}|${m.readOnlyRole ?? ''}|${m.label}|${selected}`;
+      const shape = JSON.stringify([m.x, m.y, m.radius ?? null, m.outline ?? null]);
       let layer = layers.get(m.id);
       if (!layer) {
         const marker = L.marker([m.x, m.y], { draggable: m.draggable, icon: iconFor(m, selected), keyboard: true, title: m.label });
@@ -117,14 +122,18 @@ export function LeafletMap(props: LeafletMapProps): React.JSX.Element {
         });
         marker.on('click', () => latest.current.onMarkerSelected(m.id));
         marker.addTo(map);
-        layer = { marker, extra: null };
+        layer = { marker, extra: null, look, shape: '' };
         layers.set(m.id, layer);
       } else {
-        layer.marker.setLatLng([m.x, m.y]);
-        layer.marker.setIcon(iconFor(m, selected));
-        if (m.draggable) layer.marker.dragging?.enable();
-        else layer.marker.dragging?.disable();
+        const at = layer.marker.getLatLng();
+        if (at.lat !== m.x || at.lng !== m.y) layer.marker.setLatLng([m.x, m.y]);
+        if (layer.look !== look) {
+          layer.marker.setIcon(iconFor(m, selected));
+          layer.look = look;
+        }
       }
+      if (layer.shape === shape) continue;
+      layer.shape = shape;
       layer.extra?.remove();
       layer.extra = m.radius
         ? L.circle([m.x, m.y], { radius: m.radius, className: 'quest-map__area' }).addTo(map)

@@ -92,6 +92,13 @@ export function QuestMapView({
   const offView = markers.filter((m) => m.map !== null && !shownIds.has(m.map));
   const start = focus && onThisMap.includes(focus) ? focus : onThisMap[0];
   const shownCenter = center ?? (start ? { x: start.x, y: start.y } : { x: 0, y: 0 });
+  // The view starts on the quest's first position and then stays put: following the positions would
+  // recentre the map on every marker the author drags.
+  const startX = start?.x;
+  const startY = start?.y;
+  useEffect(() => {
+    if (center === null && startX !== undefined && startY !== undefined) setCenter({ x: startX, y: startY });
+  }, [center, startX, startY]);
   const mapInfo = maps.find((m) => m.id === currentMap);
 
   /** The floors at a point: their candidates, or why there are none. */
