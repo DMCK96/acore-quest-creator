@@ -21,13 +21,13 @@ describe('patrol export', () => {
     const out = compile(three());
     expect(out.inserts.creature![0]).toMatchObject({ guid: '900', MovementType: '2', wander_distance: '0' });
     expect(out.inserts.creature_addon).toEqual([{ guid: '900', path_id: '9000' }]);
-    expect(out.inserts.waypoint_data).toEqual([
+    expect(out.inserts.waypoint_data!.slice(0, 3)).toEqual([
       { id: '9000', point: '1', position_x: '1', position_y: '2', position_z: '3', delay: '0', move_type: '0', action: '0', action_chance: '100', wpguid: '0', velocity: '0', smoothTransition: '0' },
       { id: '9000', point: '2', position_x: '4', position_y: '5', position_z: '6', orientation: '1.25', delay: '8000', move_type: '0', action: '0', action_chance: '100', wpguid: '0', velocity: '0', smoothTransition: '0' },
       { id: '9000', point: '3', position_x: '7', position_y: '8', position_z: '9', delay: '0', move_type: '1', action: '0', action_chance: '100', wpguid: '0', velocity: '0', smoothTransition: '0' },
     ]);
     expect(out.deletes.creature_addon).toEqual([{ guid: '900' }]);
-    expect(out.deletes.waypoint_data).toEqual([{ id: '9000', point: '1' }, { id: '9000', point: '2' }, { id: '9000', point: '3' }]);
+    expect(out.deletes.waypoint_data).toEqual([{ id: '9000', point: '1' }, { id: '9000', point: '2' }, { id: '9000', point: '3' }, { id: '9000', point: '4' }]);
   });
   it('starts at the pace it is set to start at', () => {
     expect(compile(setStartPace(three(), 'run')).inserts.waypoint_data![0]!.move_type).toBe('1');
@@ -65,5 +65,13 @@ describe('patrol export', () => {
     const p = addAction(three(), 0, { id: 'a1', afterSecs: 0, kind: 'emote', emote: 3 });
     expect(compile(p).inserts.creature_template![0]!.AIName).toBe('SmartAI');
     expect(compile(three()).inserts.creature_template![0]!.AIName).toBe('');
+  });
+  it('walks back to where it stands after the last point, as the map draws it', () => {
+    const npc = { ...npcWith(three()), spawns: [{ ...newSpawn(900), x: 10, y: 20, z: 30, patrol: three() }] };
+    const rows = compileEntities({ questId: Q, entities: { npcs: [npc], objects: [] }, givers: [], context: EMPTY_ENTITY_CONTEXT }).inserts.waypoint_data!;
+    expect(rows).toHaveLength(4);
+    // The server loops the path's own points only, so the spawn is the route's last point.
+    expect(rows[3]).toEqual({ id: '9000', point: '4', position_x: '10', position_y: '20', position_z: '30', delay: '0', move_type: '1',
+      action: '0', action_chance: '100', wpguid: '0', velocity: '0', smoothTransition: '0' });
   });
 });

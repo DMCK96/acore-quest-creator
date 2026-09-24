@@ -38,6 +38,14 @@ export function QuestFlowView({ store }: { store: AppStore }): React.JSX.Element
   const [mapRequest, setMapRequest] = useState<MapRequest | null>(null);
   const [mapReturn, setMapReturn] = useState<typeof openPanel>(null);
 
+  // A map closed any other way than its Close button (Escape, another panel) forgets why it was
+  // opened, so the next opening shows the map rather than placing or drawing on the first click.
+  useEffect(() => {
+    if (openPanel === 'map') return;
+    setMapRequest(null);
+    setMapReturn(null);
+  }, [openPanel]);
+
   // Escape closes the open panel first, and leaves the editor only when nothing is open.
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent): void => {

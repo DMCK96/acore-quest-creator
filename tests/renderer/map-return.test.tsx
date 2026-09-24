@@ -52,4 +52,15 @@ describe('map from a panel', () => {
     await userEvent.click(screen.getByRole('button', { name: 'Place on map' }));
     expect(open).toHaveBeenCalledWith({ kind: 'place', target: { kind: 'npc', entry: 12000001 } });
   });
+  it('forgets place mode when the map closes with Escape, so the Map button just shows the map', async () => {
+    await mountFlow();
+    await userEvent.click(within(screen.getByRole('list', { name: 'Modules' })).getByRole('button', { name: /^Quest Giver/ }));
+    await userEvent.click(within(screen.getByRole('dialog', { name: 'Quest Giver' })).getByRole('button', { name: 'Place on map' }));
+    expect(await screen.findByText('Click where Hela should stand.')).toBeTruthy();
+    await userEvent.keyboard('{Escape}');
+    expect(screen.queryByRole('dialog', { name: 'Quest map' })).toBeNull();
+    await userEvent.click(screen.getByRole('button', { name: /^Map$/ }));
+    expect(await screen.findByRole('dialog', { name: 'Quest map' })).toBeTruthy();
+    expect(screen.queryByText('Click where Hela should stand.')).toBeNull();
+  });
 });

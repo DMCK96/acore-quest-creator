@@ -17,4 +17,13 @@ describe('entity validation', () => {
   it('warns when the entry already holds something else in the database', () =>
     expect(codes([good], [], new Map([['creature:12000001', 'Someone Else']]))).toEqual([['ENTITY_TAKEN', 'warning']]));
   it('checks objects too', () => expect(codes([], [{ ...newObject(9), name: 'Chest', displayId: 0, spawns: [{ ...newSpawn(2), x: 1 }] }])).toEqual([['ENTITY_NO_MODEL', 'error']]));
+  it('warns about patrol point actions with nothing picked', () => {
+    const point = (actions: unknown[]) => ({ x: 1, y: 1, z: 1, waitSecs: 0, facing: null, paceFromHere: null, actions });
+    const patrol = { pathId: 10, startPace: 'walk', points: [point([]), point([{ id: 'a1', afterSecs: 0, kind: 'mount', creature: 0 }, { id: 'a2', afterSecs: 0, kind: 'say', chance: 100, lines: [{ text: '', style: 'say' }] }])] };
+    const issues = entityIssues({ entities: { npcs: [{ ...good, spawns: [{ ...good.spawns[0]!, patrol }] }] as never, objects: [] }, dbNames: new Map() });
+    expect(issues.map((i) => [i.code, i.severity, i.message])).toEqual([
+      ['PATROL_UNPICKED', 'warning', 'NPC "Hela": at patrol point 2, pick what it rides.'],
+      ['PATROL_UNPICKED', 'warning', 'NPC "Hela": at patrol point 2, give it a line to say.'],
+    ]);
+  });
 });

@@ -93,7 +93,8 @@ test('a new quest giver is made, placed and given a patrol with a line to say, a
   const sql = readFileSync(join(outDir, readdirSync(outDir)[0]!), 'utf8');
   expect(sql).toContain('Patrol Hela');
   expect(sql).toMatch(/INSERT INTO `creature_addon`/);
-  expect(sql.match(/INSERT INTO `waypoint_data`/g)).toHaveLength(3);
+  // Three points, then back where it stands.
+  expect(sql.match(/INSERT INTO `waypoint_data`/g)).toHaveLength(4);
   expect(sql).toMatch(/INSERT INTO `waypoint_data` .*, 8000,/);
   expect(sql).toContain('All quiet here.');
   expect(sql).toMatch(/INSERT INTO `smart_scripts` .*VALUES \(\d+, 0, 0, 0, 34, /);

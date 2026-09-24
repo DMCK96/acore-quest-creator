@@ -100,4 +100,22 @@ describe('point actions', () => {
     expect(out.deletes.smart_scripts).toEqual([{ entryorguid: String(E), source_type: '0', id: '1', link: '0' }]);
     expect(out.deletes.creature_text).toEqual([{ CreatureID: String(E), GroupID: '0', ID: '0' }]);
   });
+  it('leaves out actions with nothing picked, and blank lines', () => {
+    let p = addAction(route(), 0, act({ id: 'a1', kind: 'mount', creature: 0 }));
+    p = addAction(p, 0, act({ id: 'a2', kind: 'cast', spell: 0 }));
+    p = addAction(p, 0, act({ id: 'a3', kind: 'sound', sound: 0 }));
+    p = addAction(p, 0, act({ id: 'a4', kind: 'useObject', guid: 0, entry: 0 }));
+    p = addAction(p, 0, act({ id: 'a5', kind: 'say', chance: 100, lines: [{ text: '  ', style: 'say' }] }));
+    p = addAction(p, 0, act({ id: 'a6', kind: 'say', chance: 100, lines: [{ text: '', style: 'say' }, { text: 'Halt!', style: 'yell' }] }));
+    const out = compile(npcWith(p));
+    expect(out.inserts.creature_text).toEqual([expect.objectContaining({ ID: '0', Text: 'Halt!', Type: '14' })]);
+    expect(out.inserts.smart_scripts).toEqual([expect.objectContaining({ event_type: '34', action_type: '1' })]);
+  });
+
+  it('never says a line with a chance of 0, and rounds a chance to a whole percent', () => {
+    const never = addAction(route(), 0, act({ kind: 'say', chance: 0, lines: [{ text: 'Hm.', style: 'say' }] }));
+    expect(compile(npcWith(never)).inserts.smart_scripts).toBeUndefined();
+    const some = addAction(route(), 0, act({ kind: 'say', chance: 33.6, lines: [{ text: 'Hm.', style: 'say' }] }));
+    expect(compile(npcWith(some)).inserts.smart_scripts![0]!.event_chance).toBe('34');
+  });
 });

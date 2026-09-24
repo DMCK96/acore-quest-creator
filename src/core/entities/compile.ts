@@ -29,10 +29,14 @@ const PACE_MOVE_TYPE = { walk: 0, run: 1 } as const;
 /** A patrol with a route to walk; one point alone is no route. */
 const walking = (patrol: Patrol | null): patrol is Patrol => patrol !== null && patrol.points.length >= 2;
 
-/** One `waypoint_data` row per point; each row's pace is the one it walks there at. */
-function routeRows(patrol: Patrol): Record<string, string>[] {
+/**
+ * One `waypoint_data` row per point, then one back where the spawn stands: the server loops a path's
+ * own points only, so without it the NPC would go from the last point straight to the first. Each
+ * row's pace is the one it walks there at.
+ */
+function routeRows(patrol: Patrol, home: { x: number; y: number; z: number }): Record<string, string>[] {
   let pace = patrol.startPace;
-  return patrol.points.map((point, i) => {
+  const rows = patrol.points.map((point, i) => {
     const row: Record<string, string> = {
       id: String(patrol.pathId), point: String(i + 1), position_x: String(point.x), position_y: String(point.y), position_z: String(point.z),
       delay: String(Math.round(point.waitSecs * 1000)), move_type: String(PACE_MOVE_TYPE[pace]), action: '0', action_chance: '100', wpguid: '0',
@@ -43,6 +47,11 @@ function routeRows(patrol: Patrol): Record<string, string>[] {
     if (point.paceFromHere !== null) pace = point.paceFromHere;
     return row;
   });
+  rows.push({
+    id: String(patrol.pathId), point: String(patrol.points.length + 1), position_x: String(home.x), position_y: String(home.y), position_z: String(home.z),
+    delay: '0', move_type: String(PACE_MOVE_TYPE[pace]), action: '0', action_chance: '100', wpguid: '0', velocity: '0', smoothTransition: '0',
+  });
+  return rows;
 }
 
 const text = (n: number): string => String(n);
@@ -127,7 +136,7 @@ export function compileEntities(input: {
       });
       if (patrol) {
         insert('creature_addon', { guid: text(spawn.guid), path_id: text(patrol.pathId) });
-        for (const row of routeRows(patrol)) insert('waypoint_data', row);
+        for (const row of routeRows(patrol, spawn)) insert('waypoint_data', row);
       }
     }
   }

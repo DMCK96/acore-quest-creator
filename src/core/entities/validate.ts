@@ -1,6 +1,7 @@
 import { fightIssues } from '../combat/validate';
 import type { Issue } from '../validate/validate';
 import { ENTITIES_FIELD, type CustomNpc, type CustomObject, type QuestEntities } from './model';
+import { missingChoice } from '../patrol/compile';
 
 /** What is wrong with the quest's new NPCs and objects, each issue routed to their module. */
 export function entityIssues(input: {
@@ -28,6 +29,16 @@ export function entityIssues(input: {
     if (entity.spawns.length === 0) add('warning', 'ENTITY_NO_SPAWN', 'nothing places it in the world yet; add a spawn.');
     else if (entity.spawns.some((s) => s.x === 0 && s.y === 0 && s.z === 0)) {
       add('warning', 'ENTITY_SPAWN_ORIGIN', 'a spawn is still at 0, 0, 0; set where it stands.');
+    }
+    if ('fight' in entity) {
+      for (const spawn of entity.spawns) {
+        spawn.patrol?.points.forEach((point, i) => {
+          for (const action of point.actions) {
+            const missing = missingChoice(action);
+            if (missing) add('warning', 'PATROL_UNPICKED', `at patrol point ${i + 1}, ${missing}.`);
+          }
+        });
+      }
     }
     if ('pages' in entity) {
       if (entity.type === 'text' && entity.pages.length === 0) add('error', 'ENTITY_NO_PAGES', 'a readable object needs at least one page.');

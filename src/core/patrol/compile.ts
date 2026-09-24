@@ -26,9 +26,34 @@ const text = (n: number): string => String(n);
 const keyOf = (row: RawRow, columns: readonly string[]): Row => Object.fromEntries(columns.map((c) => [c, row[c] ?? '0']));
 const routed = (patrol: Patrol | null): patrol is Patrol => patrol !== null && patrol.points.length >= 2;
 
+/** What an action still needs before it can be exported, in the author's words; null when it is ready. */
+export function missingChoice(action: PointAction): string | null {
+  switch (action.kind) {
+    case 'say':
+      return action.lines.some((l) => l.text.trim() !== '') ? null : 'give it a line to say';
+    case 'cast':
+      return action.spell > 0 ? null : 'pick the spell it casts';
+    case 'sound':
+      return action.sound > 0 ? null : 'pick the sound it plays';
+    case 'mount':
+      return action.creature > 0 ? null : 'pick what it rides';
+    case 'useObject':
+      return action.guid > 0 ? null : 'pick the object it uses';
+    default:
+      return null;
+  }
+}
+
+/** A say's chance as the server reads it: a whole percent, where 0 means it never speaks. */
+const chanceOf = (chance: number): number => Math.min(100, Math.max(0, Math.round(chance)));
+
+/** Actions that are ready and can happen: nothing half-picked, no line with no chance. */
+const exported = (actions: readonly PointAction[]): PointAction[] =>
+  actions.filter((a) => missingChoice(a) === null && !(a.kind === 'say' && chanceOf(a.chance) === 0));
+
 /** Whether an NPC does anything at any point of a route it walks. */
 export function hasPointActions(npc: CustomNpc): boolean {
-  return npc.spawns.some((s) => routed(s.patrol) && s.patrol.points.some((p) => p.actions.length > 0));
+  return npc.spawns.some((s) => routed(s.patrol) && s.patrol.points.some((p) => exported(p.actions).length > 0));
 }
 
 export function compilePatrols(input: {
@@ -79,14 +104,14 @@ export function compilePatrols(input: {
       switch (action.kind) {
         case 'say': {
           const group = alloc.takeGroup(entry);
-          action.lines.forEach((line, i) => {
+          action.lines.filter((line) => line.text.trim() !== '').forEach((line, i) => {
             insert('creature_text', {
               CreatureID: text(entry), GroupID: text(group), ID: text(i), Text: line.text, Type: text(STYLE_TYPE[line.style]), Language: '0',
               Probability: '100', Emote: '0', Duration: '0', Sound: '0', BroadcastTextId: '0', TextRange: '0',
               comment: textComment(tag, `says "${line.text}"`),
             });
           });
-          return self(ACTION.talk, [group, 0, 0], 'says a line', { chance: action.chance });
+          return self(ACTION.talk, [group, 0, 0], 'says a line', { chance: chanceOf(action.chance) });
         }
         case 'emote':
           return self(ACTION.playEmote, [action.emote], `plays emote ${action.emote}`);
@@ -109,11 +134,12 @@ export function compilePatrols(input: {
       if (!routed(spawn.patrol)) continue;
       const { pathId } = spawn.patrol;
       spawn.patrol.points.forEach((point, i) => {
-        if (point.actions.length === 0) return;
+        const ready = exported(point.actions);
+        if (ready.length === 0) return;
         const n = i + 1;
         // Each action at its time after arriving; a pose also stands back up just before leaving.
         const timeline: { at: number; action: SmartAction }[] = [];
-        for (const action of point.actions) {
+        for (const action of ready) {
           timeline.push({ at: action.afterSecs, action: toSmart(action) });
           if (action.kind === 'pose') {
             timeline.push({ at: Math.max(action.afterSecs, point.waitSecs - POSE_UNDO_EARLY_S), action: self(ACTION.setEmoteState, [0], 'stops posing') });
