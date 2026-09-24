@@ -22,18 +22,24 @@ export const SOURCE = {
 } as const;
 
 export const EVENT = {
+  updateIc: 0,
   updateOoc: 1,
   kill: 5,
   death: 6,
+  spellHit: 8,
+  oocLos: 10,
   acceptedQuest: 19,
   rewardQuest: 20,
   receiveEmote: 22,
+  dataSet: 38,
+  escortReached: 40,
   areatrigger: 46,
   questAccepted: 47,
   questObjCompletion: 48,
   questCompletion: 49,
   questRewarded: 50,
   questFail: 51,
+  justSummoned: 54,
   link: 61,
   gossipSelect: 62,
   gossipHello: 64,
@@ -43,16 +49,63 @@ export const EVENT = {
 } as const;
 
 export const ACTION = {
+  talk: 1,
+  setFaction: 2,
+  playEmote: 5,
   failQuest: 6,
   offerQuest: 7,
+  cast: 11,
+  summonCreature: 12,
   areaExploredOrEventHappens: 15,
   groupEventHappens: 26,
+  killedMonster: 33,
+  forceDespawn: 41,
+  setData: 45,
+  summonGo: 50,
   escortStart: 53,
   escortStop: 55,
+  addItem: 56,
+  removeItem: 57,
+  moveToPos: 69,
+  closeGossip: 72,
   callTimedList: 80,
+  addNpcFlag: 82,
+  removeNpcFlag: 83,
   callRandomTimedList: 87,
   callRandomRangeTimedList: 88,
+  goSetGoState: 118,
 } as const;
+
+/** `SMART_TARGET_*`: who an action applies to. */
+export const TARGET = {
+  self: 1,
+  invoker: 7,
+  position: 8,
+  creatureRange: 9,
+  gameobjectRange: 13,
+  invokerParty: 16,
+  closestCreature: 19,
+  closestGameobject: 20,
+} as const;
+
+/** `CONDITION_*` from `ConditionMgr.h`: what a condition row checks. */
+export const CONDITION = {
+  item: 2,
+  team: 6,
+  questRewarded: 8,
+  questTaken: 9,
+  questNone: 14,
+  questComplete: 28,
+} as const;
+
+/** `CONDITION_SOURCE_TYPE_GOSSIP_MENU_OPTION`: conditions that show or hide one gossip option. */
+export const CONDITION_SOURCE_GOSSIP_OPTION = 15;
+
+/** `ChatMsg` values `creature_text.Type` takes for what an NPC says. */
+export const TEXT_TYPE = { say: 12, yell: 14, textEmote: 16 } as const;
+
+/** `Team` ids `CONDITION_TEAM` compares against. */
+export const TEAM = { alliance: 469, horde: 67 } as const;
 
 export const CONDITION_SOURCE_SMART_EVENT = 22;
 

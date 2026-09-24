@@ -186,6 +186,6 @@ const NEEDS_PLAYER: ReadonlySet<StepKind> = new Set([
 ]);
 
 /** Whether the step acts on the player who set the scene off. */
-export function stepNeedsPlayer(step: Pick<StepBody, 'kind'>): boolean {
+export function stepNeedsPlayer(step: StepBody): boolean {
   return NEEDS_PLAYER.has(step.kind);
 }

@@ -1,4 +1,25 @@
-import type { QuestScene, SceneTrigger, StepBody } from './model';
+import type { QuestScene, SceneGate, SceneTrigger, StepBody } from './model';
+
+const QUEST_STATES = {
+  inLog: 'is in the log',
+  objectivesDone: 'has all objectives done',
+  handedIn: 'was handed in',
+  neverTaken: 'was never taken',
+} as const;
+
+/** A gate as the "only when …" clause of a sentence. */
+export function describeGate(gate: SceneGate): string {
+  switch (gate.kind) {
+    case 'quest': {
+      const quest = gate.questId === 0 ? 'this quest' : `quest ${gate.questId}`;
+      return `${gate.negate ? 'not: ' : ''}${quest} ${QUEST_STATES[gate.state]}`;
+    }
+    case 'item':
+      return `${gate.negate ? 'not: ' : ''}the player has ${gate.count} × item ${gate.item}`;
+    case 'team':
+      return `the player is ${gate.team === 'alliance' ? 'Alliance' : 'Horde'}`;
+  }
+}
 
 /** A scene's trigger in the words the editor and the row comments use. */
 export function describeTrigger(trigger: SceneTrigger): string {
