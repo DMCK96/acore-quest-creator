@@ -63,3 +63,31 @@ describe('giver card: new NPC', () => {
     expect(screen.queryByRole('button', { name: 'New NPC for starts at 1' })).toBeNull();
   });
 });
+
+describe('giver card: new NPC after a wait', () => {
+  it('keeps edits made while the new NPC id was on its way', async () => {
+    const { render, act } = await import('@testing-library/react');
+    const { ModuleBody } = await import('../../src/renderer/modules/ModuleBody');
+    const { NamesProvider } = await import('../../src/renderer/state/names');
+    const { sampleOpen } = await import('./mock-api');
+    let answer: (v: unknown) => void = () => {};
+    const api = makeMockApi({ allocateIds: vi.fn(() => new Promise((resolve) => { answer = resolve; })) });
+    const onChange = vi.fn();
+    const openWith = (values: Record<string, unknown>) => {
+      const base = sampleOpen();
+      return { ...base, aggregate: { ...base.aggregate, values: { ...base.aggregate.values, ...values } as never } };
+    };
+    const ui = (values: Record<string, unknown>) => (
+      <NamesProvider api={api}><ModuleBody id="giver" open={openWith(values)} links={null} onChange={onChange} onOpenQuest={vi.fn()} /></NamesProvider>
+    );
+    const view = render(ui({ creature_queststarter: [{ id: 0 }] }));
+    await userEvent.click(screen.getByRole('button', { name: 'New NPC for starts at 1' }));
+    // Meanwhile another NPC was made and the quest gained an ender.
+    const other = { ...newNpc(12000004), name: 'Other' };
+    view.rerender(ui({ creature_queststarter: [{ id: 0 }], creature_questender: [{ id: 240 }], [ENTITIES_FIELD]: writeEntities({ npcs: [other], objects: [] }) }));
+    await act(async () => answer(okv([12000005])));
+    expect(entitiesOf(onChange).npcs.map((n) => n.entry)).toEqual([12000004, 12000005]);
+    expect(onChange).toHaveBeenCalledWith('creature_queststarter', [{ id: 12000005 }]);
+    expect(onChange).not.toHaveBeenCalledWith('creature_questender', []);
+  });
+});

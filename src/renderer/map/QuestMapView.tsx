@@ -576,7 +576,8 @@ export function QuestMapView({
               {notes[selected.id] && <p className="scene-warning">{notes[selected.id]}</p>}
               {(() => {
                 const match = /^spawn:npc:(\d+):(\d+)$/.exec(selected.id);
-                if (!match || !npcs.some((n) => n.entry === Number(match[1]))) return null;
+                // Right after placing, the banner already offers it.
+                if (!match || modeState?.kind === 'placed' || !npcs.some((n) => n.entry === Number(match[1]))) return null;
                 return (
                   <button type="button" className="entry-card__btn"
                     onClick={() => setMode({ kind: 'patrol', entry: Number(match[1]), guid: Number(match[2]) })}>

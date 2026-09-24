@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { readGivers, writeGivers, type GiverTarget } from '@core/modules/givers';
 import { removeEntry } from '@core/modules/entries';
 import { ENTITIES_FIELD, newNpc, readEntities, writeEntities, type CustomNpc } from '@core/entities/model';
@@ -22,6 +22,9 @@ export function GiverBody({ open, links, onChange, onOpenQuest }: ModuleBodyProp
   const api = useApi();
   const openMap = useMapOpener();
   const entities = readEntities(aggregate.values);
+  // Edits made after waiting for the server start from the values as they are then.
+  const valuesRef = useRef(aggregate.values);
+  valuesRef.current = aggregate.values;
   const [error, setError] = useState<string | null>(null);
   const [making, setMaking] = useState(false);
 
@@ -34,7 +37,7 @@ export function GiverBody({ open, links, onChange, onOpenQuest }: ModuleBodyProp
   }
 
   /** A new NPC made with this quest, already a quest giver, put on the card at `index`. */
-  async function newGiver(role: 'start' | 'end', targets: GiverTarget[], index: number): Promise<void> {
+  async function newGiver(role: 'start' | 'end', index: number): Promise<void> {
     if (!api || making) return;
     setMaking(true);
     try {
@@ -45,8 +48,9 @@ export function GiverBody({ open, links, onChange, onOpenQuest }: ModuleBodyProp
       }
       setError(null);
       const entry = result.value[0]!;
-      onChange(ENTITIES_FIELD, writeEntities({ ...entities, npcs: [...entities.npcs, { ...newNpc(entry), questGiver: true }] }));
-      write(role, targets.map((t, i) => (i === index ? { kind: 'creature', id: entry } : t)));
+      const now = readEntities(valuesRef.current);
+      onChange(ENTITIES_FIELD, writeEntities({ ...now, npcs: [...now.npcs, { ...newNpc(entry), questGiver: true }] }));
+      write(role, readGivers(valuesRef.current, role).map((t, i) => (i === index ? { kind: 'creature', id: entry } : t)));
     } finally {
       setMaking(false);
     }
@@ -81,7 +85,7 @@ export function GiverBody({ open, links, onChange, onOpenQuest }: ModuleBodyProp
                       onChange={(picked) => set(i, { kind: t.kind, id: picked })} />
                     {t.kind === 'creature' && (
                       <button type="button" className="entry-card__btn" disabled={making}
-                        aria-label={`New NPC for ${list.toLowerCase()} ${n}`} onClick={() => void newGiver(role, targets, i)}>
+                        aria-label={`New NPC for ${list.toLowerCase()} ${n}`} onClick={() => void newGiver(role, i)}>
                         New NPC
                       </button>
                     )}

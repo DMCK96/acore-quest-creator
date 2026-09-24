@@ -113,4 +113,14 @@ describe('patrol polish', () => {
     const form = screen.getByRole('group', { name: 'Plays an emote' });
     expect(within(form).getByText('It only waits 0 s here, so this may be cut short when it walks on.')).toBeTruthy();
   });
+
+  it('offers Draw patrol once right after placing, from the banner', async () => {
+    const api = floorsApi({ allocateIds: vi.fn(async () => okv([901])) });
+    const values = { ...sampleOpen().aggregate.values, [ENTITIES_FIELD]: writeEntities({ npcs: [{ ...newNpc(12000001), name: 'Hela' }], objects: [] }) };
+    render(<Live api={api} values={values} mode={{ kind: 'place', target: { kind: 'npc', entry: 12000001 } }} />);
+    await screen.findByText('Click where Hela should stand.');
+    await act(async () => lastProps!.onMapClick({ x: 5, y: 5 }));
+    await screen.findByText('Placed. Drag to adjust, or draw its patrol.');
+    expect(screen.getAllByRole('button', { name: 'Draw patrol' })).toHaveLength(1);
+  });
 });
