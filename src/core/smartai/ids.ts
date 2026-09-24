@@ -153,6 +153,70 @@ const STEP_NAMES: Record<number, string> = {
   [ACTION.addNpcFlag]: 'change NPC flags',
   [ACTION.removeNpcFlag]: 'change NPC flags',
   [ACTION.goSetGoState]: 'change object state',
+  [ACTION.setFaction]: 'change faction',
+  [ACTION.failQuest]: 'fail the quest',
+  [ACTION.offerQuest]: 'offer a quest',
+  [ACTION.removeItem]: 'take an item',
+  [ACTION.closeGossip]: 'close the talk window',
+  3: 'change its model',
+  4: 'play a sound',
+  8: 'change how it reacts',
+  9: 'use an object',
+  10: 'play a random emote',
+  17: 'keep playing an emote',
+  18: 'change unit flags',
+  19: 'change unit flags',
+  20: 'switch auto attack',
+  21: 'change combat movement',
+  22: 'change script phase',
+  23: 'change script phase',
+  24: 'stop fighting',
+  25: 'flee for help',
+  28: 'remove an aura',
+  29: 'follow someone',
+  37: 'die',
+  39: 'call for help',
+  40: 'sheathe or draw weapons',
+  43: 'mount or dismount',
+  44: 'change phase',
+  47: 'show or hide',
+  48: 'stay active when no one is near',
+  49: 'attack',
+  51: 'kill a unit',
+  52: 'send on a flight',
+  54: 'pause the escort',
+  55: 'stop the escort',
+  59: 'switch between running and walking',
+  62: 'teleport',
+  63: 'set a counter',
+  64: 'remember a target',
+  65: 'resume the escort',
+  66: 'turn to face',
+  67: 'start a timer',
+  70: 'respawn',
+  71: 'change equipment',
+  73: 'set off a timer',
+  75: 'add an aura',
+  81: 'set NPC flags',
+  84: 'say a line',
+  85: 'cast a spell',
+  86: 'cast a spell',
+  87: 'run a random sequence',
+  88: 'run a random sequence',
+  89: 'wander',
+  90: 'change stance',
+  91: 'change stance',
+  97: 'jump',
+  98: 'show a talk window',
+  99: 'change object loot state',
+  101: 'set its home',
+  103: 'root in place',
+  104: 'change object flags',
+  105: 'change object flags',
+  106: 'change object flags',
+  107: 'spawn a group of NPCs',
+  115: 'play a random sound',
+  134: 'cast a spell',
 };
 
 /** A script action as one step of a sentence, for scripts the tool did not write. */
@@ -230,6 +294,32 @@ export function describeEvent(row: ScriptRow): string {
       return 'when an escort reaches a point';
     case EVENT.justSummoned:
       return 'when it is spawned';
+    case 7:
+      return 'when it stops fighting';
+    case 11:
+      return 'when it respawns';
+    case 25:
+      return 'when it resets';
+    case 34:
+      return 'when it arrives at a point';
+    case 52:
+      return 'when it finishes a line';
+    case 59:
+      return 'when its own timer goes off';
+    case 60:
+      return 'on a timer';
+    case 63:
+      return 'when it first appears';
+    case 72:
+      return 'when another script signals it is done';
+    case 77:
+      return 'when a counter reaches a value';
+    case 101:
+      return 'when players are near';
+    case 108:
+      return 'when it reaches a waypoint';
+    case 109:
+      return 'when it finishes its path';
     default:
       return `on SmartAI event ${row.eventType}`;
   }
