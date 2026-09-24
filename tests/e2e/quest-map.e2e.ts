@@ -5,6 +5,7 @@ import { join } from 'node:path';
 import { mysqlUrl } from '../helpers/env';
 
 const DATA_DIR = process.env.ACQC_WORLD_DB_DBC_DIR ? join(process.env.ACQC_WORLD_DB_DBC_DIR, '..') : 'E:\\Repositories\\azerothcore-wotlk-coa\\data';
+const CLIENT_DIR = process.env.ACQC_TEST_CLIENT_DIR ?? 'E:\\Games\\World of Warcraft - Ascension';
 const withoutConnectionEnv = (env: NodeJS.ProcessEnv): Record<string, string> =>
   Object.fromEntries(Object.entries(env).filter((e): e is [string, string] => e[1] !== undefined && !/^ACQC_(WORLD|DEV)_DB_/.test(e[0])));
 
@@ -32,6 +33,7 @@ test('a new NPC spawn is shown on the quest map and moved by dragging', async ()
   await page.getByLabel('Database').fill(u.pathname.slice(1));
   await page.getByLabel('Password').fill(decodeURIComponent(u.password));
   await page.getByLabel('Server data folder (optional)').fill(DATA_DIR);
+  await page.getByLabel('Game client folder (optional)').fill(CLIENT_DIR);
   await page.getByRole('button', { name: 'Save and connect' }).click();
 
   await page.getByRole('button', { name: 'New quest', exact: true }).click();
@@ -46,7 +48,7 @@ test('a new NPC spawn is shown on the quest map and moved by dragging', async ()
   await card.getByLabel('Paste .gps output').fill('Map: 0 X: -8902.59 Y: -162.606 Z: 82.02 Orientation: 1');
   await page.keyboard.press('Escape');
 
-  const tileLoaded = page.waitForResponse((r) => r.url().startsWith('acqc-map://tile/0/') && r.status() === 200);
+  const tileLoaded = page.waitForResponse((r) => r.url().startsWith('acqc-map://tile/0/6/') && r.status() === 200);
   await page.getByRole('button', { name: 'Map', exact: true }).click();
   const map = page.getByRole('dialog', { name: 'Quest map' });
   await expect(map).toBeVisible();
@@ -59,9 +61,34 @@ test('a new NPC spawn is shown on the quest map and moved by dragging', async ()
   await page.mouse.move(boxBefore.x + 60, boxBefore.y + 40, { steps: 8 });
   await page.mouse.up();
   await expect(map.getByRole('button', { name: /^Floor / }).first()).toBeVisible();
-  // Existing spawns around Northshire show as dots once the first view is reported.
-  await expect(map.locator('.quest-map__dot').first()).toBeAttached();
-  await page.screenshot({ path: 'test-results/quest-map.png' });
+  // Existing spawns around Northshire show as canvas dots at the opening zoom (7).
+  const canvas = map.locator('.quest-map__canvas');
+  await expect.poll(async () => Number(await canvas.getAttribute('data-dot-count'))).toBeGreaterThan(0);
+  await page.waitForTimeout(1500);
+  await page.screenshot({ path: 'test-results/quest-map-z7.png' });
+
+  // Zoomed out, the painted art shows and the dots go.
+  const zoomOut = map.getByRole('button', { name: 'Zoom out' });
+  const zoomIn = map.getByRole('button', { name: 'Zoom in' });
+  const artLoaded = page.waitForResponse((r) => r.url().startsWith('acqc-map://tile/0/4/') && r.status() === 200);
+  for (let i = 0; i < 3; i++) {
+    await zoomOut.click();
+    await page.waitForTimeout(350);
+  }
+  await artLoaded;
+  await expect(map.getByText('Zoom in to see existing spawns.')).toBeVisible();
+  await expect(canvas).toHaveAttribute('data-dot-count', '0');
+  await page.waitForTimeout(8000);
+  await page.screenshot({ path: 'test-results/quest-map-z4.png' });
+
+  // All the way in: zoom 11.
+  for (let i = 0; i < 7; i++) {
+    await zoomIn.click();
+    await page.waitForTimeout(350);
+  }
+  await expect(zoomIn).toHaveClass(/leaflet-disabled/);
+  await page.waitForTimeout(1000);
+  await page.screenshot({ path: 'test-results/quest-map-z11.png' });
   await map.getByRole('button', { name: 'Close' }).click();
 
   await page.getByRole('button', { name: 'Changes' }).click();
