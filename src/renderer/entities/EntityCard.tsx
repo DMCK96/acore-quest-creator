@@ -88,10 +88,11 @@ export function NpcCard({
         <NumberField label="Health multiplier" value={npc.healthModifier} onChange={(healthModifier) => onChange({ ...npc, healthModifier })} />
         <NumberField label="Damage multiplier" value={npc.damageModifier} onChange={(damageModifier) => onChange({ ...npc, damageModifier })} />
       </div>
-      <FightEditor idPrefix={`npc-${npc.entry}`} fight={npc.fight} onChange={(fight) => onChange({ ...npc, fight })} />
+      <FightEditor idPrefix={`npc-${npc.entry}`} entry={npc.entry} fight={npc.fight} onChange={(fight) => onChange({ ...npc, fight })} />
       <LootList idPrefix={`npc-${npc.entry}`} loot={npc.loot} onChange={(loot) => onChange({ ...npc, loot })} />
       <SpawnList
         idPrefix={`npc-${npc.entry}`}
+        ownerKey={{ kind: 'npc', entry: npc.entry }}
         spawns={npc.spawns}
         wanders
         onChange={(spawns: Spawn[]) => onChange({ ...npc, spawns })}
@@ -183,6 +184,7 @@ export function ObjectCard({
       )}
       <SpawnList
         idPrefix={`obj-${object.entry}`}
+        ownerKey={{ kind: 'obj', entry: object.entry }}
         spawns={object.spawns}
         wanders={false}
         onChange={(spawns: Spawn[]) => onChange({ ...object, spawns })}

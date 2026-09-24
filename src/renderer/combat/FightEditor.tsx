@@ -36,7 +36,7 @@ function spellIds(fight: Fight | null): number[] {
 }
 
 /** A new NPC's fight: a plain-English summary, then its phases, abilities and reactions. */
-export function FightEditor({ idPrefix, fight, onChange }: { idPrefix: string; fight: Fight | null; onChange(next: Fight | null): void }): React.JSX.Element {
+export function FightEditor({ idPrefix, entry, fight, onChange }: { idPrefix: string; entry?: number; fight: Fight | null; onChange(next: Fight | null): void }): React.JSX.Element {
   const api = useApi();
   const ids = spellIds(fight);
   const idsKey = ids.join(',');
@@ -116,6 +116,7 @@ export function FightEditor({ idPrefix, fight, onChange }: { idPrefix: string; f
           <ReactionEditor
             key={reaction.id}
             idPrefix={`${idPrefix}-${reaction.id}`}
+            markerBase={entry === undefined ? undefined : `fight:${entry}:${reaction.id}`}
             index={i}
             reaction={reaction}
             fight={fight}

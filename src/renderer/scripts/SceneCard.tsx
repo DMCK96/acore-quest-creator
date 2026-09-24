@@ -17,7 +17,7 @@ function emptyOwner(kind: OwnerKind): SceneOwner {
 }
 
 /** Who the scene runs on: an NPC or object by name, or an area, existing or created here. */
-function OwnerEditor({ idPrefix, owner, onChange }: { idPrefix: string; owner: SceneOwner; onChange(next: SceneOwner): void }): React.JSX.Element {
+function OwnerEditor({ idPrefix, owner, markerId, onChange }: { idPrefix: string; owner: SceneOwner; markerId: string; onChange(next: SceneOwner): void }): React.JSX.Element {
   return (
     <div className="scene-section">
       <SelectField label="Runs on" value={owner.kind} options={OWNER_KINDS} onChange={(kind) => onChange(emptyOwner(kind))} />
@@ -43,6 +43,7 @@ function OwnerEditor({ idPrefix, owner, onChange }: { idPrefix: string; owner: S
                 idPrefix={`${idPrefix}-area`}
                 value={{ x: owner.area.x, y: owner.area.y, z: owner.area.z, o: 0 }}
                 map={owner.area.map}
+                markerId={markerId}
                 onChange={(p, map) => onChange({ ...owner, area: { ...owner.area!, x: p.x, y: p.y, z: p.z, map: map ?? owner.area!.map } })}
               />
               <NumberField label="Radius (yards)" value={owner.area.radius} min={1} onChange={(radius) => onChange({ ...owner, area: { ...owner.area!, radius } })} />
@@ -88,10 +89,10 @@ export function SceneCard({
         </button>
       </div>
       <TextField label="Name (for you)" value={scene.name} onChange={(name) => onChange({ ...scene, name })} />
-      <OwnerEditor idPrefix={idPrefix} owner={scene.owner} onChange={setOwner} />
+      <OwnerEditor idPrefix={idPrefix} owner={scene.owner} markerId={`area:${scene.id}`} onChange={setOwner} />
       <TriggerEditor scene={scene} scenes={scenes} onChange={(trigger) => onChange({ ...scene, trigger })} />
       <GateEditor idPrefix={idPrefix} gates={scene.gates} onChange={(gates) => onChange({ ...scene, gates })} />
-      <StepEditor idPrefix={idPrefix} owner={scene.owner.kind} steps={scene.steps} onChange={(steps) => onChange({ ...scene, steps })} />
+      <StepEditor idPrefix={idPrefix} sceneId={scene.id} owner={scene.owner.kind} steps={scene.steps} onChange={(steps) => onChange({ ...scene, steps })} />
     </fieldset>
   );
 }

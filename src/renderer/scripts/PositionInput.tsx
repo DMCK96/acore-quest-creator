@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { parseGps } from '@core/scripts/gps';
 import type { Position } from '@core/scripts/model';
 import { useApi } from '../state/names';
+import { useMapOpener } from '../map/MapOpener';
 
 const AXES = ['x', 'y', 'z', 'o'] as const;
 const AXIS_LABEL = { x: 'X', y: 'Y', z: 'Z', o: 'Facing' } as const;
@@ -17,6 +18,7 @@ export function PositionInput({
   value,
   onChange,
   map,
+  markerId,
 }: {
   idPrefix: string;
   value: Position;
@@ -24,10 +26,13 @@ export function PositionInput({
   onChange(next: Position, map?: number): void;
   /** The map the position is on; without one there is no ground to snap to. */
   map?: number;
+  /** The quest map's marker for this position; with it, a link opens the map there. */
+  markerId?: string;
 }): React.JSX.Element {
   const [paste, setPaste] = useState('');
   const [groundNote, setGroundNote] = useState<string | null>(null);
   const api = useApi();
+  const openMap = useMapOpener();
 
   function fromText(text: string): void {
     setPaste(text);
@@ -69,6 +74,11 @@ export function PositionInput({
         {map !== undefined && (
           <button type="button" className="btn position-input__snap" onClick={() => void snap()}>
             Snap to ground
+          </button>
+        )}
+        {markerId && openMap && (
+          <button type="button" className="entry-card__btn position-input__map" onClick={() => openMap(markerId)}>
+            Show on map
           </button>
         )}
       </div>

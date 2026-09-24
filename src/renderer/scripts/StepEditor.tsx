@@ -79,7 +79,19 @@ export function defaultStep(kind: StepKind): SceneStep {
 const TOGGLES = [['keep', 'Leave as it is'], ['on', 'On'], ['off', 'Off']] as const;
 
 /** One step's own fields, below its wait. */
-export function StepFields({ idPrefix, step, onChange }: { idPrefix: string; step: SceneStep; onChange(next: SceneStep): void }): React.JSX.Element | null {
+export function StepFields({
+  idPrefix,
+  step,
+  onChange,
+  markerBase,
+}: {
+  idPrefix: string;
+  step: SceneStep;
+  onChange(next: SceneStep): void;
+  /** `scene:<id>:<step>`: the step's positions' markers on the quest map are named from it. */
+  markerBase?: string;
+}): React.JSX.Element | null {
+  const at = markerBase ? `${markerBase}:at` : undefined;
   switch (step.kind) {
     case 'say':
       return (
@@ -119,7 +131,7 @@ export function StepFields({ idPrefix, step, onChange }: { idPrefix: string; ste
       return (
         <>
           <EntityField id={`${idPrefix}-npc`} label="NPC" kind="creature" value={step.entry} onChange={(entry) => onChange({ ...step, entry })} />
-          <PositionInput idPrefix={`${idPrefix}-at`} value={step.at} onChange={(at) => onChange({ ...step, at })} />
+          <PositionInput idPrefix={`${idPrefix}-at`} value={step.at} markerId={at} onChange={(next) => onChange({ ...step, at: next })} />
           <NumberField label="Despawn after (seconds; 0 = when its corpse fades)" value={step.despawnAfterS} min={0} onChange={(despawnAfterS) => onChange({ ...step, despawnAfterS })} />
           <CheckField label="Attacks the player" value={step.attackPlayer} onChange={(attackPlayer) => onChange({ ...step, attackPlayer })} />
         </>
@@ -128,7 +140,7 @@ export function StepFields({ idPrefix, step, onChange }: { idPrefix: string; ste
       return (
         <>
           <EntityField id={`${idPrefix}-object`} label="Object" kind="gameobject" value={step.entry} onChange={(entry) => onChange({ ...step, entry })} />
-          <PositionInput idPrefix={`${idPrefix}-at`} value={step.at} onChange={(at) => onChange({ ...step, at })} />
+          <PositionInput idPrefix={`${idPrefix}-at`} value={step.at} markerId={at} onChange={(next) => onChange({ ...step, at: next })} />
           <NumberField label="Despawn after (seconds)" value={step.despawnAfterS} min={0} onChange={(despawnAfterS) => onChange({ ...step, despawnAfterS })} />
         </>
       );
@@ -140,7 +152,7 @@ export function StepFields({ idPrefix, step, onChange }: { idPrefix: string; ste
         </>
       );
     case 'moveTo':
-      return <PositionInput idPrefix={`${idPrefix}-at`} value={step.at} onChange={(at) => onChange({ ...step, at })} />;
+      return <PositionInput idPrefix={`${idPrefix}-at`} value={step.at} markerId={at} onChange={(next) => onChange({ ...step, at: next })} />;
     case 'startEscort':
       return (
         <>
@@ -151,6 +163,7 @@ export function StepFields({ idPrefix, step, onChange }: { idPrefix: string; ste
                 <PositionInput
                   idPrefix={`${idPrefix}-p${i}`}
                   value={point}
+                  markerId={markerBase ? `${markerBase}:point:${i}` : undefined}
                   onChange={(next) => onChange({ ...step, points: step.points.map((p, j) => (j === i ? next : p)) })}
                 />
                 <button type="button" className="entry-card__btn entry-card__btn--danger" onClick={() => onChange({ ...step, points: step.points.filter((_, j) => j !== i) })}>
@@ -205,11 +218,14 @@ export function StepFields({ idPrefix, step, onChange }: { idPrefix: string; ste
 /** The "Then…" list: steps in order, each with its wait and move/remove buttons. */
 export function StepEditor({
   idPrefix,
+  sceneId,
   owner,
   steps,
   onChange,
 }: {
   idPrefix: string;
+  /** The scene's id, for its points' markers on the quest map. */
+  sceneId?: string;
   owner: OwnerKind;
   steps: readonly SceneStep[];
   onChange(next: SceneStep[]): void;
@@ -249,7 +265,7 @@ export function StepEditor({
               min={0}
               onChange={(seconds) => set(i, { ...step, waitMs: Math.max(0, Math.round(seconds * 1000)) })}
             />
-            <StepFields idPrefix={`${idPrefix}-s${i}`} step={step} onChange={(next) => set(i, next)} />
+            <StepFields idPrefix={`${idPrefix}-s${i}`} step={step} markerBase={sceneId ? `scene:${sceneId}:${i}` : undefined} onChange={(next) => set(i, next)} />
           </li>
         ))}
       </ol>

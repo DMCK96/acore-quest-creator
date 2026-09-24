@@ -6,12 +6,15 @@ import { PositionInput } from '../scripts/PositionInput';
 /** Where a new NPC or object stands: one row per spawn, each with its own position and timing. */
 export function SpawnList({
   idPrefix,
+  ownerKey,
   spawns,
   wanders,
   onChange,
   allocate,
 }: {
   idPrefix: string;
+  /** Whose spawns these are, for their markers on the quest map. */
+  ownerKey?: { kind: 'npc' | 'obj'; entry: number };
   spawns: readonly Spawn[];
   /** NPCs can wander around their spawn point; objects cannot. */
   wanders: boolean;
@@ -47,6 +50,7 @@ export function SpawnList({
               idPrefix={`${idPrefix}-spawn${i}`}
               value={{ x: spawn.x, y: spawn.y, z: spawn.z, o: spawn.o }}
               map={spawn.map}
+              markerId={ownerKey ? `spawn:${ownerKey.kind}:${ownerKey.entry}:${spawn.guid}` : undefined}
               onChange={(p, map) => set(i, { ...spawn, ...p, map: map ?? spawn.map })}
             />
             <NumberField label="Respawn (seconds)" value={spawn.respawnSecs} min={0} onChange={(respawnSecs) => set(i, { ...spawn, respawnSecs: Math.round(respawnSecs) })} />

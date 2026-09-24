@@ -72,6 +72,7 @@ function newStep(kind: FightStepKind, phase: number): FightStep {
 /** One reaction: when it happens, the phases it counts in, and its steps in order. */
 export function ReactionEditor({
   idPrefix,
+  markerBase,
   index,
   reaction,
   fight,
@@ -79,6 +80,8 @@ export function ReactionEditor({
   onRemove,
 }: {
   idPrefix: string;
+  /** `fight:<entry>:<reaction id>`: its summon points' markers on the quest map are named from it. */
+  markerBase?: string;
   index: number;
   reaction: Reaction;
   fight: Fight;
@@ -161,7 +164,7 @@ export function ReactionEditor({
                 min={0}
                 onChange={(seconds) => setStep(i, { ...step, waitMs: Math.max(0, Math.round(seconds * 1000)) })}
               />
-              <FightStepFields idPrefix={`${idPrefix}-s${i}`} step={step} fight={fight} reaction={reaction} onChange={(next) => setStep(i, next)} />
+              <FightStepFields idPrefix={`${idPrefix}-s${i}`} markerId={markerBase ? `${markerBase}:${i}` : undefined} step={step} fight={fight} reaction={reaction} onChange={(next) => setStep(i, next)} />
             </li>
           ))}
         </ol>
@@ -189,12 +192,14 @@ export function ReactionEditor({
 
 function FightStepFields({
   idPrefix,
+  markerId,
   step,
   fight,
   reaction,
   onChange,
 }: {
   idPrefix: string;
+  markerId?: string;
   step: FightStep;
   fight: Fight;
   reaction: Reaction;
@@ -242,7 +247,7 @@ function FightStepFields({
             options={[['aroundMe', 'Around itself'], ['point', 'At a point']] as const}
             onChange={(where) => onChange({ ...step, at: where === 'aroundMe' ? 'aroundMe' : { x: 0, y: 0, z: 0, o: 0 } })}
           />
-          {step.at !== 'aroundMe' && <PositionInput idPrefix={`${idPrefix}-at`} value={step.at} onChange={(at) => onChange({ ...step, at })} />}
+          {step.at !== 'aroundMe' && <PositionInput idPrefix={`${idPrefix}-at`} value={step.at} markerId={markerId} onChange={(at) => onChange({ ...step, at })} />}
           {step.at === 'aroundMe' ? (
             <CheckField label="Appear at its target and attack right away" value={step.attack} onChange={(attack) => onChange({ ...step, attack })} />
           ) : (
