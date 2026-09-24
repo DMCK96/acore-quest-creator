@@ -153,9 +153,10 @@ export function compilePatrols(input: {
           previous = at;
           return { ...action, waitMs };
         });
+        // A fight pauses the list rather than running it mid-fight.
         const emitted = emitTrigger({
           alloc, entryorguid: entry, source: SOURCE.creature, eventType: EVENT.movementInform, eventParams: [WAYPOINT_MOTION, n, pathId],
-          actions, header: `${tag}: spawn ${spawn.guid} point ${n}`, tag, shape: 'list', listOverride: true,
+          actions, header: `${tag}: spawn ${spawn.guid} point ${n}`, tag, shape: 'list', listOverride: true, listOutOfCombat: true,
         });
         if (emitted === null) {
           out.warnings.push(`No free timed action list id for NPC ${entry}.`);
@@ -163,6 +164,17 @@ export function compilePatrols(input: {
         }
         for (const row of emitted.rows) insert('smart_scripts', row);
       });
+    }
+
+    // A fight's own list can replace a point's before its stand-up step, so the NPC stops posing as
+    // the fight starts, on a row of its own that leaves every list alone.
+    const poses = npc.spawns.some((s) => routed(s.patrol) && s.patrol.points.some((p) => exported(p.actions).some((a) => a.kind === 'pose')));
+    if (poses) {
+      const stop = emitTrigger({
+        alloc, entryorguid: entry, source: SOURCE.creature, eventType: EVENT.aggro, eventParams: [],
+        actions: [self(ACTION.setEmoteState, [0], 'stops posing')], header: `${tag}: stops posing when a fight starts`, tag, shape: 'link',
+      });
+      for (const row of stop?.rows ?? []) insert('smart_scripts', row);
     }
   }
   return out;

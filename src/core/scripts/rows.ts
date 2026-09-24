@@ -30,6 +30,8 @@ const LIST_SLOTS = 100;
  * any other value and it skips the row.
  */
 const LIST_TIMER_ALWAYS = 2;
+/** Timer type 0: the list only counts down while the owner is not fighting, so a fight pauses it. */
+const LIST_TIMER_OUT_OF_COMBAT = 0;
 /** `creature_text.comment` is a varchar(255); a longer comment fails the whole patch in strict mode. */
 const TEXT_COMMENT_MAX = 255;
 
@@ -154,6 +156,8 @@ export function emitTrigger(input: {
   eventFlags?: number;
   /** Whether this list replaces one the owner is still running, rather than being dropped. */
   listOverride?: boolean;
+  /** True for a list that waits out a fight instead of running through it. */
+  listOutOfCombat?: boolean;
   /** False when the event cannot carry this action on its own row, so even one action goes in a list. */
   allowSingle?: boolean;
 }): { rows: Row[]; triggerId: number } | null {
@@ -177,7 +181,7 @@ export function emitTrigger(input: {
   if (list === null) return null;
   const triggerId = alloc.takeId(entryorguid, source);
   const call: SmartAction = {
-    type: ACTION.callTimedList, params: [list, LIST_TIMER_ALWAYS, input.listOverride ? 1 : 0], target: TARGET.self, targetParams: [], waitMs: 0, describe: '',
+    type: ACTION.callTimedList, params: [list, input.listOutOfCombat ? LIST_TIMER_OUT_OF_COMBAT : LIST_TIMER_ALWAYS, input.listOverride ? 1 : 0], target: TARGET.self, targetParams: [], waitMs: 0, describe: '',
   };
   const rows = [smartRow({ entryorguid, source, id: triggerId, link: 0, eventType, eventParams, action: call, comment: header, ...flags })];
   actions.forEach((action, i) =>

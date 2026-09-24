@@ -55,6 +55,24 @@ describe('point actions', () => {
     expect(list.map((r) => [r.action_type, r.action_param1, r.event_param1])).toEqual([['17', '68', '0'], ['17', '0', '7500']]);
   });
 
+  it("pauses a point's actions while the NPC fights, rather than running them mid-fight", () => {
+    let p = addAction(route(), 0, act({ id: 'a1', kind: 'emote', emote: 3, afterSecs: 2 }));
+    p = addAction(p, 0, act({ id: 'a2', kind: 'cast', spell: 1234 }));
+    const call = compile(npcWith(p)).inserts.smart_scripts![0]!;
+    expect(call).toMatchObject({ action_type: '80', action_param2: '0', action_param3: '1' });
+  });
+
+  it('stops posing when a fight starts, once per NPC, since a fight can cut the stand-up short', () => {
+    let p = updatePoint(addAction(route(), 0, act({ id: 'a1', kind: 'pose', emoteState: 68 })), 0, { waitSecs: 8 });
+    p = updatePoint(addAction(p, 1, act({ id: 'a2', kind: 'pose', emoteState: 69 })), 1, { waitSecs: 8 });
+    const rows = compile(npcWith(p)).inserts.smart_scripts!;
+    const aggro = rows.filter((r) => r.event_type === '4');
+    expect(aggro).toEqual([expect.objectContaining({ source_type: '0', action_type: '17', action_param1: '0', target_type: '1' })]);
+    expect(aggro[0]!.comment.startsWith(`AQC q${Q} patrol${E}`)).toBe(true);
+    expect(new Set(rows.filter((r) => r.source_type === '0').map((r) => r.id)).size).toBe(rows.filter((r) => r.source_type === '0').length);
+    expect(compile(npcWith(addAction(route(), 0, act({ kind: 'emote', emote: 3 })))).inserts.smart_scripts!.some((r) => r.event_type === '4')).toBe(false);
+  });
+
   it('undoes a pose at once when the point has no wait', () => {
     const p = updatePoint(addAction(route(), 0, act({ kind: 'pose', emoteState: 68 })), 0, { waitSecs: 0 });
     const list = compile(npcWith(p)).inserts.smart_scripts!.filter((r) => r.source_type === '9');
