@@ -1,3 +1,4 @@
+import { useEffect, useRef, useState } from 'react';
 import type { SearchKind } from '@core/db/world-db';
 import { EntityPicker } from '../controls/EntityPicker';
 
@@ -12,14 +13,31 @@ export function NumberField({ label, value, onChange, min }: { label: string; va
   );
 }
 
+/**
+ * Text keeps its own copy while the author types, and follows the stored value when it changes from
+ * elsewhere, so a keystroke is never lost to a save that has not come back yet.
+ */
 export function TextField({ label, value, onChange, long }: { label: string; value: string; onChange(s: string): void; long?: boolean }): React.JSX.Element {
+  const [local, setLocal] = useState(value);
+  const lastKnown = useRef(value);
+  useEffect(() => {
+    if (value !== lastKnown.current) {
+      lastKnown.current = value;
+      setLocal(value);
+    }
+  }, [value]);
+  const change = (next: string): void => {
+    setLocal(next);
+    lastKnown.current = next;
+    onChange(next);
+  };
   return (
     <label className="scene-field">
       <span>{label}</span>
       {long ? (
-        <textarea rows={3} value={value} onChange={(e) => onChange(e.target.value)} />
+        <textarea rows={3} value={local} onChange={(e) => change(e.target.value)} />
       ) : (
-        <input type="text" value={value} onChange={(e) => onChange(e.target.value)} />
+        <input type="text" value={local} onChange={(e) => change(e.target.value)} />
       )}
     </label>
   );
