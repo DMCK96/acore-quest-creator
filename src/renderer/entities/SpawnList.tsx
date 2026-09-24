@@ -4,6 +4,9 @@ import { NumberField } from '../scripts/fields';
 import { PositionInput } from '../scripts/PositionInput';
 import { useMapOpener } from '../map/MapOpener';
 
+/** A spawn with a route to walk: it patrols instead of wandering. */
+const patrols = (spawn: Spawn): boolean => (spawn.patrol?.points.length ?? 0) >= 2;
+
 /** Where a new NPC or object stands: one row per spawn, each with its own position and timing. */
 export function SpawnList({
   idPrefix,
@@ -31,7 +34,8 @@ export function SpawnList({
     if (guid === null) return;
     // A new spawn starts where the last one stands: most spawns of one NPC are close together.
     const last = spawns.at(-1);
-    onChange([...spawns, last ? { ...last, guid } : newSpawn(guid)]);
+    // A copied patrol would share its pinned path with the spawn it came from.
+    onChange([...spawns, last ? { ...last, guid, patrol: null } : newSpawn(guid)]);
   }
 
   return (
@@ -56,7 +60,18 @@ export function SpawnList({
               onChange={(p, map) => set(i, { ...spawn, ...p, map: map ?? spawn.map })}
             />
             <NumberField label="Respawn (seconds)" value={spawn.respawnSecs} min={0} onChange={(respawnSecs) => set(i, { ...spawn, respawnSecs: Math.round(respawnSecs) })} />
-            {wanders && <NumberField label="Wander (yards)" value={spawn.wander} min={0} onChange={(wander) => set(i, { ...spawn, wander })} />}
+            {wanders && !patrols(spawn) && (
+              <NumberField label="Wander (yards)" value={spawn.wander} min={0} onChange={(wander) => set(i, { ...spawn, wander })} />
+            )}
+            {ownerKey?.kind === 'npc' && openMap && (
+              <div className="scene-row">
+                {patrols(spawn) && <p className="scene-hint">Walks a patrol of {spawn.patrol!.points.length} points.</p>}
+                <button type="button" className="entry-card__btn"
+                  onClick={() => openMap({ kind: 'patrol', entry: ownerKey.entry, guid: spawn.guid })}>
+                  {patrols(spawn) ? 'Edit patrol' : 'Draw patrol'}
+                </button>
+              </div>
+            )}
           </li>
         ))}
       </ol>
