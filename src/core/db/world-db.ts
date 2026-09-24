@@ -1,5 +1,6 @@
 import type { ColumnInfo, RawRow, RefKind, Where } from './types';
 import type { DbSearchKind, EntityHit } from './entity-search';
+import type { MapBox, SpawnDot, SpawnKind } from './spawns';
 
 export type { DbSearchKind, EntityHit, SearchKind } from './entity-search';
 
@@ -65,6 +66,10 @@ export interface WorldDb {
    * number (a path, a menu, an area trigger) starts. Throws `UnknownTableError` / `UnknownColumnError`.
    */
   selectMax?(table: string, column: string): Promise<number | null>;
+  /** Spawns of one kind on a map inside a box, ordered by guid, at most `limit`. */
+  spawnsInBox?(kind: SpawnKind, map: number, box: MapBox, limit: number): Promise<SpawnDot[]>;
+  /** Spawns of these entries on any map, ordered by guid, at most `limit`. */
+  spawnsOfEntries?(kind: SpawnKind, entries: readonly number[], limit: number): Promise<SpawnDot[]>;
   searchQuests(text: string, limit: number): Promise<QuestSummary[]>;
   /**
    * Entities whose ID is `text` (a whole number) or whose name contains it, case-insensitively:

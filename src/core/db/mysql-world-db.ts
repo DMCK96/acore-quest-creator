@@ -4,6 +4,7 @@ import { ident } from '../sql/render';
 import type { ColumnInfo, RawRow, RawValue, RefKind, Where } from './types';
 import { isNumericColumn } from './types';
 import { ENTITY_TABLES, ID_TEXT, toHit, type DbSearchKind, type EntityHit } from './entity-search';
+import { SPAWN_TABLES, toSpawnDot, type MapBox, type SpawnDot, type SpawnKind } from './spawns';
 import { LOOKUP_KINDS, UnknownColumnError, UnknownTableError, type QuestSummary, type WorldDb } from './world-db';
 
 export interface MysqlWorldDbOptions {
@@ -311,6 +312,30 @@ class MysqlWorldDb implements WorldDb {
     });
     const max = rows[0]?.m;
     return max === null || max === undefined ? null : Number(max);
+  }
+
+  async spawnsInBox(kind: SpawnKind, map: number, box: MapBox, limit: number): Promise<SpawnDot[]> {
+    return this.spawns(kind, 's.map = ? AND s.position_x BETWEEN ? AND ? AND s.position_y BETWEEN ? AND ?', [map, box.minX, box.maxX, box.minY, box.maxY], limit);
+  }
+
+  async spawnsOfEntries(kind: SpawnKind, entries: readonly number[], limit: number): Promise<SpawnDot[]> {
+    if (entries.length === 0) return [];
+    const spec = SPAWN_TABLES[kind];
+    return this.spawns(kind, `s.${ident(spec.entry)} IN (${entries.map(() => '?').join(', ')})`, [...entries], limit);
+  }
+
+  /** Spawns with their template's name, filtered by `where` (its `?` bound to `params`). */
+  private async spawns(kind: SpawnKind, where: string, params: number[], limit: number): Promise<SpawnDot[]> {
+    const spec = SPAWN_TABLES[kind];
+    const sql =
+      `SELECT s.guid, s.${ident(spec.entry)} AS entry, s.map, s.position_x, s.position_y, s.position_z, t.name ` +
+      `FROM ${ident(spec.table)} s LEFT JOIN ${ident(spec.template)} t ON t.entry = s.${ident(spec.entry)} ` +
+      `WHERE ${where} ORDER BY s.guid LIMIT ?`;
+    const rows = await this.run(`reading ${spec.table}`, async () => {
+      const [result] = await this.pool.query(sql, [...params, Math.max(0, Math.trunc(limit))]);
+      return result as Record<string, string | number | null>[];
+    });
+    return rows.map((r) => toSpawnDot(kind, Object.fromEntries(Object.entries(r).map(([k, v]) => [k, v === null ? null : String(v)]))));
   }
 
   async searchQuests(text: string, limit: number): Promise<QuestSummary[]> {

@@ -46,9 +46,14 @@ import type {
   ProjectState,
   QuestLinks,
   Result,
+  MapInfo,
+  QuestMapRef,
+  SpawnDot,
   SpellFactsResult,
   StartBadge,
 } from '../shared/ipc';
+import { floorsAt, navTileFileName, parseNavTile, type NavTile } from '../core/game/navmesh';
+import { AREA_TABLE_FILE, MAP_FILE, parseMapNames, parseZoneLabels, WORLD_MAP_AREA_FILE } from '../core/game/maps-dbc';
 import type { Store } from './store/store';
 import { compileScenes, mergeCompiled, type CompiledScripts } from '../core/scripts/compile';
 import { compileFights } from '../core/combat/compile';
@@ -121,7 +126,23 @@ interface Session {
   spells?: Promise<SpellIndex | { reason: string }>;
   /** The spell list once loaded, for checks that must not wait for or start a load. */
   spellsReady?: SpellIndex;
+  /** Parsed navmesh tiles by file name (null when missing or unreadable), most recent last. */
+  navTiles?: Map<string, NavTile | null>;
+  /** The quest map's maps and zone names, read once per connection. */
+  mapInfo?: Promise<MapInfo[]>;
 }
+
+/** The continents the quest map shows even when the server's own map list cannot be read. */
+const CONTINENTS: readonly MapInfo[] = [
+  { id: 0, name: 'Eastern Kingdoms', zones: [] },
+  { id: 1, name: 'Kalimdor', zones: [] },
+  { id: 530, name: 'Outland', zones: [] },
+  { id: 571, name: 'Northrend', zones: [] },
+];
+const NAV_CACHE_SIZE = 64;
+/** Spawn dots sent to the map per kind; more means the author should zoom in. */
+const SPAWN_DOT_CAP = 2000;
+const REF_SPAWNS_PER_ENTRY = 20;
 
 const REGISTRY_TABLES = registry.tables.map((t) => t.table);
 const KEY_COLUMNS = keyColumnsByTable(registry);
@@ -519,6 +540,100 @@ export function createApi(deps: ApiDeps): Api {
     // Only a spell list already loaded: a validation run must not wait for, or start, the big read.
     const spells = live.spellsReady;
     return entityIssues({ entities, dbNames, questItems: questItemsOf(aggregate), objectives: objectivesOf(aggregate), knownSpell: spells ? (id) => spells.get(id) !== undefined : null });
+  }
+
+  /**
+   * The terrain grid under a point, cached across sessions by folder and file: null when no map
+   * file covers it, a reason when the file is damaged.
+   */
+  async function terrainAt(dir: string, map: number, x: number, y: number): Promise<{ file: TerrainFile | null } | { reason: string }> {
+    const name = gridFileName(map, x, y);
+    const key = `${dir}|${name}`;
+    const cached = terrainCache.get(key);
+    if (cached !== undefined) return { file: cached };
+    const files = deps.serverDataFiles ?? NO_SERVER_DATA_FILES;
+    let file: TerrainFile | null = null;
+    // The folder may be the server's DataDir or its dbc folder; maps/ sits in the one, beside the other.
+    for (const folder of [join(dir, 'maps'), join(dir, '..', 'maps')]) {
+      const bytes = await files.read(folder, name);
+      if (!bytes) continue;
+      try {
+        file = parseMapFile(bytes);
+      } catch (error) {
+        if (error instanceof TerrainFormatError) return { reason: `${name} could not be read: ${error.message}` };
+        throw error;
+      }
+      break;
+    }
+    terrainCache.set(key, file);
+    if (terrainCache.size > TERRAIN_CACHE_SIZE) terrainCache.delete(terrainCache.keys().next().value!);
+    return { file };
+  }
+
+  /** The navmesh tile under a point, cached per session; null when it is missing or unreadable. */
+  async function navTileAt(live: Session, dir: string, map: number, x: number, y: number): Promise<NavTile | null> {
+    const name = navTileFileName(map, x, y);
+    const cache = (live.navTiles ??= new Map());
+    if (cache.has(name)) {
+      const tile = cache.get(name)!;
+      cache.delete(name);
+      cache.set(name, tile);
+      return tile;
+    }
+    const files = deps.serverDataFiles ?? NO_SERVER_DATA_FILES;
+    let tile: NavTile | null = null;
+    for (const folder of [join(dir, 'mmaps'), join(dir, '..', 'mmaps')]) {
+      const bytes = await files.read(folder, name);
+      if (!bytes) continue;
+      try {
+        tile = parseNavTile(bytes);
+      } catch (error) {
+        console.warn(`Navmesh: ${name} could not be read: ${error instanceof Error ? error.message : String(error)}`);
+      }
+      break;
+    }
+    cache.set(name, tile);
+    if (cache.size > NAV_CACHE_SIZE) cache.delete(cache.keys().next().value!);
+    return tile;
+  }
+
+  /**
+   * The maps the quest map shows: the open-world maps of `Map.dbc` that have terrain in the data
+   * folder, continents first, with zone names. Without the folder (or its files), the continents.
+   */
+  function mapsOf(live: Session): Promise<MapInfo[]> {
+    live.mapInfo ??= (async () => {
+      const dir = live.serverData?.status.dir;
+      if (!dir) return [...CONTINENTS];
+      const files = deps.serverDataFiles ?? NO_SERVER_DATA_FILES;
+      try {
+        const [maps, areas, zones] = await Promise.all([
+          readServerDataFile(dir, MAP_FILE, files),
+          readServerDataFile(dir, AREA_TABLE_FILE, files),
+          readServerDataFile(dir, WORLD_MAP_AREA_FILE, files),
+        ]);
+        if (!maps) return [...CONTINENTS];
+        const names = parseMapNames(maps);
+        const labels = areas && zones ? parseZoneLabels(zones, areas) : [];
+        const gridFiles = [...((await files.list?.(join(dir, 'maps'))) ?? []), ...((await files.list?.(join(dir, '..', 'maps'))) ?? [])];
+        const withTerrain = new Set(gridFiles.filter((f) => f.toLowerCase().endsWith('.map')).map((f) => Number(f.slice(0, 3))));
+        const continents = CONTINENTS.map((c) => c.id);
+        const rank = (id: number): number => (continents.includes(id) ? continents.indexOf(id) : continents.length);
+        const ids = [...names.entries()]
+          .filter(([id, m]) => !m.instance && (withTerrain.has(id) || (withTerrain.size === 0 && continents.includes(id))))
+          .map(([id]) => id)
+          .sort((a, b) => rank(a) - rank(b) || a - b);
+        return ids.map((id) => ({
+          id,
+          name: names.get(id)!.name,
+          zones: labels.filter((l) => l.map === id).map(({ name, x, y }) => ({ name, x, y })),
+        }));
+      } catch (error) {
+        console.warn(`Map list: ${error instanceof Error ? error.message : String(error)}`);
+        return [...CONTINENTS];
+      }
+    })();
+    return live.mapInfo;
   }
 
   /**
@@ -1127,31 +1242,75 @@ export function createApi(deps: ApiDeps): Api {
         const dir = live.serverData?.status.dir;
         if (!dir) return { reason: 'Set the server data folder on the connection to read ground heights.' };
         const name = gridFileName(map, x, y);
-        const files = deps.serverDataFiles ?? NO_SERVER_DATA_FILES;
-        // The folder may be the server's DataDir or its dbc folder; maps/ sits in the one, beside the other.
-        const candidates = [join(dir, 'maps'), join(dir, '..', 'maps')];
-        const key = `${dir}|${name}`;
-        let file = terrainCache.get(key);
-        if (file === undefined) {
-          file = null;
-          for (const folder of candidates) {
-            const bytes = await files.read(folder, name);
-            if (!bytes) continue;
-            try {
-              file = parseMapFile(bytes);
-            } catch (error) {
-              if (error instanceof TerrainFormatError) return { reason: `${name} could not be read: ${error.message}` };
-              throw error;
-            }
-            break;
-          }
-          terrainCache.set(key, file);
-          if (terrainCache.size > TERRAIN_CACHE_SIZE) terrainCache.delete(terrainCache.keys().next().value!);
-        }
+        const loaded = await terrainAt(dir, map, x, y);
+        if ('reason' in loaded) return loaded;
+        const file = loaded.file;
         if (!file) return { reason: `No map file covers this point (${name}).` };
         const z = terrainHeight(file, x, y);
         if (z === null) return { reason: 'There is no ground here (a hole in the terrain).' };
         return { z: Math.round(z * 100) / 100 };
+      }),
+
+    mapList: () => run(async () => mapsOf(connected())),
+
+    mapFloors: (map, x, y) =>
+      run(async () => {
+        const live = connected();
+        const dir = live.serverData?.status.dir;
+        if (!dir) return { reason: 'Set the server data folder on the connection to read floors.' };
+        const tile = await navTileAt(live, dir, map, x, y);
+        const terrain = await terrainAt(dir, map, x, y);
+        const height = 'file' in terrain && terrain.file ? terrainHeight(terrain.file, x, y) : null;
+        const ground = height === null || !Number.isFinite(height) ? null : Math.round(height * 100) / 100;
+        return { floors: tile ? floorsAt(tile, x, y) : [], ground };
+      }),
+
+    mapSpawns: (map, area) =>
+      run(async () => {
+        const db = connected().db;
+        if (!db.spawnsInBox) return { dots: [], capped: false };
+        const [creatures, objects] = await Promise.all([
+          db.spawnsInBox('creature', map, area, SPAWN_DOT_CAP + 1),
+          db.spawnsInBox('gameobject', map, area, SPAWN_DOT_CAP + 1),
+        ]);
+        const capped = creatures.length > SPAWN_DOT_CAP || objects.length > SPAWN_DOT_CAP;
+        return { dots: [...creatures.slice(0, SPAWN_DOT_CAP), ...objects.slice(0, SPAWN_DOT_CAP)], capped };
+      }),
+
+    entitySpawns: (kind, entry) =>
+      run(async () => (await connected().db.spawnsOfEntries?.(kind, [entry], REF_SPAWNS_PER_ENTRY)) ?? []),
+
+    questMapRefs: (questId) =>
+      run(async () => {
+        const db = connected().db;
+        if (!db.spawnsOfEntries) return [];
+        const aggregate = questOf(questId).aggregate;
+        const { npcs, objects } = readEntities(aggregate.values);
+        // The quest's own NPCs and objects are markers already.
+        const own = new Set([...npcs.map((n) => `creature:${n.entry}`), ...objects.map((o) => `gameobject:${o.entry}`)]);
+        const wanted: { role: QuestMapRef['role']; kind: 'creature' | 'gameobject'; entry: number }[] = [];
+        for (const [role, relation] of [['giver', 'starter'], ['ender', 'ender']] as const) {
+          for (const owner of relationOwners(aggregate, relation)) {
+            if (owner.kind === 'creature' || owner.kind === 'gameobject') wanted.push({ role, kind: owner.kind, entry: owner.entry });
+          }
+        }
+        for (const entry of objectivesOf(aggregate)) {
+          if (entry > 0) wanted.push({ role: 'objective', kind: 'creature', entry });
+          else if (entry < 0) wanted.push({ role: 'objective', kind: 'gameobject', entry: -entry });
+        }
+        const refs: QuestMapRef[] = [];
+        const seen = new Set<string>();
+        for (const want of wanted) {
+          if (own.has(`${want.kind}:${want.entry}`)) continue;
+          const dots: SpawnDot[] = await db.spawnsOfEntries(want.kind, [want.entry], REF_SPAWNS_PER_ENTRY);
+          for (const dot of dots) {
+            const key = `${dot.kind}:${dot.guid}`;
+            if (seen.has(key)) continue;
+            seen.add(key);
+            refs.push({ ...dot, role: want.role });
+          }
+        }
+        return refs;
       }),
 
     testCommands: (questId) =>

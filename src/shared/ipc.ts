@@ -2,6 +2,7 @@ import { z } from 'zod';
 import type { RefKind } from '@core/db/types';
 import type { EntityHit, QuestSummary, SearchKind } from '@core/db/world-db';
 import type { SpellFacts } from '@core/game/spells';
+import type { MapBox, SpawnDot } from '@core/db/spawns';
 import type { PatchWarning } from '@core/export/build-patch';
 import type { UnmodelledColumn } from '@core/import/unmodelled';
 import type { UnavailableComponent } from '@core/links/availability';
@@ -47,6 +48,23 @@ export type ErrorCode =
   | 'SAVE_FAILED'
   | 'INVALID_NAME'
   | 'UNKNOWN';
+
+export type { MapBox, SpawnDot, SpawnKind } from '@core/db/spawns';
+
+/** A map the quest map can show: its name and its zones' names, placed at their middles. */
+export interface MapInfo {
+  id: number;
+  name: string;
+  zones: { name: string; x: number; y: number }[];
+}
+
+/** The floors at a point (navmesh) and the terrain ground there, or why there are none. */
+export type MapFloors = { floors: number[]; ground: number | null } | { reason: string };
+
+/** An existing spawn of one of the quest's givers, enders or objectives, shown read-only on its map. */
+export interface QuestMapRef extends SpawnDot {
+  role: 'giver' | 'ender' | 'objective';
+}
 
 /** What `spellFacts` answers: the spells found, or why spell names are not available. */
 export interface SpellFactsResult {
@@ -311,6 +329,16 @@ export interface Api {
   groundHeight(map: number, x: number, y: number): Promise<Result<{ z: number } | { reason: string }>>;
   /** Facts of the spells the server's spell list has, or why there is no list (no server data folder, unreadable file). */
   spellFacts(ids: number[]): Promise<Result<SpellFactsResult>>;
+  /** The maps the quest map shows, with zone names. */
+  mapList(): Promise<Result<MapInfo[]>>;
+  /** The walkable floors and the ground at a point, from the server data folder. */
+  mapFloors(map: number, x: number, y: number): Promise<Result<MapFloors>>;
+  /** Existing NPC and object spawns in an area of a map; `capped` when there were more than the page is sent. */
+  mapSpawns(map: number, box: MapBox): Promise<Result<{ dots: SpawnDot[]; capped: boolean }>>;
+  /** Where an NPC or object stands in the world, for jumping to it on the map. */
+  entitySpawns(kind: 'creature' | 'gameobject', entry: number): Promise<Result<SpawnDot[]>>;
+  /** The existing spawns of the quest's givers, enders and objectives. */
+  questMapRefs(questId: number): Promise<Result<QuestMapRef[]>>;
   /** The GM commands to try the quest in game after applying it: reloads, restarts, travel and quest commands. */
   testCommands(questId: number): Promise<Result<TestCommands>>;
   /** The scripts around the quest that the Scripts module lists read-only. */
@@ -444,6 +472,11 @@ const REQUEST_SCHEMAS: Record<keyof Api, z.ZodType<unknown[]>> = {
   testCommands: z.tuple([z.number()]),
   groundHeight: z.tuple([z.number().int(), z.number(), z.number()]),
   spellFacts: z.tuple([z.array(z.number().int()).max(MAX_LOOKUP_IDS)]),
+  mapList: z.tuple([]),
+  mapFloors: z.tuple([z.number().int(), z.number().finite(), z.number().finite()]),
+  mapSpawns: z.tuple([z.number().int(), z.object({ minX: z.number().finite(), maxX: z.number().finite(), minY: z.number().finite(), maxY: z.number().finite() })]),
+  entitySpawns: z.tuple([z.enum(['creature', 'gameobject']), z.number().int()]),
+  questMapRefs: z.tuple([z.number()]),
   allocateIds: z.tuple([z.enum(['creature', 'gameobject', 'creatureSpawn', 'gameobjectSpawn', 'page']), z.number().int().min(1).max(50)]),
   entityTemplate: z.tuple([z.enum(['creature', 'gameobject']), z.number().int()]),
   exportQuest: z.tuple([z.number()]),
