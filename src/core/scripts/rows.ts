@@ -19,6 +19,8 @@ export interface SmartAction {
   at?: Position;
   waitMs: number;
   describe: string;
+  /** Percent chance the action runs when its turn comes; 100 when unset. */
+  chance?: number;
 }
 
 const LIST_SLOTS = 100;
@@ -60,7 +62,7 @@ export function smartRow(input: {
   const p = (list: readonly number[], i: number): string => text(list[i] ?? 0);
   return {
     entryorguid: text(input.entryorguid), source_type: text(input.source), id: text(input.id), link: text(input.link),
-    event_type: text(input.eventType), event_phase_mask: text(input.phaseMask ?? 0), event_chance: '100', event_flags: text(input.eventFlags ?? 0),
+    event_type: text(input.eventType), event_phase_mask: text(input.phaseMask ?? 0), event_chance: text(action.chance ?? 100), event_flags: text(input.eventFlags ?? 0),
     event_param1: p(eventParams, 0), event_param2: p(eventParams, 1), event_param3: p(eventParams, 2),
     event_param4: p(eventParams, 3), event_param5: p(eventParams, 4), event_param6: p(eventParams, 5),
     action_type: text(action.type),

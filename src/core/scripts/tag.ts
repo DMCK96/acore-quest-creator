@@ -42,6 +42,18 @@ export function fightEntryOf(comment: string | null | undefined, questId: number
   return match ? Number(match[1]) : null;
 }
 
+/** The tag on every row of what a new NPC does at its patrol points (slice L). */
+export function patrolTag(questId: number, entry: number): string {
+  return `${questTagPrefix(questId)}patrol${entry}`;
+}
+
+/** The NPC a patrol row belongs to, or null for a row that is not one of this quest's patrol rows. */
+export function patrolEntryOf(comment: string | null | undefined, questId: number): number | null {
+  if (!isOurs(comment, questId)) return null;
+  const match = /^patrol(\d+)(?::|$)/.exec(comment!.slice(questTagPrefix(questId).length));
+  return match ? Number(match[1]) : null;
+}
+
 export function triggerComment(questId: number, scene: QuestScene): string {
   return `${sceneTag(questId, scene.id)}: ${describeScene(scene)}${DATA_MARKER}${JSON.stringify(scene)}`;
 }

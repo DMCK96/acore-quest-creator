@@ -91,3 +91,11 @@ describe('scene compiler and fight rows', () => {
     expect(out.inserts.smart_scripts![0]).toMatchObject({ entryorguid: '299', id: '1' });
   });
 });
+
+describe('slice L', () => {
+  it('writes an action\'s chance on its row', () => {
+    const action = { type: 1, params: [0], target: 1, targetParams: [], waitMs: 0, describe: '', chance: 40 };
+    expect(smartRow({ entryorguid: 1, source: 0, id: 0, link: 0, eventType: 34, eventParams: [2, 1, 10], action, comment: 'c' }).event_chance).toBe('40');
+    expect(smartRow({ entryorguid: 1, source: 0, id: 0, link: 0, eventType: 34, eventParams: [], action: { ...action, chance: undefined }, comment: 'c' }).event_chance).toBe('100');
+  });
+});

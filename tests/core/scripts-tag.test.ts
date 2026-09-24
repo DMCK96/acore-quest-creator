@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { QuestScene } from '../../src/core/scripts/model';
-import { isOurs, questTagPrefix, sceneFromComment, sceneIdOf, sceneTag, triggerComment } from '../../src/core/scripts/tag';
+import { fightEntryOf, isOurs, patrolEntryOf, patrolTag, questTagPrefix, sceneFromComment, sceneIdOf, sceneTag, triggerComment } from '../../src/core/scripts/tag';
 import { describeScene, describeStep, describeTrigger } from '../../src/core/scripts/describe';
 
 const scene: QuestScene = {
@@ -45,5 +45,16 @@ describe('scene descriptions', () => {
     expect(describeStep({ kind: 'credit', objective: 2, group: true })).toBe('give the group credit for objective 2');
     expect(describeStep({ kind: 'despawn', entry: 0, range: 0 })).toBe('despawn itself');
     expect(describeScene(scene)).toBe('When the quest is accepted: say "Good luck, $N."');
+  });
+});
+
+describe('slice L', () => {
+  it('tags patrol rows by NPC and never mistakes them for scenes or fights', () => {
+    expect(patrolTag(60001, 12000001)).toBe('AQC q60001 patrol12000001');
+    expect(patrolEntryOf('AQC q60001 patrol12000001: spawn 900 point 2', 60001)).toBe(12000001);
+    expect(patrolEntryOf('AQC q60001 fight12000001', 60001)).toBeNull();
+    expect(patrolEntryOf('AQC q6000 patrol1', 60001)).toBeNull();
+    expect(sceneIdOf('AQC q60001 patrol12000001', 60001)).toBeNull();
+    expect(fightEntryOf('AQC q60001 patrol12000001', 60001)).toBeNull();
   });
 });
