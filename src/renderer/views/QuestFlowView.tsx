@@ -2,12 +2,13 @@ import { useEffect, useState } from 'react';
 import { MODULES, moduleById, offeredModules, presentModules } from '@core/modules/catalog';
 import { routeIssues, worstSeverity } from '@core/modules/issues';
 import type { AppStore } from '../state/app-store';
-import { useNameBook } from '../state/names';
+import { useApi, useNameBook } from '../state/names';
 import { FidelityBanner } from '../components/FidelityBanner';
 import { IssuesList } from '../components/IssuesList';
 import { ModuleBox } from '../modules/ModuleBox';
 import { ModulePanel, PanelFrame } from '../modules/ModulePanel';
 import { ChangesView } from './ChangesView';
+import { TestInGameView } from './TestInGameView';
 import { QuestHeader, type ReadinessChip } from './QuestHeader';
 import './QuestFlowView.css';
 
@@ -17,6 +18,7 @@ import './QuestFlowView.css';
  */
 export function QuestFlowView({ store }: { store: AppStore }): React.JSX.Element | null {
   const open = store((s) => s.open);
+  const api = useApi();
   const issues = store((s) => s.issues);
   const links = store((s) => s.links);
   const openPanel = store((s) => s.openPanel);
@@ -105,7 +107,12 @@ export function QuestFlowView({ store }: { store: AppStore }): React.JSX.Element
           <ChangesView store={store} />
         </PanelFrame>
       )}
-      {openPanel !== null && openPanel !== 'changes' && (
+      {openPanel === 'test' && api && (
+        <PanelFrame title="Test in game" onClose={() => setOpenPanel(null)}>
+          <TestInGameView api={api} questId={open.questId} />
+        </PanelFrame>
+      )}
+      {openPanel !== null && openPanel !== 'changes' && openPanel !== 'test' && (
         <ModulePanel
           key={openPanel}
           id={openPanel}

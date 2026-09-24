@@ -58,6 +58,9 @@ export function QuestHeader({ store, chips }: { store: AppStore; chips: readonly
           <button type="button" className="btn" onClick={() => setOpenPanel('changes')}>
             Changes
           </button>
+          <button type="button" className="btn" onClick={() => setOpenPanel('test')}>
+            Test in game
+          </button>
           <ExportBar store={store} />
         </div>
       </div>
