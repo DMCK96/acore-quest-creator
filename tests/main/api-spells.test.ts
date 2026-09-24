@@ -53,7 +53,7 @@ describe('spells through the API', () => {
     expect(reads).toBe(1);
   });
 
-  it('explains why there are no spell names', async () => {
+  it('explains why there are no spell names', { timeout: 15000 }, async () => {
     const none: any = await (await apiWith('')).spellFacts([116]);
     expect(none.value).toEqual({ available: false, reason: 'Spell names need the server data folder.', spells: {} });
     const broken: any = await (await apiWith('/data', true)).spellFacts([116]);

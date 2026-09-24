@@ -1,0 +1,171 @@
+.quest-map {
+  position: fixed;
+  inset: 0;
+  z-index: 50;
+  display: flex;
+  flex-direction: column;
+  background: var(--bg, #15110d);
+}
+
+.quest-map__header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 12px;
+  padding: 10px 16px;
+  border-bottom: 1px solid var(--border-soft);
+}
+
+.quest-map__title {
+  margin: 0 12px 0 0;
+  font-size: 18px;
+}
+
+.quest-map__search {
+  min-width: 260px;
+}
+
+.quest-map__body {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+}
+
+.quest-map__canvas {
+  flex: 1;
+  min-width: 0;
+  background: #1c2230;
+}
+
+.quest-map__side {
+  width: 300px;
+  flex: none;
+  overflow-y: auto;
+  padding: 12px 14px;
+  border-left: 1px solid var(--border-soft);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.quest-map__selected h3 {
+  margin: 0;
+  font-size: 14px;
+}
+
+.quest-map__floors {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.quest-map__list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.quest-map__item {
+  width: 100%;
+  text-align: left;
+  background: none;
+  border: 1px solid transparent;
+  border-radius: 4px;
+  padding: 4px 6px;
+  color: inherit;
+  cursor: pointer;
+}
+
+.quest-map__item:hover,
+.quest-map__item--selected {
+  border-color: var(--border-soft);
+  background: rgba(255, 255, 255, 0.04);
+}
+
+/* Markers: a pin and a label beside it. Colours follow what the marker is. */
+.quest-map__marker {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  white-space: nowrap;
+  width: auto !important;
+  height: auto !important;
+}
+
+.quest-map__pin {
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  border: 2px solid #1a1208;
+  background: #e0a33a;
+  box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.5);
+}
+
+.quest-map__label {
+  font-size: 11px;
+  color: #fff;
+  text-shadow: 0 0 3px #000, 0 0 2px #000;
+}
+
+.quest-map__marker--scenePoint .quest-map__pin,
+.quest-map__marker--escortPoint .quest-map__pin {
+  background: #4b8fe0;
+}
+
+.quest-map__marker--fightPoint .quest-map__pin {
+  background: #d9534f;
+}
+
+.quest-map__marker--area .quest-map__pin {
+  background: #58b368;
+}
+
+.quest-map__marker--ref .quest-map__pin {
+  background: #9a9a9a;
+}
+
+.quest-map__marker--poi .quest-map__pin {
+  background: #9b6bd6;
+}
+
+.quest-map__marker--selected .quest-map__pin {
+  box-shadow: 0 0 0 3px #fff;
+}
+
+.quest-map__area {
+  stroke: #58b368;
+  fill: #58b368;
+  fill-opacity: 0.15;
+}
+
+.quest-map__poi {
+  stroke: #9b6bd6;
+  fill: #9b6bd6;
+  fill-opacity: 0.12;
+}
+
+.quest-map__dot {
+  stroke: #1a1208;
+  stroke-width: 1;
+  fill-opacity: 0.85;
+}
+
+.quest-map__dot--creature {
+  fill: #f2d16b;
+}
+
+.quest-map__dot--gameobject {
+  fill: #8fd3e8;
+}
+
+.quest-map__zone {
+  font-size: 12px;
+  font-weight: 600;
+  color: #fff;
+  text-shadow: 0 0 4px #000, 0 0 2px #000;
+  white-space: nowrap;
+  pointer-events: none;
+}

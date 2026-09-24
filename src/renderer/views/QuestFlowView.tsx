@@ -9,6 +9,8 @@ import { ModuleBox } from '../modules/ModuleBox';
 import { ModulePanel, PanelFrame } from '../modules/ModulePanel';
 import { ChangesView } from './ChangesView';
 import { TestInGameView } from './TestInGameView';
+import { QuestMapView } from '../map/QuestMapView';
+import { MapOpenerProvider } from '../map/MapOpener';
 import { QuestHeader, type ReadinessChip } from './QuestHeader';
 import './QuestFlowView.css';
 
@@ -30,6 +32,8 @@ export function QuestFlowView({ store }: { store: AppStore }): React.JSX.Element
   const backToChain = store((s) => s.backToChain);
   const names = useNameBook();
   const [menuOpen, setMenuOpen] = useState(false);
+  /** The marker the map opens on, when a "Show on map" link opened it. */
+  const [mapFocus, setMapFocus] = useState<string | null>(null);
 
   // Escape closes the open panel first, and leaves the editor only when nothing is open.
   useEffect(() => {
@@ -66,7 +70,13 @@ export function QuestFlowView({ store }: { store: AppStore }): React.JSX.Element
       selected={openPanel === id} onOpen={() => setOpenPanel(id)} />
   );
 
+  const openMap = (markerId: string | null): void => {
+    setMapFocus(markerId);
+    setOpenPanel('map');
+  };
+
   return (
+    <MapOpenerProvider open={openMap}>
     <div className="quest-flow">
       <div className="quest-flow__main">
         <button type="button" className="btn quest-flow__back" onClick={() => void backToChain()}>
@@ -112,7 +122,19 @@ export function QuestFlowView({ store }: { store: AppStore }): React.JSX.Element
           <TestInGameView api={api} questId={open.questId} />
         </PanelFrame>
       )}
-      {openPanel !== null && openPanel !== 'changes' && openPanel !== 'test' && (
+      {openPanel === 'map' && (
+        <QuestMapView
+          key={mapFocus ?? 'quest'}
+          open={open}
+          onChange={setValue}
+          focusId={mapFocus}
+          onClose={() => {
+            setMapFocus(null);
+            setOpenPanel(null);
+          }}
+        />
+      )}
+      {openPanel !== null && openPanel !== 'changes' && openPanel !== 'test' && openPanel !== 'map' && (
         <ModulePanel
           key={openPanel}
           id={openPanel}
@@ -126,5 +148,6 @@ export function QuestFlowView({ store }: { store: AppStore }): React.JSX.Element
         />
       )}
     </div>
+    </MapOpenerProvider>
   );
 }

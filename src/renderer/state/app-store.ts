@@ -31,7 +31,7 @@ export interface AppState {
   results: QuestSummary[];
   open: OpenResult | null;
   /** The module (or the changes view) open in the flow view's side panel. */
-  openPanel: ModuleId | 'changes' | 'test' | null;
+  openPanel: ModuleId | 'changes' | 'test' | 'map' | null;
   /** Optional modules added this session that have nothing in them yet, so they still show. */
   addedModules: ModuleId[];
   issues: Issue[];
@@ -71,7 +71,7 @@ export interface AppState {
   editQuest(): void;
   /** Leaves the editor for the chain canvas, sending any pending edit first; the quest stays previewed. */
   backToChain(): Promise<void>;
-  setOpenPanel(p: ModuleId | 'changes' | 'test' | null): void;
+  setOpenPanel(p: ModuleId | 'changes' | 'test' | 'map' | null): void;
   addModule(id: ModuleId): void;
   /** Clears every writable field the module owns and hides it again. */
   removeModule(id: ModuleId): void;
