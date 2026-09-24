@@ -1,8 +1,15 @@
+import { fightIssues } from '../combat/validate';
 import type { Issue } from '../validate/validate';
 import { ENTITIES_FIELD, type CustomNpc, type CustomObject, type QuestEntities } from './model';
 
 /** What is wrong with the quest's new NPCs and objects, each issue routed to their module. */
-export function entityIssues(input: { entities: QuestEntities; dbNames: ReadonlyMap<string, string>; questItems?: readonly number[] }): Issue[] {
+export function entityIssues(input: {
+  entities: QuestEntities;
+  dbNames: ReadonlyMap<string, string>;
+  questItems?: readonly number[];
+  /** Whether a spell is in the server's spell list; null when the list is not loaded. */
+  knownSpell?: ((id: number) => boolean) | null;
+}): Issue[] {
   const questItems = new Set(input.questItems ?? []);
   const issues: Issue[] = [];
   const check = (kind: 'creature' | 'gameobject', entity: CustomNpc | CustomObject): void => {
@@ -31,6 +38,7 @@ export function entityIssues(input: { entities: QuestEntities; dbNames: Readonly
       if (row.chance < 0 || row.chance > 100) add('error', 'LOOT_CHANCE', 'a drop chance must be between 0 and 100%.');
       if (row.min < 1 || row.min > row.max) add('error', 'LOOT_COUNT', 'the least dropped must be at least 1 and no more than the most.');
     }
+    if ('fight' in entity && entity.fight) issues.push(...fightIssues(entity.fight, label, input.knownSpell ?? null));
     const existing = input.dbNames.get(`${kind}:${entity.entry}`);
     if (existing !== undefined && existing !== entity.name) {
       add('warning', 'ENTITY_TAKEN', `entry ${entity.entry} already holds "${existing}" in the database, which this would replace.`);
