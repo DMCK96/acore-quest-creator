@@ -42,8 +42,7 @@ function OwnerEditor({ idPrefix, owner, onChange }: { idPrefix: string; owner: S
               <PositionInput
                 idPrefix={`${idPrefix}-area`}
                 value={{ x: owner.area.x, y: owner.area.y, z: owner.area.z, o: 0 }}
-                onChange={(p) => onChange({ ...owner, area: { ...owner.area!, x: p.x, y: p.y, z: p.z } })}
-                onMap={(map) => onChange({ ...owner, area: { ...owner.area!, map } })}
+                onChange={(p, map) => onChange({ ...owner, area: { ...owner.area!, x: p.x, y: p.y, z: p.z, map: map ?? owner.area!.map } })}
               />
               <NumberField label="Radius (yards)" value={owner.area.radius} min={1} onChange={(radius) => onChange({ ...owner, area: { ...owner.area!, radius } })} />
             </>

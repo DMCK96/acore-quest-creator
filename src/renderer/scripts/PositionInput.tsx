@@ -7,18 +7,18 @@ const AXIS_LABEL = { x: 'X', y: 'Y', z: 'Z', o: 'Facing' } as const;
 
 /**
  * A position as four numbers, with a box to paste the server's `.gps` output into so an author can
- * copy where they stand in game. `onMap` receives the map from pasted text when the caller needs it.
+ * copy where they stand in game. A paste reports the position and the map it names in one change, so
+ * a caller never applies one on top of a stale copy of the other.
  */
 export function PositionInput({
   idPrefix,
   value,
   onChange,
-  onMap,
 }: {
   idPrefix: string;
   value: Position;
-  onChange(next: Position): void;
-  onMap?(map: number): void;
+  /** `map` is set only when pasted `.gps` text named one. */
+  onChange(next: Position, map?: number): void;
 }): React.JSX.Element {
   const [paste, setPaste] = useState('');
 
@@ -26,8 +26,7 @@ export function PositionInput({
     setPaste(text);
     const parsed = parseGps(text);
     if (!parsed) return;
-    onChange({ x: parsed.x, y: parsed.y, z: parsed.z, o: parsed.o });
-    onMap?.(parsed.map);
+    onChange({ x: parsed.x, y: parsed.y, z: parsed.z, o: parsed.o }, parsed.map);
   }
 
   return (

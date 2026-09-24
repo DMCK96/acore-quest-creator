@@ -325,6 +325,13 @@ export function createAppStore(api: Api, opts: { saveDelayMs?: number } = {}): A
 
     setOpenPanel(p) {
       set({ openPanel: p });
+      // What one panel just changed can matter to the next (a new NPC picked as a giver), and the
+      // main process only answers from what it has been sent: send a pending edit now.
+      if (saveTimer) {
+        clearTimeout(saveTimer);
+        saveTimer = null;
+        void get().flushSave();
+      }
     },
 
     addModule(id) {

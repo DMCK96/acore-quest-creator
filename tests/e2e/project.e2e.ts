@@ -21,7 +21,7 @@ function connectionEnv(): Record<string, string> {
   return {
     ACQC_ENV_FILE: 'none',
     ACQC_WORLD_DB_HOST: u.hostname, ACQC_WORLD_DB_PORT: u.port || '3306', ACQC_WORLD_DB_USER: decodeURIComponent(u.username),
-    ACQC_WORLD_DB_PASS: decodeURIComponent(u.password), ACQC_WORLD_DB_DATABASE: u.pathname.slice(1),
+    ACQC_WORLD_DB_PASSWORD: decodeURIComponent(u.password), ACQC_WORLD_DB_DATABASE: u.pathname.slice(1),
   };
 }
 

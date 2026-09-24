@@ -34,6 +34,15 @@ describe('NPCs & objects module', () => {
     await waitFor(() => expect(last(onChange).npcs[0]).toMatchObject({ entry: 12000002, name: 'Wolf', displayId: 903, minLevel: 5 }));
   });
 
+  it('keeps the pasted position and map together', async () => {
+    const onChange = vi.fn();
+    const entities: QuestEntities = { npcs: [{ ...newNpc(12000001), name: 'Hela', spawns: [{ guid: 1, map: 0, x: 0, y: 0, z: 0, o: 0, respawnSecs: 300, wander: 0 }] }], objects: [] };
+    await mountBody('entities', { [ENTITIES_FIELD]: writeEntities(entities) }, { onChange });
+    await userEvent.click(screen.getByLabelText('Paste .gps output'));
+    await userEvent.paste('Map: 1 X: 5.5 Y: 6.5 Z: 7.5 Orientation: 2');
+    expect(last(onChange).npcs[0]!.spawns[0]).toMatchObject({ map: 1, x: 5.5, y: 6.5, z: 7.5, o: 2 });
+  });
+
   it('edits an NPC and adds a spawn from pasted .gps output', async () => {
     const api = makeMockApi({ allocateIds: vi.fn(async () => okv([6000001])) });
     const onChange = vi.fn();

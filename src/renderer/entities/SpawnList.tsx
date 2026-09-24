@@ -46,8 +46,7 @@ export function SpawnList({
             <PositionInput
               idPrefix={`${idPrefix}-spawn${i}`}
               value={{ x: spawn.x, y: spawn.y, z: spawn.z, o: spawn.o }}
-              onChange={(p) => set(i, { ...spawn, ...p })}
-              onMap={(map) => set(i, { ...spawn, map })}
+              onChange={(p, map) => set(i, { ...spawn, ...p, map: map ?? spawn.map })}
             />
             <NumberField label="Respawn (seconds)" value={spawn.respawnSecs} min={0} onChange={(respawnSecs) => set(i, { ...spawn, respawnSecs: Math.round(respawnSecs) })} />
             {wanders && <NumberField label="Wander (yards)" value={spawn.wander} min={0} onChange={(wander) => set(i, { ...spawn, wander })} />}
