@@ -4,7 +4,7 @@ import { ident } from '../sql/render';
 import type { ColumnInfo, RawRow, RawValue, RefKind, Where } from './types';
 import { isNumericColumn } from './types';
 import { ENTITY_TABLES, ID_TEXT, toHit, type DbSearchKind, type EntityHit } from './entity-search';
-import { SPAWN_TABLES, toSpawnDot, type MapBox, type SpawnDot, type SpawnKind } from './spawns';
+import { SPAWN_TABLES, spawnEntryColumn, toSpawnDot, type MapBox, type SpawnDot, type SpawnKind } from './spawns';
 import { LOOKUP_KINDS, UnknownColumnError, UnknownTableError, type QuestSummary, type WorldDb } from './world-db';
 
 export interface MysqlWorldDbOptions {
@@ -320,17 +320,17 @@ class MysqlWorldDb implements WorldDb {
 
   async spawnsOfEntries(kind: SpawnKind, entries: readonly number[], limit: number): Promise<SpawnDot[]> {
     if (entries.length === 0) return [];
-    const spec = SPAWN_TABLES[kind];
-    return this.spawns(kind, `s.${ident(spec.entry)} IN (${entries.map(() => '?').join(', ')})`, [...entries], limit);
+    return this.spawns(kind, `s.{entry} IN (${entries.map(() => '?').join(', ')})`, [...entries], limit);
   }
 
-  /** Spawns with their template's name, filtered by `where` (its `?` bound to `params`). */
+  /** Spawns with their template's name, filtered by `where` (its `?` bound to `params`, `{entry}` the entry column). */
   private async spawns(kind: SpawnKind, where: string, params: number[], limit: number): Promise<SpawnDot[]> {
     const spec = SPAWN_TABLES[kind];
+    const entry = `${ident(spawnEntryColumn(kind, (await this.knownColumns(spec.table)).map((c) => c.name)))}`;
     const sql =
-      `SELECT s.guid, s.${ident(spec.entry)} AS entry, s.map, s.position_x, s.position_y, s.position_z, t.name ` +
-      `FROM ${ident(spec.table)} s LEFT JOIN ${ident(spec.template)} t ON t.entry = s.${ident(spec.entry)} ` +
-      `WHERE ${where} ORDER BY s.guid LIMIT ?`;
+      `SELECT s.guid, s.${entry} AS entry, s.map, s.position_x, s.position_y, s.position_z, t.name ` +
+      `FROM ${ident(spec.table)} s LEFT JOIN ${ident(spec.template)} t ON t.entry = s.${entry} ` +
+      `WHERE ${where.replace('{entry}', entry)} ORDER BY s.guid LIMIT ?`;
     const rows = await this.run(`reading ${spec.table}`, async () => {
       const [result] = await this.pool.query(sql, [...params, Math.max(0, Math.trunc(limit))]);
       return result as Record<string, string | number | null>[];

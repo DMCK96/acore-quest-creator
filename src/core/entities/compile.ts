@@ -93,7 +93,8 @@ export function compileEntities(input: {
     for (const spawn of npc.spawns) {
       creatureGuids.add(spawn.guid);
       insert('creature', {
-        guid: text(spawn.guid), id1: text(npc.entry), map: text(spawn.map), spawnMask: '1', phaseMask: '1',
+        // Stock AzerothCore calls the spawn's NPC `id1`, older forks `id`; the export keeps the one the database has.
+        guid: text(spawn.guid), id: text(npc.entry), id1: text(npc.entry), map: text(spawn.map), spawnMask: '1', phaseMask: '1',
         position_x: text(spawn.x), position_y: text(spawn.y), position_z: text(spawn.z), orientation: text(spawn.o),
         spawntimesecs: text(spawn.respawnSecs), wander_distance: text(spawn.wander), MovementType: text(spawn.wander > 0 ? RANDOM_MOVEMENT : 0),
         Comment: `${questTagPrefix(questId)}npc${npc.entry}`,

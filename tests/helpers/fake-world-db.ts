@@ -8,7 +8,7 @@ import {
   type WorldDb,
 } from '@core/db/world-db';
 import { loadFork } from './ddl';
-import { SPAWN_TABLES, toSpawnDot, type MapBox, type SpawnDot, type SpawnKind } from '@core/db/spawns';
+import { SPAWN_TABLES, spawnEntryColumn, toSpawnDot, type MapBox, type SpawnDot, type SpawnKind } from '@core/db/spawns';
 import { ENTITY_TABLES, ID_TEXT, rankHits, toHit, type DbSearchKind, type EntityHit } from '@core/db/entity-search';
 
 type MutableRow = Record<string, RawValue>;
@@ -169,9 +169,10 @@ export class FakeWorldDb implements WorldDb {
 
   private async spawnDots(kind: SpawnKind): Promise<SpawnDot[]> {
     const spec = SPAWN_TABLES[kind];
+    const column = spawnEntryColumn(kind, this.table(spec.table).columns.map((c) => c.name));
     const names = new Map((await this.selectRows(spec.template, {})).map((r) => [r.entry, r.name ?? '']));
     return (await this.selectRows(spec.table, {}))
-      .map((r) => toSpawnDot(kind, { ...r, entry: r[spec.entry] ?? null, name: names.get(r[spec.entry] ?? null) ?? '' }))
+      .map((r) => toSpawnDot(kind, { ...r, entry: r[column] ?? null, name: names.get(r[column] ?? null) ?? '' }))
       .sort((a, b) => a.guid - b.guid);
   }
 
