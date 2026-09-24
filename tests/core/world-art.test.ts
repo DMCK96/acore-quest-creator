@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { RgbaImage } from '../../src/core/client/blp';
-import { composeArtTile, loadZoneArt, parseAreaParents, parseWorldMapAreas, zoneFinder, type ZoneArt } from '../../src/core/map/world-art';
+import { composeArtTile, loadZoneArt, parseAreaParents, parseWorldMapAreas, parseWorldMapOverlays, zoneFinder, type ZoneArt } from '../../src/core/map/world-art';
 import { buildDbcWithStrings, f32 } from '../helpers/dbc';
 import { solidBlp } from '../helpers/blp-file';
 
@@ -73,6 +73,33 @@ describe('zone art', () => {
     const img = (await loadZoneArt(read, 'A'))!;
     expect([img.width, img.height]).toEqual([32, 24]);
     expect(Array.from(img.rgba.subarray((2 * 32 + 12) * 4, (2 * 32 + 12) * 4 + 4))).toEqual([9, 9, 9, 255]);
+  });
+  it('reads the explored-area overlays of each zone', () => {
+    const bytes = buildDbcWithStrings([
+      [122, 30, 87, 0, 0, 0, 0, 0, 'GOLDSHIRE', 240, 220, 250, 270, 400, 370, 465, 455],
+      [121, 30, 1519, 0, 0, 0, 0, 0, 'STORMWIND', 485, 405, 0, 0, 120, 115, 355, 370],
+      [900, 31, 5, 0, 0, 0, 0, 0, '', 10, 10, 0, 0, 0, 0, 0, 0],
+    ], 17);
+    const overlays = parseWorldMapOverlays(bytes);
+    expect(overlays.get(30)).toEqual([
+      { name: 'GOLDSHIRE', width: 240, height: 220, offsetX: 250, offsetY: 270 },
+      { name: 'STORMWIND', width: 485, height: 405, offsetX: 0, offsetY: 0 },
+    ]);
+    expect(overlays.has(31)).toBe(false);
+  });
+  it('paints the overlays over the base art, in 256 px pieces cropped to their size', async () => {
+    const read = async (path: string): Promise<Uint8Array | null> => {
+      if (/\\A\\A\d+\.blp$/.test(path)) return solidBlp(256, 256, [0, 0, 0, 255]);
+      if (path.endsWith('\\A\\SPOT1.blp')) return solidBlp(256, 128, [200, 0, 0, 255]);
+      if (path.endsWith('\\A\\SPOT2.blp')) return solidBlp(64, 128, [0, 200, 0, 255]);
+      return null;
+    };
+    const img = (await loadZoneArt(read, 'A', [{ name: 'SPOT', width: 300, height: 100, offsetX: 10, offsetY: 20 }]))!;
+    const at = (x: number, y: number): number[] => Array.from(img.rgba.subarray((y * 1024 + x) * 4, (y * 1024 + x) * 4 + 4));
+    expect(at(15, 25)).toEqual([200, 0, 0, 255]);
+    expect(at(270, 30)).toEqual([0, 200, 0, 255]);
+    expect(at(320, 30)).toEqual([0, 0, 0, 255]);
+    expect(at(15, 125)).toEqual([0, 0, 0, 255]);
   });
   it('is null when a zone has no art', async () => {
     expect(await loadZoneArt(async () => null, 'Nowhere')).toBeNull();

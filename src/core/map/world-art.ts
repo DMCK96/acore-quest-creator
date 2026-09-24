@@ -77,8 +77,85 @@ export function zoneFinder(
   };
 }
 
-/** A zone's twelve art tiles as one image, four across and three down; null when it has none. */
-export async function loadZoneArt(read: (path: string) => Promise<Uint8Array | null>, name: string): Promise<RgbaImage | null> {
+/** One explored-area picture of a zone, placed in the zone art's 1002 × 668 frame. */
+export interface ZoneOverlay {
+  name: string;
+  width: number;
+  height: number;
+  offsetX: number;
+  offsetY: number;
+}
+
+/**
+ * `WorldMapOverlayEntry`: 1 the zone's WorldMapArea id, 8 texture name, 9–10 size, 11–12 offset.
+ * A zone's base art is the unexplored map; these fill in its towns and landmarks.
+ */
+export function parseWorldMapOverlays(bytes: Uint8Array): Map<number, ZoneOverlay[]> {
+  const out = new Map<number, ZoneOverlay[]>();
+  for (const r of parseDbc(bytes, 'WorldMapOverlay.dbc').records) {
+    const name = dbcString(bytes, r[8]!);
+    if (!name) continue;
+    const list = out.get(r[1]!) ?? [];
+    list.push({ name, width: r[9]!, height: r[10]!, offsetX: r[11]!, offsetY: r[12]! });
+    out.set(r[1]!, list);
+  }
+  return out;
+}
+
+const OVERLAY_PIECE = 256;
+
+/** Draws one overlay, as the client does: 256 px pieces, row by row, each cropped to what is left of the overlay. */
+async function paintOverlay(read: (path: string) => Promise<Uint8Array | null>, folder: string, overlay: ZoneOverlay, image: RgbaImage, scale: number): Promise<void> {
+  const across = Math.ceil(overlay.width / OVERLAY_PIECE);
+  const down = Math.ceil(overlay.height / OVERLAY_PIECE);
+  const pieces = await Promise.all(
+    Array.from({ length: across * down }, async (_, i): Promise<RgbaImage | null> => {
+      const bytes = await read(`Interface\\WorldMap\\${folder}\\${overlay.name}${i + 1}.blp`);
+      if (!bytes) return null;
+      try {
+        return decodeBlp(bytes);
+      } catch {
+        return null;
+      }
+    }),
+  );
+  pieces.forEach((piece, i) => {
+    if (!piece) return;
+    const col = i % across;
+    const row = Math.floor(i / across);
+    const w = Math.min(OVERLAY_PIECE, overlay.width - col * OVERLAY_PIECE);
+    const h = Math.min(OVERLAY_PIECE, overlay.height - row * OVERLAY_PIECE);
+    // The piece's file may be larger than what shows (textures are powers of two); HD art is scaled.
+    const left = (overlay.offsetX + col * OVERLAY_PIECE) * scale;
+    const top = (overlay.offsetY + row * OVERLAY_PIECE) * scale;
+    // The client's file for a w-wide piece is the next power of two from 16; a bigger file is an HD copy.
+    const fileSize = (n: number): number => Math.max(16, 2 ** Math.ceil(Math.log2(Math.max(1, n))));
+    const fx = Math.max(1, piece.width / fileSize(w));
+    const fy = Math.max(1, piece.height / fileSize(h));
+    for (let y = 0; y < Math.round(h * scale); y++) {
+      const dy = Math.round(top) + y;
+      if (dy < 0 || dy >= image.height) continue;
+      const sy = Math.min(piece.height - 1, Math.floor(((y + 0.5) / scale) * fy));
+      for (let x = 0; x < Math.round(w * scale); x++) {
+        const dx = Math.round(left) + x;
+        if (dx < 0 || dx >= image.width) continue;
+        const sx = Math.min(piece.width - 1, Math.floor(((x + 0.5) / scale) * fx));
+        const s = (sy * piece.width + sx) * 4;
+        const d = (dy * image.width + dx) * 4;
+        const a = piece.rgba[s + 3]! / 255;
+        if (a === 0) continue;
+        for (let k = 0; k < 3; k++) image.rgba[d + k] = Math.round(piece.rgba[s + k]! * a + image.rgba[d + k]! * (1 - a));
+        image.rgba[d + 3] = Math.max(image.rgba[d + 3]!, piece.rgba[s + 3]!);
+      }
+    }
+  });
+}
+
+/**
+ * A zone's twelve art tiles as one image, four across and three down, with its explored-area
+ * overlays painted on (the map as a player who has seen everything); null when it has no art.
+ */
+export async function loadZoneArt(read: (path: string) => Promise<Uint8Array | null>, name: string, overlays: ZoneOverlay[] = []): Promise<RgbaImage | null> {
   const tiles = await Promise.all(
     Array.from({ length: 12 }, async (_, i): Promise<RgbaImage | null> => {
       const bytes = await read(`Interface\\WorldMap\\${name}\\${name}${i + 1}.blp`);
@@ -103,6 +180,7 @@ export async function loadZoneArt(read: (path: string) => Promise<Uint8Array | n
     const y0 = Math.floor(i / 4) * th;
     for (let row = 0; row < th; row++) image.rgba.set(t.rgba.subarray(row * tw * 4, (row + 1) * tw * 4), ((y0 + row) * width + x0) * 4);
   });
+  for (const overlay of overlays) await paintOverlay(read, name, overlay, image, tw / OVERLAY_PIECE);
   return image;
 }
 
