@@ -122,6 +122,11 @@ export function compileEntities(input: {
     insert('creature_template_model', {
       CreatureID: text(npc.entry), Idx: '0', CreatureDisplayID: text(npc.displayId), DisplayScale: text(npc.scale), Probability: '1',
     });
+    const { mainHand, offHand, ranged } = npc.equipment;
+    const armed = mainHand > 0 || offHand > 0 || ranged > 0;
+    if (armed) {
+      insert('creature_equip_template', { CreatureID: text(npc.entry), ID: '1', ItemID1: text(mainHand), ItemID2: text(offHand), ItemID3: text(ranged) });
+    }
     for (const spawn of npc.spawns) {
       creatureGuids.add(spawn.guid);
       const patrol = walking(spawn.patrol) ? spawn.patrol : null;
@@ -132,6 +137,8 @@ export function compileEntities(input: {
         spawntimesecs: text(spawn.respawnSecs),
         wander_distance: text(patrol ? 0 : spawn.wander),
         MovementType: text(patrol ? WAYPOINT_MOVEMENT : spawn.wander > 0 ? RANDOM_MOVEMENT : 0),
+        // A spawn holds no weapons unless it names the equipment row: 0 means none.
+        equipment_id: armed ? '1' : '0',
         Comment: `${questTagPrefix(questId)}npc${npc.entry}`,
       });
       if (patrol) {
@@ -188,6 +195,7 @@ export function compileEntities(input: {
   };
   add('creature_template', sorted(entities.npcs.map((n) => n.entry)).map((e) => ({ entry: text(e) })));
   add('creature_template_model', sorted(entities.npcs.map((n) => n.entry)).map((e) => ({ CreatureID: text(e), Idx: '0' })));
+  add('creature_equip_template', sorted(entities.npcs.map((n) => n.entry)).map((e) => ({ CreatureID: text(e), ID: '1' })));
   add('creature', sorted(creatureGuids).map((g) => ({ guid: text(g) })));
   add('gameobject_template', sorted(entities.objects.map((o) => o.entry)).map((e) => ({ entry: text(e) })));
   add('gameobject', sorted(objectGuids).map((g) => ({ guid: text(g) })));

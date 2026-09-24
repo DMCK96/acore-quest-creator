@@ -20,6 +20,7 @@ const DELETE_ORDER = [
   'creature',
   'gameobject',
   'creature_template_model',
+  'creature_equip_template',
   'creature_template',
   'gameobject_template',
   'page_text',
@@ -29,6 +30,7 @@ const DELETE_ORDER = [
 const INSERT_ORDER = [
   'creature_template',
   'creature_template_model',
+  'creature_equip_template',
   'page_text',
   'gameobject_template',
   'creature',

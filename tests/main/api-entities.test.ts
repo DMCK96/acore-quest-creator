@@ -71,4 +71,12 @@ describe('new NPCs through the API', () => {
     expect(out.value.sql).toMatch(/INSERT INTO `creature` .*'AQC q\d+ npc11000240'/);
     expect(out.value.sql.indexOf('INSERT INTO `creature_template`')).toBeLessThan(out.value.sql.indexOf('INSERT INTO `creature_queststarter`'));
   });
+  it('copies an NPC\'s weapons with its look', async () => {
+    const { api, db } = await setup();
+    db.insert('creature_equip_template', { CreatureID: '11000230', ID: '1', ItemID1: '1899', ItemID2: '0', ItemID3: '2552' });
+    const copied: any = await api.entityTemplate('creature', 11000230);
+    expect(copied.value.equipment).toEqual({ mainHand: 1899, offHand: 0, ranged: 2552 });
+    const plain: any = await api.entityTemplate('gameobject', 1);
+    expect(plain.value?.equipment).toBeUndefined();
+  });
 });

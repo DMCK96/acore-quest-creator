@@ -21,6 +21,8 @@ const LOOKUP_TABLES = [
   'creature_template_model', 'creature', 'gameobject', 'page_text',
   // Patrol routes of new NPCs (slice L).
   'creature_addon', 'waypoint_data',
+  // Weapons of new NPCs (slice M).
+  'creature_equip_template',
 ] as const;
 
 /** An empty in-memory world DB whose tables carry the fork's real DDL. */

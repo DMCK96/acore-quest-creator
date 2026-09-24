@@ -105,6 +105,8 @@ const npcSchema = z.object({
   loot: z.array(lootSchema).default([]),
   // Added with fights (slice I); null keeps NPCs saved before then as they were.
   fight: fightSchema.nullable().default(null),
+  // Added with the NPC editor (slice M): the weapons it holds, as items; none keeps older NPCs unarmed.
+  equipment: z.object({ mainHand: int, offHand: int, ranged: int }).default({ mainHand: 0, offHand: 0, ranged: 0 }),
 });
 
 const pageSchema = z.object({ id: int, text: z.string() });
@@ -180,6 +182,7 @@ export function newNpc(entry: number): CustomNpc {
     spawns: [],
     loot: [],
     fight: null,
+    equipment: { mainHand: 0, offHand: 0, ranged: 0 },
   };
 }
 
