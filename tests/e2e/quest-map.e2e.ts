@@ -42,10 +42,12 @@ test('a new NPC spawn is shown on the quest map and moved by dragging', async ()
   await page.getByRole('menuitem', { name: /^NPCs & objects/ }).click();
   const panel = page.getByRole('dialog', { name: 'NPCs & objects' });
   await panel.getByRole('button', { name: 'Add NPC' }).click();
-  const card = panel.getByRole('group', { name: /^NPC: / });
+  const card = page.getByRole('dialog', { name: 'New NPC' });
   await card.getByLabel('Name', { exact: true }).fill('Map Hela');
+  await card.getByRole('tab', { name: 'Placement' }).click();
   await card.getByRole('button', { name: 'Add spawn' }).click();
   await card.getByLabel('Paste .gps output').fill('Map: 0 X: -8902.59 Y: -162.606 Z: 82.02 Orientation: 1');
+  await card.getByRole('button', { name: 'Done' }).click();
   await page.keyboard.press('Escape');
 
   const tileLoaded = page.waitForResponse((r) => r.url().startsWith('acqc-map://tile/0/6/') && r.status() === 200);

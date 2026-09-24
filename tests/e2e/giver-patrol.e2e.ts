@@ -41,8 +41,14 @@ test('a new quest giver is made, placed and given a patrol with a line to say, a
   const giver = page.getByRole('dialog', { name: 'Quest Giver' });
   await giver.getByRole('button', { name: 'Add quest giver' }).click();
   await giver.getByRole('button', { name: 'New NPC for starts at 1' }).click();
+  const npc = page.getByRole('dialog', { name: 'New NPC' });
+  await npc.getByLabel('Name', { exact: true }).fill('Patrol Hela');
+  await npc.getByRole('tab', { name: 'Look & gear' }).click();
+  await npc.getByRole('button', { name: 'Other ways' }).click();
+  await npc.getByLabel('Display ID').fill('1234');
+  await npc.getByRole('button', { name: 'Done' }).click();
   const card = giver.getByRole('region', { name: 'Starts at 1' });
-  await card.getByLabel('NPC name').fill('Patrol Hela');
+  await expect(card.getByText('Patrol Hela')).toBeVisible();
   await card.getByRole('button', { name: 'Place on map' }).click();
 
   const map = page.getByRole('dialog', { name: 'Quest map' });
@@ -81,11 +87,14 @@ test('a new quest giver is made, placed and given a patrol with a line to say, a
   await expect(page.getByRole('dialog', { name: 'Quest Giver' })).toBeVisible();
   await page.keyboard.press('Escape');
 
-  // The giver card names the NPC; its look is set with the rest of it in NPCs & objects.
+  // The same NPC editor opens from NPCs & objects, with the patrol on its Placement tab.
   await page.getByRole('list', { name: 'Modules' }).getByRole('button', { name: /^NPCs & objects/ }).click();
   const entities = page.getByRole('dialog', { name: 'NPCs & objects' });
-  await entities.getByRole('group', { name: /^NPC: Patrol Hela/ }).getByLabel('Model ID').fill('1234');
-  await expect(entities.getByText('Walks a patrol of 3 points.')).toBeVisible();
+  await entities.getByRole('listitem', { name: 'Patrol Hela' }).getByRole('button', { name: 'Edit' }).click();
+  const editor = page.getByRole('dialog', { name: 'NPC: Patrol Hela' });
+  await editor.getByRole('tab', { name: 'Placement' }).click();
+  await expect(editor.getByText('Walks a patrol of 3 points.')).toBeVisible();
+  await editor.getByRole('button', { name: 'Done' }).click();
   await page.keyboard.press('Escape');
 
   await page.getByRole('button', { name: 'Export patch' }).click();

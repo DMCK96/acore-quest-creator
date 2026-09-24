@@ -51,14 +51,18 @@ test('a new NPC is created, placed, made the quest giver and exported with the q
   await page.getByRole('menuitem', { name: /^NPCs & objects/ }).click();
   const panel = page.getByRole('dialog', { name: 'NPCs & objects' });
   await panel.getByRole('button', { name: 'Add NPC' }).click();
-  const card = panel.getByRole('group', { name: /^NPC: / });
-  await expect(card).toHaveCount(1);
+  const card = page.getByRole('dialog', { name: 'New NPC' });
   await card.getByLabel('Name', { exact: true }).fill('Scout Hela');
-  await card.getByLabel('Model ID').fill('1234');
+  await card.getByRole('tab', { name: 'Look & gear' }).click();
+  await card.getByRole('button', { name: 'Other ways' }).click();
+  await card.getByLabel('Display ID').fill('1234');
+  await card.getByRole('tab', { name: 'Placement' }).click();
   await card.getByRole('button', { name: 'Add spawn' }).click();
   await card.getByLabel('Paste .gps output').fill('Map: 0 X: -8913.2 Y: -136.5 Z: 80.5 Orientation: 1');
   await expect(card.getByLabel('X', { exact: true })).toHaveValue('-8913.2');
   await page.screenshot({ path: 'test-results/entities-module.png' });
+  await card.getByRole('button', { name: 'Done' }).click();
+  await expect(panel.getByRole('listitem', { name: 'Scout Hela' })).toBeVisible();
   await page.keyboard.press('Escape');
 
   await page.getByRole('list', { name: 'Modules' }).getByRole('button', { name: /^Quest Giver/ }).click();
