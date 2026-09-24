@@ -1,0 +1,115 @@
+.conn-fields {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.conn-fields__section {
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+.conn-fields__section legend {
+  padding: 0;
+  margin-bottom: 0.5rem;
+  font-size: 0.72rem;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--accent);
+}
+
+.conn-fields__section + .conn-fields__section {
+  padding-top: 1rem;
+  border-top: 1px solid var(--border-soft);
+}
+
+.conn-fields__pair {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.6rem;
+}
+
+.conn-fields__pair--port {
+  grid-template-columns: 1fr 6rem;
+}
+
+.conn-fields__remove {
+  align-self: flex-start;
+}
+
+.conn-fields__section > .btn {
+  align-self: flex-start;
+}
+
+.conn-field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+  min-width: 0;
+  font-size: 0.85em;
+  color: var(--text-muted);
+}
+
+.conn-field input {
+  width: 100%;
+  min-width: 0;
+  box-sizing: border-box;
+  font: inherit;
+  font-size: 1.1em;
+  padding: 0.45em 0.6em;
+  color: var(--text);
+  background: var(--bg-inset);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+}
+
+.conn-field input:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+
+.conn-field input[aria-invalid='true'] {
+  border-color: var(--red);
+}
+
+.conn-field input:disabled {
+  opacity: 0.6;
+}
+
+.conn-field input::placeholder {
+  color: var(--text-faint);
+}
+
+.conn-field__row {
+  display: flex;
+  gap: 0.5rem;
+}
+
+.conn-field__row input {
+  flex: 1;
+}
+
+.conn-field__help {
+  margin: 0;
+  font-size: 0.92em;
+  line-height: 1.4;
+  color: var(--text-faint);
+}
+
+.conn-field__error {
+  margin: 0;
+  color: var(--red);
+}
+
+@media (max-width: 480px) {
+  .conn-fields__pair,
+  .conn-fields__pair--port {
+    grid-template-columns: 1fr;
+  }
+}
