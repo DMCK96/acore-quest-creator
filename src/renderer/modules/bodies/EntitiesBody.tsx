@@ -2,11 +2,16 @@ import { useState } from 'react';
 import { readEntities, type CustomNpc, type CustomObject } from '@core/entities/model';
 import { useEntityEditor, type EditorRequest } from '../../entities/EntityEditorContext';
 import { OBJECT_TYPES } from '../../entities/object/ObjectBasics';
+import { stillNeeds } from '../../entities/still-needs';
 import type { ModuleBodyProps } from '../body-props';
 import '../../scripts/scripts.css';
 import '../../entities/editor.css';
 
 const placed = (spawns: readonly unknown[]): string => (spawns.length > 0 ? 'placed' : 'not placed');
+const needs = (entity: { name: string; displayId: number }): string => {
+  const missing = stillNeeds(entity);
+  return missing ? ` · still needs ${missing}` : '';
+};
 const levels = (npc: CustomNpc): string => (npc.minLevel === npc.maxLevel ? `Level ${npc.minLevel}` : `Level ${npc.minLevel}–${npc.maxLevel}`);
 const typeLabel = (object: CustomObject): string => OBJECT_TYPES.find(([t]) => t === object.type)?.[1] ?? object.type;
 
@@ -48,9 +53,9 @@ export function EntitiesBody({ open }: ModuleBodyProps): React.JSX.Element {
       </div>
       <ul aria-label="NPCs and objects" className="entity-list">
         {entities.npcs.map((npc) =>
-          row(`n${npc.entry}`, npc.name.trim() || `New NPC ${npc.entry}`, `${levels(npc)} · ${placed(npc.spawns)}`, { kind: 'npc', entry: npc.entry }))}
+          row(`n${npc.entry}`, npc.name.trim() || `New NPC ${npc.entry}`, `${levels(npc)} · ${placed(npc.spawns)}${needs(npc)}`, { kind: 'npc', entry: npc.entry }))}
         {entities.objects.map((object) =>
-          row(`o${object.entry}`, object.name.trim() || `New object ${object.entry}`, `${typeLabel(object)} · ${placed(object.spawns)}`, { kind: 'object', entry: object.entry }))}
+          row(`o${object.entry}`, object.name.trim() || `New object ${object.entry}`, `${typeLabel(object)} · ${placed(object.spawns)}${needs(object)}`, { kind: 'object', entry: object.entry }))}
       </ul>
     </div>
   );

@@ -79,4 +79,14 @@ describe('new NPCs through the API', () => {
     const plain: any = await api.entityTemplate('gameobject', 1);
     expect(plain.value?.equipment).toBeUndefined();
   });
+  it('warns when an NPC holds an item that is not a weapon', async () => {
+    const { api, db } = await setup();
+    db.insert('item_template', { entry: '2589', name: 'Linen Cloth', InventoryType: '0' });
+    const opened: any = await api.newQuest();
+    const aggregate = opened.value.aggregate;
+    aggregate.values[ENTITIES_FIELD] = writeEntities({ npcs: [{ ...newNpc(11000240), name: 'Holder', displayId: 1, equipment: { mainHand: 2589, offHand: 0, ranged: 0 } }], objects: [] });
+    await api.updateQuest(aggregate);
+    const issues: any = await api.validate(aggregate.questId);
+    expect(issues.value.map((i: any) => i.message)).toContain('NPC "Holder": the main hand item 2589 is not held in a hand, so it would not show.');
+  });
 });

@@ -31,11 +31,40 @@ export function PanelFrame({
 
   useEffect(() => {
     const opener = document.activeElement instanceof HTMLElement ? document.activeElement : null;
-    dialog.current?.focus();
+    const self = dialog.current;
+    self?.focus();
     return () => {
-      if (opener?.isConnected) opener.focus();
+      if (opener?.isConnected) {
+        opener.focus();
+        return;
+      }
+      // What opened it is gone (a deleted row): focus the modal underneath, if one is still open.
+      const below = [...document.querySelectorAll<HTMLElement>('.module-panel')].filter((p) => p !== self).at(-1);
+      below?.focus();
     };
   }, []);
+
+  /** Tab and Shift+Tab go round this modal only, never into the one underneath. */
+  function trapTab(e: React.KeyboardEvent): void {
+    if (e.key !== 'Tab' || !dialog.current) return;
+    const focusable = [...dialog.current.querySelectorAll<HTMLElement>('button, [href], input, select, textarea, [tabindex]')]
+      .filter((el) => el.tabIndex >= 0 && !(el as HTMLButtonElement).disabled);
+    if (focusable.length === 0) {
+      e.preventDefault();
+      return;
+    }
+    const first = focusable[0]!;
+    const last = focusable.at(-1)!;
+    const at = document.activeElement;
+    const inside = focusable.includes(at as HTMLElement);
+    if (e.shiftKey && (at === first || !inside)) {
+      e.preventDefault();
+      last.focus();
+    } else if (!e.shiftKey && (at === last || !inside)) {
+      e.preventDefault();
+      first.focus();
+    }
+  }
 
   return (
     <div
@@ -48,7 +77,7 @@ export function PanelFrame({
         pressedBackdrop.current = false;
       }}
     >
-      <div ref={dialog} role="dialog" aria-modal="true" aria-label={title} tabIndex={-1} className="module-panel">
+      <div ref={dialog} role="dialog" aria-modal="true" aria-label={title} tabIndex={-1} className="module-panel" onKeyDown={trapTab}>
         <div className="module-panel__head">
           <div>
             <h2 className="module-panel__title">{title}</h2>

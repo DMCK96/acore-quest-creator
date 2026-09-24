@@ -26,4 +26,13 @@ describe('entity validation', () => {
       ['PATROL_UNPICKED', 'warning', 'NPC "Hela": at patrol point 2, give it a line to say.'],
     ]);
   });
+  it('warns about weapons that are not held in a hand, or not in the database', () => {
+    const npc = { ...good, equipment: { mainHand: 1899, offHand: 5, ranged: 777 } };
+    const issues = entityIssues({ entities: { npcs: [npc] as never, objects: [] }, dbNames: new Map(), itemInventoryTypes: new Map([[1899, 13], [5, 4]]) });
+    expect(issues.map((i) => [i.code, i.severity, i.message])).toEqual([
+      ['ENTITY_WEAPON', 'warning', 'NPC "Hela": the off hand item 5 is not held in a hand, so it would not show.'],
+      ['ENTITY_WEAPON', 'warning', 'NPC "Hela": the ranged item 777 is not in the world database.'],
+    ]);
+    expect(entityIssues({ entities: { npcs: [npc] as never, objects: [] }, dbNames: new Map() })).toEqual([]);
+  });
 });

@@ -6,7 +6,7 @@ import { useApi } from '../../state/names';
 import { LookLine } from '../LookLine';
 
 /** How the object looks: taken from an existing object by name, browsed, or typed as an id. */
-export function ObjectLook({ object, onChange }: { object: CustomObject; onChange(next: CustomObject): void }): React.JSX.Element {
+export function ObjectLook({ object, onChange, hasServerData = true }: { object: CustomObject; onChange(next: CustomObject): void; hasServerData?: boolean }): React.JSX.Element {
   const api = useApi();
   const [from, setFrom] = useState(0);
   const [otherWays, setOtherWays] = useState(false);
@@ -22,7 +22,7 @@ export function ObjectLook({ object, onChange }: { object: CustomObject; onChang
 
   return (
     <div className="scripts-body">
-      <LookLine kind="objectDisplay" displayId={object.displayId} />
+      <LookLine kind="objectDisplay" displayId={object.displayId} hasServerData={hasServerData} />
       <EntityPicker id={`obj-${object.entry}-look-like`} label="Look like…" kind="gameobject" value={from} onChange={(entry) => void lookLike(entry)} />
       <button type="button" className="entry-card__btn" aria-expanded={otherWays} onClick={() => setOtherWays((v) => !v)}>
         Other ways

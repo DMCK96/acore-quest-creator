@@ -3,6 +3,12 @@ import type { Issue } from '../validate/validate';
 import { ENTITIES_FIELD, type CustomNpc, type CustomObject, type QuestEntities } from './model';
 import { missingChoice } from '../patrol/compile';
 
+/**
+ * Inventory types the server lets an NPC hold (`ObjectMgr::LoadEquipmentTemplates`): weapon, shield,
+ * ranged, two-hand, main hand, off hand, held in off hand, thrown, wand/gun. Anything else it drops.
+ */
+const HELD_IN_HAND: ReadonlySet<number> = new Set([13, 14, 15, 17, 21, 22, 23, 25, 26]);
+
 /** What is wrong with the quest's new NPCs and objects, each issue routed to their module. */
 export function entityIssues(input: {
   entities: QuestEntities;
@@ -12,6 +18,8 @@ export function entityIssues(input: {
   knownSpell?: ((id: number) => boolean) | null;
   /** `RequiredNpcOrGo`, for fights that give quest credit. */
   objectives?: readonly number[];
+  /** `item_template.InventoryType` of the items NPCs hold, when read; null skips the weapon check. */
+  itemInventoryTypes?: ReadonlyMap<number, number> | null;
 }): Issue[] {
   const questItems = new Set(input.questItems ?? []);
   const issues: Issue[] = [];
@@ -29,6 +37,15 @@ export function entityIssues(input: {
     if (entity.spawns.length === 0) add('warning', 'ENTITY_NO_SPAWN', 'nothing places it in the world yet; add a spawn.');
     else if (entity.spawns.some((s) => s.x === 0 && s.y === 0 && s.z === 0)) {
       add('warning', 'ENTITY_SPAWN_ORIGIN', 'a spawn is still at 0, 0, 0; set where it stands.');
+    }
+    if ('equipment' in entity && input.itemInventoryTypes) {
+      for (const [slot, word] of [['mainHand', 'main hand'], ['offHand', 'off hand'], ['ranged', 'ranged']] as const) {
+        const item = entity.equipment[slot];
+        if (item <= 0) continue;
+        const type = input.itemInventoryTypes.get(item);
+        if (type === undefined) add('warning', 'ENTITY_WEAPON', `the ${word} item ${item} is not in the world database.`);
+        else if (!HELD_IN_HAND.has(type)) add('warning', 'ENTITY_WEAPON', `the ${word} item ${item} is not held in a hand, so it would not show.`);
+      }
     }
     if ('fight' in entity) {
       for (const spawn of entity.spawns) {

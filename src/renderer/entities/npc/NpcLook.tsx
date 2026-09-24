@@ -12,8 +12,9 @@ const NO_WEAPONS = { mainHand: 0, offHand: 0, ranged: 0 };
  * browsing the server's displays, or typed as an id. Armour is part of the look; only its three
  * weapons are items.
  */
-export function NpcLook({ npc, onChange, others = [] }: {
+export function NpcLook({ npc, onChange, others = [], hasServerData = true }: {
   npc: CustomNpc;
+  hasServerData?: boolean;
   onChange(next: CustomNpc): void;
   /** This quest's other new NPCs: the search offers them, but the database does not have them yet. */
   others?: readonly CustomNpc[];
@@ -22,6 +23,8 @@ export function NpcLook({ npc, onChange, others = [] }: {
   const [from, setFrom] = useState(0);
   const [lookError, setLookError] = useState<string | null>(null);
   const [withWeapons, setWithWeapons] = useState(true);
+  // Off by default: it would overwrite levels and a faction the author may already have set.
+  const [withStats, setWithStats] = useState(false);
   const [otherWays, setOtherWays] = useState(false);
 
   async function lookLike(entry: number): Promise<void> {
@@ -42,6 +45,12 @@ export function NpcLook({ npc, onChange, others = [] }: {
       displayId: source.displayId ?? npc.displayId,
       scale: source.scale ?? npc.scale,
       ...(withWeapons ? { equipment: source.equipment ?? NO_WEAPONS } : {}),
+      ...(withStats
+        ? {
+          minLevel: source.minLevel ?? npc.minLevel, maxLevel: source.maxLevel ?? npc.maxLevel, faction: source.faction ?? npc.faction,
+          rank: source.rank ?? npc.rank, type: source.type ?? npc.type,
+        }
+        : {}),
     });
   }
 
@@ -52,10 +61,11 @@ export function NpcLook({ npc, onChange, others = [] }: {
 
   return (
     <div className="scripts-body">
-      <LookLine kind="creatureDisplay" displayId={npc.displayId} />
+      <LookLine kind="creatureDisplay" displayId={npc.displayId} hasServerData={hasServerData} />
       <EntityPicker id={`npc-${npc.entry}-look-like`} label="Look like…" kind="creature" value={from} onChange={(entry) => void lookLike(entry)} />
       {lookError && <p className="scene-warning">{lookError}</p>}
       <CheckField label="and its weapons" value={withWeapons} onChange={setWithWeapons} />
+      <CheckField label="and its level, faction and rank" value={withStats} onChange={setWithStats} />
       <button type="button" className="entry-card__btn" aria-expanded={otherWays} onClick={() => setOtherWays((v) => !v)}>
         Other ways
       </button>

@@ -36,7 +36,7 @@ describe('entity editor host', () => {
     expect(within(dialog).getByRole('button', { name: 'Delete NPC' })).toBeTruthy();
   });
 
-  it('discard removes the NPC and its giver rows, after asking', async () => {
+  it('discard removes the NPC and empties the giver card it was on, after asking', async () => {
     const confirm = vi.spyOn(window, 'confirm').mockReturnValueOnce(false).mockReturnValueOnce(true);
     const { onChange, onClose } = await mountEditor(withHela(), { kind: 'npc', entry: 12000005, isNew: true });
     await userEvent.click(screen.getByRole('button', { name: 'Discard' }));
@@ -44,7 +44,7 @@ describe('entity editor host', () => {
     await userEvent.click(screen.getByRole('button', { name: 'Discard' }));
     expect(confirm).toHaveBeenLastCalledWith('Discard this NPC? It is removed from the quest.');
     expect(entitiesIn(onChange).npcs).toEqual([]);
-    expect(onChange).toHaveBeenCalledWith('creature_queststarter', []);
+    expect(onChange).toHaveBeenCalledWith('creature_queststarter', [{ id: 0 }]);
     expect(onClose).toHaveBeenCalled();
   });
 
@@ -116,5 +116,35 @@ describe('the editor in the quest flow', () => {
     expect(screen.queryByRole('dialog', { name: 'Quest map' })).toBeNull();
     expect(await screen.findByRole('dialog', { name: 'New NPC' })).toBeTruthy();
     expect(screen.getByRole('dialog', { name: 'Quest Giver' })).toBeTruthy();
+  });
+
+  it('keeps Tab inside the editor, not the panel under it', { timeout: 20000 }, async () => {
+    await mountFlow();
+    await userEvent.click(within(screen.getByRole('list', { name: 'Modules' })).getByRole('button', { name: /^Quest Giver/ }));
+    await userEvent.click(screen.getByRole('button', { name: 'New NPC for starts at 1' }));
+    const editor = await screen.findByRole('dialog', { name: 'New NPC' });
+    // More presses than the editor has tab stops, so focus has to wrap round at least once.
+    for (let i = 0; i < 25; i += 1) {
+      await userEvent.tab();
+      expect(editor.contains(document.activeElement)).toBe(true);
+    }
+    await userEvent.tab({ shift: true });
+    expect(editor.contains(document.activeElement)).toBe(true);
+  });
+
+  it('puts focus on the panel below when what opened the editor is gone', async () => {
+    vi.spyOn(window, 'confirm').mockReturnValue(true);
+    const { store } = await mountFlow();
+    await userEvent.click(within(screen.getByRole('list', { name: 'Modules' })).getByRole('button', { name: /^Quest Giver/ }));
+    await userEvent.click(screen.getByRole('button', { name: 'New NPC for starts at 1' }));
+    await screen.findByRole('dialog', { name: 'New NPC' });
+    store.getState().setOpenPanel('entities');
+    const list = await screen.findByRole('dialog', { name: 'NPCs & objects' });
+    await userEvent.keyboard('{Escape}');
+    await userEvent.click(within(list).getByRole('button', { name: 'Edit' }));
+    const editor = await screen.findByRole('dialog', { name: /^NPC: / });
+    await userEvent.click(within(editor).getByRole('button', { name: 'Delete NPC' }));
+    expect(screen.queryByRole('dialog', { name: /^NPC: / })).toBeNull();
+    expect(screen.getByRole('dialog', { name: 'NPCs & objects' }).contains(document.activeElement)).toBe(true);
   });
 });

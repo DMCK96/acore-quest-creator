@@ -151,4 +151,45 @@ describe('NPC editor', () => {
     await userEvent.click(await screen.findByRole('option', { name: /Stormwind City Guard/ }));
     expect(await screen.findByText('Its look could not be read.')).toBeTruthy();
   });
+
+  it('takes its level, faction and rank too when asked, and not otherwise', async () => {
+    const api = makeMockApi({
+      searchEntities: vi.fn(async () => okv([{ id: 68, name: 'Stormwind City Guard' }])),
+      entityTemplate: vi.fn(async () => okv({ displayId: 3167, scale: 1, minLevel: 55, maxLevel: 56, faction: 11, rank: 'elite', type: 'humanoid', name: 'Stormwind City Guard' })),
+    });
+    render(<Live api={api} start={{ ...newNpc(12000001), name: 'Vessa' }} />);
+    await tab('Look & gear');
+    await userEvent.type(screen.getByRole('combobox', { name: 'Look like…' }), 'guard');
+    await userEvent.click(await screen.findByRole('option', { name: /Stormwind City Guard/ }));
+    await waitFor(() => expect(current.displayId).toBe(3167));
+    expect(current).toMatchObject({ minLevel: 1, faction: 35, rank: 'normal' });
+    await userEvent.click(screen.getByLabelText('and its level, faction and rank'));
+    await userEvent.clear(screen.getByRole('combobox', { name: 'Look like…' }));
+    await userEvent.type(screen.getByRole('combobox', { name: 'Look like…' }), 'guard');
+    await userEvent.click(await screen.findByRole('option', { name: /Stormwind City Guard/ }));
+    await waitFor(() => expect(current).toMatchObject({ minLevel: 55, maxLevel: 56, faction: 11, rank: 'elite', type: 'humanoid' }));
+    expect(current.name).toBe('Vessa');
+  });
+
+  it('says a look needs the server data folder to be named, when there is none', async () => {
+    render(<NamesProvider api={makeMockApi()}><NpcEditor npc={{ ...newNpc(12000001), displayId: 3167 }} onChange={vi.fn()} allocateSpawn={async () => null} hasServerData={false} /></NamesProvider>);
+    await tab('Look & gear');
+    expect(screen.getByText('Looks like: display 3167 (its name needs the server data folder)')).toBeTruthy();
+  });
+
+  it('moves between tabs with the arrow keys, one tab stop for the row', async () => {
+    render(<Live api={makeMockApi()} start={newNpc(12000001)} />);
+    const basics = screen.getByRole('tab', { name: 'Basics' });
+    expect(screen.getAllByRole('tab').map((t) => t.getAttribute('tabindex'))).toEqual(['0', '-1', '-1', '-1', '-1']);
+    basics.focus();
+    await userEvent.keyboard('{ArrowRight}');
+    expect(screen.getByRole('tab', { name: 'Look & gear' })).toHaveAttribute('aria-selected', 'true');
+    expect(document.activeElement).toBe(screen.getByRole('tab', { name: 'Look & gear' }));
+    await userEvent.keyboard('{End}');
+    expect(document.activeElement).toBe(screen.getByRole('tab', { name: 'Placement' }));
+    await userEvent.keyboard('{ArrowRight}');
+    expect(document.activeElement).toBe(screen.getByRole('tab', { name: 'Basics' }));
+    await userEvent.keyboard('{ArrowLeft}');
+    expect(screen.getByRole('tab', { name: 'Placement' })).toHaveAttribute('aria-selected', 'true');
+  });
 });

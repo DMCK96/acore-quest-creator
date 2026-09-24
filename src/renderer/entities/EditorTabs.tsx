@@ -21,11 +21,21 @@ export function EditorTabs({ label, tabs, tab, onTab }: { label: string; tabs: E
     setOwn(id);
     onTab?.(id);
   };
+  /** Arrow keys, Home and End move along the row, choosing and focusing the tab they land on. */
+  const onKeyDown = (e: React.KeyboardEvent): void => {
+    const at = tabs.findIndex((t) => t.id === shown?.id);
+    const to = { ArrowRight: at + 1, ArrowLeft: at - 1, Home: 0, End: tabs.length - 1 }[e.key];
+    if (to === undefined || tabs.length === 0) return;
+    e.preventDefault();
+    const next = tabs[(to + tabs.length) % tabs.length]!;
+    choose(next.id);
+    document.getElementById(`${base}-${next.id}`)?.focus();
+  };
   return (
     <div className="editor-tabs">
-      <div role="tablist" aria-label={label} className="editor-tabs__list">
+      <div role="tablist" aria-label={label} className="editor-tabs__list" onKeyDown={onKeyDown}>
         {tabs.map((t) => (
-          <button key={t.id} type="button" role="tab" id={`${base}-${t.id}`} aria-selected={t.id === shown?.id}
+          <button key={t.id} type="button" role="tab" id={`${base}-${t.id}`} aria-selected={t.id === shown?.id} tabIndex={t.id === shown?.id ? 0 : -1}
             aria-controls={`${base}-${t.id}-panel`} className={`editor-tabs__tab${t.id === shown?.id ? ' editor-tabs__tab--on' : ''}`}
             onClick={() => choose(t.id)}>
             {t.label}

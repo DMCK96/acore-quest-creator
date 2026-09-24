@@ -203,7 +203,7 @@ export function QuestFlowView({ store }: { store: AppStore }): React.JSX.Element
         />
       )}
       {editor && openPanel !== 'map' && (
-        <EntityEditorHost values={values} onChange={setValue} state={editor} onTab={onEditorTab} onClose={closeEditor} />
+        <EntityEditorHost values={values} onChange={setValue} state={editor} onTab={onEditorTab} onClose={closeEditor} hasServerData={hasServerData} />
       )}
     </div>
     </MapOpenerProvider>

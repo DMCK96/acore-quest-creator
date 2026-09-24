@@ -15,6 +15,7 @@ export function NpcEditor({
   allocateSpawn,
   tab,
   onTab,
+  hasServerData = true,
   others,
 }: {
   npc: CustomNpc;
@@ -24,6 +25,8 @@ export function NpcEditor({
   allocateSpawn(): Promise<number | null>;
   tab?: string;
   onTab?(id: string): void;
+  /** Whether looks can be named, from the server data folder. */
+  hasServerData?: boolean;
 }): React.JSX.Element {
   return (
     <EditorTabs
@@ -32,7 +35,7 @@ export function NpcEditor({
       onTab={onTab}
       tabs={[
         { id: 'basics', label: 'Basics', render: () => <NpcBasics npc={npc} onChange={onChange} /> },
-        { id: 'look', label: 'Look & gear', render: () => <NpcLook npc={npc} onChange={onChange} others={others} /> },
+        { id: 'look', label: 'Look & gear', render: () => <NpcLook npc={npc} onChange={onChange} others={others} hasServerData={hasServerData} /> },
         {
           id: 'fight',
           label: 'Fight',

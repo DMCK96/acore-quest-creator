@@ -552,7 +552,13 @@ export function createApi(deps: ApiDeps): Api {
     ]);
     // Only a spell list already loaded: a validation run must not wait for, or start, the big read.
     const spells = live.spellsReady;
-    return entityIssues({ entities, dbNames, questItems: questItemsOf(aggregate), objectives: objectivesOf(aggregate), knownSpell: spells ? (id) => spells.get(id) !== undefined : null });
+    const held = [...new Set(entities.npcs.flatMap((n) => [n.equipment.mainHand, n.equipment.offHand, n.equipment.ranged]).filter((i) => i > 0))];
+    const items = held.length > 0 ? await rowsOrNone(live.db, 'item_template', { entry: held.map(String) }) : [];
+    const itemInventoryTypes = new Map(items.map((r) => [Number(r.entry), Number(r.InventoryType ?? 0)]));
+    return entityIssues({
+      entities, dbNames, questItems: questItemsOf(aggregate), objectives: objectivesOf(aggregate),
+      knownSpell: spells ? (id) => spells.get(id) !== undefined : null, itemInventoryTypes,
+    });
   }
 
   /**

@@ -15,6 +15,7 @@ export function ObjectEditor({
   allocatePage,
   tab,
   onTab,
+  hasServerData = true,
 }: {
   object: CustomObject;
   onChange(next: CustomObject): void;
@@ -22,11 +23,13 @@ export function ObjectEditor({
   allocatePage(): Promise<number | null>;
   tab?: string;
   onTab?(id: string): void;
+  /** Whether looks can be named, from the server data folder. */
+  hasServerData?: boolean;
 }): React.JSX.Element {
   const hasPages = object.type === 'text' || object.type === 'goober';
   const tabs: EditorTab[] = [
     { id: 'basics', label: 'Basics', render: () => <ObjectBasics object={object} onChange={onChange} /> },
-    { id: 'look', label: 'Look', render: () => <ObjectLook object={object} onChange={onChange} /> },
+    { id: 'look', label: 'Look', render: () => <ObjectLook object={object} onChange={onChange} hasServerData={hasServerData} /> },
   ];
   // Only an object that shows pages or can be looted has contents.
   if (hasPages || object.type === 'chest') {

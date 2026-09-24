@@ -7,6 +7,7 @@ import { PanelFrame } from '../modules/ModulePanel';
 import { useApi } from '../state/names';
 import { NpcEditor } from './npc/NpcEditor';
 import { ObjectEditor } from './object/ObjectEditor';
+import { stillNeeds } from './still-needs';
 
 type Values = Readonly<Record<string, FieldValue>>;
 
@@ -18,15 +19,6 @@ export interface EditorState {
   tab?: string;
 }
 
-/** What an entity still needs before it is usable in game, as the footer says it. */
-function stillNeeds(entity: { name: string; displayId: number }): string | null {
-  const name = entity.name.trim() === '';
-  const look = entity.displayId <= 0;
-  if (name && look) return 'Still needs a name and a look.';
-  if (name) return 'Still needs a name.';
-  if (look) return 'Still needs a look.';
-  return null;
-}
 
 /**
  * The NPC or object editor as a modal: its title, its tabs and a footer with Done and Discard (a
@@ -40,7 +32,10 @@ export function EntityEditorHost({
   state,
   onTab,
   onClose,
+  hasServerData = true,
 }: {
+  /** Whether the connection names a server data folder, which looks are named from. */
+  hasServerData?: boolean;
   values: Values;
   onChange(fieldId: string, value: FieldValue): void;
   state: EditorState;
@@ -80,12 +75,14 @@ export function EntityEditorHost({
         ? { ...entities, npcs: entities.npcs.filter((n) => n.entry !== state.entry) }
         : { ...entities, objects: entities.objects.filter((o) => o.entry !== state.entry) }),
     );
-    // A giver card must not be left pointing at something that is gone.
+    // A giver card must not be left pointing at something that is gone: it goes back to empty, as it
+    // was before New, and one empty card per role is enough.
     const kind = state.kind === 'npc' ? 'creature' : 'gameobject';
     for (const role of ['start', 'end'] as const) {
       const targets = readGivers(values, role);
-      const kept = targets.filter((t) => !(t.kind === kind && t.id === state.entry));
-      if (kept.length === targets.length) continue;
+      if (!targets.some((t) => t.kind === kind && t.id === state.entry)) continue;
+      const emptied = targets.map((t) => (t.kind === kind && t.id === state.entry ? { ...t, id: 0 } : t));
+      const kept = emptied.filter((t, i) => t.id !== 0 || emptied.findIndex((u) => u.id === 0) === i);
       for (const [fieldId, value] of Object.entries(writeGivers(role, kept))) {
         if (JSON.stringify(value) !== JSON.stringify(values[fieldId] ?? [])) onChange(fieldId, value);
       }
@@ -96,7 +93,7 @@ export function EntityEditorHost({
   const needs = stillNeeds(entity);
   const footer = (
     <>
-      <span className="scene-hint">{needs}</span>
+      <span className="scene-hint">{needs && `Still needs ${needs}.`}</span>
       <span className="entry-card__actions">
         <button type="button" className="btn entry-card__btn--danger" onClick={remove}>
           {state.isNew ? 'Discard' : `Delete ${word}`}
@@ -112,11 +109,11 @@ export function EntityEditorHost({
     <PanelFrame title={title} onClose={onClose} footer={footer}>
       {npc && (
         <NpcEditor npc={npc} onChange={saveNpc} allocateSpawn={() => allocate('creatureSpawn')} tab={state.tab} onTab={onTab}
-          others={entities.npcs.filter((n) => n.entry !== npc.entry)} />
+          others={entities.npcs.filter((n) => n.entry !== npc.entry)} hasServerData={hasServerData} />
       )}
       {object && (
         <ObjectEditor object={object} onChange={saveObject} allocateSpawn={() => allocate('gameobjectSpawn')} allocatePage={() => allocate('page')}
-          tab={state.tab} onTab={onTab} />
+          tab={state.tab} onTab={onTab} hasServerData={hasServerData} />
       )}
     </PanelFrame>
   );
