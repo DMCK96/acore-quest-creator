@@ -38,8 +38,10 @@ export function usePatrolMode(input: {
   mapName(map: number): string;
   onLeave(message: string | null): void;
   onEnter(spawn: Spawn): void;
+  /** The floors found under a point just added, so the map can offer the others or say why there are none. */
+  onFloors(markerId: string, at: { x: number; y: number }, candidates: number[], reason: string | null): void;
 }) {
-  const { api, target, values, valuesRef, onChange, floorsAt, currentMap, mapName, onLeave, onEnter } = input;
+  const { api, target, values, valuesRef, onChange, floorsAt, currentMap, mapName, onLeave, onEnter, onFloors } = input;
   const [selected, setSelected] = useState<number | null>(null);
   const [picking, setPicking] = useState<'facing' | 'object' | null>(null);
   const asked = useRef<string | null>(null);
@@ -52,6 +54,12 @@ export function usePatrolMode(input: {
   const key = target ? `${target.entry}:${target.guid}` : null;
   const missing = target !== null && active === null;
   const needsPath = active !== null && active.patrol === null;
+  const pointCount = active?.patrol?.points.length ?? 0;
+
+  // A selected point that an undo or another edit took away is let go, not left pointing at another.
+  useEffect(() => {
+    setSelected((s) => (s !== null && s >= pointCount ? null : s));
+  }, [pointCount]);
 
   useEffect(() => {
     if (key === null) {
@@ -80,6 +88,8 @@ export function usePatrolMode(input: {
         onLeave(result.error.message);
         return;
       }
+      // A route drawn while the id was on its way is kept, never reset to an empty one.
+      if (patrolOf(valuesRef.current, target.entry, target.guid) !== null) return;
       const edit = setPatrol(valuesRef.current, target.entry, target.guid, newPatrol(result.value));
       if (edit) onChange(edit.field, edit.value);
     });
@@ -95,9 +105,11 @@ export function usePatrolMode(input: {
   /** The patrol as the values hold it now: edits after an await start from here. */
   const latest = (): Patrol | null => (target ? patrolOf(valuesRef.current, target.entry, target.guid) : null);
 
-  async function zAt(at: { x: number; y: number }, near: number): Promise<number> {
-    const { result } = await floorsAt(currentMap, at.x, at.y);
-    return chooseZ(result ? floorCandidates(result) : [], near) ?? near;
+  /** The floor nearest `near` under a point, with the other floors there or why there are none. */
+  async function zAt(at: { x: number; y: number }, near: number): Promise<{ z: number; candidates: number[]; reason: string | null }> {
+    const { result, reason } = await floorsAt(currentMap, at.x, at.y);
+    const candidates = result ? floorCandidates(result) : [];
+    return { z: chooseZ(candidates, near) ?? near, candidates, reason };
   }
 
   /** A click on the map while drawing: false when the map should treat it as usual. */
@@ -105,11 +117,12 @@ export function usePatrolMode(input: {
     if (!active || !active.patrol) return { handled: false, message: null };
     if (currentMap !== active.spawn.map) return { handled: true, message: `A patrol stays on ${mapName(active.spawn.map)}.` };
     const before = active.patrol.points.at(-1) ?? active.spawn;
-    const z = await zAt(at, before.z);
+    const { z, candidates, reason } = await zAt(at, before.z);
     const now = latest();
     if (!now) return { handled: true, message: null };
     save(addPoint(now, { x: at.x, y: at.y, z }));
     setSelected(now.points.length);
+    onFloors(`${active.routeId}:${now.points.length}`, at, candidates, reason);
     return { handled: true, message: null };
   }
 
@@ -120,11 +133,12 @@ export function usePatrolMode(input: {
     const segment = nearestSegment(route, at);
     const a = route[segment]!;
     const b = route[(segment + 1) % route.length]!;
-    const z = await zAt(at, (a.z + b.z) / 2);
+    const { z, candidates, reason } = await zAt(at, (a.z + b.z) / 2);
     const now = latest();
     if (!now) return;
     save(insertPoint(now, segment, { x: at.x, y: at.y, z }));
     setSelected(segment);
+    onFloors(`${active.routeId}:${segment}`, at, candidates, reason);
   }
 
   return { active, selected, setSelected, picking, setPicking, save, latest, mapClick, routeClick, zAt };

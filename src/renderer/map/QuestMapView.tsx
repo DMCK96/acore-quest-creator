@@ -161,14 +161,25 @@ export function QuestMapView({
     api, target: patrolTarget, values, valuesRef, onChange, floorsAt, currentMap,
     mapName: (id) => maps.find((m) => m.id === id)?.name ?? `map ${id}`,
     onLeave: leavePatrol, onEnter: enterPatrol,
+    onFloors: (id, at, candidates, reason) => {
+      setFloors({ id, x: at.x, y: at.y, candidates });
+      noteZ(id, candidates, reason);
+    },
   });
   const activeRoute = patrol.active?.routeId ?? null;
   const closeMenu = useCallback(() => setMenu(null), []);
   // Patrol points show only while their own route is drawn; otherwise the route line is enough.
   const markers = allMarkers.filter((m) => m.kind !== 'patrolPoint' || (activeRoute !== null && m.id.startsWith(`${activeRoute}:`)));
-  const routes = questRoutes(values)
-    .filter((r) => r.map === currentMap)
-    .map((r) => ({ id: r.id, points: r.points, facings: r.facings, active: r.id === activeRoute }));
+  // The same array while the routes are the same, so the map does not redraw them on every render.
+  const routes = useMemo(
+    () => questRoutes(values).filter((r) => r.map === currentMap).map((r) => ({ id: r.id, points: r.points, facings: r.facings, active: r.id === activeRoute })),
+    [values, currentMap, activeRoute],
+  );
+  // While a route is drawn its selected point is the panel's; a patrol point never stays marked after it is let go.
+  const shownSelectedId =
+    activeRoute !== null && patrol.selected !== null ? `${activeRoute}:${patrol.selected}`
+    : selectedId?.startsWith('patrol:') ? null
+    : selectedId;
   const onThisMap = markers.filter((m) => m.map === currentMap || m.map === null);
   const otherMaps = maps
     .filter((m) => m.id !== currentMap)
@@ -326,7 +337,7 @@ export function QuestMapView({
       case 'insertAfter': {
         const next = now.points[index + 1] ?? active.spawn;
         const mid = { x: (point.x + next.x) / 2, y: (point.y + next.y) / 2 };
-        const z = await patrol.zAt(mid, (point.z + next.z) / 2);
+        const { z } = await patrol.zAt(mid, (point.z + next.z) / 2);
         const latest = patrol.latest();
         if (latest) patrol.save(insertPoint(latest, index + 1, { ...mid, z }));
         patrol.setSelected(index + 1);
@@ -452,7 +463,7 @@ export function QuestMapView({
           markers={onThisMap}
           dots={dots}
           zones={mapInfo?.zones ?? []}
-          selectedId={selectedId}
+          selectedId={shownSelectedId}
           onMarkerMoved={(id, at) => void moved(id, at)}
           onMapClick={(at) => void mapClicked(at)}
           routes={routes}
@@ -535,6 +546,23 @@ export function QuestMapView({
               onDone={() => setMode(null)}
             />
           )}
+          {patrol.active && patrol.selected !== null && (() => {
+            const id = `${patrol.active.routeId}:${patrol.selected}`;
+            return (
+              <>
+                {notes[id] && <p className="scene-warning">{notes[id]}</p>}
+                {floors?.id === id && floors.candidates.length > 1 && (
+                  <div className="quest-map__floors" aria-label="Floors here">
+                    {floors.candidates.map((z) => (
+                      <button key={z} type="button" className="entry-card__btn" onClick={() => pickFloor(z)}>
+                        Floor {z}
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </>
+            );
+          })()}
           {menu && patrol.active && (
             <PointMenu index={menu.index} at={menu.at} onClose={closeMenu} onPick={(item) => void menuPicked(menu.index, item)} />
           )}
@@ -546,6 +574,16 @@ export function QuestMapView({
               </p>
               {selected.note && <p className="scene-hint">{selected.note}</p>}
               {notes[selected.id] && <p className="scene-warning">{notes[selected.id]}</p>}
+              {(() => {
+                const match = /^spawn:npc:(\d+):(\d+)$/.exec(selected.id);
+                if (!match || !npcs.some((n) => n.entry === Number(match[1]))) return null;
+                return (
+                  <button type="button" className="entry-card__btn"
+                    onClick={() => setMode({ kind: 'patrol', entry: Number(match[1]), guid: Number(match[2]) })}>
+                    Draw patrol
+                  </button>
+                );
+              })()}
               {floors?.id === selected.id && floors.candidates.length > 0 && (
                 <div className="quest-map__floors">
                   {floors.candidates.map((z) => (

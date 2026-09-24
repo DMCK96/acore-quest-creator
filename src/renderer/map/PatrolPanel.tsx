@@ -70,6 +70,7 @@ export function PatrolPanel({
               key={action.id}
               idPrefix={`patrol-${selected}-${action.id}`}
               action={action}
+              waitSecs={point.waitSecs}
               first={k === 0}
               last={k === point.actions.length - 1}
               onChange={(next) => onChange(updateAction(patrol, selected, next))}

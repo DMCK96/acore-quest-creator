@@ -42,9 +42,12 @@ export function PointActionForm({
   onMove,
   onRemove,
   onPickObject,
+  waitSecs,
 }: {
   idPrefix: string;
   action: PointAction;
+  /** How long the NPC waits at the point; an action due later may be cut off when it walks on. */
+  waitSecs: number;
   first: boolean;
   last: boolean;
   onChange(next: PointAction): void;
@@ -108,6 +111,9 @@ export function PointActionForm({
     <fieldset aria-label={TITLES[action.kind]} className="quest-map__action">
       <legend>{TITLES[action.kind]}</legend>
       {fields()}
+      {action.afterSecs > waitSecs && (
+        <p className="scene-hint">It only waits {waitSecs} s here, so this may be cut short when it walks on.</p>
+      )}
       <div className="scene-row">
         <NumberField label="After (seconds)" value={action.afterSecs} min={0}
           onChange={(afterSecs) => onChange({ ...action, afterSecs: Math.max(0, afterSecs) })} />
