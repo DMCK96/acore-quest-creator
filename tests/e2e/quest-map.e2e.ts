@@ -35,6 +35,8 @@ test('a new NPC spawn is shown on the quest map and moved by dragging', async ()
   await page.getByLabel('Server data folder (optional)').fill(DATA_DIR);
   await page.getByLabel('Game client folder (optional)').fill(CLIENT_DIR);
   await page.getByRole('button', { name: 'Save and connect' }).click();
+  // The client folder opens at connect: its archives read cleanly.
+  await expect(page.getByText('Game client', { exact: true })).toBeVisible();
 
   await page.getByRole('button', { name: 'New quest', exact: true }).click();
   await page.getByLabel('Quest title').fill('Map test');
