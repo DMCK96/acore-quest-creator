@@ -21,8 +21,13 @@ const CONTINENTS: MapInfo[] = [
   { id: 530, name: 'Outland', zones: [] },
   { id: 571, name: 'Northrend', zones: [] },
 ];
-const START_ZOOM = 6;
+/** Opens close enough in that existing spawns show. */
+const START_ZOOM = 7;
+/** Below this zoom no spawn dots are loaded: a whole zone of dots is slow and unreadable. */
+const DOT_ZOOM = 7;
 const VIEW_DELAY_MS = 300;
+/** "Only quest-relevant" is remembered while the app runs, across openings of the map. */
+let questOnlyForSession = false;
 const ROLE_WORDS = { giver: 'quest giver', ender: 'quest ender', objective: 'objective' } as const;
 
 interface Floors {
@@ -61,6 +66,9 @@ export function QuestMapView({
   const [refs, setRefs] = useState<QuestMapRef[]>([]);
   const [dots, setDots] = useState<SpawnDot[]>([]);
   const [capped, setCapped] = useState(false);
+  const [zoomedOut, setZoomedOut] = useState(false);
+  const [questOnly, setQuestOnly] = useState(questOnlyForSession);
+  const lastView = useRef<{ box: MapBox; zoom: number } | null>(null);
   const [selectedId, setSelectedId] = useState<string | null>(focusId);
   const [floors, setFloors] = useState<Floors | null>(null);
   const [notes, setNotes] = useState<Record<string, string>>({});
@@ -189,8 +197,15 @@ export function QuestMapView({
     }
   }
 
-  function viewChanged(box: MapBox): void {
+  function viewChanged(box: MapBox, zoom: number, onlyQuest = questOnly): void {
+    lastView.current = { box, zoom };
     if (viewTimer.current) clearTimeout(viewTimer.current);
+    setZoomedOut(zoom < DOT_ZOOM);
+    if (onlyQuest || zoom < DOT_ZOOM) {
+      setDots([]);
+      setCapped(false);
+      return;
+    }
     viewTimer.current = setTimeout(() => {
       void api?.mapSpawns(currentMap, box).then((r) => {
         if (!r.ok) return;
@@ -280,12 +295,27 @@ export function QuestMapView({
             setFloors(null);
           }}
           onMarkerSelected={(id) => setSelectedId(id)}
-          onViewChanged={(box) => viewChanged(box)}
+          onViewChanged={(box, zoom) => viewChanged(box, zoom)}
         />
         <aside className="quest-map__side">
           {!hasServerData && <p className="scene-warning">Set the server data folder on the connection to see the terrain and floors.</p>}
           {message && <p className="scene-warning">{message}</p>}
+          {!hasClient && <p className="scene-hint">Set the game client folder on the connection to see the in-game map art.</p>}
           {capped && <p className="scene-hint">Zoom in to see every spawn here.</p>}
+          {zoomedOut && !questOnly && <p className="scene-hint">Zoom in to see existing spawns.</p>}
+          <label className="scene-field">
+            <input
+              type="checkbox"
+              checked={questOnly}
+              onChange={(e) => {
+                const on = e.target.checked;
+                questOnlyForSession = on;
+                setQuestOnly(on);
+                if (lastView.current) viewChanged(lastView.current.box, lastView.current.zoom, on);
+              }}
+            />{' '}
+            Only quest-relevant
+          </label>
           {selected && (
             <section className="quest-map__selected" aria-label="Selected position">
               <h3>{selected.label}</h3>

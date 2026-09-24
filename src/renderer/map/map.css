@@ -147,20 +147,6 @@
   fill-opacity: 0.12;
 }
 
-.quest-map__dot {
-  stroke: #1a1208;
-  stroke-width: 1;
-  fill-opacity: 0.85;
-}
-
-.quest-map__dot--creature {
-  fill: #f2d16b;
-}
-
-.quest-map__dot--gameobject {
-  fill: #8fd3e8;
-}
-
 .quest-map__zone {
   font-size: 12px;
   font-weight: 600;

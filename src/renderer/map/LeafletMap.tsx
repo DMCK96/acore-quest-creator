@@ -1,7 +1,7 @@
 import { useEffect, useRef } from 'react';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
-import { circleOutline, GRID_SIZE, LEAFLET_TRANSFORM, MAX_ZOOM, MIN_ZOOM } from '@core/map/coords';
+import { circleOutline, GRID_SIZE, LEAFLET_TRANSFORM, MAX_VIEW_ZOOM, MAX_ZOOM, MIN_ZOOM } from '@core/map/coords';
 import type { QuestMarker } from '@core/map/positions';
 import type { MapBox, SpawnDot } from '@shared/ipc';
 
@@ -36,8 +36,6 @@ export interface LeafletMapProps {
 
 const HALF = 32 * GRID_SIZE;
 const CRS = L.extend({}, L.CRS.Simple, { transformation: new L.Transformation(...LEAFLET_TRANSFORM) }) as L.CRS;
-/** Beyond the tiles' own zoom the relief is scaled up, for placing things precisely. */
-const OVERZOOM = 8;
 
 /** Each tile's edges drawn as faint lines: at full zoom one tile is one of the server's grids. */
 const GridLines = L.GridLayer.extend({
@@ -67,6 +65,7 @@ export function LeafletMap(props: LeafletMapProps): React.JSX.Element {
   const tiles = useRef<L.TileLayer | null>(null);
   const markerLayers = useRef(new Map<string, { marker: L.Marker; extra: L.Layer | null; look: string; shape: string }>());
   const dotLayer = useRef<L.LayerGroup | null>(null);
+  const dotRenderer = useRef<L.Canvas | null>(null);
   const zoneLayer = useRef<L.LayerGroup | null>(null);
   // Leaflet keeps the handlers it was given; these always call the latest props.
   const latest = useRef(props);
@@ -75,7 +74,7 @@ export function LeafletMap(props: LeafletMapProps): React.JSX.Element {
   useEffect(() => {
     if (!host.current) return undefined;
     const map = L.map(host.current, {
-      crs: CRS, minZoom: MIN_ZOOM, maxZoom: OVERZOOM, zoomSnap: 1, attributionControl: false,
+      crs: CRS, minZoom: MIN_ZOOM, maxZoom: MAX_VIEW_ZOOM, zoomSnap: 1, attributionControl: false,
       maxBounds: L.latLngBounds([-HALF, -HALF], [HALF, HALF]),
     });
     map.on('click', (e: L.LeafletMouseEvent) => latest.current.onMapClick({ x: e.latlng.lat, y: e.latlng.lng }));
@@ -86,8 +85,11 @@ export function LeafletMap(props: LeafletMapProps): React.JSX.Element {
     // After the handlers, so the first view is reported too and its spawns load without a pan.
     map.setView([latest.current.view.x, latest.current.view.y], latest.current.zoom);
     // Grid lines under the relief, so a map without terrain (no server data folder) still has a scale.
-    new GridLines({ tileSize: 256, minZoom: MIN_ZOOM, maxZoom: OVERZOOM, maxNativeZoom: MAX_ZOOM, noWrap: true }).addTo(map);
+    new GridLines({ tileSize: 256, minZoom: MIN_ZOOM, maxZoom: MAX_VIEW_ZOOM, maxNativeZoom: MAX_ZOOM, noWrap: true }).addTo(map);
     dotLayer.current = L.layerGroup().addTo(map);
+    // One canvas for every spawn dot: thousands of SVG circles make panning crawl.
+    dotRenderer.current = L.canvas({ padding: 0.5 });
+    host.current.dataset.dotCount = '0';
     zoneLayer.current = L.layerGroup().addTo(map);
     mapRef.current = map;
     const layers = markerLayers.current;
@@ -104,7 +106,7 @@ export function LeafletMap(props: LeafletMapProps): React.JSX.Element {
     if (!map) return;
     tiles.current?.remove();
     tiles.current = L.tileLayer(`acqc-map://tile/${props.map}/{z}/{x}/{y}.png`, {
-      tileSize: 256, minZoom: MIN_ZOOM, maxZoom: OVERZOOM, minNativeZoom: MIN_ZOOM, maxNativeZoom: MAX_ZOOM, noWrap: true,
+      tileSize: 256, minZoom: MIN_ZOOM, maxZoom: MAX_VIEW_ZOOM, minNativeZoom: MIN_ZOOM, maxNativeZoom: MAX_ZOOM, noWrap: true,
       bounds: L.latLngBounds([-HALF, -HALF], [HALF, HALF]),
     }).addTo(map);
   }, [props.map]);
@@ -169,10 +171,19 @@ export function LeafletMap(props: LeafletMapProps): React.JSX.Element {
     if (!group) return;
     group.clearLayers();
     for (const dot of props.dots) {
-      L.circleMarker([dot.x, dot.y], { radius: 3, className: `quest-map__dot quest-map__dot--${dot.kind}`, interactive: true })
+      L.circleMarker([dot.x, dot.y], {
+        renderer: dotRenderer.current ?? undefined,
+        radius: 3,
+        color: '#1a1208',
+        weight: 1,
+        fillColor: dot.kind === 'creature' ? '#f2d16b' : '#8fd3e8',
+        fillOpacity: 0.85,
+        interactive: true,
+      })
         .bindTooltip(dot.name || `#${dot.entry}`)
         .addTo(group);
     }
+    if (host.current) host.current.dataset.dotCount = String(props.dots.length);
   }, [props.dots]);
 
   useEffect(() => {

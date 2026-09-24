@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { describe, expect, it, vi } from 'vitest';
 import { useState } from 'react';
-import { render, screen, waitFor, within } from '@testing-library/react';
+import { act, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import type { LeafletMapProps } from '../../src/renderer/map/LeafletMap';
 import { QuestMapView } from '../../src/renderer/map/QuestMapView';
@@ -143,5 +143,61 @@ describe('quest map', () => {
   it('says why there is no terrain without a server data folder', async () => {
     render(<NamesProvider api={makeMockApi()}><QuestMapView open={openWith()} onChange={vi.fn()} focusId={null} onClose={vi.fn()} hasServerData={false} /></NamesProvider>);
     expect(await screen.findByText('Set the server data folder on the connection to see the terrain and floors.')).toBeTruthy();
+  });
+});
+
+describe('quest map dots and zoom', () => {
+  const box = { minX: -9000, maxX: -8800, minY: -200, maxY: -100 };
+  const dot = { kind: 'creature' as const, guid: 79970, entry: 197, name: 'Marshal McBride', map: 0, x: -8902, y: -162, z: 82 };
+  const settle = (): Promise<void> => new Promise((r) => setTimeout(r, 400));
+
+  it('opens zoomed in far enough to show spawns', async () => {
+    mount();
+    await screen.findByRole('dialog', { name: 'Quest map' });
+    expect(lastProps!.zoom).toBe(7);
+  });
+
+  it('loads no spawn dots below zoom 7 and says to zoom in', async () => {
+    const api = makeMockApi();
+    mount(api);
+    await screen.findByRole('dialog', { name: 'Quest map' });
+    act(() => lastProps!.onViewChanged(box, 6));
+    await settle();
+    expect(api.mapSpawns).not.toHaveBeenCalled();
+    expect(lastProps!.dots).toEqual([]);
+    expect(screen.getByText('Zoom in to see existing spawns.')).toBeTruthy();
+  });
+
+  it('loads spawn dots at zoom 7 and up', async () => {
+    const api = makeMockApi({ mapSpawns: vi.fn(async () => okv({ dots: [dot], capped: false })) });
+    mount(api);
+    await screen.findByRole('dialog', { name: 'Quest map' });
+    act(() => lastProps!.onViewChanged(box, 7));
+    await waitFor(() => expect(lastProps!.dots).toHaveLength(1));
+    expect(api.mapSpawns).toHaveBeenCalledWith(0, box);
+    expect(screen.queryByText('Zoom in to see existing spawns.')).toBeNull();
+  });
+
+  it("shows only the quest's own positions when asked, and the dots again when not", async () => {
+    const api = makeMockApi({ mapSpawns: vi.fn(async () => okv({ dots: [dot], capped: false })) });
+    mount(api);
+    await screen.findByRole('dialog', { name: 'Quest map' });
+    act(() => lastProps!.onViewChanged(box, 8));
+    await waitFor(() => expect(lastProps!.dots).toHaveLength(1));
+    const toggle = screen.getByRole('checkbox', { name: 'Only quest-relevant' });
+    await userEvent.click(toggle);
+    expect(lastProps!.dots).toEqual([]);
+    vi.mocked(api.mapSpawns).mockClear();
+    act(() => lastProps!.onViewChanged(box, 9));
+    await settle();
+    expect(api.mapSpawns).not.toHaveBeenCalled();
+    expect(within(screen.getByRole('list', { name: 'Map markers' })).getByText('Hela · spawn 1')).toBeTruthy();
+    await userEvent.click(toggle);
+    await waitFor(() => expect(lastProps!.dots).toHaveLength(1));
+  });
+
+  it('asks for the game client folder when the connection has none', async () => {
+    render(<NamesProvider api={makeMockApi()}><QuestMapView open={openWith()} onChange={vi.fn()} focusId={null} onClose={vi.fn()} hasClient={false} /></NamesProvider>);
+    expect(await screen.findByText('Set the game client folder on the connection to see the in-game map art.')).toBeTruthy();
   });
 });
