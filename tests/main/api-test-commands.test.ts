@@ -19,7 +19,7 @@ describe('testCommands', () => {
     await api.connect(rec.value.id);
     const opened: any = await api.newQuest();
     const aggregate = opened.value.aggregate;
-    aggregate.values[ENTITIES_FIELD] = writeEntities({ npcs: [{ ...newNpc(12000001), name: 'Scout Hela', displayId: 1, spawns: [{ guid: 5, map: 0, x: 1, y: 2, z: 3, o: 0, respawnSecs: 60, wander: 0 }] }], objects: [] });
+    aggregate.values[ENTITIES_FIELD] = writeEntities({ npcs: [{ ...newNpc(12000001), name: 'Scout Hela', displayId: 1, spawns: [{ guid: 5, map: 0, x: 1, y: 2, z: 3, o: 0, respawnSecs: 60, wander: 0, patrol: null }] }], objects: [] });
     aggregate.values.creature_queststarter = [{ id: 12000001 }];
     aggregate.values[SCRIPTS_FIELD] = writeScenes([{ id: 's1', name: '', owner: { kind: 'creature', entry: 12000001 }, trigger: { kind: 'questAccepted' }, gates: [],
       steps: [{ kind: 'say', text: 'Go!', style: 'say', waitMs: 0 }] }]);

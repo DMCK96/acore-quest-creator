@@ -36,7 +36,7 @@ describe('NPCs & objects module', () => {
 
   it('keeps the pasted position and map together', async () => {
     const onChange = vi.fn();
-    const entities: QuestEntities = { npcs: [{ ...newNpc(12000001), name: 'Hela', spawns: [{ guid: 1, map: 0, x: 0, y: 0, z: 0, o: 0, respawnSecs: 300, wander: 0 }] }], objects: [] };
+    const entities: QuestEntities = { npcs: [{ ...newNpc(12000001), name: 'Hela', spawns: [{ guid: 1, map: 0, x: 0, y: 0, z: 0, o: 0, respawnSecs: 300, wander: 0, patrol: null }] }], objects: [] };
     await mountBody('entities', { [ENTITIES_FIELD]: writeEntities(entities) }, { onChange });
     await userEvent.click(screen.getByLabelText('Paste .gps output'));
     await userEvent.paste('Map: 1 X: 5.5 Y: 6.5 Z: 7.5 Orientation: 2');

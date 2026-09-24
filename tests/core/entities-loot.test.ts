@@ -42,7 +42,7 @@ describe('loot', () => {
   });
   it('validates loot rows', () => {
     const codes = (loot: unknown[], type: 'chest' | 'goober' = 'chest') => entityIssues({
-      entities: { npcs: [], objects: [{ ...newObject(9), type, name: 'C', displayId: 1, loot: loot as never, spawns: [{ guid: 1, map: 0, x: 1, y: 0, z: 0, o: 0, respawnSecs: 1, wander: 0 }] }] },
+      entities: { npcs: [], objects: [{ ...newObject(9), type, name: 'C', displayId: 1, loot: loot as never, spawns: [{ guid: 1, map: 0, x: 1, y: 0, z: 0, o: 0, respawnSecs: 1, wander: 0, patrol: null }] }] },
       dbNames: new Map(), questItems: [750],
     }).map((i) => i.code);
     expect(codes([])).toEqual(['LOOT_EMPTY_CHEST']);

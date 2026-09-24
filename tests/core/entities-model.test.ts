@@ -15,6 +15,14 @@ describe('entity model', () => {
   it('starts new entities with sensible defaults', () => {
     expect(newNpc(5)).toMatchObject({ entry: 5, name: '', minLevel: 1, maxLevel: 1, faction: 35, scale: 1, rank: 'normal', type: 'humanoid', questGiver: false, gossip: false, healthModifier: 1, damageModifier: 1, spawns: [] });
     expect(newObject(6)).toMatchObject({ entry: 6, type: 'goober', size: 1, spawns: [] });
-    expect(newSpawn(7)).toEqual({ guid: 7, map: 0, x: 0, y: 0, z: 0, o: 0, respawnSecs: 300, wander: 0 });
+    expect(newSpawn(7)).toEqual({ guid: 7, map: 0, x: 0, y: 0, z: 0, o: 0, respawnSecs: 300, wander: 0, patrol: null });
+  });
+  it('reads spawns saved before patrols as not patrolling, and keeps a saved patrol', () => {
+    const old = { guid: 1, map: 0, x: 0, y: 0, z: 0, o: 0, respawnSecs: 300, wander: 0 };
+    const patrol = { pathId: 10, startPace: 'run', points: [{ x: 1, y: 2, z: 3, waitSecs: 0, facing: null, paceFromHere: null, actions: [{ id: 'a1', afterSecs: 0, kind: 'dismount' }] }] };
+    const values = { [ENTITIES_FIELD]: { npcs: [{ ...newNpc(5), spawns: [old, { ...old, guid: 2, patrol }] }], objects: [] } };
+    const spawns = readEntities(values).npcs[0]!.spawns;
+    expect(spawns[0]!.patrol).toBeNull();
+    expect(spawns[1]!.patrol).toEqual(patrol);
   });
 });

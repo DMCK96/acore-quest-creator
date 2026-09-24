@@ -20,7 +20,7 @@ describe('Show on map', () => {
   });
   it('opens the map on a spawn', async () => {
     const open = vi.fn();
-    wrap(open, <SpawnList idPrefix="npc-1" ownerKey={{ kind: 'npc', entry: 12000001 }} spawns={[{ guid: 900, map: 0, x: 1, y: 2, z: 3, o: 0, respawnSecs: 300, wander: 0 }]} wanders onChange={() => {}} allocate={async () => null} />);
+    wrap(open, <SpawnList idPrefix="npc-1" ownerKey={{ kind: 'npc', entry: 12000001 }} spawns={[{ guid: 900, map: 0, x: 1, y: 2, z: 3, o: 0, respawnSecs: 300, wander: 0, patrol: null }]} wanders onChange={() => {}} allocate={async () => null} />);
     await userEvent.click(within(screen.getByText(/Spawn 1/).closest('li')!).getByRole('button', { name: 'Show on map' }));
     expect(open).toHaveBeenCalledWith('spawn:npc:12000001:900');
   });

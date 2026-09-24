@@ -13,6 +13,46 @@ export const ENTITIES_FIELD = 'entities';
 const int = z.number().int();
 const num = z.number().finite();
 
+const PACES = ['walk', 'run'] as const;
+const action = <T extends z.ZodRawShape>(kind: string, shape: T) =>
+  z.object({ id: z.string(), afterSecs: num.min(0), kind: z.literal(kind), ...shape });
+
+/** What a patrolling NPC does on reaching a point of its route, each `afterSecs` after arriving. */
+const pointActionSchema = z.discriminatedUnion('kind', [
+  action('say', {
+    lines: z.array(z.object({ text: z.string(), style: z.enum(['say', 'yell', 'emote']) })),
+    chance: num.min(0).max(100),
+  }),
+  action('emote', { emote: int }),
+  // An emote state held while it waits (kneel, mining, …), undone before it walks on.
+  action('pose', { emoteState: int }),
+  action('cast', { spell: int }),
+  action('sound', { sound: int }),
+  action('mount', { creature: int }),
+  action('dismount', {}),
+  action('useObject', { guid: int, entry: int }),
+]);
+
+const patrolPointSchema = z.object({
+  x: num,
+  y: num,
+  z: num,
+  waitSecs: num.min(0),
+  /** Radians; null leaves it facing the way it walked in. */
+  facing: num.nullable(),
+  /** The pace from this point on; null keeps the pace it had. */
+  paceFromHere: z.enum(PACES).nullable(),
+  actions: z.array(pointActionSchema).default([]),
+});
+
+/** A route a new NPC's spawn walks forever, looping back to where it stands. */
+const patrolSchema = z.object({
+  /** The `waypoint_data` path, allocated once and pinned like a guid. */
+  pathId: int,
+  startPace: z.enum(PACES),
+  points: z.array(patrolPointSchema),
+});
+
 const spawnSchema = z.object({
   guid: int,
   map: int,
@@ -22,6 +62,8 @@ const spawnSchema = z.object({
   o: num,
   respawnSecs: int.min(0),
   wander: num.min(0),
+  // Added with patrols (slice L); null keeps spawns saved before then as they were.
+  patrol: patrolSchema.nullable().default(null),
 });
 
 export const RANK_VALUE = { normal: 0, elite: 1, rareElite: 2, boss: 3, rare: 4 } as const;
@@ -81,6 +123,11 @@ const objectSchema = z.object({
 });
 
 export type Spawn = z.infer<typeof spawnSchema>;
+export type Pace = (typeof PACES)[number];
+export type PointAction = z.infer<typeof pointActionSchema>;
+export type SayLine = Extract<PointAction, { kind: 'say' }>['lines'][number];
+export type PatrolPoint = z.infer<typeof patrolPointSchema>;
+export type Patrol = z.infer<typeof patrolSchema>;
 export type Page = z.infer<typeof pageSchema>;
 export type LootRow = z.infer<typeof lootSchema>;
 export type CustomNpc = z.infer<typeof npcSchema>;
@@ -141,5 +188,5 @@ export function newObject(entry: number): CustomObject {
 }
 
 export function newSpawn(guid: number): Spawn {
-  return { guid, map: 0, x: 0, y: 0, z: 0, o: 0, respawnSecs: 300, wander: 0 };
+  return { guid, map: 0, x: 0, y: 0, z: 0, o: 0, respawnSecs: 300, wander: 0, patrol: null };
 }

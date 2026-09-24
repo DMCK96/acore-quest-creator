@@ -34,7 +34,7 @@ describe('pages and quest-only objects', () => {
   });
   it('needs pages on a readable object and warns about empty ones', () => {
     const codes = (o: ReturnType<typeof newObject>) =>
-      entityIssues({ entities: { npcs: [], objects: [{ ...o, spawns: [{ guid: 1, map: 0, x: 1, y: 0, z: 0, o: 0, respawnSecs: 1, wander: 0 }] }] }, dbNames: new Map() }).map((i) => i.code);
+      entityIssues({ entities: { npcs: [], objects: [{ ...o, spawns: [{ guid: 1, map: 0, x: 1, y: 0, z: 0, o: 0, respawnSecs: 1, wander: 0, patrol: null }] }] }, dbNames: new Map() }).map((i) => i.code);
     expect(codes({ ...newObject(1), type: 'text', name: 'N', displayId: 1 })).toEqual(['ENTITY_NO_PAGES']);
     expect(codes({ ...newObject(1), type: 'text', name: 'N', displayId: 1, pages: [{ id: 1, text: ' ' }] })).toEqual(['ENTITY_EMPTY_PAGE']);
   });

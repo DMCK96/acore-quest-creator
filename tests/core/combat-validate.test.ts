@@ -55,7 +55,7 @@ describe('fightIssues', () => {
     expect(codes(credit, null, null)).toEqual([]);
   });
   it('runs as part of the entity checks, named after the NPC', () => {
-    const npc = { ...newNpc(1), name: 'Hela', displayId: 1, spawns: [{ guid: 1, map: 0, x: 1, y: 1, z: 1, o: 0, respawnSecs: 300, wander: 0 }], fight: { ...emptyFight(), abilities: [{ ...a, spellId: 0 }] } };
+    const npc = { ...newNpc(1), name: 'Hela', displayId: 1, spawns: [{ guid: 1, map: 0, x: 1, y: 1, z: 1, o: 0, respawnSecs: 300, wander: 0, patrol: null }], fight: { ...emptyFight(), abilities: [{ ...a, spellId: 0 }] } };
     const issues = entityIssues({ entities: { npcs: [npc], objects: [] }, dbNames: new Map() });
     expect(issues).toEqual([expect.objectContaining({ severity: 'error', code: 'FIGHT_NO_SPELL', fieldId: 'entities' })]);
     expect(issues[0]!.message).toMatch(/^NPC "Hela": /);
