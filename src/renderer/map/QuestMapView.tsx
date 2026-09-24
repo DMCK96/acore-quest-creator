@@ -354,13 +354,12 @@ export function QuestMapView({
     setMessage(null);
   }
 
-  function dotClicked(dot: SpawnDot): void {
-    if (patrol.picking !== 'object') return;
-    if (dot.kind === 'creature') {
-      setMessage('Pick an object, not an NPC.');
-      return;
-    }
-    objectPicked(dot.guid, dot.entry);
+  /** A spawn dot clicked: used only while picking an object, else it is a click on the map. */
+  function dotClicked(dot: SpawnDot): boolean {
+    if (patrol.picking !== 'object') return false;
+    if (dot.kind === 'creature') setMessage('Pick an object, not an NPC.');
+    else objectPicked(dot.guid, dot.entry);
+    return true;
   }
 
   async function mapClicked(at: { x: number; y: number }): Promise<void> {

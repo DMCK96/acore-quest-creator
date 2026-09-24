@@ -46,7 +46,8 @@ export interface LeafletMapProps {
   routes?: MapRoute[];
   onRouteClick?(routeId: string, at: { x: number; y: number }): void;
   onMarkerContextMenu?(id: string, screen: { x: number; y: number }): void;
-  onDotClick?(dot: SpawnDot): void;
+  /** True when the click was used (picking an object); otherwise it also counts as a click on the map. */
+  onDotClick?(dot: SpawnDot): boolean;
 }
 
 const HALF = 32 * GRID_SIZE;
@@ -64,11 +65,15 @@ const GridLines = L.GridLayer.extend({
 const escapeHtml = (text: string): string =>
   text.replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]!);
 
+/** A patrol point shows its number only: full labels on a short route pile on top of each other. */
+const shownLabel = (marker: MapMarkerView): string =>
+  marker.kind === 'patrolPoint' ? String(Number(marker.id.split(':')[3]) + 1) : marker.label;
+
 function iconFor(marker: MapMarkerView, selected: boolean): L.DivIcon {
   const kind = marker.readOnlyRole ? 'ref' : marker.kind;
   return L.divIcon({
     className: `quest-map__marker quest-map__marker--${kind}${selected ? ' quest-map__marker--selected' : ''}`,
-    html: `<span class="quest-map__pin"></span><span class="quest-map__label">${escapeHtml(marker.label)}</span>`,
+    html: `<span class="quest-map__pin"></span><span class="quest-map__label">${escapeHtml(shownLabel(marker))}</span>`,
     iconSize: undefined,
     iconAnchor: [6, 6],
   });
@@ -204,8 +209,7 @@ export function LeafletMap(props: LeafletMapProps): React.JSX.Element {
         .bindTooltip(dot.name || `#${dot.entry}`)
         .on('click', (e: L.LeafletMouseEvent) => {
           // A dot picked for something must not also count as a click on the map under it.
-          L.DomEvent.stopPropagation(e);
-          latest.current.onDotClick?.(dot);
+          if (latest.current.onDotClick?.(dot)) L.DomEvent.stopPropagation(e);
         })
         .addTo(group);
     }

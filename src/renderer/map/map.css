@@ -14,6 +14,9 @@
   gap: 12px;
   padding: 10px 16px;
   border-bottom: 1px solid var(--border-soft);
+  /* Leaflet's panes stack up to z-index 700; the search's drop-down must open over them. */
+  position: relative;
+  z-index: 1000;
 }
 
 .quest-map__title {
