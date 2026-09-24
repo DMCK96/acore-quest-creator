@@ -2,6 +2,7 @@ import type { Spawn } from '@core/entities/model';
 import { newSpawn } from '@core/entities/model';
 import { NumberField } from '../scripts/fields';
 import { PositionInput } from '../scripts/PositionInput';
+import { useMapOpener } from '../map/MapOpener';
 
 /** Where a new NPC or object stands: one row per spawn, each with its own position and timing. */
 export function SpawnList({
@@ -22,6 +23,7 @@ export function SpawnList({
   /** A fresh guid for a new spawn, or null when none could be had. */
   allocate(): Promise<number | null>;
 }): React.JSX.Element {
+  const openMap = useMapOpener();
   const set = (i: number, spawn: Spawn): void => onChange(spawns.map((s, j) => (j === i ? spawn : s)));
 
   async function add(): Promise<void> {
@@ -61,6 +63,12 @@ export function SpawnList({
       <button type="button" className="btn" onClick={() => void add()}>
         Add spawn
       </button>
+      {spawns.length === 0 && ownerKey && openMap && (
+        <button type="button" className="btn"
+          onClick={() => openMap({ kind: 'place', target: { kind: ownerKey.kind === 'npc' ? 'npc' : 'object', entry: ownerKey.entry } })}>
+          Place on map
+        </button>
+      )}
     </div>
   );
 }

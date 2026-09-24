@@ -34,8 +34,9 @@ export function QuestFlowView({ store }: { store: AppStore }): React.JSX.Element
   const backToChain = store((s) => s.backToChain);
   const names = useNameBook();
   const [menuOpen, setMenuOpen] = useState(false);
-  /** The marker the map opens on, when a "Show on map" link opened it. */
-  const [mapFocus, setMapFocus] = useState<string | null>(null);
+  /** What the map was opened to do, and the panel to go back to when it closes. */
+  const [mapRequest, setMapRequest] = useState<MapRequest | null>(null);
+  const [mapReturn, setMapReturn] = useState<typeof openPanel>(null);
 
   // Escape closes the open panel first, and leaves the editor only when nothing is open.
   useEffect(() => {
@@ -73,7 +74,8 @@ export function QuestFlowView({ store }: { store: AppStore }): React.JSX.Element
   );
 
   const openMap = (request: MapRequest | string | null): void => {
-    setMapFocus(typeof request === 'string' || request === null ? request : request.kind === 'focus' ? request.markerId : null);
+    setMapRequest(typeof request === 'string' || request === null ? { kind: 'focus', markerId: request } : request);
+    if (openPanel !== 'map') setMapReturn(openPanel === 'changes' || openPanel === 'test' ? null : openPanel);
     setOpenPanel('map');
   };
 
@@ -126,15 +128,17 @@ export function QuestFlowView({ store }: { store: AppStore }): React.JSX.Element
       )}
       {openPanel === 'map' && (
         <QuestMapView
-          key={mapFocus ?? 'quest'}
+          key={JSON.stringify(mapRequest)}
           open={open}
           onChange={setValue}
-          focusId={mapFocus}
+          focusId={mapRequest?.kind === 'focus' ? mapRequest.markerId : null}
+          mode={mapRequest && mapRequest.kind !== 'focus' ? mapRequest : null}
           hasServerData={hasServerData}
           hasClient={hasClient}
           onClose={() => {
-            setMapFocus(null);
-            setOpenPanel(null);
+            setMapRequest(null);
+            setOpenPanel(mapReturn);
+            setMapReturn(null);
           }}
         />
       )}
