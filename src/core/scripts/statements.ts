@@ -12,10 +12,21 @@ const DELETE_ORDER = [
   'gossip_menu_option',
   'areatrigger_scripts',
   'areatrigger',
+  // New NPCs and objects (slice D): spawns before the templates they place.
+  'creature',
+  'gameobject',
+  'creature_template_model',
+  'creature_template',
+  'gameobject_template',
 ] as const;
 
 /** Inserts run in the order the server needs them: what a row points at exists before the row. */
 const INSERT_ORDER = [
+  'creature_template',
+  'creature_template_model',
+  'gameobject_template',
+  'creature',
+  'gameobject',
   'areatrigger',
   'areatrigger_scripts',
   'npc_text',
