@@ -16,6 +16,11 @@ export function parseMapNames(bytes: Uint8Array): Map<number, { name: string; in
   return new Map(table.records.map((r) => [r[0]!, { name: dbcString(bytes, r[5]!), instance: r[2]! !== 0 }]));
 }
 
+/** `MapEntry` 1: each map's folder name in the client (`Azeroth`, `Kalimdor`, `Expansion01`, …). */
+export function parseMapDirectories(bytes: Uint8Array): Map<number, string> {
+  return new Map(parseDbc(bytes, MAP_FILE).records.map((r) => [r[0]!, dbcString(bytes, r[1]!)]));
+}
+
 /** Each zone's name at the middle of its world map box: `WorldMapAreaEntry` 1 map, 2 area, 4–7 y1, y2, x1, x2. */
 export function parseZoneLabels(worldMapArea: Uint8Array, areaTable: Uint8Array): { map: number; name: string; x: number; y: number }[] {
   const areas = parseDbc(areaTable, AREA_TABLE_FILE);
