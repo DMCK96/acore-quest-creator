@@ -1,11 +1,16 @@
-import type { ReactNode } from 'react';
+import { useEffect, useRef, type ReactNode } from 'react';
 import type { Issue } from '@core/validate/validate';
 import type { ModuleId } from '@core/modules/model';
 import { moduleById } from '@core/modules/catalog';
 import type { ModuleBodyProps } from './body-props';
 import { ModuleBody } from './ModuleBody';
 
-/** The docked side panel frame: a title, an optional description, a close button and content. */
+/**
+ * The frame every quest-editor panel opens in: a centred modal over a dimmed backdrop, with a title,
+ * an optional description, a close button and scrolling content. Edits save as they are made, so a
+ * click on the backdrop closes it like Escape or the close button. Focus moves in when it opens and
+ * goes back to whatever opened it when it closes.
+ */
 export function PanelFrame({
   title,
   description,
@@ -17,18 +22,41 @@ export function PanelFrame({
   onClose(): void;
   children: ReactNode;
 }): React.JSX.Element {
+  const dialog = useRef<HTMLDivElement | null>(null);
+  /** Only a click that also started on the backdrop closes it: a text selection dragged out must not. */
+  const pressedBackdrop = useRef(false);
+
+  useEffect(() => {
+    const opener = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    dialog.current?.focus();
+    return () => {
+      if (opener?.isConnected) opener.focus();
+    };
+  }, []);
+
   return (
-    <div role="dialog" aria-label={title} className="module-panel">
-      <div className="module-panel__head">
-        <div>
-          <h2 className="module-panel__title">{title}</h2>
-          {description && <p className="module-panel__description">{description}</p>}
+    <div
+      className="module-modal"
+      onMouseDown={(e) => {
+        pressedBackdrop.current = e.target === e.currentTarget;
+      }}
+      onClick={(e) => {
+        if (pressedBackdrop.current && e.target === e.currentTarget) onClose();
+        pressedBackdrop.current = false;
+      }}
+    >
+      <div ref={dialog} role="dialog" aria-modal="true" aria-label={title} tabIndex={-1} className="module-panel">
+        <div className="module-panel__head">
+          <div>
+            <h2 className="module-panel__title">{title}</h2>
+            {description && <p className="module-panel__description">{description}</p>}
+          </div>
+          <button type="button" className="module-panel__close" aria-label="Close panel" onClick={onClose}>
+            ×
+          </button>
         </div>
-        <button type="button" className="module-panel__close" aria-label="Close panel" onClick={onClose}>
-          ×
-        </button>
+        <div className="module-panel__body">{children}</div>
       </div>
-      <div className="module-panel__body">{children}</div>
     </div>
   );
 }

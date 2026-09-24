@@ -102,4 +102,25 @@ describe('quest flow view', () => {
     await userEvent.click(screen.getByRole('button', { name: 'Changes' }));
     expect(screen.getByRole('dialog', { name: 'Changes' })).toBeInTheDocument();
   });
+
+  it('opens a module as a centred modal and hands focus back when its backdrop is clicked', async () => {
+    await mountFlow();
+    const box = screen.getByRole('button', { name: /^Rewards/ });
+    await userEvent.click(box);
+    const dialog = screen.getByRole('dialog', { name: 'Rewards' });
+    expect(dialog).toHaveAttribute('aria-modal', 'true');
+    expect(dialog.contains(document.activeElement)).toBe(true);
+    const backdrop = dialog.parentElement!;
+    expect(backdrop).toHaveClass('module-modal');
+    await userEvent.click(backdrop);
+    expect(screen.queryByRole('dialog', { name: 'Rewards' })).toBeNull();
+    expect(document.activeElement).toBe(box);
+  });
+
+  it('keeps a modal open when clicking inside it', async () => {
+    await mountFlow();
+    await userEvent.click(screen.getByRole('button', { name: /^Rewards/ }));
+    await userEvent.click(screen.getByRole('heading', { name: 'Rewards' }));
+    expect(screen.getByRole('dialog', { name: 'Rewards' })).toBeInTheDocument();
+  });
 });

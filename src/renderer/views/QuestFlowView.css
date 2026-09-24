@@ -262,14 +262,32 @@
 
 /* Docked panel */
 
+/* Panels open centred over the quest, which stays in view behind a dimmed backdrop. */
+.module-modal {
+  position: absolute;
+  inset: 0;
+  z-index: 20;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  background: rgba(0, 0, 0, 0.55);
+}
+
 .module-panel {
-  width: min(560px, 45vw);
-  flex-shrink: 0;
+  width: min(760px, 92vw);
+  max-height: 88vh;
   display: flex;
   flex-direction: column;
   background: var(--bg-panel);
-  border-left: 1px solid var(--border);
+  border: 1px solid var(--border);
+  border-radius: 10px;
   box-shadow: var(--shadow);
+  overflow: hidden;
+}
+
+.module-panel:focus {
+  outline: none;
 }
 
 .module-panel__head {
