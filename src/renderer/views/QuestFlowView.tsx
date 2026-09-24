@@ -1,4 +1,7 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import { ENTITIES_FIELD, newNpc, newObject, readEntities, writeEntities } from '@core/entities/model';
+import { EntityEditorProvider, type EditorRequest, type OpenEditor } from '../entities/EntityEditorContext';
+import { EntityEditorHost, type EditorState } from '../entities/EntityEditorHost';
 import { MODULES, moduleById, offeredModules, presentModules } from '@core/modules/catalog';
 import { routeIssues, worstSeverity } from '@core/modules/issues';
 import type { AppStore } from '../state/app-store';
@@ -37,6 +40,12 @@ export function QuestFlowView({ store }: { store: AppStore }): React.JSX.Element
   /** What the map was opened to do, and the panel to go back to when it closes. */
   const [mapRequest, setMapRequest] = useState<MapRequest | null>(null);
   const [mapReturn, setMapReturn] = useState<typeof openPanel>(null);
+  /** The NPC or object editor, open over whichever panel opened it; kept while the map is open. */
+  const [editor, setEditor] = useState<EditorState | null>(null);
+  const editorRef = useRef(editor);
+  editorRef.current = editor;
+  const closeEditor = useCallback(() => setEditor(null), []);
+  const onEditorTab = useCallback((tab: string) => setEditor((e) => (e ? { ...e, tab } : e)), []);
 
   // A map closed any other way than its Close button (Escape, another panel) forgets why it was
   // opened, so the next opening shows the map rather than placing or drawing on the first click.
@@ -51,7 +60,9 @@ export function QuestFlowView({ store }: { store: AppStore }): React.JSX.Element
     const onKeyDown = (e: KeyboardEvent): void => {
       if (e.key !== 'Escape') return;
       const state = store.getState();
-      if (state.openPanel !== null) state.setOpenPanel(null);
+      // The editor sits on top of the panel that opened it, so it closes first.
+      if (editorRef.current && state.openPanel !== 'map') setEditor(null);
+      else if (state.openPanel !== null) state.setOpenPanel(null);
       else void state.backToChain();
     };
     document.addEventListener('keydown', onKeyDown);
@@ -87,7 +98,31 @@ export function QuestFlowView({ store }: { store: AppStore }): React.JSX.Element
     setOpenPanel('map');
   };
 
+  const openEditor: OpenEditor = async (request) => {
+    if (request.kind === 'npc' || request.kind === 'object') {
+      setEditor({ kind: request.kind, entry: request.entry, isNew: false });
+      return null;
+    }
+    if (!api) return 'Not connected.';
+    // The first `if` returned for both existing kinds; TypeScript cannot narrow a union-typed `kind` out.
+    const made = request as Extract<EditorRequest, { kind: 'newNpc' | 'newObject' }>;
+    const isNpc = made.kind === 'newNpc';
+    const result = await api.allocateIds(isNpc ? 'creature' : 'gameobject', 1);
+    if (!result.ok || result.value.length === 0) return result.ok ? 'No free ID could be found.' : result.error.message;
+    const entry = result.value[0]!;
+    // Created in the quest at once, from the values as they are now (never a draft).
+    const now = readEntities(store.getState().open?.aggregate.values ?? {});
+    const next = made.kind === 'newNpc'
+      ? { ...now, npcs: [...now.npcs, { ...newNpc(entry), ...made.preset, entry }] }
+      : { ...now, objects: [...now.objects, { ...newObject(entry), ...made.preset, entry }] };
+    setValue(ENTITIES_FIELD, writeEntities(next));
+    made.onCreated?.(entry);
+    setEditor({ kind: isNpc ? 'npc' : 'object', entry, isNew: true });
+    return null;
+  };
+
   return (
+    <EntityEditorProvider open={openEditor}>
     <MapOpenerProvider open={openMap}>
     <div className="quest-flow">
       <div className="quest-flow__main">
@@ -163,7 +198,11 @@ export function QuestFlowView({ store }: { store: AppStore }): React.JSX.Element
           onRemove={() => removeModule(openPanel)}
         />
       )}
+      {editor && openPanel !== 'map' && (
+        <EntityEditorHost values={values} onChange={setValue} state={editor} onTab={onEditorTab} onClose={closeEditor} />
+      )}
     </div>
     </MapOpenerProvider>
+    </EntityEditorProvider>
   );
 }

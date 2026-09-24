@@ -6,6 +6,7 @@ import { EntityPicker } from '../../controls/EntityPicker';
 import { QuestStartsList } from '../../views/QuestStartsList';
 import { TextField } from '../../scripts/fields';
 import { useMapOpener } from '../../map/MapOpener';
+import { useEntityEditor } from '../../entities/EntityEditorContext';
 import { useApi } from '../../state/names';
 import type { ModuleBodyProps } from '../body-props';
 import { FieldSetting } from '../FieldSetting';
@@ -21,6 +22,7 @@ export function GiverBody({ open, links, onChange, onOpenQuest }: ModuleBodyProp
   const { aggregate } = open;
   const api = useApi();
   const openMap = useMapOpener();
+  const openEditor = useEntityEditor();
   const entities = readEntities(aggregate.values);
   // Edits made after waiting for the server start from the values as they are then.
   const valuesRef = useRef(aggregate.values);
@@ -36,21 +38,18 @@ export function GiverBody({ open, links, onChange, onOpenQuest }: ModuleBodyProp
     onChange(ENTITIES_FIELD, writeEntities({ ...entities, npcs: entities.npcs.map((n) => (n.entry === next.entry ? next : n)) }));
   }
 
-  /** A new NPC made with this quest, already a quest giver, put on the card at `index`. */
+  /** A new NPC made with this quest in the one NPC editor, already a quest giver, put on the card at `index`. */
   async function newGiver(role: 'start' | 'end', index: number): Promise<void> {
-    if (!api || making) return;
+    if (!openEditor || making) return;
     setMaking(true);
     try {
-      const result = await api.allocateIds('creature', 1);
-      if (!result.ok || result.value.length === 0) {
-        setError(result.ok ? 'No free ID could be found.' : result.error.message);
-        return;
-      }
-      setError(null);
-      const entry = result.value[0]!;
-      const now = readEntities(valuesRef.current);
-      onChange(ENTITIES_FIELD, writeEntities({ ...now, npcs: [...now.npcs, { ...newNpc(entry), questGiver: true }] }));
-      write(role, readGivers(valuesRef.current, role).map((t, i) => (i === index ? { kind: 'creature', id: entry } : t)));
+      const why = await openEditor({
+        kind: 'newNpc',
+        preset: { questGiver: true },
+        // Read the cards as they are when the NPC exists, not as they were when the button was pressed.
+        onCreated: (entry) => write(role, readGivers(valuesRef.current, role).map((t, i) => (i === index ? { kind: 'creature', id: entry } : t))),
+      });
+      setError(why);
     } finally {
       setMaking(false);
     }

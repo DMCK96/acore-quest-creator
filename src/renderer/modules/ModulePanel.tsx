@@ -16,11 +16,14 @@ export function PanelFrame({
   description,
   onClose,
   children,
+  footer,
 }: {
   title: string;
   description?: string;
   onClose(): void;
   children: ReactNode;
+  /** A bar under the scrolling content that stays in view, for the modal's own buttons. */
+  footer?: ReactNode;
 }): React.JSX.Element {
   const dialog = useRef<HTMLDivElement | null>(null);
   /** Only a click that also started on the backdrop closes it: a text selection dragged out must not. */
@@ -56,6 +59,7 @@ export function PanelFrame({
           </button>
         </div>
         <div className="module-panel__body">{children}</div>
+        {footer && <div className="module-panel__foot--sticky">{footer}</div>}
       </div>
     </div>
   );
