@@ -196,13 +196,16 @@ function sample(zone: ZoneArt, image: RgbaImage, x: number, y: number, out: Uint
   const y1 = Math.min(height - 1, y0 + 1);
   const fx = u - x0;
   const fy = v - y0;
-  const channel = (k: number): number =>
-    (rgba[(y0 * width + x0) * 4 + k]! * (1 - fx) + rgba[(y0 * width + x1) * 4 + k]! * fx) * (1 - fy) +
-    (rgba[(y1 * width + x0) * 4 + k]! * (1 - fx) + rgba[(y1 * width + x1) * 4 + k]! * fx) * fy;
-  if (channel(3) < 128) return false;
-  out[at] = Math.round(channel(0));
-  out[at + 1] = Math.round(channel(1));
-  out[at + 2] = Math.round(channel(2));
+  const w00 = (1 - fx) * (1 - fy);
+  const w10 = fx * (1 - fy);
+  const w01 = (1 - fx) * fy;
+  const w11 = fx * fy;
+  const p00 = (y0 * width + x0) * 4;
+  const p10 = (y0 * width + x1) * 4;
+  const p01 = (y1 * width + x0) * 4;
+  const p11 = (y1 * width + x1) * 4;
+  if (rgba[p00 + 3]! * w00 + rgba[p10 + 3]! * w10 + rgba[p01 + 3]! * w01 + rgba[p11 + 3]! * w11 < 128) return false;
+  for (let k = 0; k < 3; k++) out[at + k] = Math.round(rgba[p00 + k]! * w00 + rgba[p10 + k]! * w10 + rgba[p01 + k]! * w01 + rgba[p11 + k]! * w11);
   out[at + 3] = 255;
   return true;
 }

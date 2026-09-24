@@ -83,7 +83,10 @@ export function reliefPixels(file: TerrainFile | null, gx: number, gy: number): 
       const water = liquidLevel(file, xs[row]!, ys[col]!);
       const base = water !== null && water > h ? WATER : tint(h);
       const lit = water !== null && water > h ? 0.85 + 0.15 * shade : shade;
-      out.set([clamp(base[0] * lit), clamp(base[1] * lit), clamp(base[2] * lit), 255], k * 4);
+      out[k * 4] = clamp(base[0] * lit);
+      out[k * 4 + 1] = clamp(base[1] * lit);
+      out[k * 4 + 2] = clamp(base[2] * lit);
+      out[k * 4 + 3] = 255;
     }
   }
   return out;
@@ -98,14 +101,13 @@ export function downsample(children: readonly [Uint8Array | null, Uint8Array | n
     if (!child) return;
     const ox = (q % 2) * half;
     const oy = Math.trunc(q / 2) * half;
+    const stride = size * 4;
     for (let row = 0; row < half; row++) {
       for (let col = 0; col < half; col++) {
         const target = ((oy + row) * size + ox + col) * 4;
+        const a = (row * 2 * size + col * 2) * 4;
         for (let ch = 0; ch < 4; ch++) {
-          const at = (r: number, c: number): number => child[(r * size + c) * 4 + ch]!;
-          const r2 = row * 2;
-          const c2 = col * 2;
-          out[target + ch] = Math.round((at(r2, c2) + at(r2, c2 + 1) + at(r2 + 1, c2) + at(r2 + 1, c2 + 1)) / 4);
+          out[target + ch] = Math.round((child[a + ch]! + child[a + 4 + ch]! + child[a + stride + ch]! + child[a + stride + 4 + ch]!) / 4);
         }
       }
     }

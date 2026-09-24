@@ -133,16 +133,18 @@ export async function createClientImagery(dir: string, fs: ClientFs, log: (messa
       const south = north - span * GRID_SIZE;
       const east = west - span * GRID_SIZE;
       const overlaps = (z: ZoneArt): boolean => z.south <= north && z.north >= south && z.east <= west && z.west >= east;
-      const candidates = [...(finder.continent && overlaps(finder.continent) ? [finder.continent] : []), ...finder.zones.filter(overlaps)];
+      // The continent's own art is left out: it is a whole continent in 1002 px, a blur this close.
+      const candidates = finder.zones.filter(overlaps);
       if (candidates.length === 0) return null;
       const loaded = new Map<ZoneArt, RgbaImage | null>();
       await Promise.all(candidates.map(async (z) => loaded.set(z, await artOf(z))));
       return composeArtTile({
         tx,
         ty,
-        continent: finder.continent,
+        continent: null,
         image: (z) => loaded.get(z) ?? null,
-        zoneAt: (x, y) => finder.zoneAt(x, y, areaAt(x, y)),
+        // Ground takes its own zone's art; the sea, and ground no zone claims, the smallest zone box around it.
+        zoneAt: (x, y) => finder.zoneAt(x, y, areaAt(x, y)) ?? finder.zoneAt(x, y, null),
       });
     },
     close: () => files.close(),

@@ -139,8 +139,16 @@ function parseArea(bytes: Uint8Array, view: DataView, at: number): AreaData | nu
   return { gridArea, cells };
 }
 
+/** Only the area section of a `.map` file: what the map's painted art needs, without the heights. */
+export function parseMapArea(bytes: Uint8Array): AreaData | null {
+  if (bytes.length < 44 || fourcc(bytes, 0) !== 'MAPS') throw new TerrainFormatError('This is not a map file.');
+  const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+  const areaOffset = view.getUint32(12, true);
+  return areaOffset > 0 ? parseArea(bytes, view, areaOffset) : null;
+}
+
 /** The area id at a point of this grid, as `GridTerrainData::getArea` reads it; 0 without area data. */
-export function areaAt(file: TerrainFile, x: number, y: number): number {
+export function areaAt(file: Pick<TerrainFile, 'area'>, x: number, y: number): number {
   if (!file.area) return 0;
   if (!file.area.cells) return file.area.gridArea;
   const lx = Math.trunc(16 * (CENTER_GRID_ID - x / SIZE_OF_GRIDS)) & 15;

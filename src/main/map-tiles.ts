@@ -1,6 +1,6 @@
 import { createHash } from 'node:crypto';
 import { join } from 'node:path';
-import { areaAt, parseMapFile, type TerrainFile } from '../core/game/terrain';
+import { areaAt, parseMapArea, parseMapFile, type AreaData, type TerrainFile } from '../core/game/terrain';
 import { ART_ZOOM, gridOf, MAX_ZOOM, MIN_ZOOM, TILE_PX, tileGrids } from '../core/map/coords';
 import { decodeOwnPng, encodePng } from '../core/map/png';
 import { downsample, emptyPixels, reliefPixels } from '../core/map/relief';
@@ -70,6 +70,7 @@ export function createMapTiles(deps: {
   const transparent = encodePng(TILE_PX, TILE_PX, emptyPixels());
   const rgbaCache = new Map<string, Drawn>();
   const gridCache = new Map<string, Promise<TerrainFile | null>>();
+  const areaCache = new Map<string, Promise<{ area: AreaData | null } | null>>();
   const inFlight = new Map<string, Promise<Drawn>>();
   const reported = new Set<string>();
   const warnOnce = (key: string, text: string): void => {
@@ -83,7 +84,8 @@ export function createMapTiles(deps: {
     if (rgbaCache.size > RGBA_CACHE_SIZE) rgbaCache.delete(rgbaCache.keys().next().value!);
   };
 
-  async function readGrid(map: number, gx: number, gy: number): Promise<TerrainFile | null> {
+  /** A grid file parsed one way or another; null when it is missing or unreadable. */
+  async function readGrid<T>(map: number, gx: number, gy: number, parse: (bytes: Uint8Array) => T): Promise<T | null> {
     if (!dir) return null;
     const pad = (n: number, width: number): string => String(n).padStart(width, '0');
     const name = `${pad(map, 3)}${pad(gx, 2)}${pad(gy, 2)}.map`;
@@ -92,7 +94,7 @@ export function createMapTiles(deps: {
       const bytes = await deps.files.read(folder, name);
       if (!bytes) continue;
       try {
-        return parseMapFile(bytes);
+        return parse(bytes);
       } catch (error) {
         warnOnce(name, `Map tile: ${name} could not be read: ${error instanceof Error ? error.message : String(error)}`);
         return null;
@@ -101,18 +103,20 @@ export function createMapTiles(deps: {
     return null;
   }
 
-  function grid(map: number, gx: number, gy: number): Promise<TerrainFile | null> {
-    const key = `${folderKey}/${map}/${gx}/${gy}`;
-    let file = gridCache.get(key);
-    if (file) {
-      gridCache.delete(key);
-    } else {
-      file = readGrid(map, gx, gy);
-    }
-    gridCache.set(key, file);
-    if (gridCache.size > GRID_CACHE_SIZE) gridCache.delete(gridCache.keys().next().value!);
-    return file;
+  function lru<T>(cache: Map<string, Promise<T>>, key: string, load: () => Promise<T>): Promise<T> {
+    let value = cache.get(key);
+    if (value) cache.delete(key);
+    else value = load();
+    cache.set(key, value);
+    if (cache.size > GRID_CACHE_SIZE) cache.delete(cache.keys().next().value!);
+    return value;
   }
+
+  const grid = (map: number, gx: number, gy: number): Promise<TerrainFile | null> =>
+    lru(gridCache, `${folderKey}/${map}/${gx}/${gy}`, () => readGrid(map, gx, gy, parseMapFile));
+  /** Only a grid's areas: the painted art needs them, and they are far quicker to read than the heights. */
+  const areas = (map: number, gx: number, gy: number): Promise<{ area: AreaData | null } | null> =>
+    lru(areaCache, `${folderKey}/${map}/${gx}/${gy}`, () => readGrid(map, gx, gy, (bytes) => ({ area: parseMapArea(bytes) })));
 
   /**
    * A tile from memory, from the disk cache, or drawn now and written there. A tile asked for twice
@@ -184,18 +188,27 @@ export function createMapTiles(deps: {
       }
       if (zoom === ART_ZOOM) {
         const { gx0, gy0, span } = tileGrids(zoom, tx, ty);
-        const grids = new Map<string, TerrainFile | null>();
-        for (let gx = gx0; gx < gx0 + span; gx++) for (let gy = gy0; gy < gy0 + span; gy++) grids.set(`${gx}/${gy}`, await grid(map, gx, gy));
+        const grids: ({ area: AreaData | null } | null)[] = [];
+        for (let gx = gx0; gx < gx0 + span; gx++) for (let gy = gy0; gy < gy0 + span; gy++) grids.push(await areas(map, gx, gy));
         const lookup: AreaLookup = (x, y) => {
           const { gx, gy } = gridOf(x, y);
-          const file = grids.get(`${gx}/${gy}`);
+          const file = gx >= gx0 && gx < gx0 + span && gy >= gy0 && gy < gy0 + span ? grids[(gx - gx0) * span + (gy - gy0)] : null;
           return file ? areaAt(file, x, y) : null;
         };
-        const [art, base] = await Promise.all([client.art(map, tx, ty, lookup), relief(map, zoom, tx, ty)]);
-        if (!art) return base.pixels;
+        const art = await client.art(map, tx, ty, lookup);
+        if (!art) return (await relief(map, zoom, tx, ty)).pixels;
+        // The relief is slow to draw; it is only needed where the art leaves a gap.
+        let covered = true;
+        for (let i = 3; i < art.length && covered; i += 4) covered = art[i]! >= ART_ALPHA;
+        if (covered) return art;
+        const base = await relief(map, zoom, tx, ty);
         const out = base.pixels ? Uint8Array.from(base.pixels) : emptyPixels();
         for (let i = 0; i < out.length; i += 4) {
-          if (art[i + 3]! >= ART_ALPHA) out.set([art[i]!, art[i + 1]!, art[i + 2]!, 255], i);
+          if (art[i + 3]! < ART_ALPHA) continue;
+          out[i] = art[i]!;
+          out[i + 1] = art[i + 1]!;
+          out[i + 2] = art[i + 2]!;
+          out[i + 3] = 255;
         }
         return out;
       }
@@ -224,6 +237,7 @@ export function createMapTiles(deps: {
   const forget = (): void => {
     rgbaCache.clear();
     gridCache.clear();
+    areaCache.clear();
   };
 
   return {

@@ -163,6 +163,13 @@ describe('map tiles from the game client', () => {
     expect(rgbaAt(png, 200, 200)[3]).toBe(0);
     expect(areas).toEqual([12, null]);
   });
+  it('does not draw the relief under art that covers the whole tile', async () => {
+    const { tiles, stored } = setupWithClient({ art: async () => solidTile(200, 0, 0) });
+    tiles.setDataDir('/data');
+    tiles.setClientDir('/client');
+    expect(rgbaAt(await tiles.tile(0, 5, 16, 16), 100, 100)).toEqual([200, 0, 0, 255]);
+    expect([...stored.keys()].some((k) => k.includes('/r2/'))).toBe(false);
+  });
   it('builds zoom 4 from the painted tiles', async () => {
     const { tiles } = setupWithClient();
     tiles.setDataDir('/data');

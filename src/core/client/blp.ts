@@ -41,7 +41,12 @@ export function decodeBlp(bytes: Uint8Array): RgbaImage {
 
   if (compression === RAW) {
     if (data.length < count * 4) throw new BlpFormatError('The texture ends before its image.');
-    for (let i = 0; i < count; i++) rgba.set([data[i * 4 + 2]!, data[i * 4 + 1]!, data[i * 4]!, data[i * 4 + 3]!], i * 4);
+    for (let i = 0; i < count * 4; i += 4) {
+      rgba[i] = data[i + 2]!;
+      rgba[i + 1] = data[i + 1]!;
+      rgba[i + 2] = data[i]!;
+      rgba[i + 3] = data[i + 3]!;
+    }
   } else if (compression === PALETTE) {
     if (bytes.length < 148 + 1024) throw new BlpFormatError('The texture ends before its palette.');
     const alphaBytes = Math.ceil((count * alphaDepth) / 8);
@@ -52,7 +57,10 @@ export function decodeBlp(bytes: Uint8Array): RgbaImage {
       if (alphaDepth === 8) a = data[count + i]!;
       else if (alphaDepth === 1) a = (data[count + (i >> 3)]! >> (i & 7)) & 1 ? 255 : 0;
       else if (alphaDepth === 4) a = ((data[count + (i >> 1)]! >> ((i & 1) * 4)) & 15) * 17;
-      rgba.set([bytes[p + 2]!, bytes[p + 1]!, bytes[p]!, a], i * 4);
+      rgba[i * 4] = bytes[p + 2]!;
+      rgba[i * 4 + 1] = bytes[p + 1]!;
+      rgba[i * 4 + 2] = bytes[p]!;
+      rgba[i * 4 + 3] = a;
     }
   } else if (compression === DXT) {
     decodeDxt(data, width, height, alphaType === DXT3 ? 3 : alphaType === DXT5 ? 5 : 1, alphaDepth, rgba);
@@ -62,11 +70,12 @@ export function decodeBlp(bytes: Uint8Array): RgbaImage {
   return { width, height, rgba };
 }
 
-const expand = (c: number): [number, number, number] => [
-  Math.floor(((c >> 11) * 255) / 31),
-  Math.floor((((c >> 5) & 63) * 255) / 63),
-  Math.floor(((c & 31) * 255) / 31),
-];
+/** A 565 colour's channels into `into[at..at+2]`. */
+function expand(c: number, into: Uint8Array, at: number): void {
+  into[at] = Math.floor(((c >> 11) * 255) / 31);
+  into[at + 1] = Math.floor((((c >> 5) & 63) * 255) / 63);
+  into[at + 2] = Math.floor(((c & 31) * 255) / 31);
+}
 
 function decodeDxt(data: Uint8Array, width: number, height: number, kind: 1 | 3 | 5, alphaDepth: number, out: Uint8Array): void {
   const blockSize = kind === 1 ? 8 : 16;
@@ -74,6 +83,8 @@ function decodeDxt(data: Uint8Array, width: number, height: number, kind: 1 | 3 
   const blocks = across * Math.ceil(height / 4);
   if (data.length < blocks * blockSize) throw new BlpFormatError('The texture ends before its image.');
   const alpha = new Uint8Array(16);
+  // The block's four colours, RGBA each, reused for every block.
+  const colours = new Uint8Array(16);
   for (let b = 0; b < blocks; b++) {
     const at = b * blockSize;
     alpha.fill(255);
@@ -95,15 +106,23 @@ function decodeDxt(data: Uint8Array, width: number, height: number, kind: 1 | 3 
     const c = at + blockSize - 8;
     const v0 = data[c]! | (data[c + 1]! << 8);
     const v1 = data[c + 2]! | (data[c + 3]! << 8);
-    const c0 = expand(v0);
-    const c1 = expand(v1);
-    const colours: [number, number, number, number][] = [[...c0, 255], [...c1, 255]];
+    expand(v0, colours, 0);
+    expand(v1, colours, 4);
+    colours[3] = 255;
+    colours[7] = 255;
+    colours[11] = 255;
     if (kind !== 1 || v0 > v1) {
-      colours.push([0, 1, 2].map((k) => Math.floor((2 * c0[k]! + c1[k]!) / 3)).concat(255) as [number, number, number, number]);
-      colours.push([0, 1, 2].map((k) => Math.floor((c0[k]! + 2 * c1[k]!) / 3)).concat(255) as [number, number, number, number]);
+      for (let k = 0; k < 3; k++) {
+        colours[8 + k] = Math.floor((2 * colours[k]! + colours[4 + k]!) / 3);
+        colours[12 + k] = Math.floor((colours[k]! + 2 * colours[4 + k]!) / 3);
+      }
+      colours[15] = 255;
     } else {
-      colours.push([0, 1, 2].map((k) => Math.floor((c0[k]! + c1[k]!) / 2)).concat(255) as [number, number, number, number]);
-      colours.push([0, 0, 0, alphaDepth === 0 ? 255 : 0]);
+      for (let k = 0; k < 3; k++) {
+        colours[8 + k] = Math.floor((colours[k]! + colours[4 + k]!) / 2);
+        colours[12 + k] = 0;
+      }
+      colours[15] = alphaDepth === 0 ? 255 : 0;
     }
     const bx = (b % across) * 4;
     const by = Math.floor(b / across) * 4;
@@ -113,12 +132,12 @@ function decodeDxt(data: Uint8Array, width: number, height: number, kind: 1 | 3 
         const px = bx + x;
         const py = by + y;
         if (px >= width || py >= height) continue;
-        const colour = colours[(row >> (2 * x)) & 3]!;
+        const colour = ((row >> (2 * x)) & 3) * 4;
         const o = (py * width + px) * 4;
-        out[o] = colour[0];
-        out[o + 1] = colour[1];
-        out[o + 2] = colour[2];
-        out[o + 3] = kind === 1 ? (alphaDepth === 0 ? 255 : colour[3]) : alpha[y * 4 + x]!;
+        out[o] = colours[colour]!;
+        out[o + 1] = colours[colour + 1]!;
+        out[o + 2] = colours[colour + 2]!;
+        out[o + 3] = kind === 1 ? (alphaDepth === 0 ? 255 : colours[colour + 3]!) : alpha[y * 4 + x]!;
       }
     }
   }

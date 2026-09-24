@@ -44,12 +44,13 @@ describe('client imagery', () => {
     expect(tile).toHaveLength(256 * 256 * 4);
     expect(at(tile, 255, 255)).toEqual([200, 10, 10, 255]);
   });
-  it('paints a zoom-5 tile from the zone the ground belongs to, else the continent', async () => {
+  it('paints a zoom-5 tile from the zone the ground belongs to, and the sea from the zone box around it, never the continent', async () => {
     const imagery = (await createClientImagery('/wow', client()))!;
     // Zoom-5 tile (16, 24) covers grids gx 48-49, gy 32-33: inside Elwynn's box.
     // Pixel (250, 250) is clear of the fixture's overlay.
     expect(at((await imagery.art(0, 16, 24, () => 9))!, 250, 250)).toEqual([10, 200, 10, 255]);
-    expect(at((await imagery.art(0, 16, 24, () => 0))!, 250, 250)).toEqual([10, 10, 200, 255]);
+    // Area 0 (the sea): the continent's art is a whole continent in 1002 px, far too coarse this close.
+    expect(at((await imagery.art(0, 16, 24, () => 0))!, 250, 250)).toEqual([10, 200, 10, 255]);
     expect(at((await imagery.art(0, 16, 24, () => null))!, 250, 250)).toEqual([10, 200, 10, 255]);
     expect(await imagery.art(1, 16, 24, () => 9)).toBeNull();
   });
