@@ -25,6 +25,14 @@ export interface TerrainFile {
   holes: Uint16Array | null;
   /** The grid's water, or null when it has none. */
   liquid: LiquidData | null;
+  /** The area ids of the grid's cells, or null when the file has no area section. */
+  area: AreaData | null;
+}
+
+/** `LoadedAreaData` in the fork: one area for the whole grid, or one per cell of 16 × 16. */
+export interface AreaData {
+  gridArea: number;
+  cells: Uint16Array | null;
 }
 
 /** `LoadedLiquidData` in the fork: a level (global or per point) and which 8 × 8-cell blocks have water. */
@@ -51,6 +59,7 @@ const MAP_VERSION = 9;
 const HEIGHT_NO_HEIGHT = 0x1;
 const HEIGHT_AS_INT16 = 0x2;
 const HEIGHT_AS_INT8 = 0x4;
+const MAP_AREA_NO_AREA = 0x1;
 const LIQUID_NO_TYPE = 0x1;
 const LIQUID_NO_HEIGHT = 0x2;
 
@@ -75,6 +84,7 @@ export function parseMapFile(bytes: Uint8Array): TerrainFile {
   const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
   const version = view.getUint32(4, true);
   if (version !== MAP_VERSION) throw new TerrainFormatError(`This map file is version ${version}; the server reads version ${MAP_VERSION}.`);
+  const areaOffset = view.getUint32(12, true);
   const heightOffset = view.getUint32(20, true);
   const liquidOffset = view.getUint32(28, true);
   const holesOffset = view.getUint32(36, true);
@@ -88,14 +98,15 @@ export function parseMapFile(bytes: Uint8Array): TerrainFile {
   }
 
   const liquid = liquidOffset > 0 ? parseLiquid(bytes, view, liquidOffset) : null;
+  const area = areaOffset > 0 ? parseArea(bytes, view, areaOffset) : null;
 
-  if (heightOffset === 0) return { kind: 'flat', gridHeight: Number.NaN, multiplier: 0, v9: [], v8: [], holes, liquid };
+  if (heightOffset === 0) return { kind: 'flat', gridHeight: Number.NaN, multiplier: 0, v9: [], v8: [], holes, liquid, area };
   if (fourcc(bytes, heightOffset) !== 'MHGT') throw new TerrainFormatError('The map file has no height section.');
   const flags = view.getUint32(heightOffset + 4, true);
   const gridHeight = view.getFloat32(heightOffset + 8, true);
   const gridMaxHeight = view.getFloat32(heightOffset + 12, true);
   const data = heightOffset + 16;
-  if (flags & HEIGHT_NO_HEIGHT) return { kind: 'flat', gridHeight, multiplier: 0, v9: [], v8: [], holes, liquid };
+  if (flags & HEIGHT_NO_HEIGHT) return { kind: 'flat', gridHeight, multiplier: 0, v9: [], v8: [], holes, liquid, area };
 
   const read = (size: number, count: number, at: number, get: (offset: number) => number): number[] => {
     if (at + size * count > bytes.length) throw new TerrainFormatError('The map file ends inside its height data.');
@@ -104,16 +115,37 @@ export function parseMapFile(bytes: Uint8Array): TerrainFile {
   if (flags & HEIGHT_AS_INT16) {
     const v9 = read(2, V9, data, (o) => view.getUint16(o, true));
     const v8 = read(2, V8, data + V9 * 2, (o) => view.getUint16(o, true));
-    return { kind: 'uint16', gridHeight, multiplier: (gridMaxHeight - gridHeight) / 65535, v9, v8, holes, liquid };
+    return { kind: 'uint16', gridHeight, multiplier: (gridMaxHeight - gridHeight) / 65535, v9, v8, holes, liquid, area };
   }
   if (flags & HEIGHT_AS_INT8) {
     const v9 = read(1, V9, data, (o) => view.getUint8(o));
     const v8 = read(1, V8, data + V9, (o) => view.getUint8(o));
-    return { kind: 'uint8', gridHeight, multiplier: (gridMaxHeight - gridHeight) / 255, v9, v8, holes, liquid };
+    return { kind: 'uint8', gridHeight, multiplier: (gridMaxHeight - gridHeight) / 255, v9, v8, holes, liquid, area };
   }
   const v9 = read(4, V9, data, (o) => view.getFloat32(o, true));
   const v8 = read(4, V8, data + V9 * 4, (o) => view.getFloat32(o, true));
-  return { kind: 'float', gridHeight, multiplier: 1, v9, v8, holes, liquid };
+  return { kind: 'float', gridHeight, multiplier: 1, v9, v8, holes, liquid, area };
+}
+
+function parseArea(bytes: Uint8Array, view: DataView, at: number): AreaData | null {
+  if (at + 8 > bytes.length) throw new TerrainFormatError('The map file ends inside its areas.');
+  if (fourcc(bytes, at) !== 'AREA') return null;
+  const flags = view.getUint16(at + 4, true);
+  const gridArea = view.getUint16(at + 6, true);
+  if (flags & MAP_AREA_NO_AREA) return { gridArea, cells: null };
+  if (at + 8 + 512 > bytes.length) throw new TerrainFormatError('The map file ends inside its areas.');
+  const cells = new Uint16Array(256);
+  for (let k = 0; k < 256; k++) cells[k] = view.getUint16(at + 8 + k * 2, true);
+  return { gridArea, cells };
+}
+
+/** The area id at a point of this grid, as `GridTerrainData::getArea` reads it; 0 without area data. */
+export function areaAt(file: TerrainFile, x: number, y: number): number {
+  if (!file.area) return 0;
+  if (!file.area.cells) return file.area.gridArea;
+  const lx = Math.trunc(16 * (CENTER_GRID_ID - x / SIZE_OF_GRIDS)) & 15;
+  const ly = Math.trunc(16 * (CENTER_GRID_ID - y / SIZE_OF_GRIDS)) & 15;
+  return file.area.cells[lx * 16 + ly]!;
 }
 
 function parseLiquid(bytes: Uint8Array, view: DataView, at: number): LiquidData | null {

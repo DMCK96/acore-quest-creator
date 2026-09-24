@@ -5,6 +5,8 @@ export function buildMapFile(opts: {
   v9?: (i: number, j: number) => number; v8?: (i: number, j: number) => number;
   holes?: Uint16Array;
   /** An `MLIQ` section: one level (and global flags), optional per-block flags, optional per-point levels. */
+  /** An `AREA` section: one area for the grid, or one per cell (16 × 16, row = x cell, col = y cell). */
+  area?: { gridArea: number; cells?: (row: number, col: number) => number };
   liquid?: {
     flags: number;
     level: number;
@@ -22,12 +24,14 @@ export function buildMapFile(opts: {
   const liq = opts.liquid;
   const liquidOffset = holesOffset + holesSize;
   const liquidSize = liq ? 16 + (liq.blockFlags ? 512 + 256 : 0) + (liq.levels ? liq.levels.width * liq.levels.height * 4 : 0) : 0;
-  const bytes = new Uint8Array(liquidOffset + liquidSize);
+  const areaOffset = liquidOffset + liquidSize;
+  const areaSize = opts.area ? 8 + (opts.area.cells ? 512 : 0) : 0;
+  const bytes = new Uint8Array(areaOffset + areaSize);
   const view = new DataView(bytes.buffer);
   bytes.set([0x4d, 0x41, 0x50, 0x53]); // MAPS
   view.setUint32(4, 9, true);
   view.setUint32(8, 0, true);
-  view.setUint32(12, 0, true); view.setUint32(16, 0, true);
+  view.setUint32(12, opts.area ? areaOffset : 0, true); view.setUint32(16, areaSize, true);
   view.setUint32(20, heightOffset, true); view.setUint32(24, heightHeaderSize + dataSize, true);
   view.setUint32(28, liq ? liquidOffset : 0, true); view.setUint32(32, liquidSize, true);
   view.setUint32(36, opts.holes ? holesOffset : 0, true); view.setUint32(40, holesSize, true);
@@ -64,6 +68,14 @@ export function buildMapFile(opts: {
     if (liq.levels) {
       const { width, height, at } = liq.levels;
       for (let i = 0; i < height; i++) for (let j = 0; j < width; j++) view.setFloat32(o + (i * width + j) * 4, at(i, j), true);
+    }
+  }
+  if (opts.area) {
+    bytes.set([0x41, 0x52, 0x45, 0x41], areaOffset); // AREA
+    view.setUint16(areaOffset + 4, opts.area.cells ? 0 : 1, true);
+    view.setUint16(areaOffset + 6, opts.area.gridArea, true);
+    if (opts.area.cells) {
+      for (let row = 0; row < 16; row++) for (let col = 0; col < 16; col++) view.setUint16(areaOffset + 8 + (row * 16 + col) * 2, opts.area.cells(row, col), true);
     }
   }
   return bytes;
