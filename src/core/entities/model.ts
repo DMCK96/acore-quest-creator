@@ -58,6 +58,8 @@ const npcSchema = z.object({
   spawns: z.array(spawnSchema),
 });
 
+const pageSchema = z.object({ id: int, text: z.string() });
+
 const objectSchema = z.object({
   entry: int,
   name: z.string(),
@@ -65,9 +67,13 @@ const objectSchema = z.object({
   displayId: int,
   size: num,
   spawns: z.array(spawnSchema),
+  // Added with readable objects (slice E); defaults keep objects saved before then as they were.
+  pages: z.array(pageSchema).default([]),
+  onlyDuringQuest: z.boolean().default(false),
 });
 
 export type Spawn = z.infer<typeof spawnSchema>;
+export type Page = z.infer<typeof pageSchema>;
 export type CustomNpc = z.infer<typeof npcSchema>;
 export type CustomObject = z.infer<typeof objectSchema>;
 export type NpcRank = CustomNpc['rank'];
@@ -120,7 +126,7 @@ export function newNpc(entry: number): CustomNpc {
 }
 
 export function newObject(entry: number): CustomObject {
-  return { entry, name: '', type: 'goober', displayId: 0, size: 1, spawns: [] };
+  return { entry, name: '', type: 'goober', displayId: 0, size: 1, spawns: [], pages: [], onlyDuringQuest: false };
 }
 
 export function newSpawn(guid: number): Spawn {

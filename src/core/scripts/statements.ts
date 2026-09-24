@@ -18,12 +18,14 @@ const DELETE_ORDER = [
   'creature_template_model',
   'creature_template',
   'gameobject_template',
+  'page_text',
 ] as const;
 
 /** Inserts run in the order the server needs them: what a row points at exists before the row. */
 const INSERT_ORDER = [
   'creature_template',
   'creature_template_model',
+  'page_text',
   'gameobject_template',
   'creature',
   'gameobject',

@@ -80,7 +80,17 @@ export function compileEntities(input: {
     };
     // A chest's loot is looked up by `Data1`; using its own entry keeps its loot rows its own.
     if (object.type === 'chest') row.Data1 = text(object.entry);
+    // The page an object opens when used: a readable object's `Data0`, a usable object's `Data7`.
+    const firstPage = object.pages[0]?.id;
+    if (firstPage !== undefined && object.type === 'text') row.Data0 = text(firstPage);
+    if (firstPage !== undefined && object.type === 'goober') row.Data7 = text(firstPage);
+    // Only players with the quest in their log may use it (goober `Data1`) or loot it (chest `Data8`).
+    if (object.onlyDuringQuest && object.type === 'goober') row.Data1 = text(questId);
+    if (object.onlyDuringQuest && object.type === 'chest') row.Data8 = text(questId);
     insert('gameobject_template', row);
+    object.pages.forEach((page, i) => {
+      insert('page_text', { ID: text(page.id), Text: page.text, NextPageID: text(object.pages[i + 1]?.id ?? 0) });
+    });
     for (const spawn of object.spawns) {
       objectGuids.add(spawn.guid);
       insert('gameobject', {
@@ -110,5 +120,6 @@ export function compileEntities(input: {
   add('creature', sorted(creatureGuids).map((g) => ({ guid: text(g) })));
   add('gameobject_template', sorted(entities.objects.map((o) => o.entry)).map((e) => ({ entry: text(e) })));
   add('gameobject', sorted(objectGuids).map((g) => ({ guid: text(g) })));
+  add('page_text', sorted(entities.objects.flatMap((o) => o.pages.map((p) => p.id))).map((id) => ({ ID: text(id) })));
   return out;
 }

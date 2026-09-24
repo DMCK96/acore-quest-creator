@@ -19,6 +19,10 @@ export function entityIssues(input: { entities: QuestEntities; dbNames: Readonly
     else if (entity.spawns.some((s) => s.x === 0 && s.y === 0 && s.z === 0)) {
       add('warning', 'ENTITY_SPAWN_ORIGIN', 'a spawn is still at 0, 0, 0; set where it stands.');
     }
+    if ('pages' in entity) {
+      if (entity.type === 'text' && entity.pages.length === 0) add('error', 'ENTITY_NO_PAGES', 'a readable object needs at least one page.');
+      if (entity.pages.some((p) => p.text.trim() === '')) add('warning', 'ENTITY_EMPTY_PAGE', 'a page has no text.');
+    }
     const existing = input.dbNames.get(`${kind}:${entity.entry}`);
     if (existing !== undefined && existing !== entity.name) {
       add('warning', 'ENTITY_TAKEN', `entry ${entity.entry} already holds "${existing}" in the database, which this would replace.`);

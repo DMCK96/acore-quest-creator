@@ -5,7 +5,7 @@ import { taggedRows } from '../scripts/context';
 import type { QuestEntities } from './model';
 
 /** The tables new NPCs and objects are written to. */
-export const ENTITY_TABLES = ['creature_template', 'creature_template_model', 'creature', 'gameobject_template', 'gameobject'] as const;
+export const ENTITY_TABLES = ['creature_template', 'creature_template_model', 'creature', 'gameobject_template', 'gameobject', 'page_text'] as const;
 
 export const ENTITY_KEYS: Record<string, readonly string[]> = {
   creature_template: ['entry'],
@@ -13,6 +13,7 @@ export const ENTITY_KEYS: Record<string, readonly string[]> = {
   creature: ['guid'],
   gameobject_template: ['entry'],
   gameobject: ['guid'],
+  page_text: ['ID'],
 };
 
 /**
