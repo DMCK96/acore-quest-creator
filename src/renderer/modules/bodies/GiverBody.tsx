@@ -1,13 +1,11 @@
 import { useRef, useState } from 'react';
 import { readGivers, writeGivers, type GiverTarget } from '@core/modules/givers';
 import { removeEntry } from '@core/modules/entries';
-import { ENTITIES_FIELD, newNpc, readEntities, writeEntities, type CustomNpc } from '@core/entities/model';
+import { readEntities } from '@core/entities/model';
 import { EntityPicker } from '../../controls/EntityPicker';
 import { QuestStartsList } from '../../views/QuestStartsList';
-import { TextField } from '../../scripts/fields';
 import { useMapOpener } from '../../map/MapOpener';
 import { useEntityEditor } from '../../entities/EntityEditorContext';
-import { useApi } from '../../state/names';
 import type { ModuleBodyProps } from '../body-props';
 import { FieldSetting } from '../FieldSetting';
 import '../modules.css';
@@ -20,7 +18,6 @@ const ROLES = [
 /** Who offers the quest and who takes it back, as NPC-or-object cards, plus how it starts. */
 export function GiverBody({ open, links, onChange, onOpenQuest }: ModuleBodyProps): React.JSX.Element {
   const { aggregate } = open;
-  const api = useApi();
   const openMap = useMapOpener();
   const openEditor = useEntityEditor();
   const entities = readEntities(aggregate.values);
@@ -34,21 +31,17 @@ export function GiverBody({ open, links, onChange, onOpenQuest }: ModuleBodyProp
     for (const [fieldId, value] of Object.entries(writeGivers(role, targets))) onChange(fieldId, value);
   }
 
-  function saveNpc(next: CustomNpc): void {
-    onChange(ENTITIES_FIELD, writeEntities({ ...entities, npcs: entities.npcs.map((n) => (n.entry === next.entry ? next : n)) }));
-  }
-
-  /** A new NPC made with this quest in the one NPC editor, already a quest giver, put on the card at `index`. */
-  async function newGiver(role: 'start' | 'end', index: number): Promise<void> {
+  /** A new NPC or object made with this quest in its one editor, already a quest giver, put on the card at `index`. */
+  async function newGiver(role: 'start' | 'end', index: number, kind: GiverTarget['kind']): Promise<void> {
     if (!openEditor || making) return;
     setMaking(true);
+    // Read the cards as they are when the entity exists, not as they were when the button was pressed.
+    const onCreated = (entry: number): void =>
+      write(role, readGivers(valuesRef.current, role).map((t, i) => (i === index ? { kind, id: entry } : t)));
     try {
-      const why = await openEditor({
-        kind: 'newNpc',
-        preset: { questGiver: true },
-        // Read the cards as they are when the NPC exists, not as they were when the button was pressed.
-        onCreated: (entry) => write(role, readGivers(valuesRef.current, role).map((t, i) => (i === index ? { kind: 'creature', id: entry } : t))),
-      });
+      const why = await openEditor(kind === 'creature'
+        ? { kind: 'newNpc', preset: { questGiver: true }, onCreated }
+        : { kind: 'newObject', preset: { type: 'questGiver' }, onCreated });
       setError(why);
     } finally {
       setMaking(false);
@@ -70,6 +63,7 @@ export function GiverBody({ open, links, onChange, onOpenQuest }: ModuleBodyProp
               const n = i + 1;
               const id = `giver.${role}.${i}`;
               const own = t.kind === 'creature' ? entities.npcs.find((npc) => npc.entry === t.id) : undefined;
+              const ownObject = t.kind === 'gameobject' ? entities.objects.find((o) => o.entry === t.id) : undefined;
               const firstSpawn = own?.spawns[0];
               return (
                 <section key={i} className="entry-card" aria-label={`${list} ${n}`}>
@@ -82,17 +76,34 @@ export function GiverBody({ open, links, onChange, onOpenQuest }: ModuleBodyProp
                     </select>
                     <EntityPicker id={id} label={`${list} ${n}`} kind={t.kind} value={t.id}
                       onChange={(picked) => set(i, { kind: t.kind, id: picked })} />
-                    {t.kind === 'creature' && (
+                    {openEditor && (
                       <button type="button" className="entry-card__btn" disabled={making}
-                        aria-label={`New NPC for ${list.toLowerCase()} ${n}`} onClick={() => void newGiver(role, i)}>
-                        New NPC
+                        aria-label={`${t.kind === 'creature' ? 'New NPC' : 'New object'} for ${list.toLowerCase()} ${n}`}
+                        onClick={() => void newGiver(role, i, t.kind)}>
+                        {t.kind === 'creature' ? 'New NPC' : 'New object'}
                       </button>
                     )}
                   </div>
+                  {ownObject && (
+                    <div className="entry-card__own">
+                      <strong>{ownObject.name.trim() || `New object ${ownObject.entry}`}</strong>
+                      <p className="scene-hint">Made with this quest.</p>
+                      {openEditor && (
+                        <button type="button" className="entry-card__btn" onClick={() => void openEditor({ kind: 'object', entry: ownObject.entry })}>
+                          Edit object
+                        </button>
+                      )}
+                    </div>
+                  )}
                   {own && (
                     <div className="entry-card__own">
-                      <TextField label="NPC name" value={own.name} onChange={(name) => saveNpc({ ...own, name })} />
-                      <p className="scene-hint">Made with this quest. Set its level, model and more in NPCs &amp; objects.</p>
+                      <strong>{own.name.trim() || `New NPC ${own.entry}`}</strong>
+                      <p className="scene-hint">Made with this quest.</p>
+                      {openEditor && (
+                        <button type="button" className="entry-card__btn" onClick={() => void openEditor({ kind: 'npc', entry: own.entry })}>
+                          Edit NPC
+                        </button>
+                      )}
                       {openMap && !firstSpawn && (
                         <button type="button" className="entry-card__btn"
                           onClick={() => openMap({ kind: 'place', target: { kind: 'npc', entry: own.entry } })}>

@@ -2,7 +2,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import { cleanup, fireEvent, screen, within, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { mountBody } from './module-harness';
+import { mountEditor } from './module-harness';
 import { makeMockApi, okv } from './mock-api';
 import { ENTITIES_FIELD, newNpc, writeEntities, type QuestEntities } from '../../src/core/entities/model';
 import { emptyFight, newAbility, type Fight } from '../../src/core/combat/model';
@@ -19,12 +19,12 @@ const spellApi = () => makeMockApi({
     : [])),
   lookupNames: vi.fn(async (_k: string, ids: number[]) => okv(Object.fromEntries(ids.filter((i) => i === 116 || i === 8269).map((i) => [i, i === 116 ? 'Frostbolt (Rank 1)' : 'Frenzy'])))),
 });
-const fightRegion = () => within(screen.getByRole('group', { name: 'NPC: Hela' })).getByRole('region', { name: 'Fight' });
+const fightRegion = () => screen.getByRole('region', { name: 'Fight' });
 
 describe('Fight editor', () => {
   it('shows that an NPC without a fight just attacks, and starts one from a preset or from scratch', async () => {
     const onChange = vi.fn();
-    await mountBody('entities', { [ENTITIES_FIELD]: writeEntities(withFight(null)) }, { onChange, api: spellApi() });
+    await mountEditor({ [ENTITIES_FIELD]: writeEntities(withFight(null)) }, { kind: 'npc', entry: 12000001, isNew: false }, { onChange, api: spellApi(), tab: 'Fight' });
     expect(within(fightRegion()).getByText('This NPC just attacks (no abilities).')).toBeTruthy();
     await userEvent.selectOptions(within(fightRegion()).getByLabelText('Start from a preset'), 'Flee at 15%');
     expect(last(onChange).npcs[0]!.fight!.reactions[0]).toMatchObject({ when: { kind: 'healthBelow', pct: 15 } });
@@ -34,7 +34,7 @@ describe('Fight editor', () => {
 
   it('picks a spell by name and saves it with the target its effect suggests', async () => {
     const onChange = vi.fn();
-    await mountBody('entities', { [ENTITIES_FIELD]: writeEntities(withFight({ ...emptyFight(), abilities: [newAbility(emptyFight())] })) }, { onChange, api: spellApi() });
+    await mountEditor({ [ENTITIES_FIELD]: writeEntities(withFight({ ...emptyFight(), abilities: [newAbility(emptyFight())] })) }, { kind: 'npc', entry: 12000001, isNew: false }, { onChange, api: spellApi(), tab: 'Fight' });
     const ability = within(fightRegion()).getByRole('group', { name: 'Ability 1' });
     await userEvent.type(within(ability).getByRole('combobox', { name: 'Spell' }), 'Frenzy');
     await userEvent.click(await within(ability).findByRole('option', { name: /Frenzy/ }));
@@ -42,7 +42,7 @@ describe('Fight editor', () => {
   });
 
   it('shows the summary in plain words with spell names', async () => {
-    await mountBody('entities', { [ENTITIES_FIELD]: writeEntities(withFight({ ...emptyFight(), abilities: [{ ...newAbility(emptyFight()), spellId: 116 }] })) }, { api: spellApi() });
+    await mountEditor({ [ENTITIES_FIELD]: writeEntities(withFight({ ...emptyFight(), abilities: [{ ...newAbility(emptyFight()), spellId: 116 }] })) }, { kind: 'npc', entry: 12000001, isNew: false }, { api: spellApi(), tab: 'Fight' });
     expect(await screen.findByText('Casts Frostbolt on its current target every 8–12 s (first after 2–4 s)')).toBeTruthy();
   });
 
@@ -53,7 +53,7 @@ describe('Fight editor', () => {
       abilities: [{ ...newAbility(emptyFight()), spellId: 116 }],
       reactions: [{ id: 'r1', when: { kind: 'healthBelow', pct: 50 }, phases: [], steps: [] }],
     };
-    await mountBody('entities', { [ENTITIES_FIELD]: writeEntities(withFight(start)) }, { onChange, api: spellApi() });
+    await mountEditor({ [ENTITIES_FIELD]: writeEntities(withFight(start)) }, { kind: 'npc', entry: 12000001, isNew: false }, { onChange, api: spellApi(), tab: 'Fight' });
     expect(within(fightRegion()).queryByRole('group', { name: 'Phases' })).toBeNull();
     const reaction = within(fightRegion()).getByRole('group', { name: 'Reaction 1' });
     await userEvent.selectOptions(within(reaction).getByLabelText('Add step'), 'Go to phase');
@@ -62,7 +62,7 @@ describe('Fight editor', () => {
     expect(saved.npcs[0]!.fight!.reactions[0]!.steps).toEqual([{ kind: 'goToPhase', phase: 2, waitMs: 0 }]);
 
     cleanup();
-    await mountBody('entities', { [ENTITIES_FIELD]: writeEntities(saved) }, { api: spellApi() });
+    await mountEditor({ [ENTITIES_FIELD]: writeEntities(saved) }, { kind: 'npc', entry: 12000001, isNew: false }, { api: spellApi(), tab: 'Fight' });
     expect(within(fightRegion()).getByRole('group', { name: 'Phases' })).toBeTruthy();
     expect(within(within(fightRegion()).getByRole('group', { name: 'Ability 1' })).getByText('In phases')).toBeTruthy();
   });
@@ -70,7 +70,7 @@ describe('Fight editor', () => {
   it('refuses to remove a phase that is still used and says where', async () => {
     const onChange = vi.fn();
     const f: Fight = { phases: ['Ground', 'Air'], abilities: [{ ...newAbility(emptyFight()), spellId: 116, phases: [2] }], reactions: [] };
-    await mountBody('entities', { [ENTITIES_FIELD]: writeEntities(withFight(f)) }, { onChange, api: spellApi() });
+    await mountEditor({ [ENTITIES_FIELD]: writeEntities(withFight(f)) }, { kind: 'npc', entry: 12000001, isNew: false }, { onChange, api: spellApi(), tab: 'Fight' });
     const phases = within(fightRegion()).getByRole('group', { name: 'Phases' });
     await userEvent.click(within(phases).getByRole('button', { name: 'Remove Air' }));
     expect(within(phases).getByText('Air is still used by Ability 1.')).toBeTruthy();
@@ -80,7 +80,7 @@ describe('Fight editor', () => {
   it('moves a cast on the hurt friend back to the current target when the reaction stops being about a hurt friend', async () => {
     const onChange = vi.fn();
     const f: Fight = { ...emptyFight(), reactions: [{ id: 'r1', when: { kind: 'friendHealthBelow', pct: 40, range: 30 }, phases: [], steps: [{ kind: 'cast', spellId: 2054, target: 'hurtFriend', waitMs: 0 }] }] };
-    await mountBody('entities', { [ENTITIES_FIELD]: writeEntities(withFight(f)) }, { onChange, api: spellApi() });
+    await mountEditor({ [ENTITIES_FIELD]: writeEntities(withFight(f)) }, { kind: 'npc', entry: 12000001, isNew: false }, { onChange, api: spellApi(), tab: 'Fight' });
     const reaction = within(fightRegion()).getByRole('group', { name: 'Reaction 1' });
     await userEvent.selectOptions(within(reaction).getByLabelText('When'), 'At a health %');
     expect(last(onChange).npcs[0]!.fight!.reactions[0]!.steps[0]).toMatchObject({ kind: 'cast', target: 'victim' });
@@ -89,7 +89,7 @@ describe('Fight editor', () => {
   it('falls back to a spell ID when there is no server data folder', async () => {
     const onChange = vi.fn();
     const api = makeMockApi({ spellFacts: vi.fn(async () => okv({ available: false, reason: 'Spell names need the server data folder.', spells: {} })) });
-    await mountBody('entities', { [ENTITIES_FIELD]: writeEntities(withFight({ ...emptyFight(), abilities: [newAbility(emptyFight())] })) }, { onChange, api });
+    await mountEditor({ [ENTITIES_FIELD]: writeEntities(withFight({ ...emptyFight(), abilities: [newAbility(emptyFight())] })) }, { kind: 'npc', entry: 12000001, isNew: false }, { onChange, api, tab: 'Fight' });
     const ability = within(fightRegion()).getByRole('group', { name: 'Ability 1' });
     expect(await within(ability).findByText('Spell names need the server data folder.')).toBeTruthy();
     fireEvent.change(within(ability).getByLabelText('Spell ID'), { target: { value: '116' } });

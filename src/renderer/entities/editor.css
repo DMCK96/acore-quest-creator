@@ -28,3 +28,27 @@
   outline: 2px solid var(--accent);
   outline-offset: -2px;
 }
+
+.entity-list {
+  list-style: none;
+  margin: 12px 0 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.entity-row {
+  display: grid;
+  grid-template-columns: minmax(120px, 1fr) auto auto;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 12px;
+  border: 1px solid var(--border-soft);
+  border-radius: 6px;
+  background: var(--bg-panel-raised);
+}
+
+.entity-row__name {
+  font-weight: 600;
+}

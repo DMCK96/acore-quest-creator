@@ -1,58 +1,39 @@
 // @vitest-environment jsdom
 import { describe, expect, it, vi } from 'vitest';
-import { screen, within, waitFor } from '@testing-library/react';
+import { screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { mountBody } from './module-harness';
-import { makeMockApi, okv } from './mock-api';
-import { ENTITIES_FIELD, newNpc, writeEntities, type QuestEntities } from '../../src/core/entities/model';
+import { ENTITIES_FIELD, newNpc, newObject, newSpawn, writeEntities } from '../../src/core/entities/model';
 
-const last = (onChange: ReturnType<typeof vi.fn>) => onChange.mock.calls.filter(([f]) => f === ENTITIES_FIELD).at(-1)![1] as QuestEntities;
+const values = { [ENTITIES_FIELD]: writeEntities({ npcs: [{ ...newNpc(12000001), name: 'Hela', minLevel: 10, maxLevel: 12, spawns: [newSpawn(900)] }], objects: [{ ...newObject(9100001), name: 'Crate' }] }) };
 
 describe('NPCs & objects module', () => {
-  it('adds an NPC with a freshly allocated entry', async () => {
-    const api = makeMockApi({ allocateIds: vi.fn(async () => okv([12000001])) });
-    const onChange = vi.fn();
-    await mountBody('entities', {}, { api, onChange });
+  it('lists each NPC and object in one row with Edit', async () => {
+    const openEditor = vi.fn(async () => null);
+    await mountBody('entities', values, { openEditor });
+    const hela = screen.getByRole('listitem', { name: 'Hela' });
+    expect(within(hela).getByText('Level 10–12 · placed')).toBeTruthy();
+    const crate = screen.getByRole('listitem', { name: 'Crate' });
+    expect(within(crate).getByText('Usable object · not placed')).toBeTruthy();
+    await userEvent.click(within(hela).getByRole('button', { name: 'Edit' }));
+    expect(openEditor).toHaveBeenCalledWith({ kind: 'npc', entry: 12000001 });
+    await userEvent.click(within(crate).getByRole('button', { name: 'Edit' }));
+    expect(openEditor).toHaveBeenCalledWith({ kind: 'object', entry: 9100001 });
+  });
+
+  it('adds NPCs and objects through the one editor, with no copy picker', async () => {
+    const openEditor = vi.fn(async () => null);
+    await mountBody('entities', {}, { openEditor });
+    expect(screen.queryByRole('combobox', { name: /Copy/ })).toBeNull();
     await userEvent.click(screen.getByRole('button', { name: 'Add NPC' }));
-    await waitFor(() => expect(last(onChange).npcs).toHaveLength(1));
-    expect(last(onChange).npcs[0]).toMatchObject({ entry: 12000001, name: '' });
-    expect(api.allocateIds).toHaveBeenCalledWith('creature', 1);
+    expect(openEditor).toHaveBeenCalledWith({ kind: 'newNpc' });
+    await userEvent.click(screen.getByRole('button', { name: 'Add object' }));
+    expect(openEditor).toHaveBeenCalledWith({ kind: 'newObject' });
   });
 
-  it('copies look and stats when adding from an existing NPC', async () => {
-    const api = makeMockApi({
-      allocateIds: vi.fn(async () => okv([12000002])),
-      entityTemplate: vi.fn(async () => okv({ name: 'Wolf', displayId: 903, minLevel: 5, maxLevel: 6 })),
-      searchEntities: vi.fn(async () => okv([{ id: 299, name: 'Wolf' }])),
-    });
-    const onChange = vi.fn();
-    await mountBody('entities', {}, { api, onChange });
-    const copy = screen.getByRole('combobox', { name: 'Copy from (optional)' });
-    await userEvent.type(copy, 'Wolf');
-    await userEvent.click(await screen.findByRole('option', { name: /Wolf · #299/ }));
+  it('says why when a new one cannot be made', async () => {
+    await mountBody('entities', {}, { openEditor: vi.fn(async () => 'The database is not reachable.') });
     await userEvent.click(screen.getByRole('button', { name: 'Add NPC' }));
-    await waitFor(() => expect(last(onChange).npcs[0]).toMatchObject({ entry: 12000002, name: 'Wolf', displayId: 903, minLevel: 5 }));
-  });
-
-  it('keeps the pasted position and map together', async () => {
-    const onChange = vi.fn();
-    const entities: QuestEntities = { npcs: [{ ...newNpc(12000001), name: 'Hela', spawns: [{ guid: 1, map: 0, x: 0, y: 0, z: 0, o: 0, respawnSecs: 300, wander: 0, patrol: null }] }], objects: [] };
-    await mountBody('entities', { [ENTITIES_FIELD]: writeEntities(entities) }, { onChange });
-    await userEvent.click(screen.getByLabelText('Paste .gps output'));
-    await userEvent.paste('Map: 1 X: 5.5 Y: 6.5 Z: 7.5 Orientation: 2');
-    expect(last(onChange).npcs[0]!.spawns[0]).toMatchObject({ map: 1, x: 5.5, y: 6.5, z: 7.5, o: 2 });
-  });
-
-  it('edits an NPC and adds a spawn from pasted .gps output', async () => {
-    const api = makeMockApi({ allocateIds: vi.fn(async () => okv([6000001])) });
-    const onChange = vi.fn();
-    const entities: QuestEntities = { npcs: [{ ...newNpc(12000001), name: 'Hela' }], objects: [] };
-    await mountBody('entities', { [ENTITIES_FIELD]: writeEntities(entities) }, { api, onChange });
-    const card = screen.getByRole('group', { name: 'NPC: Hela' });
-    await userEvent.clear(within(card).getByLabelText('Name'));
-    await userEvent.type(within(card).getByLabelText('Name'), 'X');
-    expect(last(onChange).npcs[0]!.name).toBe('X');
-    await userEvent.click(within(card).getByRole('button', { name: 'Add spawn' }));
-    await waitFor(() => expect(last(onChange).npcs[0]!.spawns).toHaveLength(1));
+    expect(await screen.findByText('The database is not reachable.')).toBeTruthy();
   });
 });
