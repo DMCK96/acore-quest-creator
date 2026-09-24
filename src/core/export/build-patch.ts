@@ -27,7 +27,9 @@ import type {
 export type PatchStatement =
   | { kind: 'delete'; table: string; key: Record<string, string> }
   | { kind: 'insert'; table: string; row: RawRow }
-  | { kind: 'set-flag'; table: string; column: string; bit: number; key: Record<string, string> };
+  | { kind: 'set-flag'; table: string; column: string; bit: number; key: Record<string, string> }
+  /** Sets columns on one keyed row, only while `onlyIf` still holds, so a deliberate value is kept. */
+  | { kind: 'update'; table: string; key: Record<string, string>; set: Record<string, string>; onlyIf?: Record<string, string> };
 
 export interface PatchWarning {
   code:

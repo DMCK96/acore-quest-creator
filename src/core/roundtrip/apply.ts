@@ -67,6 +67,14 @@ export function applyPatchInMemory(
         });
         break;
       }
+      case 'update': {
+        const rows = out[statement.table];
+        if (!rows) break;
+        out[statement.table] = rows.map((row) =>
+          matches(row, statement.key) && matches(row, statement.onlyIf ?? {}) ? { ...row, ...statement.set } : row,
+        );
+        break;
+      }
     }
   }
   return out;

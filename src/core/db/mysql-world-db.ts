@@ -288,6 +288,31 @@ class MysqlWorldDb implements WorldDb {
     return rows.map((r) => ({ ...r }));
   }
 
+  async selectByPrefix(table: string, column: string, prefix: string): Promise<RawRow[]> {
+    const cols = await this.knownColumns(table);
+    await this.checkColumns(table, cols, [column]);
+    const keyCols = cols.filter((c) => c.isKey);
+    const orderBy = keyCols.length > 0 ? ` ORDER BY ${keyCols.map((c) => ident(c.name)).join(', ')}` : '';
+    const sql = `SELECT * FROM ${ident(table)} WHERE ${ident(column)} LIKE ? ESCAPE '\\\\'${orderBy}`;
+    const rows = await this.run(`reading ${table}`, async () => {
+      const [result] = await this.pool.query(sql, [`${escapeLike(prefix)}%`]);
+      return result as RawRow[];
+    });
+    return rows.map((r) => ({ ...r }));
+  }
+
+  async selectMax(table: string, column: string): Promise<number | null> {
+    const cols = await this.knownColumns(table);
+    await this.checkColumns(table, cols, [column]);
+    const sql = `SELECT MAX(${ident(column)}) AS m FROM ${ident(table)}`;
+    const rows = await this.run(`reading ${table}`, async () => {
+      const [result] = await this.pool.query(sql);
+      return result as Array<{ m: string | null }>;
+    });
+    const max = rows[0]?.m;
+    return max === null || max === undefined ? null : Number(max);
+  }
+
   async searchQuests(text: string, limit: number): Promise<QuestSummary[]> {
     await this.knownColumns('quest_template');
     const sql = INTEGER_TEXT.test(text)

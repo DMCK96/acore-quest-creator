@@ -53,6 +53,18 @@ export interface WorldDb {
    * Throws `UnknownTableError` / `UnknownColumnError`.
    */
   selectNonZero?(table: string, column: string): Promise<RawRow[]>;
+  /**
+   * Every row whose text `column` starts with `prefix`, in `selectRows`' order and shape. Used to find
+   * the rows the tool wrote itself, which it tags in comment columns. Optional: without it the tool
+   * cannot find its earlier script rows, so it neither replaces nor re-imports them.
+   * Throws `UnknownTableError` / `UnknownColumnError`.
+   */
+  selectByPrefix?(table: string, column: string, prefix: string): Promise<RawRow[]>;
+  /**
+   * The largest value of a numeric column, or `null` for an empty table: where the next free global
+   * number (a path, a menu, an area trigger) starts. Throws `UnknownTableError` / `UnknownColumnError`.
+   */
+  selectMax?(table: string, column: string): Promise<number | null>;
   searchQuests(text: string, limit: number): Promise<QuestSummary[]>;
   /**
    * Entities whose ID is `text` (a whole number) or whose name contains it, case-insensitively:

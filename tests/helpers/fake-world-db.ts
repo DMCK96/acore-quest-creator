@@ -136,6 +136,21 @@ export class FakeWorldDb implements WorldDb {
     return sorted.map((r) => ({ ...r }));
   }
 
+  clear(table: string): void {
+    this.table(table).rows.length = 0;
+  }
+
+  async selectByPrefix(table: string, column: string, prefix: string): Promise<RawRow[]> {
+    this.checkColumns(table, this.table(table), [column]);
+    return (await this.selectRows(table, {})).filter((row) => typeof row[column] === 'string' && row[column]!.startsWith(prefix));
+  }
+
+  async selectMax(table: string, column: string): Promise<number | null> {
+    this.checkColumns(table, this.table(table), [column]);
+    const values = this.table(table).rows.map((r) => r[column]).filter((v): v is string => v !== null).map(Number);
+    return values.length === 0 ? null : Math.max(...values);
+  }
+
   async selectNonZero(table: string, column: string): Promise<RawRow[]> {
     this.checkColumns(table, this.table(table), [column]);
     return (await this.selectRows(table, {})).filter((row) => row[column] !== null && Number(row[column]) !== 0);

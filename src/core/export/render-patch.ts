@@ -1,5 +1,5 @@
 import type { ColumnInfo, SchemaInfo } from '../db/types';
-import { SqlRenderError, ident, renderDelete, renderInsert } from '../sql/render';
+import { SqlRenderError, ident, renderDelete, renderInsert, renderValue } from '../sql/render';
 import type { PatchStatement } from './build-patch';
 
 export interface PatchMeta {
@@ -46,6 +46,25 @@ function renderSetFlag(s: Extract<PatchStatement, { kind: 'set-flag' }>): string
 }
 
 /**
+ * `UPDATE t SET … WHERE key AND onlyIf;` with every value through the column codec. The guard keeps a
+ * re-applied patch from overwriting a value somebody set on purpose since.
+ */
+function renderUpdate(s: Extract<PatchStatement, { kind: 'update' }>, schema: SchemaInfo): string {
+  const byName = new Map(columnsOf(schema, s.table).map((c) => [c.name, c]));
+  const column = (name: string) => {
+    const c = byName.get(name);
+    if (!c) throw new SqlRenderError(`Table \`${s.table}\` has no column \`${name}\``);
+    return c;
+  };
+  const sets = Object.entries(s.set).map(([name, value]) => `${ident(name)} = ${renderValue(column(name), value)}`);
+  const keys = Object.entries(s.key).map(([name, value]) => `${ident(name)} = ${renderValue(column(name), value)}`);
+  const guards = Object.entries(s.onlyIf ?? {}).map(([name, value]) => `${ident(name)} = ${renderValue(column(name), value)}`);
+  if (sets.length === 0) throw new SqlRenderError(`Refusing UPDATE on \`${s.table}\` with nothing to set`);
+  if (keys.length === 0) throw new SqlRenderError(`Refusing UPDATE on \`${s.table}\` without key columns`);
+  return `UPDATE ${ident(s.table)} SET ${sets.join(', ')} WHERE ${[...keys, ...guards].join(' AND ')};`;
+}
+
+/**
  * One statement as a single SQL string.
  *
  * Exported so a caller that executes the patch gets exactly one string per statement, rather than
@@ -56,10 +75,11 @@ export function renderStatement(s: PatchStatement, schema: SchemaInfo): string {
     return renderDelete(s.table, keyColumnsOf(schema, s.table, Object.keys(s.key)), s.key);
   }
   if (s.kind === 'set-flag') return renderSetFlag(s);
+  if (s.kind === 'update') return renderUpdate(s, schema);
   return renderInsert(s.table, columnsOf(schema, s.table), s.row);
 }
 
-/** The patch as a `.sql` file: a header, then the deletes, the flag updates and the inserts. */
+/** The patch as a `.sql` file: a header, then the deletes, the flag updates, the other updates and the inserts. */
 export function renderPatch(
   statements: readonly PatchStatement[],
   schema: SchemaInfo,
@@ -74,13 +94,14 @@ export function renderPatch(
 
   const deletes: string[] = [];
   const flags: string[] = [];
+  const updates: string[] = [];
   const inserts: string[] = [];
   for (const s of statements) {
-    const block = s.kind === 'delete' ? deletes : s.kind === 'set-flag' ? flags : inserts;
+    const block = s.kind === 'delete' ? deletes : s.kind === 'set-flag' ? flags : s.kind === 'update' ? updates : inserts;
     block.push(renderStatement(s, schema));
   }
 
-  const blocks = [header, deletes, flags, inserts].filter((b) => b.length > 0).map((b) => b.join('\n'));
+  const blocks = [header, deletes, flags, updates, inserts].filter((b) => b.length > 0).map((b) => b.join('\n'));
   return `${blocks.join('\n\n')}\n`;
 }
 
