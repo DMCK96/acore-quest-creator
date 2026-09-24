@@ -656,6 +656,7 @@ export function createApi(deps: ApiDeps): Api {
           gameobject: ['gameobject_template', 'entry'],
           creatureSpawn: ['creature', 'guid'],
           gameobjectSpawn: ['gameobject', 'guid'],
+          page: ['page_text', 'ID'],
         }[kind] as [string, string];
         let dbMax = 0;
         try {
@@ -668,6 +669,7 @@ export function createApi(deps: ApiDeps): Api {
           kind === 'creature' ? npcs.map((n) => n.entry)
           : kind === 'gameobject' ? objects.map((o) => o.entry)
           : kind === 'creatureSpawn' ? npcs.flatMap((n) => n.spawns.map((s) => s.guid))
+          : kind === 'page' ? objects.flatMap((o) => o.pages.map((p) => p.id))
           : objects.flatMap((o) => o.spawns.map((s) => s.guid));
         const base = Math.max(dbMax, ...used, 0);
         return Array.from({ length: count }, (_, i) => base + i + 1);
@@ -1005,7 +1007,7 @@ export function createApi(deps: ApiDeps): Api {
           entityStatements.flatMap((s) => (s.table === table && s.kind !== 'update' && s.kind !== 'set-flag' ? [String((s.kind === 'insert' ? s.row : s.key)[column] ?? '')] : []));
         const entityBefore: Record<string, RawRow[]> = Object.fromEntries(
           await Promise.all(
-            ([['creature_template', 'entry'], ['creature_template_model', 'CreatureID'], ['creature', 'guid'], ['gameobject_template', 'entry'], ['gameobject', 'guid']] as const)
+            ([['creature_template', 'entry'], ['creature_template_model', 'CreatureID'], ['creature', 'guid'], ['gameobject_template', 'entry'], ['gameobject', 'guid'], ['page_text', 'ID']] as const)
               .map(async ([table, column]) => [table, await rowsOrNone(live.db, table, { [column]: [...new Set(keysOf(table, column))] })] as const),
           ),
         );

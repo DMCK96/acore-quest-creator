@@ -86,6 +86,7 @@ export function EntitiesBody({ open, onChange }: ModuleBodyProps): React.JSX.Ele
           onChange={(next) => save({ ...entities, objects: entities.objects.map((o, j) => (j === i ? next : o)) })}
           onRemove={() => save({ ...entities, objects: entities.objects.filter((_, j) => j !== i) })}
           allocateSpawn={() => allocate('gameobjectSpawn')}
+          allocatePage={() => allocate('page')}
         />
       ))}
     </div>

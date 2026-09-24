@@ -35,6 +35,12 @@ describe('new NPCs through the API', () => {
     expect(((await api.allocateIds('creatureSpawn', 1)) as any).value).toEqual([5300701]);
   });
 
+  it('allocates page ids above the database', async () => {
+    const { api, db } = await setup();
+    db.insert('page_text', { ID: '3622', Text: 'x', NextPageID: '0' });
+    expect(((await api.allocateIds('page', 1)) as any).value).toEqual([3623]);
+  });
+
   it('copies look and stats from an existing NPC', async () => {
     const { api } = await setup();
     const copy: any = await api.entityTemplate('creature', 11000230);

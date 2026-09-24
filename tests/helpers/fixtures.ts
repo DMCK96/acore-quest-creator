@@ -18,7 +18,7 @@ const LOOKUP_TABLES = [
   // What quest scripting writes around the quest (slice C1).
   'creature_text', 'waypoints', 'gossip_menu', 'gossip_menu_option', 'npc_text', 'areatrigger',
   // Where new NPCs and objects are written (slice D).
-  'creature_template_model', 'creature', 'gameobject',
+  'creature_template_model', 'creature', 'gameobject', 'page_text',
 ] as const;
 
 /** An empty in-memory world DB whose tables carry the fork's real DDL. */

@@ -249,7 +249,7 @@ export interface QuestLinks {
   unavailable: UnavailableComponent[];
 }
 
-export type AllocKind = 'creature' | 'gameobject' | 'creatureSpawn' | 'gameobjectSpawn';
+export type AllocKind = 'creature' | 'gameobject' | 'creatureSpawn' | 'gameobjectSpawn' | 'page';
 
 /** Fields an existing NPC or object lends a new one. */
 export type EntityTemplate = Partial<Omit<CustomNpc, 'entry' | 'spawns'>> | Partial<Omit<CustomObject, 'entry' | 'spawns'>>;
@@ -426,7 +426,7 @@ const REQUEST_SCHEMAS: Record<keyof Api, z.ZodType<unknown[]>> = {
   previewChanges: z.tuple([z.number()]),
   validate: z.tuple([z.number()]),
   questScripts: z.tuple([z.number()]),
-  allocateIds: z.tuple([z.enum(['creature', 'gameobject', 'creatureSpawn', 'gameobjectSpawn']), z.number().int().min(1).max(50)]),
+  allocateIds: z.tuple([z.enum(['creature', 'gameobject', 'creatureSpawn', 'gameobjectSpawn', 'page']), z.number().int().min(1).max(50)]),
   entityTemplate: z.tuple([z.enum(['creature', 'gameobject']), z.number().int()]),
   exportQuest: z.tuple([z.number()]),
   applyToDev: z.tuple([z.number(), z.boolean()]),
