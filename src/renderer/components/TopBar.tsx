@@ -13,12 +13,14 @@ export function TopBar({
   onAddExisting,
   onFitView,
   onOpenProject,
+  onOpenSettings,
 }: {
   store: AppStore;
   onNewQuest: () => void;
   onAddExisting: () => void;
   onFitView: () => void;
   onOpenProject: () => void;
+  onOpenSettings: () => void;
 }): React.JSX.Element {
   const projectName = store((s) => s.project.name);
   const dirty = store((s) => s.project.dirty);
@@ -63,7 +65,7 @@ export function TopBar({
         </span>
         {connectedDatabase && summary?.serverData && <ServerDataPill status={summary.serverData} />}
         {connectedDatabase && summary?.client && <ClientPill status={summary.client} />}
-        <button type="button" className="btn btn--icon" aria-label="Settings" title="Settings">
+        <button type="button" className="btn btn--icon" aria-label="Settings" title="Settings" onClick={onOpenSettings}>
           ⚙
         </button>
       </div>

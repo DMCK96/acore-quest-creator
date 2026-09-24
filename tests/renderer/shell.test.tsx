@@ -151,7 +151,7 @@ describe('game client pill', () => {
     const store = createAppStore(api);
     await store.getState().loadProfiles();
     await store.getState().connectProfile(1);
-    render(<TopBar store={store} onNewQuest={() => {}} onAddExisting={() => {}} onFitView={() => {}} onOpenProject={() => {}} />);
+    render(<TopBar store={store} onNewQuest={() => {}} onAddExisting={() => {}} onFitView={() => {}} onOpenProject={() => {}} onOpenSettings={() => {}} />);
   };
   it('shows the client folder read cleanly', async () => {
     await connectWith({ dir: 'E:/WoW', archives: ['common.MPQ', 'patch.MPQ'], problems: [] });

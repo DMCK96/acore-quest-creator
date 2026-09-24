@@ -21,6 +21,7 @@ import { QuestPreview } from './QuestPreview';
 import { QuestFlowView } from './QuestFlowView';
 import { AddExistingDialog } from './AddExistingDialog';
 import { ProjectDialog } from './ProjectDialog';
+import { SettingsDialog } from './SettingsDialog';
 import { RecoveryDialog } from './RecoveryDialog';
 import { TopBar } from '../components/TopBar';
 import { ErrorBanner } from '../components/ErrorBanner';
@@ -77,6 +78,7 @@ function CanvasInner({ store }: { store: AppStore }): React.JSX.Element {
   const { screenToFlowPosition, fitView, setViewport: setFlowViewport } = useReactFlow();
   const [showAddExisting, setShowAddExisting] = useState(false);
   const [showProject, setShowProject] = useState(false);
+  const [showSettings, setShowSettings] = useState(false);
   // `<ReactFlow>` only honours `defaultViewport` at mount, so it stays unmounted until the saved
   // viewport has loaded, then mounts exactly once — never re-keyed, so nodes a test (or the user)
   // is holding a reference to never get silently detached from a remount.
@@ -163,6 +165,7 @@ function CanvasInner({ store }: { store: AppStore }): React.JSX.Element {
         onAddExisting={() => setShowAddExisting(true)}
         onFitView={() => void fitView()}
         onOpenProject={() => setShowProject(true)}
+        onOpenSettings={() => setShowSettings(true)}
       />
       <ErrorBanner store={store} />
       <div className="canvas-body">
@@ -236,6 +239,7 @@ function CanvasInner({ store }: { store: AppStore }): React.JSX.Element {
       </div>
       {showAddExisting && <AddExistingDialog store={store} onClose={() => setShowAddExisting(false)} />}
       {showProject && <ProjectDialog store={store} onClose={() => setShowProject(false)} />}
+      {showSettings && <SettingsDialog store={store} onClose={() => setShowSettings(false)} />}
       <RecoveryDialog store={store} />
     </div>
   );
