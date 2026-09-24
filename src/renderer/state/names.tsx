@@ -98,6 +98,11 @@ export function NamesProvider({ api, children }: { api: Api; children: ReactNode
   );
 }
 
+/** The api the nearest `NamesProvider` was given, for panels that ask the main process directly. */
+export function useApi(): Api | null {
+  return useContext(ApiContext);
+}
+
 type EntitySearch = (kind: SearchKind, text: string) => Promise<Result<EntityHit[]>>;
 
 const NO_SEARCH: EntitySearch = async () => ({ ok: true, value: [] });

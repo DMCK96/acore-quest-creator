@@ -1,0 +1,141 @@
+.scripts-body {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.scripts-body__add {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid var(--border-soft);
+}
+
+.scripts-body__add .btn {
+  align-self: flex-start;
+}
+
+.scripts-body__foreign {
+  margin: 0;
+  padding-left: 18px;
+  color: var(--text-muted);
+  font-size: 13px;
+}
+
+.scene-card {
+  margin: 0;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.scene-section {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding-top: 8px;
+  border-top: 1px dashed var(--border-soft);
+}
+
+.scene-section__title {
+  margin: 0;
+  font-size: 13px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--text-muted);
+}
+
+.scene-field {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  font-size: 13px;
+  min-width: 0;
+}
+
+.scene-field > span {
+  color: var(--text-muted);
+}
+
+.scene-field input,
+.scene-field select,
+.scene-field textarea {
+  width: 100%;
+  box-sizing: border-box;
+  font: inherit;
+}
+
+.scene-field--short input {
+  max-width: 140px;
+}
+
+.scene-field--check {
+  flex-direction: row;
+  align-items: center;
+  gap: 6px;
+}
+
+.scene-field--check input {
+  width: auto;
+}
+
+.scene-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 8px;
+}
+
+.scene-steps,
+.scene-points {
+  margin: 0;
+  padding-left: 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.scene-step {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.scene-step__head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+}
+
+.position-input {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.position-input__axes {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.position-input__axes .scene-field--short input {
+  max-width: 100px;
+}
+
+.scene-hint {
+  margin: 0;
+  color: var(--text-muted);
+  font-size: 13px;
+}
+
+.scene-warning {
+  margin: 0;
+  padding: 6px 10px;
+  border-radius: var(--radius);
+  background: var(--amber-soft);
+  font-size: 13px;
+}
