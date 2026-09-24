@@ -6,6 +6,7 @@ import type { FieldValue } from '@core/registry/types';
 import type { MapBox, MapInfo, OpenResult, QuestMapRef, SpawnDot } from '@shared/ipc';
 import { EntityPicker } from '../controls/EntityPicker';
 import { useApi } from '../state/names';
+import type { MapMode } from './MapOpener';
 import { LeafletMap, type MapMarkerView, type MapView } from './LeafletMap';
 import './map.css';
 
@@ -39,6 +40,10 @@ interface Floors {
 
 type FloorResult = { floors: number[]; ground: number | null };
 
+type Target = { kind: 'npc' | 'object'; entry: number };
+/** What map clicks do: the modes a caller opens the map in, plus the moment after a placement. */
+type Mode = MapMode | { kind: 'placed'; target: Target; guid: number } | null;
+
 export function QuestMapView({
   open,
   onChange,
@@ -46,6 +51,7 @@ export function QuestMapView({
   onClose,
   hasServerData = true,
   hasClient = true,
+  mode = null,
 }: {
   open: OpenResult;
   onChange(fieldId: string, value: FieldValue): void;
@@ -55,6 +61,8 @@ export function QuestMapView({
   hasServerData?: boolean;
   /** Whether the connection names a game client folder; without one the map shows the relief, not the client's art. */
   hasClient?: boolean;
+  /** What the map is opened to do; by default it just shows the quest. */
+  mode?: MapMode | null;
 }): React.JSX.Element {
   const api = useApi();
   const values = open.aggregate.values;
@@ -76,6 +84,7 @@ export function QuestMapView({
   const [notes, setNotes] = useState<Record<string, string>>({});
   const [clickAt, setClickAt] = useState<{ x: number; y: number } | null>(null);
   const [adding, setAdding] = useState(false);
+  const [modeState, setMode] = useState<Mode>(mode);
   const [searchKind, setSearchKind] = useState<'creature' | 'gameobject'>('creature');
   const [searchEntry, setSearchEntry] = useState(0);
   const [message, setMessage] = useState<string | null>(null);
@@ -171,29 +180,30 @@ export function QuestMapView({
     if (edit) onChange(edit.field, edit.value);
   }
 
-  async function addHere(kind: 'npc' | 'object', entry: number): Promise<void> {
-    if (!api || !clickAt || adding) return;
-    const spot = clickAt;
+  /** Adds a spawn at a point; the new spawn's guid, or null when none was added. */
+  async function addHere(kind: 'npc' | 'object', entry: number, spot: { x: number; y: number }): Promise<number | null> {
+    if (!api || adding) return null;
     const map = currentMap;
     setAdding(true);
     try {
       const allocated = await api.allocateIds(kind === 'npc' ? 'creatureSpawn' : 'gameobjectSpawn', 1);
       if (!allocated.ok || allocated.value.length === 0) {
         setMessage(allocated.ok ? 'No free spawn ID could be found.' : allocated.error.message);
-        return;
+        return null;
       }
       const guid = allocated.value[0]!;
       const { result, reason } = await floorsAt(map, spot.x, spot.y);
       const candidates = result ? floorCandidates(result) : [];
       const z = (result ? addZ(result) : null) ?? 0;
       const edit = addSpawn(valuesRef.current, { kind, entry }, { guid, map, x: spot.x, y: spot.y, z, o: 0 });
-      if (!edit) return;
+      if (!edit) return null;
       onChange(edit.field, edit.value);
       const id = `spawn:${kind === 'npc' ? 'npc' : 'obj'}:${entry}:${guid}`;
       setSelectedId(id);
       setFloors({ id, x: spot.x, y: spot.y, candidates });
       noteZ(id, candidates, reason);
       setClickAt(null);
+      return guid;
     } finally {
       setAdding(false);
     }
@@ -239,6 +249,22 @@ export function QuestMapView({
   }
 
   const { npcs, objects } = readEntities(values);
+  const targetName = (t: Target): string => {
+    const found = t.kind === 'npc' ? npcs.find((n) => n.entry === t.entry) : objects.find((o) => o.entry === t.entry);
+    return found?.name.trim() || `${t.kind === 'npc' ? 'New NPC' : 'New object'} ${t.entry}`;
+  };
+
+  async function mapClicked(at: { x: number; y: number }): Promise<void> {
+    if (modeState?.kind === 'place') {
+      const { target } = modeState;
+      const guid = await addHere(target.kind, target.entry, at);
+      if (guid !== null) setMode({ kind: 'placed', target, guid });
+      return;
+    }
+    setClickAt(at);
+    setSelectedId(null);
+    setFloors(null);
+  }
   const selected = markers.find((m) => m.id === selectedId);
   const item = (m: MapMarkerView): React.JSX.Element => (
     <li key={m.id}>
@@ -292,15 +318,33 @@ export function QuestMapView({
           zones={mapInfo?.zones ?? []}
           selectedId={selectedId}
           onMarkerMoved={(id, at) => void moved(id, at)}
-          onMapClick={(at) => {
-            setClickAt(at);
-            setSelectedId(null);
-            setFloors(null);
-          }}
+          onMapClick={(at) => void mapClicked(at)}
           onMarkerSelected={(id) => setSelectedId(id)}
           onViewChanged={(box, zoom) => viewChanged(box, zoom)}
         />
         <aside className="quest-map__side">
+          {modeState?.kind === 'place' && (
+            <div role="status" className="quest-map__mode">
+              <p>Click where {targetName(modeState.target)} should stand.</p>
+              <button type="button" className="entry-card__btn" onClick={() => setMode(null)}>
+                Cancel
+              </button>
+            </div>
+          )}
+          {modeState?.kind === 'placed' && (
+            <div role="status" className="quest-map__mode">
+              <p>Placed. Drag to adjust, or draw its patrol.</p>
+              {modeState.target.kind === 'npc' && (
+                <button type="button" className="entry-card__btn"
+                  onClick={() => setMode({ kind: 'patrol', entry: modeState.target.entry, guid: modeState.guid })}>
+                  Draw patrol
+                </button>
+              )}
+              <button type="button" className="entry-card__btn" onClick={() => setMode(null)}>
+                Done
+              </button>
+            </div>
+          )}
           {!hasServerData && <p className="scene-warning">Set the server data folder on the connection to see the terrain and floors.</p>}
           {message && <p className="scene-warning">{message}</p>}
           {!hasClient && <p className="scene-hint">Set the game client folder on the connection to see the in-game map art.</p>}
@@ -345,12 +389,12 @@ export function QuestMapView({
               </p>
               {npcs.length + objects.length === 0 && <p className="scene-hint">Add an NPC or object in NPCs &amp; objects to place it here.</p>}
               {npcs.map((n) => (
-                <button key={`n${n.entry}`} type="button" className="entry-card__btn" disabled={adding} onClick={() => void addHere('npc', n.entry)}>
+                <button key={`n${n.entry}`} type="button" className="entry-card__btn" disabled={adding} onClick={() => void addHere('npc', n.entry, clickAt)}>
                   Add a spawn here for {n.name.trim() || `New NPC ${n.entry}`}
                 </button>
               ))}
               {objects.map((o) => (
-                <button key={`o${o.entry}`} type="button" className="entry-card__btn" disabled={adding} onClick={() => void addHere('object', o.entry)}>
+                <button key={`o${o.entry}`} type="button" className="entry-card__btn" disabled={adding} onClick={() => void addHere('object', o.entry, clickAt)}>
                   Add a spawn here for {o.name.trim() || `New object ${o.entry}`}
                 </button>
               ))}

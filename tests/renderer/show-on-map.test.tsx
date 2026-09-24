@@ -8,7 +8,7 @@ import { SpawnList } from '../../src/renderer/entities/SpawnList';
 import { NamesProvider } from '../../src/renderer/state/names';
 import { makeMockApi } from './mock-api';
 
-const wrap = (open: (id: string | null) => void, ui: React.ReactNode) =>
+const wrap = (open: (request: unknown) => void, ui: React.ReactNode) =>
   render(<NamesProvider api={makeMockApi()}><MapOpenerProvider open={open}>{ui}</MapOpenerProvider></NamesProvider>);
 
 describe('Show on map', () => {

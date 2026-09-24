@@ -10,7 +10,7 @@ import { ModulePanel, PanelFrame } from '../modules/ModulePanel';
 import { ChangesView } from './ChangesView';
 import { TestInGameView } from './TestInGameView';
 import { QuestMapView } from '../map/QuestMapView';
-import { MapOpenerProvider } from '../map/MapOpener';
+import { MapOpenerProvider, type MapRequest } from '../map/MapOpener';
 import { QuestHeader, type ReadinessChip } from './QuestHeader';
 import './QuestFlowView.css';
 
@@ -72,8 +72,8 @@ export function QuestFlowView({ store }: { store: AppStore }): React.JSX.Element
       selected={openPanel === id} onOpen={() => setOpenPanel(id)} />
   );
 
-  const openMap = (markerId: string | null): void => {
-    setMapFocus(markerId);
+  const openMap = (request: MapRequest | string | null): void => {
+    setMapFocus(typeof request === 'string' || request === null ? request : request.kind === 'focus' ? request.markerId : null);
     setOpenPanel('map');
   };
 
