@@ -33,6 +33,7 @@ export const API_METHODS = [
   'validate',
   'questScripts',
   'testCommands',
+  'groundHeight',
   'allocateIds',
   'entityTemplate',
   'exportQuest',

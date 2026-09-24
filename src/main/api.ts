@@ -60,6 +60,7 @@ import { ENTITY_KEYS, ENTITY_TABLES, readEntityContext } from '../core/entities/
 import { ENTITIES_FIELD, NPC_TYPE_VALUE, OBJECT_TYPE_VALUE, RANK_VALUE, readEntities, writeEntities, type QuestEntities } from '../core/entities/model';
 import { entityIssues } from '../core/entities/validate';
 import { gmCommands } from '../core/testing/gm';
+import { TerrainFormatError, gridFileName, parseMapFile, terrainHeight, type TerrainFile } from '../core/game/terrain';
 import { loadServerData, type ServerData, type ServerDataFiles } from './server-data';
 import type { ProjectQuest } from './project/project-file';
 import type { ProjectSession } from './project/session';
@@ -251,8 +252,12 @@ function nameTarget(endpoint: Endpoint): [NameKind, number] | undefined {
  * world DB, an in-memory store and a fake file system. The Electron layer only wires the real
  * implementations in and forwards the calls over IPC.
  */
+/** How many parsed terrain grids to keep: a quest's positions rarely span more than a few. */
+const TERRAIN_CACHE_SIZE = 16;
+
 export function createApi(deps: ApiDeps): Api {
   let session: Session | null = null;
+  const terrainCache = new Map<string, TerrainFile | null>();
 
   const connected = (): Session => {
     if (!session) throw fail('NOT_CONNECTED', 'Connect to a world database first.');
@@ -1029,6 +1034,39 @@ export function createApi(deps: ApiDeps): Api {
           });
         }
         return differences;
+      }),
+
+    groundHeight: (map, x, y) =>
+      run(async () => {
+        const live = connected();
+        const dir = live.serverData?.status.dir;
+        if (!dir) return { reason: 'Set the server data folder on the connection to read ground heights.' };
+        const name = gridFileName(map, x, y);
+        const files = deps.serverDataFiles ?? NO_SERVER_DATA_FILES;
+        // The folder may be the server's DataDir or its dbc folder; maps/ sits in the one, beside the other.
+        const candidates = [join(dir, 'maps'), join(dir, '..', 'maps')];
+        const key = `${dir}|${name}`;
+        let file = terrainCache.get(key);
+        if (file === undefined) {
+          file = null;
+          for (const folder of candidates) {
+            const bytes = await files.read(folder, name);
+            if (!bytes) continue;
+            try {
+              file = parseMapFile(bytes);
+            } catch (error) {
+              if (error instanceof TerrainFormatError) return { reason: `${name} could not be read: ${error.message}` };
+              throw error;
+            }
+            break;
+          }
+          terrainCache.set(key, file);
+          if (terrainCache.size > TERRAIN_CACHE_SIZE) terrainCache.delete(terrainCache.keys().next().value!);
+        }
+        if (!file) return { reason: `No map file covers this point (${name}).` };
+        const z = terrainHeight(file, x, y);
+        if (z === null) return { reason: 'There is no ground here (a hole in the terrain).' };
+        return { z: Math.round(z * 100) / 100 };
       }),
 
     testCommands: (questId) =>

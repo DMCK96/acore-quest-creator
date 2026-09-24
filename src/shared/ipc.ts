@@ -299,6 +299,8 @@ export interface Api {
   allocateIds(kind: AllocKind, count: number): Promise<Result<number[]>>;
   /** The look and stats of an existing NPC or object, to start a new one from; null when there is none. */
   entityTemplate(kind: 'creature' | 'gameobject', entry: number): Promise<Result<EntityTemplate | null>>;
+  /** The terrain height at a point, from the server data folder's map files, or why there is none. */
+  groundHeight(map: number, x: number, y: number): Promise<Result<{ z: number } | { reason: string }>>;
   /** The GM commands to try the quest in game after applying it: reloads, restarts, travel and quest commands. */
   testCommands(questId: number): Promise<Result<TestCommands>>;
   /** The scripts around the quest that the Scripts module lists read-only. */
@@ -430,6 +432,7 @@ const REQUEST_SCHEMAS: Record<keyof Api, z.ZodType<unknown[]>> = {
   validate: z.tuple([z.number()]),
   questScripts: z.tuple([z.number()]),
   testCommands: z.tuple([z.number()]),
+  groundHeight: z.tuple([z.number().int(), z.number(), z.number()]),
   allocateIds: z.tuple([z.enum(['creature', 'gameobject', 'creatureSpawn', 'gameobjectSpawn', 'page']), z.number().int().min(1).max(50)]),
   entityTemplate: z.tuple([z.enum(['creature', 'gameobject']), z.number().int()]),
   exportQuest: z.tuple([z.number()]),

@@ -9,7 +9,7 @@ describe('parseRequest', () => {
     expect([...API_METHODS].sort()).toEqual([
       'addQuestChain', 'applyToDev', 'chooseServerDataDir', 'connect', 'exportQuest', 'projectState', 'listNodes', 'listProfiles', 'lookupNames', 'moveNodes', 'newQuest',
       'openQuest', 'previewChanges', 'questLinks', 'removeNode', 'rewardTables', 'updateQuest', 'saveProfile', 'saveViewport', 'searchQuests', 'searchEntities', 'startupProfile',
-      'testConnection', 'validate', 'questScripts', 'testCommands', 'allocateIds', 'entityTemplate',
+      'testConnection', 'validate', 'questScripts', 'testCommands', 'groundHeight', 'allocateIds', 'entityTemplate',
       'renameProject', 'newProject', 'openProject', 'saveProject', 'saveProjectAs', 'recentProjects', 'forgetRecent', 'recoveries', 'restoreRecovery', 'discardRecovery',
     ].sort());
   });
