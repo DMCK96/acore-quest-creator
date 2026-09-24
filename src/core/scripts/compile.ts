@@ -12,7 +12,8 @@ import {
 } from '../smartai/ids';
 import type { ScriptContext } from './context';
 import { describeGate, describeStep } from './describe';
-import { triggerHasPlayer, type Position, type QuestScene, type SceneGate, type SceneStep } from './model';
+import { triggerHasPlayer, type QuestScene, type SceneGate, type SceneStep } from './model';
+import { createAllocator, emitTrigger, type Row, type SmartAction } from './rows';
 import { isOurs, sceneFromComment, sceneIdOf, sceneTag, triggerComment } from './tag';
 
 /**
@@ -20,8 +21,6 @@ import { isOurs, sceneFromComment, sceneIdOf, sceneTag, triggerComment } from '.
  * rows, which is what makes an exported patch re-applicable. Rows the tool wrote before are found by
  * their comment tag and deleted; new IDs go around every row the tool does not own.
  */
-
-type Row = Record<string, string>;
 
 export interface RowUpdate {
   table: string;
@@ -73,11 +72,8 @@ const CONDITION_KEY = [
 ] as const;
 
 const DATA_MARKER = ' #aqc=';
-const LIST_SLOTS = 100;
 const GOSSIP_BIT = 1;
 const QUEST_GIVER_BIT = 2;
-/** `SMART_ACTION_CALL_TIMED_ACTIONLIST`'s timer type that runs whether or not the owner is fighting. */
-const LIST_TIMER_ALWAYS = 2;
 /** `TEMPSUMMON_TIMED_OR_DEAD_DESPAWN` and `TEMPSUMMON_CORPSE_DESPAWN`. */
 const SUMMON_TIMED = 1;
 const SUMMON_UNTIL_CORPSE = 5;
@@ -95,17 +91,6 @@ const text = (n: number): string => String(n);
 
 function keyOf(row: RawRow, columns: readonly string[]): Row {
   return Object.fromEntries(columns.map((c) => [c, row[c] ?? '0']));
-}
-
-/** One SmartAI action before it has a row: what it does, at whom, and how long to wait first. */
-interface Action {
-  type: number;
-  params: number[];
-  target: number;
-  targetParams: number[];
-  at?: Position;
-  waitMs: number;
-  describe: string;
 }
 
 interface SceneOutput {
@@ -129,8 +114,11 @@ export function compileScenes(input: CompileInput): CompiledScripts {
   for (const id of [...protectedScenes].sort()) {
     out.warnings.push(`Scene ${id} on this quest could not be read, so its rows are left as they are.`);
   }
-  const ours = (comment: string | null | undefined): boolean =>
-    isOurs(comment, questId) && !protectedScenes.has(sceneIdOf(comment, questId) ?? '');
+  // Only scene rows: fight rows (`AQC q<quest> fight<entry>`) belong to the fight compiler.
+  const ours = (comment: string | null | undefined): boolean => {
+    const id = sceneIdOf(comment, questId);
+    return id !== null && !protectedScenes.has(id);
+  };
 
   // --- Deletes ----------------------------------------------------------------------------------
   const deleteKeys = new Map<string, Map<string, Row>>();
@@ -165,24 +153,10 @@ export function compileScenes(input: CompileInput): CompiledScripts {
   const deleted = (table: string, key: Row): boolean => deleteKeys.get(table)?.has(JSON.stringify(key)) ?? false;
 
   // --- What other rows already hold ---------------------------------------------------------------
-  const foreignSmart = context.smartScripts.filter((r) => !ours(r.comment));
-  const usedIds = new Map<string, Set<number>>();
-  const usedLists = new Set<number>();
-  for (const row of foreignSmart) {
-    const source = num(row.source_type);
-    if (source === SOURCE.timedList) usedLists.add(num(row.entryorguid));
-    const key = `${num(row.entryorguid)}/${source}`;
-    const ids = usedIds.get(key) ?? new Set<number>();
-    ids.add(num(row.id));
-    usedIds.set(key, ids);
-  }
-  const usedGroups = new Map<number, Set<number>>();
-  for (const row of context.creatureText) {
-    if (ours(row.comment)) continue;
-    const groups = usedGroups.get(num(row.CreatureID)) ?? new Set<number>();
-    groups.add(num(row.GroupID));
-    usedGroups.set(num(row.CreatureID), groups);
-  }
+  const alloc = createAllocator({
+    smartScripts: context.smartScripts.filter((r) => !ours(r.comment)),
+    creatureText: context.creatureText.filter((r) => !ours(r.comment)),
+  });
   const usedOptions = new Map<number, Set<number>>();
   for (const row of context.gossipOptions) {
     if (deleted('gossip_menu_option', { MenuID: row.MenuID ?? '0', OptionID: row.OptionID ?? '0' })) continue;
@@ -206,33 +180,6 @@ export function compileScenes(input: CompileInput): CompiledScripts {
     areaScripts.set(num(row.entry), row.ScriptName ?? '');
   }
 
-  const takeId = (entryorguid: number, source: number): number => {
-    const key = `${entryorguid}/${source}`;
-    const ids = usedIds.get(key) ?? new Set<number>();
-    usedIds.set(key, ids);
-    let id = 0;
-    while (ids.has(id)) id += 1;
-    ids.add(id);
-    return id;
-  };
-  const takeList = (entry: number): number | null => {
-    for (let slot = 0; slot < LIST_SLOTS; slot += 1) {
-      const id = entry * LIST_SLOTS + slot;
-      if (!usedLists.has(id)) {
-        usedLists.add(id);
-        return id;
-      }
-    }
-    return null;
-  };
-  const takeGroup = (creature: number): number => {
-    const groups = usedGroups.get(creature) ?? new Set<number>();
-    usedGroups.set(creature, groups);
-    let group = 0;
-    while (groups.has(group)) group += 1;
-    groups.add(group);
-    return group;
-  };
   const takeOption = (menu: number): number => {
     const options = usedOptions.get(menu) ?? new Set<number>();
     usedOptions.set(menu, options);
@@ -293,14 +240,14 @@ export function compileScenes(input: CompileInput): CompiledScripts {
     const actions = scene.steps.flatMap((step) => stepActions(step));
     if (actions.length === 0) return;
 
-    function stepActions(step: SceneStep): Action[] {
+    function stepActions(step: SceneStep): SmartAction[] {
       const describe = describeStep(step);
-      const one = (type: number, params: number[], target: number, extra: Partial<Action> = {}): Action[] => [
+      const one = (type: number, params: number[], target: number, extra: Partial<SmartAction> = {}): SmartAction[] => [
         { type, params, target, targetParams: [], waitMs: step.waitMs, describe, ...extra },
       ];
       switch (step.kind) {
         case 'say': {
-          const group = takeGroup(entryorguid);
+          const group = alloc.takeGroup(entryorguid);
           const type = step.style === 'yell' ? TEXT_TYPE.yell : step.style === 'emote' ? TEXT_TYPE.textEmote : TEXT_TYPE.say;
           pending.push({
             table: 'creature_text',
@@ -359,7 +306,7 @@ export function compileScenes(input: CompileInput): CompiledScripts {
         case 'npcFlags': {
           const bits = (state: 'on' | 'off'): number =>
             (step.questGiver === state ? QUEST_GIVER_BIT : 0) | (step.gossip === state ? GOSSIP_BIT : 0);
-          const rows: Action[] = [];
+          const rows: SmartAction[] = [];
           if (bits('on') !== 0) rows.push(...one(ACTION.addNpcFlag, [bits('on')], TARGET.self));
           if (bits('off') !== 0) rows.push(...one(ACTION.removeNpcFlag, [bits('off')], TARGET.self, { waitMs: rows.length > 0 ? 0 : step.waitMs }));
           return rows;
@@ -451,58 +398,17 @@ export function compileScenes(input: CompileInput): CompiledScripts {
         break;
     }
 
-    const smartRow = (id: number, link: number, eventType: number, eventParams: number[], action: Action, comment: string, rowSource = source, rowEntry = entryorguid): Row => {
-      const p = (list: number[], i: number): string => text(list[i] ?? 0);
-      return {
-        entryorguid: text(rowEntry), source_type: text(rowSource), id: text(id), link: text(link),
-        event_type: text(eventType), event_phase_mask: '0', event_chance: '100', event_flags: '0',
-        event_param1: p(eventParams, 0), event_param2: p(eventParams, 1), event_param3: p(eventParams, 2),
-        event_param4: p(eventParams, 3), event_param5: p(eventParams, 4), event_param6: p(eventParams, 5),
-        action_type: text(action.type),
-        action_param1: p(action.params, 0), action_param2: p(action.params, 1), action_param3: p(action.params, 2),
-        action_param4: p(action.params, 3), action_param5: p(action.params, 4), action_param6: p(action.params, 5),
-        target_type: text(action.target),
-        target_param1: p(action.targetParams, 0), target_param2: p(action.targetParams, 1),
-        target_param3: p(action.targetParams, 2), target_param4: p(action.targetParams, 3),
-        target_x: text(action.at?.x ?? 0), target_y: text(action.at?.y ?? 0), target_z: text(action.at?.z ?? 0), target_o: text(action.at?.o ?? 0),
-        comment,
-      };
-    };
-
     const [eventType, ...eventParams] = event;
-    const header = triggerComment(questId, scene);
-    let triggerId: number;
-    if (actions.length === 1 && actions[0]!.waitMs === 0) {
-      triggerId = takeId(entryorguid, source);
-      pending.push({ table: 'smart_scripts', row: smartRow(triggerId, 0, eventType!, eventParams, actions[0]!, header) });
-    } else if (source === SOURCE.areatrigger) {
-      const ids = actions.map(() => takeId(entryorguid, source));
-      triggerId = ids[0]!;
-      actions.forEach((action, i) => {
-        const link = ids[i + 1] ?? 0;
-        pending.push({
-          table: 'smart_scripts',
-          row: i === 0
-            ? smartRow(ids[i]!, link, eventType!, eventParams, action, header)
-            : smartRow(ids[i]!, link, EVENT.link, [], action, `${tag}: ${action.describe}`),
-        });
-      });
-    } else {
-      const list = takeList(entryorguid);
-      if (list === null) {
-        out.warnings.push(`No free timed action list id for ${owner.kind} ${entryorguid}.`);
-        return;
-      }
-      triggerId = takeId(entryorguid, source);
-      const call: Action = { type: ACTION.callTimedList, params: [list, 0, LIST_TIMER_ALWAYS], target: TARGET.self, targetParams: [], waitMs: 0, describe: '' };
-      pending.push({ table: 'smart_scripts', row: smartRow(triggerId, 0, eventType!, eventParams, call, header) });
-      actions.forEach((action, i) =>
-        pending.push({
-          table: 'smart_scripts',
-          row: smartRow(i, 0, EVENT.updateIc, [action.waitMs, action.waitMs, 0, 0], action, `${tag}: ${action.describe}`, SOURCE.timedList, list),
-        }),
-      );
+    const emitted = emitTrigger({
+      alloc, entryorguid, source, eventType: eventType!, eventParams, actions,
+      header: triggerComment(questId, scene), tag, shape: source === SOURCE.areatrigger ? 'link' : 'list',
+    });
+    if (emitted === null) {
+      out.warnings.push(`No free timed action list id for ${owner.kind} ${entryorguid}.`);
+      return;
     }
+    const { triggerId } = emitted;
+    for (const row of emitted.rows) pending.push({ table: 'smart_scripts', row });
 
     // Gates: on the trigger row, and again on the gossip option so it only shows when it would work.
     const conditionRow = (sourceType: number, group: number, entry: number, sourceId: number, gate: SceneGate): Row => {

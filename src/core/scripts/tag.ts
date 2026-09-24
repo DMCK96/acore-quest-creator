@@ -30,6 +30,18 @@ export function sceneIdOf(comment: string | null | undefined, questId: number): 
   return /^s\d+$/.test(id) ? id : null;
 }
 
+/** The tag on every row of a new NPC's fight (slice I); fight rows are never scene rows. */
+export function fightTag(questId: number, entry: number): string {
+  return `${questTagPrefix(questId)}fight${entry}`;
+}
+
+/** The NPC a fight row belongs to, or null for a row that is not one of this quest's fight rows. */
+export function fightEntryOf(comment: string | null | undefined, questId: number): number | null {
+  if (!isOurs(comment, questId)) return null;
+  const match = /^fight(\d+)(?::|$)/.exec(comment!.slice(questTagPrefix(questId).length));
+  return match ? Number(match[1]) : null;
+}
+
 export function triggerComment(questId: number, scene: QuestScene): string {
   return `${sceneTag(questId, scene.id)}: ${describeScene(scene)}${DATA_MARKER}${JSON.stringify(scene)}`;
 }
