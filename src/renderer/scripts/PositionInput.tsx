@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { parseGps } from '@core/scripts/gps';
 import type { Position } from '@core/scripts/model';
+import { useApi } from '../state/names';
 
 const AXES = ['x', 'y', 'z', 'o'] as const;
 const AXIS_LABEL = { x: 'X', y: 'Y', z: 'Z', o: 'Facing' } as const;
@@ -8,25 +9,46 @@ const AXIS_LABEL = { x: 'X', y: 'Y', z: 'Z', o: 'Facing' } as const;
 /**
  * A position as four numbers, with a box to paste the server's `.gps` output into so an author can
  * copy where they stand in game. A paste reports the position and the map it names in one change, so
- * a caller never applies one on top of a stale copy of the other.
+ * a caller never applies one on top of a stale copy of the other. With a `map`, a button fills Z
+ * from the server's terrain at X and Y.
  */
 export function PositionInput({
   idPrefix,
   value,
   onChange,
+  map,
 }: {
   idPrefix: string;
   value: Position;
   /** `map` is set only when pasted `.gps` text named one. */
   onChange(next: Position, map?: number): void;
+  /** The map the position is on; without one there is no ground to snap to. */
+  map?: number;
 }): React.JSX.Element {
   const [paste, setPaste] = useState('');
+  const [groundNote, setGroundNote] = useState<string | null>(null);
+  const api = useApi();
 
   function fromText(text: string): void {
     setPaste(text);
     const parsed = parseGps(text);
     if (!parsed) return;
     onChange({ x: parsed.x, y: parsed.y, z: parsed.z, o: parsed.o }, parsed.map);
+  }
+
+  async function snap(): Promise<void> {
+    if (map === undefined || !api) return;
+    const result = await api.groundHeight(map, value.x, value.y);
+    if (!result.ok) {
+      setGroundNote(result.error.message);
+      return;
+    }
+    if ('z' in result.value) {
+      setGroundNote(null);
+      onChange({ ...value, z: result.value.z });
+    } else {
+      setGroundNote(result.value.reason);
+    }
   }
 
   return (
@@ -44,7 +66,13 @@ export function PositionInput({
             />
           </label>
         ))}
+        {map !== undefined && (
+          <button type="button" className="btn position-input__snap" onClick={() => void snap()}>
+            Snap to ground
+          </button>
+        )}
       </div>
+      {groundNote && <p className="scene-hint">{groundNote}</p>}
       <label className="scene-field">
         <span>Paste .gps output</span>
         <textarea

@@ -139,3 +139,7 @@
   background: var(--amber-soft);
   font-size: 13px;
 }
+
+.position-input__snap {
+  align-self: flex-end;
+}
