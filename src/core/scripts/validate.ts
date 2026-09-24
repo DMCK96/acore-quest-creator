@@ -35,10 +35,36 @@ const ownerKey = (owner: SceneOwner): string =>
 
 const sameOwner = (a: SceneOwner, b: SceneOwner): boolean => ownerKey(a) === ownerKey(b);
 
+/** What a step still needs before it can run, or null when it is complete. */
+function incomplete(step: QuestScene['steps'][number]): string | null {
+  switch (step.kind) {
+    case 'spawnNpc':
+      return step.entry > 0 ? null : 'an NPC to spawn';
+    case 'spawnObject':
+      return step.entry > 0 ? null : 'an object to spawn';
+    case 'giveItem':
+    case 'takeItem':
+      return step.item > 0 ? null : 'an item';
+    case 'castOnPlayer':
+    case 'castOnSelf':
+      return step.spellId > 0 ? null : 'a spell';
+    case 'say':
+      return step.text.trim() !== '' ? null : 'something to say';
+    case 'signal':
+      return step.entry > 0 ? null : 'the NPC or object to tell';
+    case 'startEscort':
+      return step.points.length > 0 ? null : 'at least one point to walk to';
+    default:
+      return null;
+  }
+}
+
 /** What is wrong with the quest's scenes, each issue routed to the Scripts module. */
 export function sceneIssues(input: SceneCheckInput): Issue[] {
   const issues: Issue[] = [];
-  const escorts = new Set(input.scenes.filter((s) => s.steps.some((step) => step.kind === 'startEscort')).map((s) => s.id));
+  const escorts = new Map(
+    input.scenes.filter((s) => s.steps.some((step) => step.kind === 'startEscort')).map((s) => [s.id, s.owner] as const),
+  );
 
   for (const scene of input.scenes) {
     const label = `Scene "${scene.name.trim() || describeTrigger(scene.trigger)}"`;
@@ -91,8 +117,17 @@ export function sceneIssues(input: SceneCheckInput): Issue[] {
       add('warning', 'SCENE_EVENT_FLAG', 'the quest is not set to complete from a script event, so this will not complete it.');
     }
 
-    if (scene.trigger.kind === 'waypointReached' && !escorts.has(scene.trigger.escortSceneId)) {
-      add('error', 'SCENE_NO_ESCORT', 'the escort it waits for no longer exists.');
+    if (scene.trigger.kind === 'waypointReached') {
+      const escortOwner = escorts.get(scene.trigger.escortSceneId);
+      if (!escortOwner) add('error', 'SCENE_NO_ESCORT', 'the escort it waits for no longer exists.');
+      else if (!sameOwner(escortOwner, owner)) {
+        add('error', 'SCENE_ESCORT_OWNER', 'it must run on the NPC that walks the escort, or it never hears the points being reached.');
+      }
+    }
+
+    for (const step of scene.steps) {
+      const missing = incomplete(step);
+      if (missing) add('error', 'SCENE_STEP_INCOMPLETE', `"${describeStep(step)}" needs ${missing}.`);
     }
 
     const needs = new Set<string>(['smart_scripts']);

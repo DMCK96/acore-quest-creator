@@ -31,6 +31,23 @@ describe('scene validation', () => {
   });
   it('refuses scenes that need a table the fork lacks', () =>
     expect(check([scene()], { missingTables: ['smart_scripts'] })).toEqual([['SCENE_TABLE_MISSING', 'error']]));
+  it('refuses a waypoint scene on a different NPC from its escort', () => {
+    const escort = scene({ id: 's1', trigger: { kind: 'questAccepted' }, steps: [{ kind: 'startEscort', points: [{ x: 1, y: 1, z: 1, o: 0 }], run: false, waitMs: 0 }] });
+    const elsewhere = scene({ id: 's2', owner: { kind: 'creature', entry: 5 }, trigger: { kind: 'waypointReached', escortSceneId: 's1', point: 1 }, steps: [{ kind: 'emote', emote: 1, waitMs: 0 }] });
+    expect(check([escort, elsewhere], { givers: [{ kind: 'creature', entry: 299 }], specialFlags: 2 })).toEqual([['SCENE_ESCORT_OWNER', 'error']]);
+  });
+  it('refuses an escort with no points', () =>
+    expect(check([scene({ steps: [{ kind: 'startEscort', points: [], run: false, waitMs: 0 }] })], { specialFlags: 2 })).toEqual([['SCENE_STEP_INCOMPLETE', 'error']]));
+  it('refuses steps left without what they act on', () => {
+    const steps = [
+      { kind: 'spawnNpc', entry: 0, at: { x: 0, y: 0, z: 0, o: 0 }, despawnAfterS: 5, attackPlayer: false, waitMs: 0 },
+      { kind: 'giveItem', item: 0, count: 1, waitMs: 0 },
+      { kind: 'castOnPlayer', spellId: 0, waitMs: 0 },
+      { kind: 'say', text: '  ', style: 'say', waitMs: 0 },
+      { kind: 'signal', signal: 1, targetKind: 'creature', entry: 0, range: 30, waitMs: 0 },
+    ] as const;
+    expect(check([scene({ steps: [...steps] })]).filter(([c]) => c === 'SCENE_STEP_INCOMPLETE')).toHaveLength(5);
+  });
   it('refuses a waypoint scene pointing at a scene with no escort', () =>
     expect(check([scene({ id: 's2', trigger: { kind: 'waypointReached', escortSceneId: 's1', point: 1 }, steps: [{ kind: 'emote', emote: 1, waitMs: 0 }] }), scene()]))
       .toContainEqual(['SCENE_NO_ESCORT', 'error']));
