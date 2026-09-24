@@ -6,6 +6,7 @@ import { readGivers, type GiverTarget } from './givers';
 import type { Values } from './model';
 import { isUnset } from './values';
 import { readScenes } from '../scripts/model';
+import { readEntities } from '../entities/model';
 import { describeScene } from '../scripts/describe';
 
 /**
@@ -85,6 +86,15 @@ const DIALOGUE_TEXTS: ReadonlyArray<readonly [string, string]> = [
 export function dialogueSummary(values: Values): string[] {
   const written = DIALOGUE_TEXTS.filter(([id]) => !isUnset(id, values[id])).map(([, label]) => label);
   return written.length === 0 ? [] : [`Written: ${written.join(', ')}`];
+}
+
+/** How many new NPCs and objects, then the first two names. */
+export function entitiesSummary(values: Values): string[] {
+  const { npcs, objects } = readEntities(values);
+  if (npcs.length + objects.length === 0) return [];
+  const count = (n: number, one: string, many: string): string => `${n} ${n === 1 ? one : many}`;
+  const names = [...npcs, ...objects].map((e) => e.name.trim() || `#${e.entry}`).slice(0, 2);
+  return [`${count(npcs.length, 'NPC', 'NPCs')}, ${count(objects.length, 'object', 'objects')}`, ...names];
 }
 
 /** How many scenes, then the first two in words. */

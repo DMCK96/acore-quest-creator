@@ -6,12 +6,14 @@ import {
   giverSummary,
   labelsSummary,
   objectivesSummary,
+  entitiesSummary,
   rewardsSummary,
   scriptsSummary,
   timerSummary,
 } from './summaries';
 import { emptyValue, isUnset } from './values';
 import { SCRIPTS_FIELD } from '../scripts/model';
+import { ENTITIES_FIELD } from '../entities/model';
 
 export { formatMoney } from './summaries';
 
@@ -137,6 +139,14 @@ const DECLARED: readonly Declared[] = [
     summary: scriptsSummary,
   },
   {
+    id: 'entities',
+    label: 'NPCs & objects',
+    description: 'New NPCs and objects this quest needs, and where they stand.',
+    kind: 'optional',
+    owns: [ENTITIES_FIELD],
+    summary: entitiesSummary,
+  },
+  {
     id: 'timer',
     label: 'Timer',
     description: 'A time limit the quest fails after.',
@@ -222,6 +232,7 @@ export function moduleById(id: ModuleId): ModuleDef {
 /** Which module (or the header, or nobody visible) edits a field; `undefined` for an unknown id. */
 export function ownerOf(fieldId: string): ModuleId | 'header' | 'hidden' | undefined {
   if (fieldId === SCRIPTS_FIELD) return 'scripts';
+  if (fieldId === ENTITIES_FIELD) return 'entities';
   if (HEADER_FIELDS.includes(fieldId)) return 'header';
   if (!fieldById(fieldId)) return undefined;
   if (isHiddenField(fieldId)) return 'hidden';
@@ -251,7 +262,7 @@ export function offeredModules(values: Values, added: readonly ModuleId[]): Modu
       m.kind === 'optional' &&
       !shown.has(m.id) &&
       // Scripts are added from nothing, so a quest never has to carry them already to be offered them.
-      (m.id === 'advanced' || m.id === 'scripts' || m.owns.some((id) => Object.prototype.hasOwnProperty.call(values, id))),
+      (m.id === 'advanced' || m.id === 'scripts' || m.id === 'entities' || m.owns.some((id) => Object.prototype.hasOwnProperty.call(values, id))),
   ).map((m) => m.id);
 }
 
@@ -266,6 +277,10 @@ export function resetModule(id: ModuleId, values: Values, readOnly: readonly str
     if (isUnset(fieldId, values[fieldId])) continue;
     if (fieldId === SCRIPTS_FIELD) {
       out[fieldId] = [];
+      continue;
+    }
+    if (fieldId === ENTITIES_FIELD) {
+      out[fieldId] = { npcs: [], objects: [] } as unknown as FieldValue;
       continue;
     }
     const field = fieldById(fieldId);

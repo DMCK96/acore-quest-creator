@@ -10,6 +10,7 @@ export type ModuleId =
   | 'requirements'
   | 'chain'
   | 'scripts'
+  | 'entities'
   | 'timer'
   | 'behaviour'
   | 'mapMarker'

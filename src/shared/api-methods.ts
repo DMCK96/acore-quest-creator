@@ -32,6 +32,8 @@ export const API_METHODS = [
   'previewChanges',
   'validate',
   'questScripts',
+  'allocateIds',
+  'entityTemplate',
   'exportQuest',
   'applyToDev',
   'projectState',

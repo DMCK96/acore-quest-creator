@@ -18,11 +18,11 @@ const names: NameBook = (kind, id) => NAMES[`${kind}:${id}`];
 describe('module catalog', () => {
   it('lists the modules in catalog order', () => {
     expect(MODULES.map((m) => m.id)).toEqual([
-      'giver', 'objectives', 'dialogue', 'rewards', 'requirements', 'chain', 'scripts',
+      'giver', 'objectives', 'dialogue', 'rewards', 'requirements', 'chain', 'scripts', 'entities',
       'timer', 'behaviour', 'mapMarker', 'mail', 'extraRewards', 'advanced',
     ]);
     expect(MODULES.map((m) => m.label)).toEqual([
-      'Quest Giver', 'Objectives', 'Dialogue', 'Rewards', 'Requirements', 'Chain', 'Scripts',
+      'Quest Giver', 'Objectives', 'Dialogue', 'Rewards', 'Requirements', 'Chain', 'Scripts', 'NPCs & objects',
       'Timer', 'Behaviour', 'Map marker', 'Mail reward', 'Extra rewards', 'Advanced',
     ]);
     expect(MODULES.filter((m) => m.kind === 'core').map((m) => m.id)).toEqual(['giver', 'objectives', 'dialogue', 'rewards']);
@@ -75,8 +75,8 @@ describe('module catalog', () => {
 
   it('offers the optional modules not shown yet whose fields exist, and always Advanced', () => {
     const values = { 'quest_template.TimeAllowed': 0, 'quest_template_addon.PrevQuestID': 0 };
-    expect(offeredModules(values, [])).toEqual(['chain', 'scripts', 'timer', 'advanced']);
-    expect(offeredModules(values, ['chain', 'scripts', 'advanced'])).toEqual(['timer']);
+    expect(offeredModules(values, [])).toEqual(['chain', 'scripts', 'entities', 'timer', 'advanced']);
+    expect(offeredModules(values, ['chain', 'scripts', 'entities', 'advanced'])).toEqual(['timer']);
   });
 
   it('offers the Scripts module on any quest and routes scene issues to it', () => {
@@ -84,6 +84,12 @@ describe('module catalog', () => {
     expect(ownerOf('scripts')).toBe('scripts');
     expect(presentModules({ scripts: [] as never }, [])).not.toContain('scripts');
     expect(resetModule('scripts', { scripts: [{}] as never }, [])).toEqual({ scripts: [] });
+  });
+
+  it('offers the NPCs & objects module on any quest', () => {
+    expect(offeredModules({}, [])).toContain('entities');
+    expect(ownerOf('entities')).toBe('entities');
+    expect(resetModule('entities', { entities: { npcs: [{}], objects: [] } as never }, [])).toEqual({ entities: { npcs: [], objects: [] } });
   });
 
   it('resets every owned field that is not read-only', () => {

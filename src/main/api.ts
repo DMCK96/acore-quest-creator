@@ -55,6 +55,10 @@ import { foreignScenes, scenesFromRows } from '../core/scripts/decompile';
 import { SCRIPTS_FIELD, readScenes, writeScenes, type QuestScene, type SceneOwner } from '../core/scripts/model';
 import { scriptStatements } from '../core/scripts/statements';
 import { sceneIssues } from '../core/scripts/validate';
+import { compileEntities } from '../core/entities/compile';
+import { ENTITY_KEYS, ENTITY_TABLES, readEntityContext } from '../core/entities/context';
+import { ENTITIES_FIELD, NPC_TYPE_VALUE, OBJECT_TYPE_VALUE, RANK_VALUE, readEntities, writeEntities, type QuestEntities } from '../core/entities/model';
+import { entityIssues } from '../core/entities/validate';
 import { loadServerData, type ServerData, type ServerDataFiles } from './server-data';
 import type { ProjectQuest } from './project/project-file';
 import type { ProjectSession } from './project/session';
@@ -296,13 +300,18 @@ export function createApi(deps: ApiDeps): Api {
    */
   async function issuesOf(live: Session, questId: number, aggregate: QuestAggregate, refs: RefChecker): Promise<Issue[]> {
     const own = await validateQuest(aggregate, refs);
-    return [...own, ...(await scriptIssues(live, aggregate)), ...linkIssues(questId, await linksFor(live, [questId]))];
+    return [
+      ...own,
+      ...(await scriptIssues(live, aggregate)),
+      ...(await newEntityIssues(live, aggregate)),
+      ...linkIssues(questId, await linksFor(live, [questId])),
+    ];
   }
 
   /** Opens one quest: the project's copy if it has one, otherwise a fresh import placed on the canvas. */
   async function openOne(questId: number, position?: NodePosition): Promise<OpenResult> {
     const live = usable();
-    const refs = refCheckerFor(live.db);
+    const refs = refsFor(live);
     const quest = quests.get(questId);
 
     // A brand-new quest (never exported) has no row in the live database to import or diff
@@ -439,6 +448,54 @@ export function createApi(deps: ApiDeps): Api {
     });
   }
 
+  /** Every new NPC and object in the project, from every quest. */
+  function projectEntities(): QuestEntities {
+    const all: QuestEntities = { npcs: [], objects: [] };
+    for (const quest of quests.list()) {
+      const { npcs, objects } = readEntities(quest.aggregate.values);
+      all.npcs.push(...npcs);
+      all.objects.push(...objects);
+    }
+    return all;
+  }
+
+  /**
+   * Reference checks that also know the project's new NPCs and objects: they exist, and a new NPC
+   * counts as a quest giver because export gives it the flag whenever it starts or ends a quest.
+   */
+  function refsFor(live: Session): RefChecker {
+    const base = refCheckerFor(live.db);
+    return {
+      exists(kind, id) {
+        const { npcs, objects } = projectEntities();
+        if (kind === 'creature' && npcs.some((n) => n.entry === id)) return Promise.resolve(true);
+        if (kind === 'gameobject' && objects.some((o) => o.entry === id)) return Promise.resolve(true);
+        return base.exists(kind, id);
+      },
+      questGiver(kind, id) {
+        const { npcs, objects } = projectEntities();
+        if (kind === 'creature' && npcs.some((n) => n.entry === id)) return Promise.resolve(true);
+        const object = kind === 'gameobject' ? objects.find((o) => o.entry === id) : undefined;
+        if (object) return Promise.resolve(object.type === 'questGiver');
+        return base.questGiver(kind, id);
+      },
+    };
+  }
+
+  async function newEntityIssues(live: Session, aggregate: QuestAggregate): Promise<Issue[]> {
+    const entities = readEntities(aggregate.values);
+    if (entities.npcs.length + entities.objects.length === 0) return [];
+    const [creatures, objects] = await Promise.all([
+      rowsOrNone(live.db, 'creature_template', { entry: entities.npcs.map((n) => String(n.entry)) }),
+      rowsOrNone(live.db, 'gameobject_template', { entry: entities.objects.map((o) => String(o.entry)) }),
+    ]);
+    const dbNames = new Map<string, string>([
+      ...creatures.map((r) => [`creature:${r.entry}`, r.name ?? ''] as [string, string]),
+      ...objects.map((r) => [`gameobject:${r.entry}`, r.name ?? ''] as [string, string]),
+    ]);
+    return entityIssues({ entities, dbNames });
+  }
+
   /** The quest's scenes compiled against the rows in the world DB right now. */
   async function compileFor(live: Session, aggregate: QuestAggregate): Promise<{ context: ScriptContext; compiled: CompiledScripts }> {
     const scenes = readScenes(aggregate.values);
@@ -468,7 +525,11 @@ export function createApi(deps: ApiDeps): Api {
         { differences: quest.fidelity.differences },
       );
     }
-    const issues = [...(await validateQuest(quest.aggregate, refCheckerFor(db))), ...(await scriptIssues(live, quest.aggregate))];
+    const issues = [
+      ...(await validateQuest(quest.aggregate, refsFor(live))),
+      ...(await scriptIssues(live, quest.aggregate)),
+      ...(await newEntityIssues(live, quest.aggregate)),
+    ];
     if (issues.some((i) => i.severity === 'error')) {
       throw fail('VALIDATION', 'Fix the errors on this quest before exporting it.', { issues });
     }
@@ -479,7 +540,7 @@ export function createApi(deps: ApiDeps): Api {
   async function patchFor(
     live: Session,
     quest: ProjectQuest,
-  ): Promise<{ statements: PatchStatement[]; warnings: PatchWarning[]; fixes: QuestGiverFix[]; scriptContext: ScriptContext }> {
+  ): Promise<{ statements: PatchStatement[]; warnings: PatchWarning[]; fixes: QuestGiverFix[]; scriptContext: ScriptContext; entityStatements: PatchStatement[] }> {
     const fixes = await findQuestGiverFixes(live.db, quest.aggregate.values);
     // Read the neighbouring linked rows now rather than trusting the ones the import saw: the
     // edit may name a creature the quest had nothing to do with when it was opened, and those
@@ -501,16 +562,23 @@ export function createApi(deps: ApiDeps): Api {
     });
     const { context: scriptContext, compiled } = await compileFor(live, quest.aggregate);
     const scripts = scriptStatements(compiled, exportSchema(live));
+    const entities = readEntities(quest.aggregate.values);
+    const givers = [...relationOwners(quest.aggregate, 'starter'), ...relationOwners(quest.aggregate, 'ender')]
+      .flatMap((o) => (o.kind === 'creature' ? [o.entry] : []));
+    const entityContext = await readEntityContext(live.db, quest.questId, entities);
+    const newEntities = scriptStatements(compileEntities({ questId: quest.questId, entities, givers, context: entityContext }), exportSchema(live));
     const of = (list: readonly PatchStatement[], kind: PatchStatement['kind']) => list.filter((s) => s.kind === kind);
-    // Deletes before anything is written, flags and updates before the rows that rely on them.
+    // Deletes before anything is written; new NPCs and objects before the flags and updates quest
+    // scripting puts on them; the quest's and the scenes' rows last.
     const merged = [
-      ...of(statements, 'delete'), ...of(scripts.statements, 'delete'),
+      ...of(statements, 'delete'), ...of(scripts.statements, 'delete'), ...of(newEntities.statements, 'delete'),
+      ...of(newEntities.statements, 'insert'),
       ...of(statements, 'set-flag'), ...of(scripts.statements, 'set-flag'),
       ...of(statements, 'update'), ...of(scripts.statements, 'update'),
       ...of(statements, 'insert'), ...of(scripts.statements, 'insert'),
     ];
     const scriptWarnings: PatchWarning[] = compiled.warnings.map((message) => ({ code: 'SCRIPT_WARNING', table: 'smart_scripts', message }));
-    return { statements: merged, warnings: [...warnings, ...scriptWarnings], fixes, scriptContext };
+    return { statements: merged, warnings: [...warnings, ...scriptWarnings], fixes, scriptContext, entityStatements: newEntities.statements };
   }
 
   return {
@@ -544,7 +612,7 @@ export function createApi(deps: ApiDeps): Api {
         const drift = diffSchema(schema, registry);
         const blocking = hasBlockingDrift(drift);
         const serverData = await loadServerData(profile.dbcDir ?? '', deps.serverDataFiles ?? NO_SERVER_DATA_FILES);
-        const scriptSchema = await loadSchema(db, [...SCRIPT_TABLES]);
+        const scriptSchema = await loadSchema(db, [...new Set<string>([...SCRIPT_TABLES, ...ENTITY_TABLES])]);
         // Swapping connections must not leave the old one open.
         if (session && session.db !== db) await session.db.close();
         session = {
@@ -566,7 +634,73 @@ export function createApi(deps: ApiDeps): Api {
     chooseServerDataDir: () => run(async () => (deps.chooseDirectory ? await deps.chooseDirectory() : null)),
 
     searchQuests: (text) => run(async () => connected().db.searchQuests(text, SEARCH_LIMIT)),
-    searchEntities: (kind, text) => run(async () => connected().db.searchEntities(kind, text, ENTITY_SEARCH_LIMIT)),
+    searchEntities: (kind, text) =>
+      run(async () => {
+        const found = await connected().db.searchEntities(kind, text, ENTITY_SEARCH_LIMIT);
+        if (kind !== 'creature' && kind !== 'gameobject') return found;
+        const { npcs, objects } = projectEntities();
+        const needle = text.trim().toLowerCase();
+        if (needle === '') return found;
+        const mine = (kind === 'creature' ? npcs : objects)
+          .filter((e) => e.name.toLowerCase().includes(needle) || String(e.entry) === needle)
+          .map((e) => ({ id: e.entry, name: e.name || `New ${kind === 'creature' ? 'NPC' : 'object'}`, detail: 'new' }));
+        const ids = new Set(mine.map((h) => h.id));
+        return [...mine, ...found.filter((h) => !ids.has(h.id))].slice(0, ENTITY_SEARCH_LIMIT);
+      }),
+
+    allocateIds: (kind, count) =>
+      run(async () => {
+        const live = connected();
+        const [table, column] = {
+          creature: ['creature_template', 'entry'],
+          gameobject: ['gameobject_template', 'entry'],
+          creatureSpawn: ['creature', 'guid'],
+          gameobjectSpawn: ['gameobject', 'guid'],
+        }[kind] as [string, string];
+        let dbMax = 0;
+        try {
+          dbMax = (await live.db.selectMax?.(table, column)) ?? 0;
+        } catch {
+          dbMax = 0;
+        }
+        const { npcs, objects } = projectEntities();
+        const used =
+          kind === 'creature' ? npcs.map((n) => n.entry)
+          : kind === 'gameobject' ? objects.map((o) => o.entry)
+          : kind === 'creatureSpawn' ? npcs.flatMap((n) => n.spawns.map((s) => s.guid))
+          : objects.flatMap((o) => o.spawns.map((s) => s.guid));
+        const base = Math.max(dbMax, ...used, 0);
+        return Array.from({ length: count }, (_, i) => base + i + 1);
+      }),
+
+    entityTemplate: (kind, entry) =>
+      run(async () => {
+        const live = connected();
+        const numberOf = (raw: string | null | undefined, fallback = 0): number => {
+          const n = Number(raw);
+          return raw === null || raw === undefined || !Number.isFinite(n) ? fallback : n;
+        };
+        const nameOf = <T extends Record<string, number>>(map: T, value: number, fallback: keyof T): keyof T =>
+          (Object.keys(map) as (keyof T)[]).find((k) => map[k] === value) ?? fallback;
+        if (kind === 'creature') {
+          const [row] = await rowsOrNone(live.db, 'creature_template', { entry: [String(entry)] });
+          if (!row) return null;
+          const [model] = await rowsOrNone(live.db, 'creature_template_model', { CreatureID: [String(entry)], Idx: ['0'] });
+          return {
+            name: row.name ?? '', subname: row.subname ?? '',
+            minLevel: numberOf(row.minlevel, 1), maxLevel: numberOf(row.maxlevel, 1), faction: numberOf(row.faction, 35),
+            rank: nameOf(RANK_VALUE, numberOf(row.rank), 'normal'), type: nameOf(NPC_TYPE_VALUE, numberOf(row.type), 'none'),
+            healthModifier: numberOf(row.HealthModifier, 1), damageModifier: numberOf(row.DamageModifier, 1),
+            displayId: numberOf(model?.CreatureDisplayID), scale: numberOf(model?.DisplayScale, 1),
+          };
+        }
+        const [row] = await rowsOrNone(live.db, 'gameobject_template', { entry: [String(entry)] });
+        if (!row) return null;
+        return {
+          name: row.name ?? '', type: nameOf(OBJECT_TYPE_VALUE, numberOf(row.type), 'generic'),
+          displayId: numberOf(row.displayId), size: numberOf(row.size, 1),
+        };
+      }),
 
     openQuest: (questId, position) => run(async () => openOne(questId, position)),
 
@@ -616,7 +750,10 @@ export function createApi(deps: ApiDeps): Api {
         const taken = await collectTakenIds(live.db, range, quests.usedQuestIds());
         const questId = allocateQuestId(range, taken);
         const created = createNewAggregate(live.schema, registry, questId);
-        const aggregate = { ...created, values: { ...created.values, [SCRIPTS_FIELD]: writeScenes([]) } };
+        const aggregate = {
+          ...created,
+          values: { ...created.values, [SCRIPTS_FIELD]: writeScenes([]), [ENTITIES_FIELD]: writeEntities({ npcs: [], objects: [] }) },
+        };
         const fidelity: FidelityReport = { ok: true };
 
         const at = placeAt(position);
@@ -636,7 +773,7 @@ export function createApi(deps: ApiDeps): Api {
           aggregate,
           fidelity,
           unmodelled: [],
-          issues: await issuesOf(live, questId, aggregate, refCheckerFor(live.db)),
+          issues: await issuesOf(live, questId, aggregate, refsFor(live)),
           inProject: false,
           stale: false,
           // A quest that does not exist yet has no translations to leave behind.
@@ -649,7 +786,7 @@ export function createApi(deps: ApiDeps): Api {
       run(async () => {
         const live = connected();
         // One checker for the whole canvas: the same NPC or item is asked about once, not per node.
-        const refs = refCheckerFor(live.db);
+        const refs = refsFor(live);
         const projectQuests = quests.list();
         const canvasIds = projectQuests.map((d) => d.questId);
         const onCanvas = new Set(canvasIds);
@@ -754,6 +891,10 @@ export function createApi(deps: ApiDeps): Api {
     lookupNames: (kind: RefKind, ids) =>
       run(async () => {
         const found = await connected().db.lookupNames(kind, ids);
+        // New NPCs and objects are not in the database until the quest is applied.
+        const { npcs, objects } = projectEntities();
+        const mine = kind === 'creature' ? npcs : kind === 'gameobject' ? objects : [];
+        for (const entity of mine) if (ids.includes(entity.entry) && !found.has(entity.entry)) found.set(entity.entry, entity.name || `#${entity.entry}`);
         const names: Record<number, string> = {};
         for (const [id, name] of found) names[id] = name;
         return names;
@@ -840,8 +981,9 @@ export function createApi(deps: ApiDeps): Api {
       run(async () => {
         const live = connected();
         const quest = questOf(questId);
-        const { statements, fixes, scriptContext } = await patchFor(live, quest);
-        const scriptTables = new Set<string>(SCRIPT_TABLES);
+        const { statements, fixes, scriptContext, entityStatements } = await patchFor(live, quest);
+        const entityTables = new Set<string>(ENTITY_TABLES);
+        const scriptTables = new Set<string>([...SCRIPT_TABLES, ...ENTITY_TABLES]);
         const own = statements.filter((s) => !scriptTables.has(s.table));
         const before = quest.snapshot?.tables ?? {};
         const after = applyPatchInMemory(before, own, KEY_COLUMNS);
@@ -858,7 +1000,19 @@ export function createApi(deps: ApiDeps): Api {
           creature_template: scriptContext.creatures,
           gameobject_template: scriptContext.gameobjects,
         };
-        const scriptStatementsOnly = statements.filter((s) => scriptTables.has(s.table) && !(s.kind === 'set-flag' && s.table === CREATURE_TABLE && s.column === 'npcflag' && s.bit === QUEST_GIVER_BIT));
+        // New NPCs and objects: compared against what the database holds for their keys now.
+        const keysOf = (table: string, column: string): string[] =>
+          entityStatements.flatMap((s) => (s.table === table && s.kind !== 'update' && s.kind !== 'set-flag' ? [String((s.kind === 'insert' ? s.row : s.key)[column] ?? '')] : []));
+        const entityBefore: Record<string, RawRow[]> = Object.fromEntries(
+          await Promise.all(
+            ([['creature_template', 'entry'], ['creature_template_model', 'CreatureID'], ['creature', 'guid'], ['gameobject_template', 'entry'], ['gameobject', 'guid']] as const)
+              .map(async ([table, column]) => [table, await rowsOrNone(live.db, table, { [column]: [...new Set(keysOf(table, column))] })] as const),
+          ),
+        );
+        const entityAfter = applyPatchInMemory(entityBefore, entityStatements, ENTITY_KEYS);
+        differences.push(...compareTables(entityBefore, entityAfter, ENTITY_KEYS));
+        const scriptStatementsOnly = statements.filter((s) => scriptTables.has(s.table) && !entityTables.has(s.table)
+          && !(s.kind === 'set-flag' && s.table === CREATURE_TABLE && s.column === 'npcflag' && s.bit === QUEST_GIVER_BIT));
         const scriptAfter = applyPatchInMemory(scriptBefore, scriptStatementsOnly, SCRIPT_KEYS);
         differences.push(...compareTables(scriptBefore, scriptAfter, SCRIPT_KEYS));
         // `creature_template` is not part of the snapshot, so the flag updates are named here.
@@ -910,7 +1064,7 @@ export function createApi(deps: ApiDeps): Api {
     validate: (questId) =>
       run(async () => {
         const live = connected();
-        return issuesOf(live, questId, questOf(questId).aggregate, refCheckerFor(live.db));
+        return issuesOf(live, questId, questOf(questId).aggregate, refsFor(live));
       }),
 
     exportQuest: (questId) =>

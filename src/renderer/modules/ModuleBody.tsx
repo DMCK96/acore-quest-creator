@@ -7,6 +7,7 @@ import { RewardsBody } from './bodies/RewardsBody';
 import { RequirementsBody } from './bodies/RequirementsBody';
 import { ChainBody } from './bodies/ChainBody';
 import { ScriptsBody } from './bodies/ScriptsBody';
+import { EntitiesBody } from './bodies/EntitiesBody';
 import { TimerBody } from './bodies/TimerBody';
 import { BehaviourBody } from './bodies/BehaviourBody';
 import { AdvancedBody, ExtraRewardsBody, MailBody, MapMarkerBody } from './bodies/SimpleBodies';
@@ -22,6 +23,7 @@ export const MODULE_BODIES: Record<ModuleId, ModuleBodyComponent> = {
   requirements: RequirementsBody,
   chain: ChainBody,
   scripts: ScriptsBody,
+  entities: EntitiesBody,
   timer: TimerBody,
   behaviour: BehaviourBody,
   mapMarker: MapMarkerBody,

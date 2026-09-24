@@ -94,8 +94,13 @@ export function compileEntities(input: {
   }
 
   // Every key the project holds, plus spawns this quest placed before and the author since removed.
-  for (const row of context.taggedCreatureSpawns) creatureGuids.add(num(row.guid));
-  for (const row of context.taggedObjectSpawns) objectGuids.add(num(row.guid));
+  // Only spawns of an NPC or object still in the project: like its template, the spawns of one the
+  // project no longer has (or never had, in a fresh project) are left as they are.
+  const tagOf = (kind: 'npc' | 'obj', entry: number): string => `${questTagPrefix(questId)}${kind}${entry}`;
+  const npcTags = new Set(entities.npcs.map((n) => tagOf('npc', n.entry)));
+  const objectTags = new Set(entities.objects.map((o) => tagOf('obj', o.entry)));
+  for (const row of context.taggedCreatureSpawns) if (npcTags.has(row.Comment ?? '')) creatureGuids.add(num(row.guid));
+  for (const row of context.taggedObjectSpawns) if (objectTags.has(row.Comment ?? '')) objectGuids.add(num(row.guid));
   const sorted = (values: Iterable<number>): number[] => [...new Set(values)].sort((a, b) => a - b);
   const add = (table: string, keys: Row[]): void => {
     if (keys.length > 0) out.deletes[table] = keys;

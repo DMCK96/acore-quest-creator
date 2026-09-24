@@ -1,5 +1,6 @@
 // @vitest-environment jsdom
 import { SCRIPTS_FIELD } from '../../src/core/scripts/model';
+import { ENTITIES_FIELD } from '../../src/core/entities/model';
 import { describe, it, expect } from 'vitest';
 import { registry } from '@core/registry';
 import { resolveControl, controlRegistry } from '../../src/renderer/controls/resolve';
@@ -26,6 +27,6 @@ describe('control coverage', () => {
   it('lists only real field ids in the modules', () => {
     const ids = new Set(registry.fields.map((f) => f.id));
     // `scripts` holds scenes, which no table column models; it is the one key a module owns outside the registry.
-    for (const m of MODULES) for (const id of m.owns) expect(ids.has(id) || id === SCRIPTS_FIELD, `${m.id}: ${id}`).toBe(true);
+    for (const m of MODULES) for (const id of m.owns) expect(ids.has(id) || id === SCRIPTS_FIELD || id === ENTITIES_FIELD, `${m.id}: ${id}`).toBe(true);
   });
 });

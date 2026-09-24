@@ -9,6 +9,7 @@ import type { QuestAggregate } from '@core/model/aggregate';
 import type { FieldValue } from '@core/registry/types';
 import type { Difference } from '@core/roundtrip/compare';
 import type { ForeignScene } from '@core/scripts/decompile';
+import type { CustomNpc, CustomObject } from '@core/entities/model';
 import type { FidelityReport } from '@core/roundtrip/verify';
 import type { SchemaDiff } from '@core/schema/diff';
 import type { Issue } from '@core/validate/validate';
@@ -248,6 +249,11 @@ export interface QuestLinks {
   unavailable: UnavailableComponent[];
 }
 
+export type AllocKind = 'creature' | 'gameobject' | 'creatureSpawn' | 'gameobjectSpawn';
+
+/** Fields an existing NPC or object lends a new one. */
+export type EntityTemplate = Partial<Omit<CustomNpc, 'entry' | 'spawns'>> | Partial<Omit<CustomObject, 'entry' | 'spawns'>>;
+
 /** What the Scripts module shows beside the quest's own scenes. */
 export interface QuestScriptsInfo {
   /** Scripts on the quest's NPCs, objects and areas that the tool did not write. */
@@ -288,6 +294,10 @@ export interface Api {
   updateQuest(aggregate: QuestAggregate): Promise<Result<true>>;
   previewChanges(questId: number): Promise<Result<Difference[]>>;
   validate(questId: number): Promise<Result<Issue[]>>;
+  /** Fresh IDs for new NPCs, objects or their spawns: above the database and every quest in the project. */
+  allocateIds(kind: AllocKind, count: number): Promise<Result<number[]>>;
+  /** The look and stats of an existing NPC or object, to start a new one from; null when there is none. */
+  entityTemplate(kind: 'creature' | 'gameobject', entry: number): Promise<Result<EntityTemplate | null>>;
   /** The scripts around the quest that the Scripts module lists read-only. */
   questScripts(questId: number): Promise<Result<QuestScriptsInfo>>;
   exportQuest(questId: number): Promise<Result<ExportResult>>;
@@ -416,6 +426,8 @@ const REQUEST_SCHEMAS: Record<keyof Api, z.ZodType<unknown[]>> = {
   previewChanges: z.tuple([z.number()]),
   validate: z.tuple([z.number()]),
   questScripts: z.tuple([z.number()]),
+  allocateIds: z.tuple([z.enum(['creature', 'gameobject', 'creatureSpawn', 'gameobjectSpawn']), z.number().int().min(1).max(50)]),
+  entityTemplate: z.tuple([z.enum(['creature', 'gameobject']), z.number().int()]),
   exportQuest: z.tuple([z.number()]),
   applyToDev: z.tuple([z.number(), z.boolean()]),
   projectState: z.tuple([]),

@@ -46,6 +46,11 @@ describe('compileEntities', () => {
     expect(out.inserts.creature_template![0]).toMatchObject({ AIName: 'SmartAI', gossip_menu_id: '90001', npcflag: '1' });
     expect(out.inserts.gameobject_template![0]).toMatchObject({ AIName: 'SmartGameObjectAI' });
   });
+  it('leaves the spawns of an NPC the project no longer has, like its template', () => {
+    const out = compile({ entities: { npcs: [], objects: [] }, context: { ...EMPTY_ENTITY_CONTEXT,
+      taggedCreatureSpawns: [{ guid: '6000009', Comment: 'AQC q60001 npc12000001' }] } });
+    expect(out.deletes.creature).toBeUndefined();
+  });
   it('deletes spawns that were removed from the project', () => {
     const out = compile({ context: { ...EMPTY_ENTITY_CONTEXT,
       taggedCreatureSpawns: [{ guid: '6000009', Comment: 'AQC q60001 npc12000001' }, { guid: '6000001', Comment: 'AQC q60001 npc12000001' }],
