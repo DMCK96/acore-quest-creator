@@ -15,8 +15,11 @@
 }
 
 .conn-fields__section legend {
+  /* Floated so it sits inside the section, under the divider, rather than in the fieldset's border. */
+  float: left;
+  width: 100%;
   padding: 0;
-  margin-bottom: 0.5rem;
+  margin-bottom: 0.1rem;
   font-size: 0.72rem;
   font-weight: 600;
   letter-spacing: 0.08em;
@@ -104,7 +107,8 @@
 
 .conn-field__error {
   margin: 0;
-  color: var(--red);
+  /* Lighter than --red, which is too dark to read as small text on the inset panels. */
+  color: #e0857d;
 }
 
 @media (max-width: 480px) {

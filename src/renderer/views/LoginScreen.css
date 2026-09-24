@@ -1,0 +1,83 @@
+/* The login screen: the orb glows in the middle of the window and the card floats over it. */
+.login {
+  position: fixed;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  overflow-x: hidden;
+  overflow-y: auto;
+  padding: 2rem 1rem;
+  background: radial-gradient(ellipse at 50% 45%, #231a12 0%, var(--bg) 70%);
+  color: var(--text);
+}
+
+.login__orb {
+  position: fixed;
+  top: 50%;
+  left: 50%;
+  width: min(88vmin, 52rem);
+  aspect-ratio: 1;
+  transform: translate(-50%, -50%);
+  pointer-events: none;
+}
+
+.login__card {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 1.1rem;
+  width: min(30rem, 100%);
+  box-sizing: border-box;
+  padding: 1.6rem 1.7rem 1.5rem;
+  /* Translucent, so the orb's glow shows through the frosted card. */
+  background: rgba(34, 27, 21, 0.78);
+  backdrop-filter: blur(14px);
+  border: 1px solid rgba(207, 159, 63, 0.28);
+  border-radius: var(--radius-lg);
+  box-shadow:
+    0 24px 60px rgba(0, 0, 0, 0.55),
+    0 0 0 1px rgba(0, 0, 0, 0.3);
+}
+
+.login__header {
+  text-align: center;
+}
+
+.login__title {
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: 1.7rem;
+  font-weight: normal;
+  color: #fff6e4;
+  text-shadow: 0 1px 10px rgba(207, 159, 63, 0.35);
+}
+
+.login__subtitle {
+  margin: 0.35rem 0 0;
+  font-size: 0.9rem;
+  color: var(--text-muted);
+}
+
+.login__error {
+  margin: 0;
+  padding: 0.6rem 0.8rem;
+  font-size: 0.85rem;
+  line-height: 1.4;
+  white-space: pre-line;
+  word-break: break-word;
+  background: var(--red-soft);
+  border: 1px solid var(--red);
+  border-radius: var(--radius);
+}
+
+.login__submit {
+  align-self: stretch;
+  padding: 0.7em 1em;
+  font-size: 1rem;
+}
+
+.login__submit:disabled {
+  opacity: 0.7;
+  cursor: progress;
+}

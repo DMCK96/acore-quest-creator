@@ -1,6 +1,6 @@
 import { useEffect, useMemo } from 'react';
 import { createAppStore } from './state/app-store';
-import { ConnectionScreen } from './views/ConnectionScreen';
+import { LoginScreen } from './views/LoginScreen';
 import { CanvasHome } from './views/CanvasHome';
 import { NamesProvider } from './state/names';
 import { RewardTablesProvider } from './state/reward-tables';
@@ -24,5 +24,5 @@ export function App(): React.JSX.Element {
       </NamesProvider>
     );
   }
-  return <ConnectionScreen store={store} />;
+  return <LoginScreen store={store} />;
 }

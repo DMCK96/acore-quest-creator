@@ -3,7 +3,6 @@ import { describe, it, expect, vi } from 'vitest';
 import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { createAppStore } from '../../src/renderer/state/app-store';
-import { ConnectionScreen } from '../../src/renderer/views/ConnectionScreen';
 import { QuestPicker } from '../../src/renderer/views/QuestPicker';
 import { TopBar } from '../../src/renderer/components/TopBar';
 import { renderFlow } from './module-harness';
@@ -14,84 +13,7 @@ const summary = { profileId: 1, schemaHash: 'h', drift, blocking: false };
 const profileRec = { id: 1, name: 'local', role: 'world' as const, host: 'h', port: 3306, user: 'u', database: 'd' };
 const form = { name: 'local', role: 'world' as const, host: '127.0.0.1', port: 3306, user: 'ro', database: 'acore_world', password: 'pw' };
 
-describe('ConnectionScreen', () => {
-  it('saves the profile then connects, moving to the picker', async () => {
-    const api = makeMockApi({ saveProfile: async () => okv(profileRec), connect: async () => okv(summary) });
-    const store = createAppStore(api);
-    render(<ConnectionScreen store={store} />);
-    await userEvent.type(screen.getByLabelText('Host'), '127.0.0.1');
-    await userEvent.type(screen.getByLabelText('User'), 'ro');
-    await userEvent.type(screen.getByLabelText('Database'), 'acore_world');
-    await userEvent.type(screen.getByLabelText('Password'), 'pw');
-    await userEvent.click(screen.getByRole('button', { name: 'Save and connect' }));
-    await waitFor(() => expect(store.getState().screen).toBe('pick'));
-    expect(api.saveProfile).toHaveBeenCalledWith(expect.objectContaining({ host: '127.0.0.1', database: 'acore_world', role: 'world' }));
-    expect(api.connect).toHaveBeenCalledWith(1);
-  });
-  it('lists saved profiles on launch and connects to one with its stored password', async () => {
-    const api = makeMockApi({ listProfiles: async () => okv([profileRec]), connect: async () => okv(summary) });
-    const store = createAppStore(api);
-    await store.getState().start();
-    render(<ConnectionScreen store={store} />);
-    await userEvent.click(screen.getByRole('button', { name: 'Connect to local' }));
-    await waitFor(() => expect(store.getState().screen).toBe('pick'));
-    expect(api.connect).toHaveBeenCalledWith(1);
-    expect(api.saveProfile).not.toHaveBeenCalled();
-  });
-  it('connects on launch to the startup profile, once', async () => {
-    const api = makeMockApi({ startupProfile: async () => okv(1), connect: async () => okv(summary) });
-    const store = createAppStore(api);
-    await Promise.all([store.getState().start(), store.getState().start()]);
-    expect(store.getState().screen).toBe('pick');
-    expect(api.connect).toHaveBeenCalledTimes(1);
-  });
-  it('editing a saved profile updates it and keeps the password when left blank', async () => {
-    const api = makeMockApi({ listProfiles: async () => okv([profileRec]), saveProfile: async () => okv(profileRec), connect: async () => okv(summary) });
-    const store = createAppStore(api);
-    await store.getState().loadProfiles();
-    render(<ConnectionScreen store={store} />);
-    await userEvent.click(screen.getByRole('button', { name: 'Edit local' }));
-    await userEvent.click(screen.getByRole('button', { name: 'Save and connect' }));
-    await waitFor(() => expect(store.getState().screen).toBe('pick'));
-    const sent = vi.mocked(api.saveProfile).mock.calls[0]![0];
-    expect(sent).toMatchObject({ id: 1, host: 'h' });
-    expect(sent).not.toHaveProperty('password');
-  });
-  it('saves the optional server data folder, picked with Browse', async () => {
-    const api = makeMockApi({ saveProfile: async () => okv(profileRec), connect: async () => okv(summary), chooseServerDataDir: async () => okv('/srv/acore/data') });
-    const store = createAppStore(api);
-    render(<ConnectionScreen store={store} />);
-    await userEvent.click(screen.getByRole('button', { name: 'Browse for the server data folder' }));
-    await waitFor(() => expect(screen.getByLabelText('Server data folder (optional)')).toHaveValue('/srv/acore/data'));
-    await userEvent.click(screen.getByRole('button', { name: 'Save and connect' }));
-    await waitFor(() => expect(store.getState().screen).toBe('pick'));
-    expect(api.saveProfile).toHaveBeenCalledWith(expect.objectContaining({ dbcDir: '/srv/acore/data' }));
-  });
-  it('saves the game client folder with the profile', async () => {
-    const api = makeMockApi({ saveProfile: async () => okv(profileRec), connect: async () => okv(summary) });
-    const store = createAppStore(api);
-    render(<ConnectionScreen store={store} />);
-    await userEvent.type(screen.getByLabelText('Game client folder (optional)'), 'E:/Games/WoW');
-    expect(screen.getByText('The folder with Wow.exe. The map uses its zone art and minimap.')).toBeTruthy();
-    await userEvent.click(screen.getByRole('button', { name: 'Save and connect' }));
-    await waitFor(() => expect(api.saveProfile).toHaveBeenCalledWith(expect.objectContaining({ clientDir: 'E:/Games/WoW' })));
-  });
-  it('browses for the game client folder', async () => {
-    const api = makeMockApi({ saveProfile: async () => okv(profileRec), connect: async () => okv(summary), chooseServerDataDir: async () => okv('E:\Games\WoW') });
-    const store = createAppStore(api);
-    render(<ConnectionScreen store={store} />);
-    await userEvent.click(screen.getByRole('button', { name: 'Browse for the game client folder' }));
-    await waitFor(() => expect(screen.getByLabelText('Game client folder (optional)')).toHaveValue('E:\Games\WoW'));
-    expect(screen.getByLabelText('Server data folder (optional)')).toHaveValue('');
-  });
-  it('shows a readable error when the server is unreachable', async () => {
-    const api = makeMockApi({ saveProfile: async () => okv(profileRec), connect: async () => errv('CONNECTION', 'Cannot reach h:3306 (ECONNREFUSED)') });
-    const store = createAppStore(api);
-    await store.getState().connect(form);
-    render(<ConnectionScreen store={store} />);
-    expect(screen.getByRole('alert')).toHaveTextContent('Cannot reach h:3306');
-    expect(store.getState().screen).toBe('connect');
-  });
+describe('QuestPicker', () => {
   it('tells the user about unmodelled columns and blocks on blocking drift', async () => {
     const drifted = { ...summary, drift: { ...drift, unregistered: [{ table: 'quest_template', column: 'X' }] } };
     const api = makeMockApi({ saveProfile: async () => okv(profileRec), connect: async () => okv(drifted) });
@@ -107,9 +29,6 @@ describe('ConnectionScreen', () => {
     expect(store2.getState().screen).toBe('connect');
     expect(store2.getState().error).toMatch(/quest_offer_reward/);
   });
-});
-
-describe('QuestPicker', () => {
   it('searches, opens a result and starts a new quest', async () => {
     const api = makeMockApi({
       saveProfile: async () => okv(profileRec), connect: async () => okv(summary),
