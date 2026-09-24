@@ -1,5 +1,6 @@
 import type { Pace, Patrol } from '@core/entities/model';
-import { clearRoute, removePoint, setStartPace, updatePoint } from '@core/map/patrol';
+import { clearRoute, moveAction, removeAction, removePoint, setStartPace, updateAction, updatePoint } from '@core/map/patrol';
+import { PointActionForm } from './PointActionForm';
 import { NumberField, SelectField } from '../scripts/fields';
 
 const START_PACES = [['walk', 'Walking'], ['run', 'Running']] as const;
@@ -17,7 +18,7 @@ export function PatrolPanel({
   onChange,
   onDone,
   onPickFacing,
-  children,
+  onPickObject,
 }: {
   name: string;
   patrol: Patrol;
@@ -27,8 +28,8 @@ export function PatrolPanel({
   onChange(next: Patrol): void;
   onDone(): void;
   onPickFacing(index: number): void;
-  /** What the selected point does, drawn under its settings. */
-  children?: React.ReactNode;
+  /** Starts picking the object a `useObject` action at a point uses. */
+  onPickObject(index: number): void;
 }): React.JSX.Element {
   const point = selected === null ? undefined : patrol.points[selected];
   return (
@@ -58,13 +59,25 @@ export function PatrolPanel({
             </button>
           ) : (
             <p className="scene-hint">
-              Facing {degrees(point.facing)}°{' '}
+              <span>Facing {degrees(point.facing)}°</span>{' '}
               <button type="button" className="entry-card__btn" onClick={() => onChange(updatePoint(patrol, selected, { facing: null }))}>
                 Clear
               </button>
             </p>
           )}
-          {children}
+          {point.actions.map((action, k) => (
+            <PointActionForm
+              key={action.id}
+              idPrefix={`patrol-${selected}-${action.id}`}
+              action={action}
+              first={k === 0}
+              last={k === point.actions.length - 1}
+              onChange={(next) => onChange(updateAction(patrol, selected, next))}
+              onMove={(by) => onChange(moveAction(patrol, selected, action.id, by))}
+              onRemove={() => onChange(removeAction(patrol, selected, action.id))}
+              onPickObject={() => onPickObject(selected)}
+            />
+          ))}
           <button type="button" className="entry-card__btn entry-card__btn--danger"
             onClick={() => {
               onChange(removePoint(patrol, selected));

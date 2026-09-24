@@ -2,13 +2,15 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { readEntities } from '@core/entities/model';
 import { addZ, chooseZ, floorCandidates } from '@core/map/floors';
 import { addSpawn, moveMarker, questMarkers, questRoutes } from '@core/map/positions';
-import type { Spawn } from '@core/entities/model';
+import type { PointAction, Spawn } from '@core/entities/model';
+import { addAction, facingToward, insertPoint, nextActionId, removePoint, updateAction, updatePoint } from '@core/map/patrol';
 import type { FieldValue } from '@core/registry/types';
 import type { MapBox, MapInfo, OpenResult, QuestMapRef, SpawnDot } from '@shared/ipc';
 import { EntityPicker } from '../controls/EntityPicker';
 import { useApi } from '../state/names';
 import type { MapMode } from './MapOpener';
 import { PatrolPanel } from './PatrolPanel';
+import { PointMenu, type PointMenuItem } from './PointMenu';
 import { usePatrolMode } from './usePatrolMode';
 import { LeafletMap, type MapMarkerView, type MapView } from './LeafletMap';
 import './map.css';
@@ -42,6 +44,18 @@ interface Floors {
 }
 
 type FloorResult = { floors: number[]; ground: number | null };
+
+/** A new action on a point, with its first choices filled in. */
+type MenuAction = 'say' | 'emote' | 'pose' | 'cast' | 'sound' | 'mount' | 'dismount';
+const DEFAULT_ACTIONS: { [K in MenuAction]: Omit<Extract<PointAction, { kind: K }>, 'id' | 'afterSecs'> } = {
+  say: { kind: 'say', lines: [{ text: '', style: 'say' }], chance: 100 },
+  emote: { kind: 'emote', emote: 3 },
+  pose: { kind: 'pose', emoteState: 68 },
+  cast: { kind: 'cast', spell: 0 },
+  sound: { kind: 'sound', sound: 0 },
+  mount: { kind: 'mount', creature: 0 },
+  dismount: { kind: 'dismount' },
+};
 
 type Target = { kind: 'npc' | 'object'; entry: number };
 /** What map clicks do: the modes a caller opens the map in, plus the moment after a placement. */
@@ -88,6 +102,8 @@ export function QuestMapView({
   const [clickAt, setClickAt] = useState<{ x: number; y: number } | null>(null);
   const [adding, setAdding] = useState(false);
   const [modeState, setMode] = useState<Mode>(mode);
+  /** The right-click menu of a patrol point, where it was opened. */
+  const [menu, setMenu] = useState<{ index: number; at: { x: number; y: number } } | null>(null);
   const [searchKind, setSearchKind] = useState<'creature' | 'gameobject'>('creature');
   const [searchEntry, setSearchEntry] = useState(0);
   const [message, setMessage] = useState<string | null>(null);
@@ -147,6 +163,7 @@ export function QuestMapView({
     onLeave: leavePatrol, onEnter: enterPatrol,
   });
   const activeRoute = patrol.active?.routeId ?? null;
+  const closeMenu = useCallback(() => setMenu(null), []);
   // Patrol points show only while their own route is drawn; otherwise the route line is enough.
   const markers = allMarkers.filter((m) => m.kind !== 'patrolPoint' || (activeRoute !== null && m.id.startsWith(`${activeRoute}:`)));
   const routes = questRoutes(values)
@@ -283,7 +300,80 @@ export function QuestMapView({
     return found?.name.trim() || `${t.kind === 'npc' ? 'New NPC' : 'New object'} ${t.entry}`;
   };
 
+
+  async function menuPicked(index: number, item: PointMenuItem): Promise<void> {
+    setMenu(null);
+    patrol.setSelected(index);
+    const now = patrol.latest();
+    const active = patrol.active;
+    const point = now?.points[index];
+    if (!now || !active || !point) return;
+    switch (item) {
+      case 'wait':
+        // The panel shows the point's wait once it is selected; put the cursor in it.
+        setTimeout(() => document.querySelector<HTMLInputElement>(`[aria-label="Point ${index + 1}"] input`)?.focus(), 0);
+        return;
+      case 'face':
+        patrol.setPicking('facing');
+        return;
+      case 'walk':
+      case 'run':
+        patrol.save(updatePoint(now, index, { paceFromHere: item }));
+        return;
+      case 'useObject':
+        patrol.setPicking('object');
+        return;
+      case 'insertAfter': {
+        const next = now.points[index + 1] ?? active.spawn;
+        const mid = { x: (point.x + next.x) / 2, y: (point.y + next.y) / 2 };
+        const z = await patrol.zAt(mid, (point.z + next.z) / 2);
+        const latest = patrol.latest();
+        if (latest) patrol.save(insertPoint(latest, index + 1, { ...mid, z }));
+        patrol.setSelected(index + 1);
+        return;
+      }
+      case 'remove':
+        patrol.save(removePoint(now, index));
+        patrol.setSelected(null);
+        return;
+      default:
+        patrol.save(addAction(now, index, { id: nextActionId(point), afterSecs: 0, ...DEFAULT_ACTIONS[item] } as PointAction));
+    }
+  }
+
+  /** An object picked for the selected point to use: a world spawn dot or one of the quest's own objects. */
+  function objectPicked(guid: number, entry: number): void {
+    const now = patrol.latest();
+    const index = patrol.selected;
+    const point = index === null ? undefined : now?.points[index];
+    if (!now || index === null || !point) return;
+    const existing = point.actions.find((a) => a.kind === 'useObject');
+    const action: PointAction = { id: existing?.id ?? nextActionId(point), afterSecs: existing?.afterSecs ?? 0, kind: 'useObject', guid, entry };
+    patrol.save(existing ? updateAction(now, index, action) : addAction(now, index, action));
+    patrol.setPicking(null);
+    setMessage(null);
+  }
+
+  function dotClicked(dot: SpawnDot): void {
+    if (patrol.picking !== 'object') return;
+    if (dot.kind === 'creature') {
+      setMessage('Pick an object, not an NPC.');
+      return;
+    }
+    objectPicked(dot.guid, dot.entry);
+  }
+
   async function mapClicked(at: { x: number; y: number }): Promise<void> {
+    if (modeState?.kind === 'patrol' && patrol.picking === 'facing') {
+      const now = patrol.latest();
+      const index = patrol.selected;
+      const point = index === null ? undefined : now?.points[index];
+      if (now && index !== null && point) patrol.save(updatePoint(now, index, { facing: facingToward(point, at) }));
+      patrol.setPicking(null);
+      return;
+    }
+    // Picking an object: only a click on an object counts.
+    if (modeState?.kind === 'patrol' && patrol.picking === 'object') return;
     if (modeState?.kind === 'patrol') {
       const { handled, message: why } = await patrol.mapClick(at);
       if (handled) {
@@ -311,7 +401,18 @@ export function QuestMapView({
   );
 
   return (
-    <div role="dialog" aria-label="Quest map" className="quest-map">
+    <div
+      role="dialog"
+      aria-label="Quest map"
+      className="quest-map"
+      onKeyDown={(e) => {
+        // Escape ends a pick on the map without closing the map.
+        if (e.key === 'Escape' && patrol.picking !== null) {
+          e.stopPropagation();
+          patrol.setPicking(null);
+        }
+      }}
+    >
       <header className="quest-map__header">
         <h2 className="quest-map__title">Quest map</h2>
         <label className="scene-field">
@@ -358,9 +459,21 @@ export function QuestMapView({
           routes={routes}
           onRouteClick={(routeId, at) => void patrol.routeClick(routeId, at)}
           onMarkerSelected={(id) => {
+            if (patrol.picking === 'object' && id.startsWith('spawn:obj:')) {
+              const [, , entry, guid] = id.split(':');
+              objectPicked(Number(guid), Number(entry));
+              return;
+            }
             setSelectedId(id);
             if (activeRoute !== null && id.startsWith(`${activeRoute}:`)) patrol.setSelected(Number(id.split(':')[3]));
           }}
+          onMarkerContextMenu={(id, screen) => {
+            if (activeRoute === null || !id.startsWith(`${activeRoute}:`)) return;
+            const index = Number(id.split(':')[3]);
+            patrol.setSelected(index);
+            setMenu({ index, at: screen });
+          }}
+          onDotClick={dotClicked}
           onViewChanged={(box, zoom) => viewChanged(box, zoom)}
         />
         <aside className="quest-map__side">
@@ -416,8 +529,15 @@ export function QuestMapView({
                 patrol.setSelected(i);
                 patrol.setPicking('facing');
               }}
+              onPickObject={(i) => {
+                patrol.setSelected(i);
+                patrol.setPicking('object');
+              }}
               onDone={() => setMode(null)}
             />
+          )}
+          {menu && patrol.active && (
+            <PointMenu index={menu.index} at={menu.at} onClose={closeMenu} onPick={(item) => void menuPicked(menu.index, item)} />
           )}
           {selected && !patrol.active && (
             <section className="quest-map__selected" aria-label="Selected position">
