@@ -915,6 +915,7 @@ export function createApi(deps: ApiDeps): Api {
           serverData,
           scriptSchema,
         };
+        deps.store.profiles.markConnected(profileId, deps.now());
         return { profileId, schemaHash: schema.hash, drift, blocking, serverData: serverData?.status ?? null, clientDir, client };
       }),
 

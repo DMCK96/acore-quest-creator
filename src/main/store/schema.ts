@@ -11,6 +11,7 @@ export const connectionProfiles = sqliteTable('connection_profiles', {
   passwordEnc: blob('password_enc', { mode: 'buffer' }).notNull(),
   dbcDir: text('dbc_dir').notNull().default(''),
   clientDir: text('client_dir').notNull().default(''),
+  lastConnectedAt: text('last_connected_at'),
 });
 
 /** Project files the user opened or saved lately, newest first by `openedAt`; the files hold the work. */

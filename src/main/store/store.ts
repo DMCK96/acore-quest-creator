@@ -33,6 +33,8 @@ export interface Store {
     list(): ProfileRecord[];
     getWithPassword(id: number): ProfileInput & { id: number };
     remove(id: number): void;
+    /** Records a successful connect; saving the profile again leaves the time alone. */
+    markConnected(id: number, at: Date): void;
   };
   recent: {
     /** Records a project file as just opened or saved; an existing entry moves to the top. */
@@ -61,6 +63,7 @@ const toProfile = (r: ProfileRow): ProfileRecord => ({
   database: r.database,
   dbcDir: r.dbcDir,
   clientDir: r.clientDir,
+  lastConnectedAt: r.lastConnectedAt ?? null,
 });
 
 export function openStore(path: string, secrets: SecretBox, migrationsFolder: string = defaultMigrationsFolder()): Store {
@@ -95,6 +98,9 @@ export function openStore(path: string, secrets: SecretBox, migrationsFolder: st
       },
       remove(id) {
         db.delete(connectionProfiles).where(eq(connectionProfiles.id, id)).run();
+      },
+      markConnected(id, at) {
+        db.update(connectionProfiles).set({ lastConnectedAt: at.toISOString() }).where(eq(connectionProfiles.id, id)).run();
       },
     },
     recent: {

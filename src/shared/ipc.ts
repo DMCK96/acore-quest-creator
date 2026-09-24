@@ -115,6 +115,8 @@ export interface ProfileRecord {
   dbcDir: string;
   /** '' when the profile names no game client folder. */
   clientDir: string;
+  /** When this profile last connected (ISO 8601); null before its first connect. */
+  lastConnectedAt: string | null;
 }
 
 export interface NodePosition {

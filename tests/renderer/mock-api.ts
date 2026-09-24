@@ -59,7 +59,7 @@ export function nodeOf(overrides: Partial<CanvasNode> = {}): CanvasNode {
 export function makeMockApi(overrides: Partial<Record<keyof Api, (...args: any[]) => any>> = {}): Api {
   const defaults: Record<keyof Api, (...args: any[]) => any> = {
     testConnection: vi.fn(async () => okv({ ok: true as const })),
-    saveProfile: vi.fn(async () => okv({ id: 1, name: '', role: 'world', host: '', port: 3306, user: '', database: '', dbcDir: '' })),
+    saveProfile: vi.fn(async () => okv({ id: 1, name: '', role: 'world', host: '', port: 3306, user: '', database: '', dbcDir: '', clientDir: '', lastConnectedAt: null })),
     listProfiles: vi.fn(async () => okv([])),
     startupProfile: vi.fn(async () => okv(null)),
     chooseServerDataDir: vi.fn(async () => okv(null)),

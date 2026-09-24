@@ -1,0 +1,1 @@
+ALTER TABLE `connection_profiles` ADD `last_connected_at` text;

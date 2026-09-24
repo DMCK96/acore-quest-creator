@@ -54,6 +54,19 @@ async function connected(overrides: Partial<ApiDeps> = {}) {
 }
 
 describe('connection', () => {
+  it('stamps the profile as last connected when a connect succeeds', async () => {
+    const { api } = makeApi({ now: () => new Date('2026-09-25T10:00:00Z') });
+    const rec = ok(await api.saveProfile(profile));
+    expect(rec.lastConnectedAt).toBeNull();
+    ok(await api.connect(rec.id));
+    expect(ok(await api.listProfiles())[0]!.lastConnectedAt).toBe('2026-09-25T10:00:00.000Z');
+  });
+  it('does not stamp a profile whose connect fails', async () => {
+    const { api } = makeApi({ openWorldDb: async () => { throw new Error('ECONNREFUSED'); } });
+    const rec = ok(await api.saveProfile(profile));
+    await api.connect(rec.id);
+    expect(ok(await api.listProfiles())[0]!.lastConnectedAt).toBeNull();
+  });
   it('refuses quest calls before connecting', async () => {
     const { api } = makeApi();
     expect(await api.searchQuests('x')).toMatchObject({ ok: false, error: { code: 'NOT_CONNECTED' } });

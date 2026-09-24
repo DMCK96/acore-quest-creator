@@ -45,6 +45,20 @@ describe('store', () => {
     expect(store.profiles.list()).toEqual([]);
   });
 
+  it('records when a profile last connected, and keeps it across reopening', () => {
+    const dir = tmp(); const file = join(dir, 'app.sqlite');
+    store = openStore(file, box);
+    const rec = store.profiles.save({ name: 'w', role: 'world', host: 'h', port: 1, user: 'u', database: 'd', password: 'p' });
+    expect(rec.lastConnectedAt).toBeNull();
+    store.profiles.markConnected(rec.id, new Date('2026-09-25T10:00:00Z'));
+    store.close();
+    store = openStore(file, box);
+    expect(store.profiles.list()[0]!.lastConnectedAt).toBe('2026-09-25T10:00:00.000Z');
+    // Saving the profile again leaves the stamp alone.
+    store.profiles.save({ id: rec.id, name: 'w', role: 'world', host: 'h2', port: 1, user: 'u', database: 'd' });
+    expect(store.profiles.list()[0]!.lastConnectedAt).toBe('2026-09-25T10:00:00.000Z');
+  });
+
   it('keeps recent projects newest first, updating an entry in place', () => {
     store = openStore(':memory:', box);
     const t = (m: number) => new Date(Date.UTC(2026, 8, 23, 10, m));
