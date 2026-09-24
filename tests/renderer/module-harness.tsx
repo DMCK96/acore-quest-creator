@@ -11,6 +11,7 @@ import { ModuleBody } from '../../src/renderer/modules/ModuleBody';
 import { QuestFlowView } from '../../src/renderer/views/QuestFlowView';
 import type { AppStore } from '../../src/renderer/state/app-store';
 import { NamesProvider } from '../../src/renderer/state/names';
+import { MapOpenerProvider } from '../../src/renderer/map/MapOpener';
 import { RewardTablesProvider } from '../../src/renderer/state/reward-tables';
 import { forkDb } from '../helpers/fixtures';
 import { makeMockApi, sampleOpen } from './mock-api';
@@ -19,7 +20,7 @@ import { makeMockApi, sampleOpen } from './mock-api';
 export async function mountBody(
   id: ModuleId,
   over: Record<string, FieldValue> = {},
-  opts: { api?: Api; onChange?: Mock; links?: QuestLinks | null; readOnly?: ReadOnlyReason[]; sharedItems?: Record<string, number[]> } = {},
+  opts: { api?: Api; onChange?: Mock; links?: QuestLinks | null; readOnly?: ReadOnlyReason[]; sharedItems?: Record<string, number[]>; openMap?: (request: any) => void } = {},
 ): Promise<{ onChange: Mock; api: Api }> {
   const schema = await loadSchema(forkDb(), registry.tables.map((t) => t.table));
   const a = createNewAggregate(schema, registry, 60001);
@@ -29,7 +30,13 @@ export async function mountBody(
   render(
     <NamesProvider api={api}>
       <RewardTablesProvider api={api}>
-        <ModuleBody id={id} open={sampleOpen({ questId: 60001, aggregate })} links={opts.links ?? null} onChange={onChange} onOpenQuest={vi.fn()} />
+        {opts.openMap ? (
+          <MapOpenerProvider open={opts.openMap}>
+            <ModuleBody id={id} open={sampleOpen({ questId: 60001, aggregate })} links={opts.links ?? null} onChange={onChange} onOpenQuest={vi.fn()} />
+          </MapOpenerProvider>
+        ) : (
+          <ModuleBody id={id} open={sampleOpen({ questId: 60001, aggregate })} links={opts.links ?? null} onChange={onChange} onOpenQuest={vi.fn()} />
+        )}
       </RewardTablesProvider>
     </NamesProvider>,
   );

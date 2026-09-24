@@ -93,3 +93,15 @@
   font-size: 15px;
   color: var(--accent-strong);
 }
+
+.entry-card__own {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 10px;
+  margin-top: 6px;
+}
+.entry-card__own .scene-hint {
+  flex-basis: 100%;
+  margin: 0;
+}
