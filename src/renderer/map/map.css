@@ -169,3 +169,52 @@
   padding: 8px;
   margin-bottom: 8px;
 }
+
+.quest-map__marker--patrolPoint .quest-map__pin {
+  width: 10px;
+  height: 10px;
+  background: #f2d16b;
+}
+
+.quest-map__route {
+  stroke: #f2d16b;
+  stroke-width: 3px;
+  fill: none;
+  cursor: copy;
+}
+
+.quest-map__route--idle {
+  stroke-width: 1.5px;
+  stroke-opacity: 0.6;
+  stroke-dasharray: 6 4;
+  cursor: default;
+}
+
+.quest-map__facing {
+  stroke: #f2d16b;
+  stroke-width: 2px;
+}
+
+.quest-map__patrol h3 {
+  margin: 0 0 4px;
+}
+
+.quest-map__points {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin: 8px 0;
+}
+
+.quest-map__point {
+  border-left: 2px solid var(--accent);
+  padding: 6px 8px;
+  margin-bottom: 8px;
+  background: var(--bg-panel-raised);
+}
+
+.quest-map__patrol-actions {
+  display: flex;
+  gap: 8px;
+  margin: 8px 0 12px;
+}

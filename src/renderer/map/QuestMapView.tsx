@@ -1,12 +1,15 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { readEntities } from '@core/entities/model';
 import { addZ, chooseZ, floorCandidates } from '@core/map/floors';
-import { addSpawn, moveMarker, questMarkers } from '@core/map/positions';
+import { addSpawn, moveMarker, questMarkers, questRoutes } from '@core/map/positions';
+import type { Spawn } from '@core/entities/model';
 import type { FieldValue } from '@core/registry/types';
 import type { MapBox, MapInfo, OpenResult, QuestMapRef, SpawnDot } from '@shared/ipc';
 import { EntityPicker } from '../controls/EntityPicker';
 import { useApi } from '../state/names';
 import type { MapMode } from './MapOpener';
+import { PatrolPanel } from './PatrolPanel';
+import { usePatrolMode } from './usePatrolMode';
 import { LeafletMap, type MapMarkerView, type MapView } from './LeafletMap';
 import './map.css';
 
@@ -104,7 +107,7 @@ export function QuestMapView({
     };
   }, [api, open.questId]);
 
-  const markers = useMemo<MapMarkerView[]>(() => {
+  const allMarkers = useMemo<MapMarkerView[]>(() => {
     const knownMaps = new Map<string, number>();
     for (const ref of refs) if (!knownMaps.has(`${ref.kind}:${ref.entry}`)) knownMaps.set(`${ref.kind}:${ref.entry}`, ref.map);
     const own: MapMarkerView[] = questMarkers(values, knownMaps);
@@ -117,9 +120,38 @@ export function QuestMapView({
   }, [values, refs]);
 
   const shownIds = new Set(maps.map((m) => m.id));
-  const focus = markers.find((m) => m.id === focusId);
-  const firstShown = markers.find((m) => m.map !== null && shownIds.has(m.map));
+  const focus = allMarkers.find((m) => m.id === focusId);
+  const firstShown = allMarkers.find((m) => m.map !== null && shownIds.has(m.map));
   const currentMap = mapId ?? (focus && focus.map !== null && shownIds.has(focus.map) ? focus.map : (firstShown?.map ?? 0));
+
+  /** Looks at a point; a new `seq` each time, so picking the same position twice still flies there. */
+  const flyTo = (x: number, y: number): void => setView((v) => ({ x, y, seq: (v?.seq ?? 0) + 1 }));
+
+  const patrolKey = modeState?.kind === 'patrol' ? `${modeState.entry}:${modeState.guid}` : null;
+  const patrolTarget = useMemo(() => {
+    if (patrolKey === null) return null;
+    const [entry, guid] = patrolKey.split(':').map(Number) as [number, number];
+    return { entry, guid };
+  }, [patrolKey]);
+  const leavePatrol = useCallback((why: string | null) => {
+    setMessage(why);
+    setMode(null);
+  }, []);
+  const enterPatrol = useCallback((spawn: Spawn) => {
+    setMapId(spawn.map);
+    setView((v) => ({ x: spawn.x, y: spawn.y, seq: (v?.seq ?? 0) + 1 }));
+  }, []);
+  const patrol = usePatrolMode({
+    api, target: patrolTarget, values, valuesRef, onChange, floorsAt, currentMap,
+    mapName: (id) => maps.find((m) => m.id === id)?.name ?? `map ${id}`,
+    onLeave: leavePatrol, onEnter: enterPatrol,
+  });
+  const activeRoute = patrol.active?.routeId ?? null;
+  // Patrol points show only while their own route is drawn; otherwise the route line is enough.
+  const markers = allMarkers.filter((m) => m.kind !== 'patrolPoint' || (activeRoute !== null && m.id.startsWith(`${activeRoute}:`)));
+  const routes = questRoutes(values)
+    .filter((r) => r.map === currentMap)
+    .map((r) => ({ id: r.id, points: r.points, facings: r.facings, active: r.id === activeRoute }));
   const onThisMap = markers.filter((m) => m.map === currentMap || m.map === null);
   const otherMaps = maps
     .filter((m) => m.id !== currentMap)
@@ -137,9 +169,6 @@ export function QuestMapView({
   useEffect(() => {
     if (view === null && startX !== undefined && startY !== undefined) setView({ x: startX, y: startY, seq: 0 });
   }, [view, startX, startY]);
-
-  /** Looks at a point; a new `seq` each time, so picking the same position twice still flies there. */
-  const flyTo = (x: number, y: number): void => setView((v) => ({ x, y, seq: (v?.seq ?? 0) + 1 }));
 
   /** The floors at a point, or why there are none. */
   async function floorsAt(map: number, x: number, y: number): Promise<{ result: FloorResult | null; reason: string | null }> {
@@ -255,6 +284,13 @@ export function QuestMapView({
   };
 
   async function mapClicked(at: { x: number; y: number }): Promise<void> {
+    if (modeState?.kind === 'patrol') {
+      const { handled, message: why } = await patrol.mapClick(at);
+      if (handled) {
+        setMessage(why);
+        return;
+      }
+    }
     if (modeState?.kind === 'place') {
       const { target } = modeState;
       const guid = await addHere(target.kind, target.entry, at);
@@ -319,7 +355,12 @@ export function QuestMapView({
           selectedId={selectedId}
           onMarkerMoved={(id, at) => void moved(id, at)}
           onMapClick={(at) => void mapClicked(at)}
-          onMarkerSelected={(id) => setSelectedId(id)}
+          routes={routes}
+          onRouteClick={(routeId, at) => void patrol.routeClick(routeId, at)}
+          onMarkerSelected={(id) => {
+            setSelectedId(id);
+            if (activeRoute !== null && id.startsWith(`${activeRoute}:`)) patrol.setSelected(Number(id.split(':')[3]));
+          }}
           onViewChanged={(box, zoom) => viewChanged(box, zoom)}
         />
         <aside className="quest-map__side">
@@ -363,7 +404,22 @@ export function QuestMapView({
             />{' '}
             Only quest-relevant
           </label>
-          {selected && (
+          {patrol.active?.patrol && (
+            <PatrolPanel
+              name={patrol.active.npc.name.trim() || `New NPC ${patrol.active.entry}`}
+              patrol={patrol.active.patrol}
+              selected={patrol.selected}
+              picking={patrol.picking}
+              onSelect={patrol.setSelected}
+              onChange={patrol.save}
+              onPickFacing={(i) => {
+                patrol.setSelected(i);
+                patrol.setPicking('facing');
+              }}
+              onDone={() => setMode(null)}
+            />
+          )}
+          {selected && !patrol.active && (
             <section className="quest-map__selected" aria-label="Selected position">
               <h3>{selected.label}</h3>
               <p className="scene-hint">
