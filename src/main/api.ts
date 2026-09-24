@@ -59,6 +59,7 @@ import { compileEntities } from '../core/entities/compile';
 import { ENTITY_KEYS, ENTITY_TABLES, readEntityContext } from '../core/entities/context';
 import { ENTITIES_FIELD, NPC_TYPE_VALUE, OBJECT_TYPE_VALUE, RANK_VALUE, readEntities, writeEntities, type QuestEntities } from '../core/entities/model';
 import { entityIssues } from '../core/entities/validate';
+import { gmCommands } from '../core/testing/gm';
 import { loadServerData, type ServerData, type ServerDataFiles } from './server-data';
 import type { ProjectQuest } from './project/project-file';
 import type { ProjectSession } from './project/session';
@@ -1028,6 +1029,30 @@ export function createApi(deps: ApiDeps): Api {
           });
         }
         return differences;
+      }),
+
+    testCommands: (questId) =>
+      run(async () => {
+        const live = connected();
+        const quest = questOf(questId);
+        const { statements } = await patchFor(live, quest);
+        const tables = new Set(statements.map((s) => s.table));
+        const creatureTemplates = statements.flatMap((s) => {
+          if (s.table !== 'creature_template') return [];
+          const entry = s.kind === 'insert' ? s.row.entry : s.key.entry;
+          return entry === undefined || entry === null ? [] : [Number(entry)];
+        });
+        const { npcs, objects } = readEntities(quest.aggregate.values);
+        const spawns = [...npcs, ...objects].flatMap((e) => e.spawns.map((s) => ({ name: e.name || `#${e.entry}`, map: s.map, x: s.x, y: s.y, z: s.z })));
+        return gmCommands({
+          questId,
+          tables,
+          creatureTemplates,
+          hasStarter: relationOwners(quest.aggregate, 'starter').length > 0,
+          spawns,
+          newObjectTemplates: objects.length > 0,
+          escorts: readScenes(quest.aggregate.values).some((s) => s.steps.some((step) => step.kind === 'startEscort')),
+        });
       }),
 
     questScripts: (questId) =>

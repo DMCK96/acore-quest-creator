@@ -10,6 +10,7 @@ import type { FieldValue } from '@core/registry/types';
 import type { Difference } from '@core/roundtrip/compare';
 import type { ForeignScene } from '@core/scripts/decompile';
 import type { CustomNpc, CustomObject } from '@core/entities/model';
+import type { TestCommands } from '@core/testing/gm';
 import type { FidelityReport } from '@core/roundtrip/verify';
 import type { SchemaDiff } from '@core/schema/diff';
 import type { Issue } from '@core/validate/validate';
@@ -298,6 +299,8 @@ export interface Api {
   allocateIds(kind: AllocKind, count: number): Promise<Result<number[]>>;
   /** The look and stats of an existing NPC or object, to start a new one from; null when there is none. */
   entityTemplate(kind: 'creature' | 'gameobject', entry: number): Promise<Result<EntityTemplate | null>>;
+  /** The GM commands to try the quest in game after applying it: reloads, restarts, travel and quest commands. */
+  testCommands(questId: number): Promise<Result<TestCommands>>;
   /** The scripts around the quest that the Scripts module lists read-only. */
   questScripts(questId: number): Promise<Result<QuestScriptsInfo>>;
   exportQuest(questId: number): Promise<Result<ExportResult>>;
@@ -426,6 +429,7 @@ const REQUEST_SCHEMAS: Record<keyof Api, z.ZodType<unknown[]>> = {
   previewChanges: z.tuple([z.number()]),
   validate: z.tuple([z.number()]),
   questScripts: z.tuple([z.number()]),
+  testCommands: z.tuple([z.number()]),
   allocateIds: z.tuple([z.enum(['creature', 'gameobject', 'creatureSpawn', 'gameobjectSpawn', 'page']), z.number().int().min(1).max(50)]),
   entityTemplate: z.tuple([z.enum(['creature', 'gameobject']), z.number().int()]),
   exportQuest: z.tuple([z.number()]),
