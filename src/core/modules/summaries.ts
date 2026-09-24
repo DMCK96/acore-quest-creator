@@ -5,6 +5,8 @@ import { factionName } from '../game/factions';
 import { readGivers, type GiverTarget } from './givers';
 import type { Values } from './model';
 import { isUnset } from './values';
+import { readScenes } from '../scripts/model';
+import { describeScene } from '../scripts/describe';
 
 /**
  * The one-line descriptions each module shows on its box and in the preview drawer. Every entity
@@ -83,6 +85,13 @@ const DIALOGUE_TEXTS: ReadonlyArray<readonly [string, string]> = [
 export function dialogueSummary(values: Values): string[] {
   const written = DIALOGUE_TEXTS.filter(([id]) => !isUnset(id, values[id])).map(([, label]) => label);
   return written.length === 0 ? [] : [`Written: ${written.join(', ')}`];
+}
+
+/** How many scenes, then the first two in words. */
+export function scriptsSummary(values: Values): string[] {
+  const scenes = readScenes(values);
+  if (scenes.length === 0) return [];
+  return [`${scenes.length} ${scenes.length === 1 ? 'scene' : 'scenes'}`, ...scenes.slice(0, 2).map(describeScene)];
 }
 
 export function rewardsSummary(values: Values, names: NameBook): string[] {

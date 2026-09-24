@@ -18,11 +18,11 @@ const names: NameBook = (kind, id) => NAMES[`${kind}:${id}`];
 describe('module catalog', () => {
   it('lists the modules in catalog order', () => {
     expect(MODULES.map((m) => m.id)).toEqual([
-      'giver', 'objectives', 'dialogue', 'rewards', 'requirements', 'chain',
+      'giver', 'objectives', 'dialogue', 'rewards', 'requirements', 'chain', 'scripts',
       'timer', 'behaviour', 'mapMarker', 'mail', 'extraRewards', 'advanced',
     ]);
     expect(MODULES.map((m) => m.label)).toEqual([
-      'Quest Giver', 'Objectives', 'Dialogue', 'Rewards', 'Requirements', 'Chain',
+      'Quest Giver', 'Objectives', 'Dialogue', 'Rewards', 'Requirements', 'Chain', 'Scripts',
       'Timer', 'Behaviour', 'Map marker', 'Mail reward', 'Extra rewards', 'Advanced',
     ]);
     expect(MODULES.filter((m) => m.kind === 'core').map((m) => m.id)).toEqual(['giver', 'objectives', 'dialogue', 'rewards']);
@@ -75,8 +75,15 @@ describe('module catalog', () => {
 
   it('offers the optional modules not shown yet whose fields exist, and always Advanced', () => {
     const values = { 'quest_template.TimeAllowed': 0, 'quest_template_addon.PrevQuestID': 0 };
-    expect(offeredModules(values, [])).toEqual(['chain', 'timer', 'advanced']);
-    expect(offeredModules(values, ['chain', 'advanced'])).toEqual(['timer']);
+    expect(offeredModules(values, [])).toEqual(['chain', 'scripts', 'timer', 'advanced']);
+    expect(offeredModules(values, ['chain', 'scripts', 'advanced'])).toEqual(['timer']);
+  });
+
+  it('offers the Scripts module on any quest and routes scene issues to it', () => {
+    expect(offeredModules({}, [])).toContain('scripts');
+    expect(ownerOf('scripts')).toBe('scripts');
+    expect(presentModules({ scripts: [] as never }, [])).not.toContain('scripts');
+    expect(resetModule('scripts', { scripts: [{}] as never }, [])).toEqual({ scripts: [] });
   });
 
   it('resets every owned field that is not read-only', () => {

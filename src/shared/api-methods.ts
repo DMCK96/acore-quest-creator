@@ -31,6 +31,7 @@ export const API_METHODS = [
   'updateQuest',
   'previewChanges',
   'validate',
+  'questScripts',
   'exportQuest',
   'applyToDev',
   'projectState',

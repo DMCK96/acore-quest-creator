@@ -8,6 +8,7 @@ import type { ComponentId, ComponentInstance } from '@core/links/model';
 import type { QuestAggregate } from '@core/model/aggregate';
 import type { FieldValue } from '@core/registry/types';
 import type { Difference } from '@core/roundtrip/compare';
+import type { ForeignScene } from '@core/scripts/decompile';
 import type { FidelityReport } from '@core/roundtrip/verify';
 import type { SchemaDiff } from '@core/schema/diff';
 import type { Issue } from '@core/validate/validate';
@@ -247,6 +248,16 @@ export interface QuestLinks {
   unavailable: UnavailableComponent[];
 }
 
+/** What the Scripts module shows beside the quest's own scenes. */
+export interface QuestScriptsInfo {
+  /** Scripts on the quest's NPCs, objects and areas that the tool did not write. */
+  foreign: ForeignScene[];
+  /** Scenes the tool wrote before whose stored data can no longer be read; their rows are left alone. */
+  unreadable: string[];
+  /** Script tables the connected database lacks. */
+  missingTables: string[];
+}
+
 /** Everything the renderer can ask the main process to do. */
 export interface Api {
   testConnection(i: ProfileInput): Promise<Result<{ ok: true }>>;
@@ -277,6 +288,8 @@ export interface Api {
   updateQuest(aggregate: QuestAggregate): Promise<Result<true>>;
   previewChanges(questId: number): Promise<Result<Difference[]>>;
   validate(questId: number): Promise<Result<Issue[]>>;
+  /** The scripts around the quest that the Scripts module lists read-only. */
+  questScripts(questId: number): Promise<Result<QuestScriptsInfo>>;
   exportQuest(questId: number): Promise<Result<ExportResult>>;
   applyToDev(questId: number, confirm: boolean): Promise<Result<{ statements: number }>>;
   projectState(): Promise<Result<ProjectState>>;
@@ -402,6 +415,7 @@ const REQUEST_SCHEMAS: Record<keyof Api, z.ZodType<unknown[]>> = {
   updateQuest: z.tuple([aggregateSchema]),
   previewChanges: z.tuple([z.number()]),
   validate: z.tuple([z.number()]),
+  questScripts: z.tuple([z.number()]),
   exportQuest: z.tuple([z.number()]),
   applyToDev: z.tuple([z.number(), z.boolean()]),
   projectState: z.tuple([]),

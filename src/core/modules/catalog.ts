@@ -7,9 +7,11 @@ import {
   labelsSummary,
   objectivesSummary,
   rewardsSummary,
+  scriptsSummary,
   timerSummary,
 } from './summaries';
 import { emptyValue, isUnset } from './values';
+import { SCRIPTS_FIELD } from '../scripts/model';
 
 export { formatMoney } from './summaries';
 
@@ -127,6 +129,14 @@ const DECLARED: readonly Declared[] = [
     ],
   },
   {
+    id: 'scripts',
+    label: 'Scripts',
+    description: 'What NPCs, objects and areas do around this quest: reactions, credit, spawns and escorts.',
+    kind: 'optional',
+    owns: [SCRIPTS_FIELD],
+    summary: scriptsSummary,
+  },
+  {
     id: 'timer',
     label: 'Timer',
     description: 'A time limit the quest fails after.',
@@ -211,6 +221,7 @@ export function moduleById(id: ModuleId): ModuleDef {
 
 /** Which module (or the header, or nobody visible) edits a field; `undefined` for an unknown id. */
 export function ownerOf(fieldId: string): ModuleId | 'header' | 'hidden' | undefined {
+  if (fieldId === SCRIPTS_FIELD) return 'scripts';
   if (HEADER_FIELDS.includes(fieldId)) return 'header';
   if (!fieldById(fieldId)) return undefined;
   if (isHiddenField(fieldId)) return 'hidden';
@@ -239,7 +250,8 @@ export function offeredModules(values: Values, added: readonly ModuleId[]): Modu
     (m) =>
       m.kind === 'optional' &&
       !shown.has(m.id) &&
-      (m.id === 'advanced' || m.owns.some((id) => Object.prototype.hasOwnProperty.call(values, id))),
+      // Scripts are added from nothing, so a quest never has to carry them already to be offered them.
+      (m.id === 'advanced' || m.id === 'scripts' || m.owns.some((id) => Object.prototype.hasOwnProperty.call(values, id))),
   ).map((m) => m.id);
 }
 
@@ -252,6 +264,10 @@ export function resetModule(id: ModuleId, values: Values, readOnly: readonly str
   for (const fieldId of moduleById(id).owns) {
     if (!Object.prototype.hasOwnProperty.call(values, fieldId) || readOnly.includes(fieldId)) continue;
     if (isUnset(fieldId, values[fieldId])) continue;
+    if (fieldId === SCRIPTS_FIELD) {
+      out[fieldId] = [];
+      continue;
+    }
     const field = fieldById(fieldId);
     if (field) out[fieldId] = emptyValue(field);
   }

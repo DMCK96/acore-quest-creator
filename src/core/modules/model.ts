@@ -9,6 +9,7 @@ export type ModuleId =
   | 'rewards'
   | 'requirements'
   | 'chain'
+  | 'scripts'
   | 'timer'
   | 'behaviour'
   | 'mapMarker'

@@ -78,6 +78,7 @@ export function makeMockApi(overrides: Partial<Record<keyof Api, (...args: any[]
     rewardTables: vi.fn(async () => okv({ xp: [], money: [] })),
     updateQuest: vi.fn(async () => okv(true as const)),
     previewChanges: vi.fn(async () => okv([])),
+    questScripts: vi.fn(async () => okv({ foreign: [], unreadable: [], missingTables: [] })),
     validate: vi.fn(async () => okv([])),
     exportQuest: vi.fn(async () => okv({ path: '', sql: '', warnings: [], issues: [] })),
     applyToDev: vi.fn(async () => okv({ statements: 0 })),

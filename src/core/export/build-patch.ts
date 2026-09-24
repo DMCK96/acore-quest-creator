@@ -36,7 +36,8 @@ export interface PatchWarning {
     | 'SHARED_ROW_MODIFIED'
     | 'LINKED_ROW_NOT_QUEST_ITEM'
     | 'LINKED_ROW_COLLISION'
-    | 'QUESTGIVER_FLAG_ADDED';
+    | 'QUESTGIVER_FLAG_ADDED'
+    | 'SCRIPT_WARNING';
   table: string;
   message: string;
 }

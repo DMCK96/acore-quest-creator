@@ -16,7 +16,7 @@ import { listUnmodelled } from '../core/import/unmodelled';
 import { componentAvailability, type Availability } from '../core/links/availability';
 import { componentById } from '../core/links/catalog';
 import type { NameBook, NameKind } from '../core/links/component';
-import { CONTEXT_TABLES, readItemStarters, type ItemStarter } from '../core/links/context';
+import { CONTEXT_TABLES, readItemStarters, rowsOrNone, type ItemStarter } from '../core/links/context';
 import { disconnectedQuests, linkIssues } from '../core/links/issues';
 import { questEdges, type ComponentId, type Endpoint } from '../core/links/model';
 import { loadLinks, type LinkSnapshot } from '../core/links/service';
@@ -49,6 +49,12 @@ import type {
   StartBadge,
 } from '../shared/ipc';
 import type { Store } from './store/store';
+import { compileScenes, type CompiledScripts } from '../core/scripts/compile';
+import { SCRIPT_KEYS, SCRIPT_TABLES, listIdsOf, readScriptContext, taggedRows, type ScriptContext } from '../core/scripts/context';
+import { foreignScenes, scenesFromRows } from '../core/scripts/decompile';
+import { SCRIPTS_FIELD, readScenes, writeScenes, type QuestScene, type SceneOwner } from '../core/scripts/model';
+import { scriptStatements } from '../core/scripts/statements';
+import { sceneIssues } from '../core/scripts/validate';
 import { loadServerData, type ServerData, type ServerDataFiles } from './server-data';
 import type { ProjectQuest } from './project/project-file';
 import type { ProjectSession } from './project/session';
@@ -97,6 +103,8 @@ interface Session {
   itemStarters: ItemStarter[];
   /** What the profile's server data folder added, read once at connect; null when it names none. */
   serverData: ServerData | null;
+  /** The tables quest scripting writes, as this database has them. */
+  scriptSchema: SchemaInfo;
 }
 
 const REGISTRY_TABLES = registry.tables.map((t) => t.table);
@@ -288,7 +296,7 @@ export function createApi(deps: ApiDeps): Api {
    */
   async function issuesOf(live: Session, questId: number, aggregate: QuestAggregate, refs: RefChecker): Promise<Issue[]> {
     const own = await validateQuest(aggregate, refs);
-    return [...own, ...linkIssues(questId, await linksFor(live, [questId]))];
+    return [...own, ...(await scriptIssues(live, aggregate)), ...linkIssues(questId, await linksFor(live, [questId]))];
   }
 
   /** Opens one quest: the project's copy if it has one, otherwise a fresh import placed on the canvas. */
@@ -314,7 +322,7 @@ export function createApi(deps: ApiDeps): Api {
     }
 
     // The importer is the one place that decides what a usable quest ID is.
-    const fresh = await importQuest(live.db, live.schema, registry, questId);
+    const fresh = await importWithScenes(live, questId);
     const fidelity = roundTripOf(fresh, live.schema);
     const unmodelled = listUnmodelled(live.schema, registry, fresh.snapshot);
     // Both branches report the translations against the rows just read, never against the edit.
@@ -368,8 +376,91 @@ export function createApi(deps: ApiDeps): Api {
     };
   }
 
+  /** The schema exports render with: the registry's tables, plus the ones quest scripting writes. */
+  const exportSchema = (live: Session): SchemaInfo => ({
+    ...live.schema,
+    tables: { ...live.scriptSchema.tables, ...live.schema.tables },
+  });
+
+  const missingScriptTables = (live: Session): string[] =>
+    SCRIPT_TABLES.filter((t) => !live.scriptSchema.tables[t]);
+
+  /** The four NPC-or-object objectives as signed entries: creatures positive, objects negative, none 0. */
+  function objectivesOf(aggregate: QuestAggregate): number[] {
+    const rows = aggregate.values['quest_template.RequiredNpcOrGo'];
+    const list = Array.isArray(rows) ? (rows as Array<Record<string, unknown>>) : [];
+    return [0, 1, 2, 3].map((i) => {
+      const target = list[i]?.target as { target?: string; id?: number } | undefined;
+      if (!target || typeof target.id !== 'number') return 0;
+      return target.target === 'gameobject' ? -target.id : target.id;
+    });
+  }
+
+  /** The quest's starters or enders as scene owners. */
+  function relationOwners(aggregate: QuestAggregate, kind: 'starter' | 'ender'): SceneOwner[] {
+    const owners: SceneOwner[] = [];
+    for (const [fieldId, ownerKind] of [
+      [`creature_quest${kind}`, 'creature'],
+      [`gameobject_quest${kind}`, 'gameobject'],
+    ] as const) {
+      const rows = aggregate.values[fieldId];
+      if (!Array.isArray(rows)) continue;
+      for (const row of rows as Array<Record<string, unknown>>) {
+        if (typeof row.id === 'number' && row.id > 0) owners.push({ kind: ownerKind, entry: row.id });
+      }
+    }
+    return owners;
+  }
+
+  /** The scene issues of a quest, which need the owners' templates to tell whether a C++ script runs them. */
+  async function scriptIssues(live: Session, aggregate: QuestAggregate): Promise<Issue[]> {
+    const scenes = readScenes(aggregate.values);
+    if (scenes.length === 0) return [];
+    const creatures = scenes.flatMap((s) => (s.owner.kind === 'creature' && s.owner.entry > 0 ? [String(s.owner.entry)] : []));
+    const objects = scenes.flatMap((s) => (s.owner.kind === 'gameobject' && s.owner.entry > 0 ? [String(s.owner.entry)] : []));
+    const [creatureRows, objectRows] = await Promise.all([
+      rowsOrNone(live.db, 'creature_template', { entry: creatures }),
+      rowsOrNone(live.db, 'gameobject_template', { entry: objects }),
+    ]);
+    const cppOwners = [
+      ...creatureRows.filter((r) => (r.ScriptName ?? '') !== '' && r.AIName !== 'SmartAI').map((r) => `creature:${r.entry}`),
+      ...objectRows.filter((r) => (r.ScriptName ?? '') !== '' && r.AIName !== 'SmartGameObjectAI').map((r) => `gameobject:${r.entry}`),
+    ];
+    const flags = aggregate.values['quest_template_addon.SpecialFlags'];
+    return sceneIssues({
+      questId: aggregate.questId,
+      scenes,
+      objectives: objectivesOf(aggregate),
+      givers: relationOwners(aggregate, 'starter'),
+      enders: relationOwners(aggregate, 'ender'),
+      cppOwners,
+      missingTables: missingScriptTables(live),
+      specialFlags: typeof flags === 'number' ? flags : 0,
+    });
+  }
+
+  /** The quest's scenes compiled against the rows in the world DB right now. */
+  async function compileFor(live: Session, aggregate: QuestAggregate): Promise<{ context: ScriptContext; compiled: CompiledScripts }> {
+    const scenes = readScenes(aggregate.values);
+    const context = await readScriptContext(live.db, aggregate.questId, scenes);
+    const compiled = compileScenes({ questId: aggregate.questId, scenes, objectives: objectivesOf(aggregate), context });
+    return { context, compiled };
+  }
+
+  /**
+   * A fresh import with the scenes the tool exported for this quest before, rebuilt from their rows,
+   * so a quest opened in a new project keeps its scripting editable.
+   */
+  async function importWithScenes(live: Session, questId: number): Promise<{ aggregate: QuestAggregate; snapshot: Snapshot }> {
+    const fresh = await importQuest(live.db, live.schema, registry, questId);
+    const tagged = await taggedRows(live.db, 'smart_scripts', 'comment', questId);
+    const { scenes } = scenesFromRows(questId, tagged);
+    return { ...fresh, aggregate: { ...fresh.aggregate, values: { ...fresh.aggregate.values, [SCRIPTS_FIELD]: writeScenes(scenes) } } };
+  }
+
   /** The three gates every write passes: lossless import, no validation errors, and a free ID. */
-  async function guardWrite(db: WorldDb, quest: ProjectQuest): Promise<Issue[]> {
+  async function guardWrite(live: Session, quest: ProjectQuest): Promise<Issue[]> {
+    const db = live.db;
     if (quest.fidelity !== null && !quest.fidelity.ok) {
       throw fail(
         'FIDELITY',
@@ -377,7 +468,7 @@ export function createApi(deps: ApiDeps): Api {
         { differences: quest.fidelity.differences },
       );
     }
-    const issues = await validateQuest(quest.aggregate, refCheckerFor(db));
+    const issues = [...(await validateQuest(quest.aggregate, refCheckerFor(db))), ...(await scriptIssues(live, quest.aggregate))];
     if (issues.some((i) => i.severity === 'error')) {
       throw fail('VALIDATION', 'Fix the errors on this quest before exporting it.', { issues });
     }
@@ -388,7 +479,7 @@ export function createApi(deps: ApiDeps): Api {
   async function patchFor(
     live: Session,
     quest: ProjectQuest,
-  ): Promise<{ statements: PatchStatement[]; warnings: PatchWarning[]; fixes: QuestGiverFix[] }> {
+  ): Promise<{ statements: PatchStatement[]; warnings: PatchWarning[]; fixes: QuestGiverFix[]; scriptContext: ScriptContext }> {
     const fixes = await findQuestGiverFixes(live.db, quest.aggregate.values);
     // Read the neighbouring linked rows now rather than trusting the ones the import saw: the
     // edit may name a creature the quest had nothing to do with when it was opened, and those
@@ -408,7 +499,18 @@ export function createApi(deps: ApiDeps): Api {
       questGiverFixes: fixes.map((f) => f.entry),
       linkedContext,
     });
-    return { statements, warnings, fixes };
+    const { context: scriptContext, compiled } = await compileFor(live, quest.aggregate);
+    const scripts = scriptStatements(compiled, exportSchema(live));
+    const of = (list: readonly PatchStatement[], kind: PatchStatement['kind']) => list.filter((s) => s.kind === kind);
+    // Deletes before anything is written, flags and updates before the rows that rely on them.
+    const merged = [
+      ...of(statements, 'delete'), ...of(scripts.statements, 'delete'),
+      ...of(statements, 'set-flag'), ...of(scripts.statements, 'set-flag'),
+      ...of(statements, 'update'), ...of(scripts.statements, 'update'),
+      ...of(statements, 'insert'), ...of(scripts.statements, 'insert'),
+    ];
+    const scriptWarnings: PatchWarning[] = compiled.warnings.map((message) => ({ code: 'SCRIPT_WARNING', table: 'smart_scripts', message }));
+    return { statements: merged, warnings: [...warnings, ...scriptWarnings], fixes, scriptContext };
   }
 
   return {
@@ -442,6 +544,7 @@ export function createApi(deps: ApiDeps): Api {
         const drift = diffSchema(schema, registry);
         const blocking = hasBlockingDrift(drift);
         const serverData = await loadServerData(profile.dbcDir ?? '', deps.serverDataFiles ?? NO_SERVER_DATA_FILES);
+        const scriptSchema = await loadSchema(db, [...SCRIPT_TABLES]);
         // Swapping connections must not leave the old one open.
         if (session && session.db !== db) await session.db.close();
         session = {
@@ -455,6 +558,7 @@ export function createApi(deps: ApiDeps): Api {
           availability,
           itemStarters,
           serverData,
+          scriptSchema,
         };
         return { profileId, schemaHash: schema.hash, drift, blocking, serverData: serverData?.status ?? null };
       }),
@@ -488,7 +592,7 @@ export function createApi(deps: ApiDeps): Api {
         const open = await openOne(questId, at(questId));
         for (const id of chain.questIds) {
           if (id === questId || quests.get(id)) continue;
-          const fresh = await importQuest(live.db, live.schema, registry, id);
+          const fresh = await importWithScenes(live, id);
           const place = at(id);
           quests.put({
             questId: id,
@@ -511,7 +615,8 @@ export function createApi(deps: ApiDeps): Api {
         const range = { start: meta.idRangeStart, end: meta.idRangeEnd };
         const taken = await collectTakenIds(live.db, range, quests.usedQuestIds());
         const questId = allocateQuestId(range, taken);
-        const aggregate = createNewAggregate(live.schema, registry, questId);
+        const created = createNewAggregate(live.schema, registry, questId);
+        const aggregate = { ...created, values: { ...created.values, [SCRIPTS_FIELD]: writeScenes([]) } };
         const fidelity: FidelityReport = { ok: true };
 
         const at = placeAt(position);
@@ -735,10 +840,27 @@ export function createApi(deps: ApiDeps): Api {
       run(async () => {
         const live = connected();
         const quest = questOf(questId);
-        const { statements, fixes } = await patchFor(live, quest);
+        const { statements, fixes, scriptContext } = await patchFor(live, quest);
+        const scriptTables = new Set<string>(SCRIPT_TABLES);
+        const own = statements.filter((s) => !scriptTables.has(s.table));
         const before = quest.snapshot?.tables ?? {};
-        const after = applyPatchInMemory(before, statements, KEY_COLUMNS);
+        const after = applyPatchInMemory(before, own, KEY_COLUMNS);
         const differences = compareTables(before, after, KEY_COLUMNS);
+        // Script rows live outside the quest's snapshot: compared against what the DB holds now.
+        const scriptBefore: Record<string, RawRow[]> = {
+          smart_scripts: scriptContext.smartScripts,
+          creature_text: scriptContext.creatureText,
+          conditions: scriptContext.conditions,
+          waypoints: scriptContext.waypoints,
+          gossip_menu_option: scriptContext.gossipOptions,
+          areatrigger: scriptContext.areatriggers,
+          areatrigger_scripts: scriptContext.areatriggerScripts,
+          creature_template: scriptContext.creatures,
+          gameobject_template: scriptContext.gameobjects,
+        };
+        const scriptStatementsOnly = statements.filter((s) => scriptTables.has(s.table) && !(s.kind === 'set-flag' && s.table === CREATURE_TABLE && s.column === 'npcflag' && s.bit === QUEST_GIVER_BIT));
+        const scriptAfter = applyPatchInMemory(scriptBefore, scriptStatementsOnly, SCRIPT_KEYS);
+        differences.push(...compareTables(scriptBefore, scriptAfter, SCRIPT_KEYS));
         // `creature_template` is not part of the snapshot, so the flag updates are named here.
         for (const fix of fixes) {
           differences.push({
@@ -752,6 +874,39 @@ export function createApi(deps: ApiDeps): Api {
         return differences;
       }),
 
+    questScripts: (questId) =>
+      run(async () => {
+        const live = connected();
+        const aggregate = questOf(questId).aggregate;
+        const creatures = new Set<number>();
+        const objects = new Set<number>();
+        const areas = new Set<number>();
+        const addOwner = (owner: SceneOwner): void => {
+          if (owner.kind === 'creature' && owner.entry > 0) creatures.add(owner.entry);
+          else if (owner.kind === 'gameobject' && owner.entry > 0) objects.add(owner.entry);
+          else if (owner.kind === 'areatrigger' && owner.id > 0) areas.add(owner.id);
+        };
+        readScenes(aggregate.values).forEach((s: QuestScene) => addOwner(s.owner));
+        [...relationOwners(aggregate, 'starter'), ...relationOwners(aggregate, 'ender')].forEach(addOwner);
+        for (const entry of objectivesOf(aggregate)) {
+          if (entry > 0) creatures.add(entry);
+          else if (entry < 0) objects.add(-entry);
+        }
+        const ids = (set: ReadonlySet<number>): string[] => [...set].map(String);
+        const [onCreatures, onObjects, onAreas, lists, tagged] = await Promise.all([
+          rowsOrNone(live.db, 'smart_scripts', { source_type: '0', entryorguid: ids(creatures) }),
+          rowsOrNone(live.db, 'smart_scripts', { source_type: '1', entryorguid: ids(objects) }),
+          rowsOrNone(live.db, 'smart_scripts', { source_type: '2', entryorguid: ids(areas) }),
+          rowsOrNone(live.db, 'smart_scripts', { source_type: '9', entryorguid: listIdsOf([...creatures, ...objects]) }),
+          taggedRows(live.db, 'smart_scripts', 'comment', questId),
+        ]);
+        return {
+          foreign: foreignScenes(questId, [...onCreatures, ...onObjects, ...onAreas, ...lists]),
+          unreadable: scenesFromRows(questId, tagged).unreadable,
+          missingTables: missingScriptTables(live),
+        };
+      }),
+
     validate: (questId) =>
       run(async () => {
         const live = connected();
@@ -762,11 +917,11 @@ export function createApi(deps: ApiDeps): Api {
       run(async () => {
         const live = usable();
         const quest = questOf(questId);
-        const issues = await guardWrite(live.db, quest);
+        const issues = await guardWrite(live, quest);
         const { statements, warnings } = await patchFor(live, quest);
 
         const date = patchDate(deps.now());
-        const sql = renderPatch(statements, live.schema, { toolVersion: TOOL_VERSION, questId, date });
+        const sql = renderPatch(statements, exportSchema(live), { toolVersion: TOOL_VERSION, questId, date });
 
         const { outputDir } = deps.session.meta();
         await deps.fs.ensureDir(outputDir);
@@ -795,9 +950,9 @@ export function createApi(deps: ApiDeps): Api {
         if (!devProfile) {
           throw fail('NO_DEV_PROFILE', 'Add a dev database profile before applying a patch to it.');
         }
-        await guardWrite(live.db, quest);
+        await guardWrite(live, quest);
         const { statements } = await patchFor(live, quest);
-        const rendered = statements.map((s) => renderStatement(s, live.schema));
+        const rendered = statements.map((s) => renderStatement(s, exportSchema(live)));
 
         const dev = await deps.openDevDb(deps.store.profiles.getWithPassword(devProfile.id));
         try {
