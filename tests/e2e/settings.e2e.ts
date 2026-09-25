@@ -28,7 +28,7 @@ test('settings add and remove the dev database, and a bad reconnect keeps the ol
   const db = { host: u.hostname, port: u.port || '3306', user: decodeURIComponent(u.username), database: u.pathname.slice(1), password: decodeURIComponent(u.password) };
 
   await page.getByLabel('Host').fill(db.host);
-  await page.getByLabel('Port').fill(db.port);
+  await page.getByLabel('Port', { exact: true }).fill(db.port);
   await page.getByLabel('User').fill(db.user);
   await page.getByLabel('Database').fill(db.database);
   await page.getByLabel('Password').fill(db.password);

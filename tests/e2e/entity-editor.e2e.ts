@@ -23,7 +23,7 @@ async function connect(app: ElectronApplication) {
   const u = new URL(mysqlUrl());
   const page = await app.firstWindow();
   await page.getByLabel('Host').fill(u.hostname);
-  await page.getByLabel('Port').fill(u.port || '3306');
+  await page.getByLabel('Port', { exact: true }).fill(u.port || '3306');
   await page.getByLabel('User').fill(decodeURIComponent(u.username));
   await page.getByLabel('Database').fill(u.pathname.slice(1));
   await page.getByLabel('Password').fill(decodeURIComponent(u.password));
@@ -48,7 +48,7 @@ test('a new quest giver is made in the NPC modal with a guard\'s look and weapon
   running = app;
   const page = await app.firstWindow();
   await page.getByLabel('Host').fill(u.hostname);
-  await page.getByLabel('Port').fill(u.port || '3306');
+  await page.getByLabel('Port', { exact: true }).fill(u.port || '3306');
   await page.getByLabel('User').fill(decodeURIComponent(u.username));
   await page.getByLabel('Database').fill(u.pathname.slice(1));
   await page.getByLabel('Password').fill(decodeURIComponent(u.password));
