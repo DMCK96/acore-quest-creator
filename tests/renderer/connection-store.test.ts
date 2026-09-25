@@ -8,7 +8,7 @@ import { makeMockApi, okv, errv, sampleOpen } from './mock-api';
 
 const drift = { missingTables: [], forbiddenTables: [], unregistered: [], missingColumns: [], typeMismatches: [] } as unknown as SchemaDiff;
 const summary = (profileId = 1, blocking = false): ConnectSummary => ({ profileId, schemaHash: 'h', drift, blocking, serverData: null, clientDir: null, client: null });
-const rec = (id: number, role: 'world' | 'dev') => ({ id, name: role === 'world' ? 'World' : 'Dev', role, host: 'h', port: 3306, user: 'u', database: 'd', dbcDir: '', clientDir: '', lastConnectedAt: null });
+const rec = (id: number, role: 'world' | 'dev') => ({ id, name: role === 'world' ? 'World' : 'Dev', role, host: 'h', port: 3306, user: 'u', database: 'd', dbcDir: '', clientDir: '', exportDir: '', lastConnectedAt: null });
 
 describe('saveConnection', () => {
   it('saves world then dev, removes a removed dev, reloads profiles, and returns the world id', async () => {

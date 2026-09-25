@@ -12,7 +12,7 @@ function Harness({ initial, errors = {}, browse = async () => null, onDraft }: {
   const [draft, setDraft] = useState(initial);
   return <ConnectionFields draft={draft} errors={errors} browse={browse} onChange={(d) => { setDraft(d); onDraft?.(d); }} />;
 }
-const saved = draftFromProfiles([{ id: 1, name: 'World', role: 'world', host: 'h', port: 3306, user: 'u', database: 'd', dbcDir: '', clientDir: '', lastConnectedAt: null }]);
+const saved = draftFromProfiles([{ id: 1, name: 'World', role: 'world', host: 'h', port: 3306, user: 'u', database: 'd', dbcDir: '', clientDir: '', exportDir: '', lastConnectedAt: null }]);
 
 describe('ConnectionFields', () => {
   it('edits the world fields under their exact labels', async () => {
@@ -22,7 +22,15 @@ describe('ConnectionFields', () => {
     await userEvent.clear(screen.getByLabelText('Port'));
     await userEvent.type(screen.getByLabelText('Port'), '3307');
     await userEvent.type(screen.getByLabelText('Game client folder (optional)'), 'E:/WoW');
-    expect(onDraft).toHaveBeenLastCalledWith(expect.objectContaining({ world: expect.objectContaining({ host: 'db.local', port: '3307', clientDir: 'E:/WoW' }) }));
+    expect(onDraft).toHaveBeenLastCalledWith(expect.objectContaining({ world: expect.objectContaining({ host: 'db.local', port: '3307', clientDir: 'E:/WoW', exportDir: '' }) }));
+  });
+  it('edits the export folder, and browses for it', async () => {
+    const onDraft = vi.fn();
+    render(<Harness initial={saved} onDraft={onDraft} browse={async () => 'D:/patches'} />);
+    await userEvent.type(screen.getByLabelText('Export folder (optional)'), 'C:/sql');
+    expect(onDraft).toHaveBeenLastCalledWith(expect.objectContaining({ world: expect.objectContaining({ exportDir: 'C:/sql' }) }));
+    await userEvent.click(screen.getByRole('button', { name: 'Browse for the export folder' }));
+    await waitFor(() => expect(screen.getByLabelText('Export folder (optional)')).toHaveValue('D:/patches'));
   });
   it('says a saved password is kept when left blank', () => {
     render(<Harness initial={saved} />);

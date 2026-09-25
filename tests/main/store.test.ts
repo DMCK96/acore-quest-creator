@@ -42,7 +42,7 @@ describe('store', () => {
 
     store = openStore(file, box);
     expect(store.profiles.list()).toEqual([
-      { id: rec.id, name: 'w', role: 'world', host: 'h', port: 3306, user: 'u', database: 'd', dbcDir: '/data', clientDir: 'E:/WoW', lastConnectedAt: null },
+      { id: rec.id, name: 'w', role: 'world', host: 'h', port: 3306, user: 'u', database: 'd', dbcDir: '/data', clientDir: 'E:/WoW', exportDir: '', lastConnectedAt: null },
     ]);
     expect(store.profiles.getWithPassword(rec.id).password).toBe('secret');
     expect(store.profiles.envSeed(rec.id)).toBeNull();
@@ -77,8 +77,11 @@ describe('store', () => {
     store.profiles.save({ id: a.id, name: 'kept', role: 'world', host: 'h', port: 1, user: 'u', database: 'd', dbcDir: '/srv/data' });
     expect(store.profiles.getWithPassword(a.id)).toMatchObject({ dbcDir: '/srv/data', password: 'p2' });
     expect(store.profiles.list()[0]!.clientDir).toBe('');
-    store.profiles.save({ id: a.id, name: 'kept', role: 'world', host: 'h', port: 1, user: 'u', database: 'd', dbcDir: '/srv/data', clientDir: 'E:/Games/WoW' });
-    expect(store.profiles.getWithPassword(a.id)).toMatchObject({ dbcDir: '/srv/data', clientDir: 'E:/Games/WoW', password: 'p2' });
+    expect(store.profiles.list()[0]!.exportDir).toBe('');
+    store.profiles.save({ id: a.id, name: 'kept', role: 'world', host: 'h', port: 1, user: 'u', database: 'd', exportDir: 'D:/patches' });
+    expect(store.profiles.getWithPassword(a.id)).toMatchObject({ exportDir: 'D:/patches', password: 'p2' });
+    store.profiles.save({ id: a.id, name: 'kept', role: 'world', host: 'h', port: 1, user: 'u', database: 'd', dbcDir: '/srv/data', clientDir: 'E:/Games/WoW', exportDir: '' });
+    expect(store.profiles.getWithPassword(a.id)).toMatchObject({ dbcDir: '/srv/data', clientDir: 'E:/Games/WoW', exportDir: '', password: 'p2' });
     store.profiles.remove(a.id);
     expect(store.profiles.list()).toEqual([]);
   });

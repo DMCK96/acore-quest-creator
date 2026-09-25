@@ -66,6 +66,7 @@ const toProfile = (r: ProfileRow): ProfileRecord => ({
   database: r.database,
   dbcDir: r.dbcDir,
   clientDir: r.clientDir,
+  exportDir: r.exportDir,
   lastConnectedAt: r.lastConnectedAt ?? null,
 });
 

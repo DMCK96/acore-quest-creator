@@ -98,6 +98,8 @@ export interface ProfileInput {
   dbcDir?: string;
   /** The game client folder (holding Wow.exe and Data/), optional; '' or absent for none. */
   clientDir?: string;
+  /** Where Export patch writes SQL files, optional; '' or absent for the default folder. */
+  exportDir?: string;
 }
 
 /** Saving a profile: an update (`id` given) may leave `password` out to keep the stored one. */
@@ -115,6 +117,8 @@ export interface ProfileRecord {
   dbcDir: string;
   /** '' when the profile names no game client folder. */
   clientDir: string;
+  /** '' when the profile names no export folder. */
+  exportDir: string;
   /** When this profile last connected (ISO 8601); null before its first connect. */
   lastConnectedAt: string | null;
 }
@@ -446,6 +450,7 @@ const profileFields = {
   password: z.string(),
   dbcDir: z.string().optional(),
   clientDir: z.string().optional(),
+  exportDir: z.string().optional(),
 };
 // Strict: a misspelled key must be a loud error, never a silently unsaved connection setting.
 const profileInputSchema = z.object(profileFields).strict();

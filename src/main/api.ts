@@ -112,6 +112,10 @@ export interface ApiDeps {
   onClientDir?(dir: string | null): void;
   /** What the game client folder given to `onClientDir` holds; the folder is opened now if it was not yet. */
   clientStatus?(): Promise<ClientStatus | null>;
+  /** Where Export patch writes whatever the connection says (`ACQC_OUTPUT_DIR`, for tests). */
+  exportDirOverride?: string | null;
+  /** Where Export patch writes when the connection names no export folder. */
+  defaultExportDir?: string;
 }
 
 const NO_SERVER_DATA_FILES: ServerDataFiles = { read: async () => null, isDir: async () => false };
@@ -119,6 +123,8 @@ const NO_SERVER_DATA_FILES: ServerDataFiles = { read: async () => null, isDir: a
 /** The live world connection plus everything that was read from it once, at connect time. */
 interface Session {
   profileId: number;
+  /** The connection's export folder; null when it names none. */
+  exportDir: string | null;
   db: WorldDb;
   schema: SchemaInfo;
   blocking: boolean;
@@ -957,6 +963,7 @@ export function createApi(deps: ApiDeps): Api {
         if (session && session.db !== db) await session.db.close();
         session = {
           profileId,
+          exportDir: profile.exportDir?.trim() || null,
           db,
           schema,
           blocking,
@@ -1606,7 +1613,9 @@ export function createApi(deps: ApiDeps): Api {
         const date = patchDate(deps.now());
         const sql = renderPatch(statements, exportSchema(live), { toolVersion: TOOL_VERSION, questId, date });
 
-        const { outputDir } = deps.session.meta();
+        // The project file's own folder is only a last resort for harnesses that name no default:
+        // a project shared between people must not send their patches into someone else's folders.
+        const outputDir = deps.exportDirOverride || live.exportDir || deps.defaultExportDir || deps.session.meta().outputDir;
         await deps.fs.ensureDir(outputDir);
         // Several exports of one quest on one day sit side by side, numbered in the order written.
         const marker = `_quest_${questId}_`;

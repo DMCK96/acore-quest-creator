@@ -147,7 +147,7 @@ describe('Quest flow view', () => {
 
 describe('game client pill', () => {
   const connectWith = async (client: unknown) => {
-    const api = makeMockApi({ listProfiles: async () => okv([profileRec]), connect: async () => okv({ ...summary, clientDir: 'E:/WoW', client }) });
+    const api = makeMockApi({ listProfiles: async () => okv([profileRec]), connect: async () => okv({ ...summary, clientDir: 'E:/WoW', exportDir: '', client }) });
     const store = createAppStore(api);
     await store.getState().loadProfiles();
     await store.getState().connectProfile(1);

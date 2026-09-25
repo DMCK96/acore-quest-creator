@@ -31,7 +31,12 @@ export function profileFromEnv(env: Env, role: 'world' | 'dev'): ProfileInput | 
   }
   // The password is not trimmed: surrounding spaces could be part of it.
   const password = env[PREFIX[role] + 'PASSWORD'] ?? '';
-  return { name: NAME[role], role, host, port, user, database, password, dbcDir: role === 'world' ? read('DBC_DIR') : '', clientDir: role === 'world' ? read('CLIENT_DIR') : '' };
+  return {
+    name: NAME[role], role, host, port, user, database, password,
+    dbcDir: role === 'world' ? read('DBC_DIR') : '',
+    clientDir: role === 'world' ? read('CLIENT_DIR') : '',
+    exportDir: role === 'world' ? read('EXPORT_DIR') : '',
+  };
 }
 
 /**

@@ -18,6 +18,7 @@ export interface WorldDraft extends DbFields {
   name?: string;
   dbcDir: string;
   clientDir: string;
+  exportDir: string;
 }
 export interface DevDraft extends DbFields {
   id?: number;
@@ -65,7 +66,7 @@ export function draftFromProfiles(profiles: ProfileRecord[], preferId: number | 
       : newestById(worlds));
   const dev = newestById(profiles.filter((p) => p.role === 'dev'));
   return {
-    world: world ? { ...dbFromProfile(world), dbcDir: world.dbcDir, clientDir: world.clientDir } : { ...emptyDb(), dbcDir: '', clientDir: '' },
+    world: world ? { ...dbFromProfile(world), dbcDir: world.dbcDir, clientDir: world.clientDir, exportDir: world.exportDir } : { ...emptyDb(), dbcDir: '', clientDir: '', exportDir: '' },
     dev: dev ? dbFromProfile(dev) : null,
   };
 }
@@ -102,7 +103,7 @@ const sameDb = (a: DbFields & { id?: number }, b: DbFields & { id?: number }): b
 export function worldChanged(draft: ConnectionDraft, original: ConnectionDraft): boolean {
   const a = draft.world;
   const b = original.world;
-  return !sameDb(a, b) || !sameText(a.dbcDir, b.dbcDir) || !sameText(a.clientDir, b.clientDir);
+  return !sameDb(a, b) || !sameText(a.dbcDir, b.dbcDir) || !sameText(a.clientDir, b.clientDir) || !sameText(a.exportDir, b.exportDir);
 }
 
 export function devChanged(draft: ConnectionDraft, original: ConnectionDraft): boolean {
@@ -141,7 +142,7 @@ export function draftToSaves(
   draft: ConnectionDraft,
   original: ConnectionDraft,
 ): { world: ProfileSave; dev: ProfileSave | null; removeDevId: number | null } {
-  const world = { ...toSave(draft.world, 'world'), dbcDir: draft.world.dbcDir.trim(), clientDir: draft.world.clientDir.trim() };
+  const world = { ...toSave(draft.world, 'world'), dbcDir: draft.world.dbcDir.trim(), clientDir: draft.world.clientDir.trim(), exportDir: draft.world.exportDir.trim() };
   const dev = draft.dev ? toSave(draft.dev, 'dev') : null;
   const originalDevId = original.dev?.id;
   const removeDevId = originalDevId !== undefined && draft.dev?.id !== originalDevId ? originalDevId : null;

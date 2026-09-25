@@ -11,7 +11,7 @@ import { makeMockApi, okv, errv, sampleOpen } from './mock-api';
 
 const drift = { missingTables: [], forbiddenTables: [], unregistered: [], missingColumns: [], typeMismatches: [] } as unknown as SchemaDiff;
 const summary = (profileId: number): ConnectSummary => ({ profileId, schemaHash: 'h', drift, blocking: false, serverData: null, clientDir: null, client: null });
-const world: ProfileRecord = { id: 1, name: 'World', role: 'world' as const, host: 'db.local', port: 3306, user: 'acore', database: 'acore_world', dbcDir: '', clientDir: '', lastConnectedAt: '2026-09-24T10:00:00.000Z' };
+const world: ProfileRecord = { id: 1, name: 'World', role: 'world' as const, host: 'db.local', port: 3306, user: 'acore', database: 'acore_world', dbcDir: '', clientDir: '', exportDir: '', lastConnectedAt: '2026-09-24T10:00:00.000Z' };
 const dev: ProfileRecord = { ...world, id: 2, name: 'Dev', role: 'dev' as const, database: 'acore_dev', lastConnectedAt: null };
 
 async function setup(profiles: ProfileRecord[] = [world]) {
@@ -52,7 +52,7 @@ describe('SettingsDialog', () => {
     expect(screen.getByText(/Saving reconnects with these details/)).toBeInTheDocument();
     await userEvent.click(screen.getByRole('button', { name: 'Save' }));
     await waitFor(() => expect(onClose).toHaveBeenCalled());
-    expect(api.saveProfile).toHaveBeenCalledWith(expect.objectContaining({ id: 1, clientDir: 'E:/WoW' }));
+    expect(api.saveProfile).toHaveBeenCalledWith(expect.objectContaining({ id: 1, clientDir: 'E:/WoW', exportDir: '' }));
     expect(api.connect).toHaveBeenCalledWith(1);
     expect(store.getState().screen).toBe('pick');
   });

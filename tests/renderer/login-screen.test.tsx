@@ -10,7 +10,7 @@ import { makeMockApi, okv, errv } from './mock-api';
 
 const drift = { missingTables: [], forbiddenTables: [], unregistered: [], missingColumns: [], typeMismatches: [] } as unknown as SchemaDiff;
 const summary: ConnectSummary = { profileId: 1, schemaHash: 'h', drift, blocking: false, serverData: null, clientDir: null, client: null };
-const world = { id: 1, name: 'World', role: 'world' as const, host: 'db.local', port: 3306, user: 'acore', database: 'acore_world', dbcDir: '', clientDir: '', lastConnectedAt: '2026-09-24T10:00:00.000Z' };
+const world = { id: 1, name: 'World', role: 'world' as const, host: 'db.local', port: 3306, user: 'acore', database: 'acore_world', dbcDir: '', clientDir: '', exportDir: '', lastConnectedAt: '2026-09-24T10:00:00.000Z' };
 
 describe('LoginScreen', () => {
   it('on a first launch saves the details then connects, reaching the picker', async () => {
@@ -23,7 +23,7 @@ describe('LoginScreen', () => {
     await userEvent.type(screen.getByLabelText('Password'), 'pw');
     await userEvent.click(screen.getByRole('button', { name: 'Save and connect' }));
     await waitFor(() => expect(store.getState().screen).toBe('pick'));
-    expect(api.saveProfile).toHaveBeenCalledWith({ name: 'World', role: 'world', host: '127.0.0.1', port: 3306, user: 'ro', database: 'acore_world', password: 'pw', dbcDir: '', clientDir: '' });
+    expect(api.saveProfile).toHaveBeenCalledWith({ name: 'World', role: 'world', host: '127.0.0.1', port: 3306, user: 'ro', database: 'acore_world', password: 'pw', dbcDir: '', clientDir: '', exportDir: '' });
     expect(api.connect).toHaveBeenCalledWith(1);
   });
   it('for a returning user is filled in and leads with Connect, keeping the saved password', async () => {

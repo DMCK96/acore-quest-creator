@@ -50,6 +50,13 @@
       "when": 1790321562299,
       "tag": "0006_profile_env_seed",
       "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "6",
+      "when": 1790340867095,
+      "tag": "0007_profile_export_dir",
+      "breakpoints": true
     }
   ]
 }

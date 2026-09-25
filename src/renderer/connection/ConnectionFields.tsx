@@ -41,7 +41,7 @@ export function ConnectionFields({
     focusNext.current = on ? 'conn-dev-host' : 'conn-dev-add';
     onChange({ ...draft, dev: on ? emptyDev() : null });
   };
-  const browseInto = async (key: 'dbcDir' | 'clientDir'): Promise<void> => {
+  const browseInto = async (key: 'dbcDir' | 'clientDir' | 'exportDir'): Promise<void> => {
     const chosen = await browse();
     if (chosen !== null) setWorld({ [key]: chosen });
   };
@@ -58,7 +58,7 @@ export function ConnectionFields({
       </fieldset>
 
       <fieldset className="conn-fields__section" disabled={disabled}>
-        <legend>Game files (optional)</legend>
+        <legend>Folders (optional)</legend>
         <Field id="conn-dbc-dir" label="Server data folder (optional)" errors={errors} help="The worldserver's data folder, the one holding dbc/. With it the editor can show values the server reads from its DBC files, such as how much XP each quest reward tier gives. Everything works without it.">
           {(props) => (
             <div className="conn-field__row">
@@ -74,6 +74,16 @@ export function ConnectionFields({
             <div className="conn-field__row">
               <input {...props} value={world.clientDir} placeholder="e.g. E:\Games\World of Warcraft" onChange={(e) => setWorld({ clientDir: e.target.value })} />
               <button type="button" className="btn" aria-label="Browse for the game client folder" onClick={() => void browseInto('clientDir')}>
+                Browse…
+              </button>
+            </div>
+          )}
+        </Field>
+        <Field id="conn-export-dir" label="Export folder (optional)" errors={errors} help="Where Export patch writes its SQL files. Left empty, they go to Documents/ACORE Quest Creator/sql.">
+          {(props) => (
+            <div className="conn-field__row">
+              <input {...props} value={world.exportDir} placeholder="e.g. /home/acore/server/data/sql/custom/db_world" onChange={(e) => setWorld({ exportDir: e.target.value })} />
+              <button type="button" className="btn" aria-label="Browse for the export folder" onClick={() => void browseInto('exportDir')}>
                 Browse…
               </button>
             </div>

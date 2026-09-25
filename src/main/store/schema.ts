@@ -11,6 +11,7 @@ export const connectionProfiles = sqliteTable('connection_profiles', {
   passwordEnc: blob('password_enc', { mode: 'buffer' }).notNull(),
   dbcDir: text('dbc_dir').notNull().default(''),
   clientDir: text('client_dir').notNull().default(''),
+  exportDir: text('export_dir').notNull().default(''),
   lastConnectedAt: text('last_connected_at'),
   // A hash of the `.env` values this profile was last seeded from; null for one the user made.
   envSeed: text('env_seed'),

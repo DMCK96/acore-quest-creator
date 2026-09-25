@@ -26,9 +26,6 @@ import { nodeProjectFs } from './project/node-fs';
  * wiring below.
  */
 
-/** The reference fork's patch directory, used when this machine has it checked out. */
-const FORK_OUTPUT_DIR = 'E:\\Repositories\\azerothcore-wotlk-coa\\data\\sql\\custom\\db_world';
-
 const STORE_FILE = 'quest-creator.sqlite';
 
 /**
@@ -48,9 +45,8 @@ if (userDataOverride) app.setPath('userData', userDataOverride);
 const envFile = process.env['ACQC_ENV_FILE'] ?? (app.isPackaged ? 'none' : join(__dirname, '..', '..', '.env'));
 if (envFile !== 'none' && existsSync(envFile)) process.loadEnvFile(envFile);
 
-const defaultOutputDir = (): string =>
-  process.env['ACQC_OUTPUT_DIR'] ??
-  (existsSync(FORK_OUTPUT_DIR) ? FORK_OUTPUT_DIR : join(app.getPath('documents'), 'ACORE Quest Creator', 'sql'));
+/** Where patches go when the connection names no export folder (Settings → Export folder). */
+const defaultOutputDir = (): string => join(app.getPath('documents'), 'ACORE Quest Creator', 'sql');
 
 /**
  * Drizzle's migration files. In development they sit in the repo, two levels above this bundle
@@ -92,6 +88,9 @@ function buildDeps(
     onServerDataDir: (dir) => tiles.setDataDir(dir),
     onClientDir: (dir) => tiles.setClientDir(dir),
     clientStatus: () => tiles.clientStatus(),
+    // Tests point exports at a scratch folder whatever the connection says.
+    exportDirOverride: process.env['ACQC_OUTPUT_DIR'] || null,
+    defaultExportDir: defaultOutputDir(),
     session,
     projects,
     startupProfileId,
