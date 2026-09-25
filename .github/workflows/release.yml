@@ -1,0 +1,79 @@
+# Builds unsigned installers for Windows, macOS and Linux when a version tag is pushed, and attaches
+# them to a draft GitHub Release for that tag. Publish the draft by hand once it looks right.
+#
+# While the repo is private only collaborators can download the release, and on the free plan the
+# macOS job's minutes count ten times — the tag check runs first so a mismatched tag costs nothing.
+name: Release
+
+on:
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - run: npm run release:check-tag -- "$GITHUB_REF_NAME"
+      - run: npm run typecheck
+      - run: npm test
+      # One draft up front: three build jobs racing to create it would each make their own.
+      - name: Create the draft release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release view "$GITHUB_REF_NAME" >/dev/null 2>&1 \
+            || gh release create "$GITHUB_REF_NAME" --draft --title "$GITHUB_REF_NAME" --generate-notes --verify-tag
+
+  build:
+    needs: verify
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: windows-latest
+            args: --win --x64
+          - os: macos-latest
+            args: --mac --arm64 --x64
+          - os: ubuntu-latest
+            args: --linux --x64
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - run: npx electron-vite build
+      # electron-builder rebuilds better-sqlite3 for Electron and for each target arch itself.
+      - run: npx electron-builder ${{ matrix.args }} --publish always
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          CSC_IDENTITY_AUTO_DISCOVERY: 'false'
+      # An Intel build carrying the arm64 native module would crash on launch.
+      - name: Check the native module matches each Mac build
+        if: runner.os == 'macOS'
+        shell: bash
+        run: |
+          check() {
+            local mod
+            mod=$(find "$1" -path '*app.asar.unpacked*' -name better_sqlite3.node | head -n 1)
+            if [ -z "$mod" ]; then echo "::error::no better_sqlite3.node under $1"; exit 1; fi
+            file "$mod"
+            file "$mod" | grep -q "$2" || { echo "::error::$mod is not $2"; exit 1; }
+          }
+          check dist/mac-arm64 arm64
+          check dist/mac x86_64
