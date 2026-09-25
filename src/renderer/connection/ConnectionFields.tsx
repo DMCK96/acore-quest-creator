@@ -50,6 +50,10 @@ export function ConnectionFields({
     <div className="conn-fields">
       <fieldset className="conn-fields__section" disabled={disabled}>
         <legend>World database</legend>
+        <p className="conn-field__help">
+          Your server&rsquo;s world database, usually acore_world. Quests, NPCs, items and the rest are read from it to
+          import and to check your work against. It is never written to: your changes go to SQL you export.
+        </p>
         <DbInputs prefix="conn-" labelPrefix="" db={world} saved={world.id !== undefined} errors={errors} onChange={setWorld} />
       </fieldset>
 

@@ -81,3 +81,32 @@
   opacity: 0.7;
   cursor: progress;
 }
+
+/*
+ * With room, the card widens to two columns (the world database on the left, the game files and
+ * dev database on the right) so it fits the launch window without scrolling.
+ */
+@media (min-width: 60rem) {
+  .login__card {
+    width: min(58rem, 100%);
+  }
+
+  .login .conn-fields {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 1rem 1.6rem;
+    align-items: start;
+  }
+
+  .login .conn-fields__section:first-child {
+    grid-row: span 2;
+    align-self: stretch;
+    padding-right: 1.6rem;
+    border-right: 1px solid var(--border-soft);
+  }
+
+  .login .conn-fields__section:nth-child(2) {
+    padding-top: 0;
+    border-top: 0;
+  }
+}
