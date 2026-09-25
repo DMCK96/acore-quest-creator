@@ -279,7 +279,9 @@ test.describe.serial('docs screenshots', () => {
       await page.getByRole('option', { name: /Heroic Strike/ }).first().click();
     }
     // Picking spells scrolled down to the last ability; show the fight from its top.
-    await npc.evaluate((dialog) => dialog.querySelectorAll('*').forEach((el: Element) => { el.scrollTop = 0; }));
+    await npc.evaluate((dialog: { querySelectorAll(selector: string): ArrayLike<{ scrollTop: number }> }) => {
+      for (const el of Array.from(dialog.querySelectorAll('*'))) el.scrollTop = 0;
+    });
     await shot(page, 'combat');
     await spawnAt(npc, 'Map: 0 X: -8910.6 Y: -140.3 Z: 80.9 Orientation: 1');
     await npc.getByRole('button', { name: 'Done' }).click();
