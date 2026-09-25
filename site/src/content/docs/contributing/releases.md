@@ -9,11 +9,16 @@ Releases are built by the **Release** workflow when a version tag is pushed. It 
 
 ## Cut a release
 
-1. Set `version` in `package.json`, for example `0.2.0`, and commit it.
-2. Tag the commit with the same version and push both:
+1. Bump the version with npm. It updates `package.json` and `package-lock.json` together, commits them and tags the commit `v0.2.0`:
 
    ```sh
-   git tag v0.2.0
+   npm version 0.2.0 -m "chore(release): %s"
+   ```
+
+   Don't edit `version` by hand: `package-lock.json` would fall behind.
+2. Push the commit and the tag:
+
+   ```sh
    git push origin main v0.2.0
    ```
 
@@ -29,7 +34,7 @@ Before a release, regenerate the [docs screenshots](/acore-quest-creator/contrib
 
 ## If something fails
 
-- **Tag does not match**: fix `package.json` or delete and re-create the tag (`git tag -d v0.2.0 && git push origin :refs/tags/v0.2.0`).
+- **Tag does not match**: delete the tag (`git tag -d v0.2.0 && git push origin :refs/tags/v0.2.0`), then bump again with `npm version`.
 - **One OS failed**: the others still upload to the draft. Fix the cause, then re-run the failed job from the Actions tab.
 
 ## Signing and updates

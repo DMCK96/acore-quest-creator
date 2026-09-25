@@ -68,8 +68,8 @@ More: [Docs and screenshots](https://dmck96.github.io/acore-quest-creator/contri
 
 ## Releases
 
-1. Set `version` in `package.json` and commit it.
-2. `git tag vX.Y.Z` and `git push origin main vX.Y.Z`.
+1. `npm version X.Y.Z -m "chore(release): %s"` bumps `package.json` and `package-lock.json` together, commits and tags `vX.Y.Z`. Don't edit `version` by hand, or the lockfile falls behind.
+2. `git push origin main vX.Y.Z`.
 3. The Release workflow checks the tag matches, runs the tests, and builds unsigned installers for Windows, macOS and Linux into a draft release.
 4. Edit the draft's notes on the Releases page and publish it.
 

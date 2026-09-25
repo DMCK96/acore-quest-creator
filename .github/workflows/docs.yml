@@ -15,8 +15,6 @@ on:
 
 permissions:
   contents: read
-  pages: write
-  id-token: write
 
 concurrency:
   group: pages
@@ -45,6 +43,10 @@ jobs:
     needs: build
     if: ${{ !github.event.repository.private }}
     runs-on: ubuntu-latest
+    # Only the deploy job can write to Pages.
+    permissions:
+      pages: write
+      id-token: write
     environment:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
