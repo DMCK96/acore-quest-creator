@@ -1,0 +1,15 @@
+/*
+ * While the login screen leaves (App's `leaving`), its orb flies onto the empty canvas's: that one
+ * stays hidden until the flying one lands on it, and the words on it wait too.
+ */
+.app-arriving .canvas-empty__circle .quest-orb {
+  visibility: hidden;
+}
+
+.app-arriving .canvas-empty__content {
+  opacity: 0;
+}
+
+.canvas-empty__content {
+  transition: opacity 0.4s ease-out;
+}

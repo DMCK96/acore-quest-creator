@@ -42,6 +42,8 @@ const stubUnsaved = (app: ElectronApplication, response: number) =>
 test('new, name, save, reopen from recent, and recover after a crash', async () => {
   let app = await launch();
   let page = await app.firstWindow();
+  // The environment's connection is filled in on the login screen; connecting is a click.
+  await page.getByRole('button', { name: 'Connect', exact: true }).click();
   const heading = page.getByRole('banner').getByRole('heading', { level: 1 });
   await expect(heading).toHaveText('Untitled Project');
 
@@ -89,6 +91,7 @@ test('new, name, save, reopen from recent, and recover after a crash', async () 
 
   app = await launch();
   page = await app.firstWindow();
+  await page.getByRole('button', { name: 'Connect', exact: true }).click();
   const prompt = page.getByRole('alertdialog', { name: 'Recover unsaved work' });
   await expect(prompt).toContainText('Crashed name');
   await prompt.getByRole('button', { name: 'Restore Crashed name' }).click();

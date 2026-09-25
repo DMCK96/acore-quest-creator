@@ -27,6 +27,8 @@ import { draftToSaves, savedDraft, type ConnectionDraft } from '../connection/dr
 export interface AppState {
   screen: 'connect' | 'pick' | 'preview' | 'edit';
   profiles: ProfileRecord[];
+  /** The profile launch puts on the login screen (seeded from `.env` in development); null when none. */
+  startupProfileId: number | null;
   summary: ConnectSummary | null;
   /** Counts the connections made; the per-connection caches (names, reward tables) start again when it moves. */
   connection: number;
@@ -56,7 +58,7 @@ export interface AppState {
   links: QuestLinks | null;
 
   loadProfiles(): Promise<void>;
-  /** Launch: lists the saved profiles, then connects straight away if one is set up for it. */
+  /** Launch: lists the saved profiles and which one to offer. Connecting is always the user's click. */
   start(): Promise<void>;
   connect(input: ProfileSave): Promise<void>;
   /** Connects with a saved profile and its stored password. */
@@ -169,6 +171,7 @@ export function createAppStore(api: Api, opts: { saveDelayMs?: number } = {}): A
   const store = create<AppState>((set, get) => ({
     screen: 'connect',
     profiles: [],
+    startupProfileId: null,
     summary: null,
     connection: 0,
     error: null,
@@ -203,9 +206,10 @@ export function createAppStore(api: Api, opts: { saveDelayMs?: number } = {}): A
     async start() {
       if (started) return;
       started = true;
-      await get().loadProfiles();
+      // Before the profiles, so the login screen fills in with the right one the first time.
       const startup = await api.startupProfile();
-      if (startup.ok && startup.value !== null) await get().connectProfile(startup.value);
+      if (startup.ok) set({ startupProfileId: startup.value });
+      await get().loadProfiles();
     },
 
     async connect(input) {

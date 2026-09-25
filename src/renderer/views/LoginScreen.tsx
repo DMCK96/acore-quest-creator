@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import type { AppStore } from '../state/app-store';
 import { QuestOrb } from '../components/QuestOrb';
 import { ConnectionFields } from '../connection/ConnectionFields';
@@ -6,31 +6,71 @@ import { draftFromProfiles, validateDraft, type ConnectionDraft, type DraftError
 import './LoginScreen.css';
 
 /**
- * The first screen of every launch that is not set up by `.env`: the connection details on a card
- * over the orb. A first launch fills them in and saves them; later launches find them filled in
- * and lead with Connect.
+ * The first screen of every launch: the connection details on a card over the orb. A first launch
+ * fills them in and saves them; later launches (and `.env` ones) find them filled in and lead with
+ * Connect. Connecting morphs the orb into the one on the empty canvas (see `App`).
  */
-export function LoginScreen({ store }: { store: AppStore }): React.JSX.Element {
+export function LoginScreen({
+  store,
+  leaving = false,
+  onLeft,
+}: {
+  store: AppStore;
+  /** Connected: the card fades, and the orb spins and shrinks onto the empty canvas's orb. */
+  leaving?: boolean;
+  /** Called once the leaving animation has finished. */
+  onLeft?: () => void;
+}): React.JSX.Element {
   const profiles = store((s) => s.profiles);
+  const startupProfileId = store((s) => s.startupProfileId);
   const storeError = store((s) => s.error);
   const { saveConnection, connectProfile, chooseServerDataDir } = store.getState();
 
-  const [original, setOriginal] = useState<ConnectionDraft>(() => draftFromProfiles(profiles));
+  const [original, setOriginal] = useState<ConnectionDraft>(() => draftFromProfiles(profiles, startupProfileId));
   const [draft, setDraft] = useState<ConnectionDraft>(original);
   const [touched, setTouched] = useState(false);
   const [errors, setErrors] = useState<DraftErrors>({});
   const [localError, setLocalError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const orbRef = useRef<HTMLDivElement | null>(null);
+  const onLeftRef = useRef(onLeft);
+  onLeftRef.current = onLeft;
+
+  useEffect(() => {
+    if (!leaving) return;
+    const orb = orbRef.current;
+    const done = (): void => onLeftRef.current?.();
+    // jsdom (tests) has no Web Animations.
+    if (!orb || typeof orb.animate !== 'function') {
+      done();
+      return;
+    }
+    const from = orb.getBoundingClientRect();
+    // With quests on the canvas there is no orb to land on: it shrinks away where it is.
+    const target = document.querySelector('.canvas-empty__circle .quest-orb')?.getBoundingClientRect();
+    const dx = target ? target.left + target.width / 2 - (from.left + from.width / 2) : 0;
+    const dy = target ? target.top + target.height / 2 - (from.top + from.height / 2) : 0;
+    const scale = target ? target.width / from.width : 0.2;
+    const animation = orb.animate(
+      [
+        { transform: 'translate(-50%, -50%) rotate(0turn) scale(1)', opacity: 1 },
+        { transform: `translate(calc(-50% + ${dx}px), calc(-50% + ${dy}px)) rotate(1turn) scale(${scale})`, opacity: target ? 1 : 0 },
+      ],
+      { duration: 1100, easing: 'cubic-bezier(0.65, 0, 0.35, 1)', fill: 'forwards' },
+    );
+    animation.finished.then(done, done);
+    return () => animation.cancel();
+  }, [leaving]);
 
   // Launch lists the saved profiles after this screen mounts: take them up until the user types.
   // Once they have typed, what they typed stays, but it is saved over the saved rows, not beside them.
   useEffect(() => {
-    const fresh = draftFromProfiles(profiles);
+    const fresh = draftFromProfiles(profiles, startupProfileId);
     setOriginal(fresh);
     setDraft(touched ? (d) => adoptSaved(d, fresh) : fresh);
     // Only a new profile list resets the draft.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [profiles]);
+  }, [profiles, startupProfileId]);
 
   const edit = (next: ConnectionDraft): void => {
     setTouched(true);
@@ -72,8 +112,8 @@ export function LoginScreen({ store }: { store: AppStore }): React.JSX.Element {
   const error = localError ?? storeError;
 
   return (
-    <main className="login">
-      <div className="login__orb" aria-hidden="true">
+    <main className={leaving ? 'login login--leaving' : 'login'} aria-hidden={leaving || undefined}>
+      <div ref={orbRef} className="login__orb" aria-hidden="true">
         <QuestOrb />
       </div>
       <form className="login__card" onSubmit={(e) => void submit(e)} noValidate>

@@ -51,16 +51,18 @@ const newestById = (rows: ProfileRecord[]): ProfileRecord | undefined =>
   rows.reduce<ProfileRecord | undefined>((best, p) => (best === undefined || p.id > best.id ? p : best), undefined);
 
 /**
- * The world profile that connected last (the newest by ID when none has), and the newest dev
- * profile.
+ * The world profile `preferId` names (the one launch offers, from `.env`), else the one that
+ * connected last (the newest by ID when none has), and the newest dev profile.
  */
-export function draftFromProfiles(profiles: ProfileRecord[]): ConnectionDraft {
+export function draftFromProfiles(profiles: ProfileRecord[], preferId: number | null = null): ConnectionDraft {
   const worlds = profiles.filter((p) => p.role === 'world');
   const stamped = worlds.filter((p) => p.lastConnectedAt !== null);
+  const preferred = worlds.find((p) => p.id === preferId);
   const world =
-    stamped.length > 0
+    preferred ??
+    (stamped.length > 0
       ? stamped.reduce((best, p) => (p.lastConnectedAt! > best.lastConnectedAt! ? p : best))
-      : newestById(worlds);
+      : newestById(worlds));
   const dev = newestById(profiles.filter((p) => p.role === 'dev'));
   return {
     world: world ? { ...dbFromProfile(world), dbcDir: world.dbcDir, clientDir: world.clientDir } : { ...emptyDb(), dbcDir: '', clientDir: '' },

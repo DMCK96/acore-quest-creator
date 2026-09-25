@@ -66,6 +66,18 @@ describe('LoginScreen', () => {
     expect(vi.mocked(api.saveProfile).mock.calls[0]![0]).toMatchObject({ id: 1, host: 'typed' });
     expect(api.deleteProfile).not.toHaveBeenCalled();
   });
+  it('launch offers the .env connection with Connect, and does not connect by itself', async () => {
+    const other = { ...world, id: 5, host: 'other.local', lastConnectedAt: '2026-09-25T10:00:00.000Z' };
+    const api = makeMockApi({ listProfiles: async () => okv([world, other]), startupProfile: async () => okv(1), connect: async () => okv(summary) });
+    const store = createAppStore(api);
+    render(<LoginScreen store={store} />);
+    await act(() => store.getState().start());
+    expect(screen.getByLabelText('Host')).toHaveValue('db.local');
+    expect(api.connect).not.toHaveBeenCalled();
+    expect(store.getState().screen).toBe('connect');
+    await userEvent.click(screen.getByRole('button', { name: 'Connect' }));
+    await waitFor(() => expect(api.connect).toHaveBeenCalledWith(1));
+  });
   it('shows validation beside the fields and sends nothing', async () => {
     const api = makeMockApi();
     const store = createAppStore(api);
