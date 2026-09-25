@@ -22,7 +22,7 @@ async function exportFolder(deps: Partial<ApiDeps>, exportDir?: string): Promise
     store: openStore(':memory:', box), openWorldDb: async () => db, openDevDb: async () => { throw new Error('x'); },
     fs: { writeFile: async (p) => { written.push(p); }, ensureDir: async () => {}, listDir: async () => [] }, now: () => new Date('2026-09-25T10:00:00Z'),
     // A project file carries a folder of its own; export must not use it.
-    session: createProjectSession(defaultProjectMeta('P', 'E:\someone-else\sql')), projects: {} as ProjectController,
+    session: createProjectSession(defaultProjectMeta('P', join('someone-else', 'sql'))), projects: {} as ProjectController,
     ...deps,
   });
   const rec: any = await api.saveProfile({ ...profile, ...(exportDir === undefined ? {} : { exportDir }) });

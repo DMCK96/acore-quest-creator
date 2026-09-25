@@ -2,10 +2,11 @@ import { test, expect, _electron as electron, type ElectronApplication } from '@
 import { mkdtempSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { mysqlUrl } from '../helpers/env';
+import { clientDir, mysqlUrl, serverDataDir } from '../helpers/env';
 
-const DATA_DIR = process.env.ACQC_WORLD_DB_DBC_DIR ? join(process.env.ACQC_WORLD_DB_DBC_DIR, '..') : 'E:\\Repositories\\azerothcore-wotlk-coa\\data';
-const CLIENT_DIR = process.env.ACQC_TEST_CLIENT_DIR ?? 'E:\\Games\\World of Warcraft - Ascension';
+// The server data and game client folders come from the same .env settings the app uses.
+const DATA_DIR = serverDataDir();
+const CLIENT_DIR = clientDir();
 const withoutConnectionEnv = (env: NodeJS.ProcessEnv): Record<string, string> =>
   Object.fromEntries(Object.entries(env).filter((e): e is [string, string] => e[1] !== undefined && !/^ACQC_(WORLD|DEV)_DB_/.test(e[0])));
 

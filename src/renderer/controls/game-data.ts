@@ -2,8 +2,7 @@
  * Race, class, quest-sort and emote lookup data for the identity and story controls.
  *
  * The bit values and IDs below are pinned to the reference fork's server source
- * (`E:\Repositories\azerothcore-wotlk-coa`, read-only), not to stock AzerothCore, per the Task 7
- * ledger ruling. Read directly from the fork rather than assumed from memory:
+ * (the Conquest of AzerothCore fork), not to stock AzerothCore. Read directly from the fork rather than assumed from memory:
  * - `RACES` / `ALLIANCE_MASK` / `HORDE_MASK`: `enum Races` in `src/server/shared/SharedDefines.h`.
  *   The fork's race IDs (Human=1 .. Draenei=11, with the historical Goblin=9 gap) are unchanged
  *   from stock, so the bit values (`1 << (raceId - 1)`) match the brief's pinned list exactly.

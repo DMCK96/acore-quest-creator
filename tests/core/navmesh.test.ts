@@ -1,7 +1,9 @@
 import { existsSync, readFileSync } from 'node:fs';
+import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { floorsAt, navTileFileName, NavmeshFormatError, parseNavTile } from '../../src/core/game/navmesh';
 import { buildNavTile } from '../helpers/nav-tile';
+import { serverDataDir } from '../helpers/env';
 
 const square = (z: number, x0 = -100, x1 = 0, y0 = -100, y1 = 0): [number, number, number][] =>
   [[x0, y0, z], [x1, y0, z], [x1, y1, z], [x0, y1, z]];
@@ -30,8 +32,9 @@ describe('navmesh', () => {
     expect(() => parseNavTile(bad)).toThrow(NavmeshFormatError);
     expect(() => parseNavTile(new Uint8Array(10))).toThrow(NavmeshFormatError);
   });
-  const real = 'E:/Repositories/azerothcore-wotlk-coa/data/mmaps/0004832.mmtile';
-  it.skipIf(!existsSync(real))('finds the ground under Marshal McBride in the fork\'s navmesh', () => {
+  // The server's own navmesh when .env names its data folder; skipped where there is none (CI).
+  const real = process.env.ACQC_WORLD_DB_DBC_DIR ? join(serverDataDir(), 'mmaps', '0004832.mmtile') : '';
+  it.skipIf(!real || !existsSync(real))('finds the ground under Marshal McBride in the fork\'s navmesh', () => {
     const floors = floorsAt(parseNavTile(new Uint8Array(readFileSync(real))), -8902.59, -162.606);
     expect(floors.some((z) => Math.abs(z - 82.02) < 0.5)).toBe(true);
   });

@@ -1,7 +1,7 @@
 /**
  * The 3.3.5a reputation factions a quest can reward or require: the `Faction.dbc` rows with a
  * reputation index. The fork's `faction_dbc` world table (`data/coa-world/.../faction_dbc.sql` in
- * `E:\Repositories\azerothcore-wotlk-coa`) ships empty, so the IDs and names are the stock 3.3.5a
+ * the Conquest of AzerothCore fork) ships empty, so the IDs and names are the stock 3.3.5a
  * client's. A custom faction the fork adds is not listed; the dropdown keeps it as `#ID`.
  */
 const FACTIONS: ReadonlyArray<readonly [number, string]> = [
