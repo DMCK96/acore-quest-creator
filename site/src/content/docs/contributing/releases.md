@@ -1,6 +1,6 @@
 ---
 title: Releases
-description: Cut a release of ACORE Quest Creator for Windows, macOS and Linux, and the checklist for making the repository public.
+description: Cut a release of ACORE Quest Creator for Windows, macOS and Linux.
 sidebar:
   order: 5
 ---
@@ -45,11 +45,6 @@ Builds are not code-signed, so Windows and macOS warn on first open; [Install](/
 
 `npm run dist` builds installers for your own platform into `dist/`. For an unpacked build to try quickly, run `npx electron-vite build && npx electron-builder --dir`.
 
-## Going public checklist
+## The app icon
 
-While the repository is private, GitHub Pages cannot publish on the free plan and only collaborators can download releases. To go public:
-
-1. Make sure `build/icon.png` (1024×1024) is in place, so the installers get the app icon. `npm run app:icon` captures it from the app: the quest orb on the canvas grid.
-2. Make the repository public.
-3. In **Settings → Pages**, set **Source** to **GitHub Actions**.
-4. Re-run the **Docs** workflow. The site appears at `https://dmck96.github.io/acore-quest-creator/`.
+Installers take their icon from `build/icon.png`. See [Docs and screenshots](/acore-quest-creator/contributing/docs-and-screenshots/#the-app-icon) to recapture it.

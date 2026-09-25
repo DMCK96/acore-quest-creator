@@ -1,8 +1,6 @@
-# Builds the docs site on every change to it, and deploys it to GitHub Pages once the repo is public.
-#
-# GitHub Free cannot publish Pages from a private repo, so while the repo is private the deploy job
-# is skipped rather than failed. After going public: Settings → Pages → Source: GitHub Actions, then
-# re-run this workflow.
+# Builds the docs site on every change to it and deploys it to GitHub Pages (Settings → Pages →
+# Source: GitHub Actions). A private copy of the repo cannot publish Pages on the free plan, so there
+# the deploy job is skipped rather than failed.
 name: Docs
 
 on:

@@ -1,8 +1,7 @@
 # Builds unsigned installers for Windows, macOS and Linux when a version tag is pushed, and attaches
 # them to a draft GitHub Release for that tag. Publish the draft by hand once it looks right.
 #
-# While the repo is private only collaborators can download the release, and on the free plan the
-# macOS job's minutes count ten times — the tag check runs first so a mismatched tag costs nothing.
+# The tag check runs first, so a mismatched tag stops the release before any installer is built.
 name: Release
 
 on:

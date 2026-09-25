@@ -12,4 +12,4 @@ How to build, test and change ACORE Quest Creator. The short version lives in [`
 - [Architecture](/acore-quest-creator/contributing/architecture/): how the code is laid out and how data flows.
 - [Testing](/acore-quest-creator/contributing/testing/): unit, integration and end-to-end tests.
 - [Docs and screenshots](/acore-quest-creator/contributing/docs-and-screenshots/): this site and its screenshots.
-- [Releases](/acore-quest-creator/contributing/releases/): cutting a release, and the checklist for going public.
+- [Releases](/acore-quest-creator/contributing/releases/): cutting a release for Windows, macOS and Linux.
