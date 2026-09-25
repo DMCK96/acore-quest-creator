@@ -150,6 +150,23 @@ exist in the CoA client and server.
    partly from titles and themes.
 9. **645 custom quests known only by ID and map points**, with no template at all.
 
+## Also checked: azerothhub.com (Bronzebeard Atlas)
+
+A community map of Ascension's Bronzebeard realm. `robots.txt` allows crawling with a
+one-second delay. There is no data API: 5,538 hand-placed markers are bundled in the map's
+JavaScript, each with a zone, a type and a position in map percent.
+
+| Marker type | Count | Use to us |
+| --- | ---: | --- |
+| Worldforge item pickups | 2,989 | None for quests; the same data is in ascension-data `supplemental/worldforged` |
+| Mystic Enchant scroll pickups | 2,455 | None for quests |
+| Quests | 49 | 43 match playable custom quests, all with chain order (previous/next quest) and a quest-hub position |
+| Points of interest, vendors, altars | 45 | Minor |
+
+The 43 quests are starting-zone chains (the Cain Estate in Deathknell, for example). They
+fill the previous-quest gap for those chains only. The site holds no NPC spawns, display
+IDs, givers or enders.
+
 ## Caveats
 
 - Inferred givers and enders are guesses with a measured error rate, not records. The
