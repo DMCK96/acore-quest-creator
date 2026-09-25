@@ -56,13 +56,13 @@ export function RowIdListControl(props: ControlProps<RowSetValue> & { def: RowSe
   }
 
   return (
-    <fieldset>
-      <legend>{info.groupLabel}</legend>
-      {def.help && <p>{def.help}</p>}
+    <fieldset className="control">
+      <legend className="control__label">{info.groupLabel}</legend>
+      {def.help && <p className="control__help">{def.help}</p>}
       {rows.map((row, index) => {
         const id = typeof row.id === 'number' ? row.id : Number(row.id) || 0;
         return (
-          <div key={index}>
+          <div key={index} className="control__row">
             <label htmlFor={`${def.id}-${index}`}>{`${info.rowNoun} ${index + 1} ID`}</label>
             <input
               id={`${def.id}-${index}`}
@@ -72,16 +72,16 @@ export function RowIdListControl(props: ControlProps<RowSetValue> & { def: RowSe
               onChange={(e) => updateId(index, Number(e.target.value) || 0)}
             />
             <RowName kind={info.kind} id={id} />
-            <button type="button" disabled={disabled} onClick={() => removeRow(index)}>
+            <button type="button" className="btn btn--small btn--danger" disabled={disabled} onClick={() => removeRow(index)}>
               {`Remove ${info.rowNoun} ${index + 1}`}
             </button>
           </div>
         );
       })}
-      <button type="button" disabled={disabled} onClick={addRow}>
+      <button type="button" className="btn btn--small" disabled={disabled} onClick={addRow}>
         Add
       </button>
-      {readOnlyReason && <p role="alert">{readOnlyReason}</p>}
+      {readOnlyReason && <p role="alert" className="control__alert">{readOnlyReason}</p>}
     </fieldset>
   );
 }

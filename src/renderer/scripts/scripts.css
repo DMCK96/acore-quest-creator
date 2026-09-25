@@ -50,13 +50,15 @@
 .scene-field {
   display: flex;
   flex-direction: column;
-  gap: 2px;
+  gap: 4px;
   font-size: 13px;
   min-width: 0;
 }
 
+/* Same as a registry control's label (.control__label), so every form in the app labels alike. */
 .scene-field > span {
   color: var(--text-muted);
+  font-weight: 600;
 }
 
 .scene-field input,
@@ -142,4 +144,9 @@
 
 .position-input__snap {
   align-self: flex-end;
+}
+
+/* A section's own button (Add condition) keeps its size instead of spanning the section. */
+.scene-section > .btn {
+  align-self: flex-start;
 }

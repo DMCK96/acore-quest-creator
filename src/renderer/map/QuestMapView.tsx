@@ -514,7 +514,7 @@ export function QuestMapView({
           {!hasClient && <p className="scene-hint">Set the game client folder on the connection to see the in-game map art.</p>}
           {capped && <p className="scene-hint">Zoom in to see every spawn here.</p>}
           {zoomedOut && !questOnly && <p className="scene-hint">Zoom in to see existing spawns.</p>}
-          <label className="scene-field">
+          <label className="scene-field scene-field--check quest-map__relevant">
             <input
               type="checkbox"
               checked={questOnly}
@@ -524,7 +524,7 @@ export function QuestMapView({
                 setQuestOnly(on);
                 if (lastView.current) viewChanged(lastView.current.box, lastView.current.zoom, on);
               }}
-            />{' '}
+            />
             Only quest-relevant
           </label>
           {patrol.active?.patrol && (

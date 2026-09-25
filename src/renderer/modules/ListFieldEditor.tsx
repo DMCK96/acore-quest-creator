@@ -62,12 +62,14 @@ export function ListFieldEditor(props: ListFieldEditorProps): React.JSX.Element 
       const target = (value as CreatureOrGoValue | null) ?? { target: 'creature', id: 0 };
       return (
         <div key={member.name} className="entry-card__target">
-          <label htmlFor={`${id}.kind`}>{`Kind ${n}`}</label>
-          <select id={`${id}.kind`} value={target.target} disabled={disabled}
-            onChange={(e) => setMember(index, member.name, { target: e.target.value as CreatureOrGoValue['target'], id: 0 })}>
-            <option value="creature">NPC</option>
-            <option value="gameobject">Object</option>
-          </select>
+          <div className="control">
+            <label htmlFor={`${id}.kind`} className="control__label">{`Kind ${n}`}</label>
+            <select id={`${id}.kind`} value={target.target} disabled={disabled}
+              onChange={(e) => setMember(index, member.name, { target: e.target.value as CreatureOrGoValue['target'], id: 0 })}>
+              <option value="creature">NPC</option>
+              <option value="gameobject">Object</option>
+            </select>
+          </div>
           <EntityPicker id={id} label={label} kind={target.target} value={target.id} disabled={disabled}
             onChange={(picked) => setMember(index, member.name, { target: target.target, id: picked })} />
         </div>

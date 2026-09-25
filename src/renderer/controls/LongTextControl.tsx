@@ -43,9 +43,9 @@ export function LongTextControl(props: ControlProps<string | null>): React.JSX.E
   }
 
   return (
-    <div>
-      <label htmlFor={id}>{label}</label>
-      {help && <p>{help}</p>}
+    <div className="control">
+      <label htmlFor={id} className="control__label">{label}</label>
+      {help && <p className="control__help">{help}</p>}
       <textarea
         id={id}
         ref={ref}
@@ -55,14 +55,14 @@ export function LongTextControl(props: ControlProps<string | null>): React.JSX.E
         disabled={disabled}
         onChange={(e) => commit(e.target.value)}
       />
-      <div>
+      <div className="control__actions">
         {TOKENS.map((t) => (
-          <button key={t.token} type="button" disabled={disabled} onClick={() => insert(t.token)}>
+          <button key={t.token} type="button" className="btn btn--small" disabled={disabled} onClick={() => insert(t.token)}>
             {`Insert ${t.token} (${t.description})`}
           </button>
         ))}
       </div>
-      {readOnlyReason && <p role="alert">{readOnlyReason}</p>}
+      {readOnlyReason && <p role="alert" className="control__alert">{readOnlyReason}</p>}
     </div>
   );
 }

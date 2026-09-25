@@ -11,29 +11,35 @@ export function CreatureOrGoControl(props: ControlProps<CreatureOrGoValue | null
   const { state, name } = useName(kind, refId);
 
   return (
-    <div>
-      {help && <p>{help}</p>}
-      <label htmlFor={`${id}-type`}>{`${label} type`}</label>
-      <select
-        id={`${id}-type`}
-        value={target === 'creature' ? 'Creature' : 'Object'}
-        disabled={disabled}
-        onChange={(e) => onChange({ target: e.target.value === 'Object' ? 'gameobject' : 'creature', id: refId })}
-      >
-        <option value="Creature">Creature</option>
-        <option value="Object">Object</option>
-      </select>
-      <label htmlFor={`${id}-id`}>{`${label} ID`}</label>
-      <input
-        id={`${id}-id`}
-        type="number"
-        value={refId}
-        disabled={disabled}
-        onChange={(e) => onChange({ target, id: Number(e.target.value) || 0 })}
-      />
-      {state === 'found' && <p>{name}</p>}
-      {state === 'missing' && <p>ID not found in your database.</p>}
-      {readOnlyReason && <p role="alert">{readOnlyReason}</p>}
+    <div className="control">
+      {help && <p className="control__help">{help}</p>}
+      <div className="control__inline">
+        <div className="control__sub">
+          <label htmlFor={`${id}-type`}>{`${label} type`}</label>
+          <select
+            id={`${id}-type`}
+            value={target === 'creature' ? 'Creature' : 'Object'}
+            disabled={disabled}
+            onChange={(e) => onChange({ target: e.target.value === 'Object' ? 'gameobject' : 'creature', id: refId })}
+          >
+            <option value="Creature">Creature</option>
+            <option value="Object">Object</option>
+          </select>
+        </div>
+        <div className="control__sub">
+          <label htmlFor={`${id}-id`}>{`${label} ID`}</label>
+          <input
+            id={`${id}-id`}
+            type="number"
+            value={refId}
+            disabled={disabled}
+            onChange={(e) => onChange({ target, id: Number(e.target.value) || 0 })}
+          />
+        </div>
+      </div>
+      {state === 'found' && <p className="control__note">{name}</p>}
+      {state === 'missing' && <p className="control__alert">ID not found in your database.</p>}
+      {readOnlyReason && <p role="alert" className="control__alert">{readOnlyReason}</p>}
     </div>
   );
 }

@@ -24,16 +24,16 @@ export function ClassMaskControl(props: ControlProps<number>): React.JSX.Element
   }
 
   return (
-    <div>
-      <span id={`${id}-label`}>{label}</span>
-      {help && <p>{help}</p>}
-      <label>
+    <div className="control">
+      <span id={`${id}-label`} className="control__label">{label}</span>
+      {help && <p className="control__help">{help}</p>}
+      <label className="control__check">
         <input type="checkbox" checked={isAll} disabled={disabled} onChange={(e) => toggleAll(e.target.checked)} />
         All classes
       </label>
-      <div role="group" aria-labelledby={`${id}-label`}>
+      <div role="group" className="control__checks" aria-labelledby={`${id}-label`}>
         {CLASSES.map((c) => (
-          <label key={c.bit}>
+          <label className="control__check" key={c.bit}>
             <input
               type="checkbox"
               checked={!isAll && (value & c.bit) !== 0}
@@ -44,7 +44,7 @@ export function ClassMaskControl(props: ControlProps<number>): React.JSX.Element
           </label>
         ))}
       </div>
-      {readOnlyReason && <p role="alert">{readOnlyReason}</p>}
+      {readOnlyReason && <p role="alert" className="control__alert">{readOnlyReason}</p>}
     </div>
   );
 }

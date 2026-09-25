@@ -29,24 +29,24 @@ export function RaceMaskControl(props: ControlProps<number>): React.JSX.Element 
   }
 
   return (
-    <div>
-      <span id={`${id}-label`}>{label}</span>
-      {help && <p>{help}</p>}
-      <label>
+    <div className="control">
+      <span id={`${id}-label`} className="control__label">{label}</span>
+      {help && <p className="control__help">{help}</p>}
+      <label className="control__check">
         <input type="checkbox" checked={isAll} disabled={disabled} onChange={(e) => toggleAll(e.target.checked)} />
         All races
       </label>
-      <div>
-        <button type="button" disabled={disabled} onClick={() => onChange(ALLIANCE_MASK)}>
+      <div className="control__actions">
+        <button type="button" className="btn btn--small" disabled={disabled} onClick={() => onChange(ALLIANCE_MASK)}>
           Alliance only
         </button>
-        <button type="button" disabled={disabled} onClick={() => onChange(HORDE_MASK)}>
+        <button type="button" className="btn btn--small" disabled={disabled} onClick={() => onChange(HORDE_MASK)}>
           Horde only
         </button>
       </div>
-      <div role="group" aria-labelledby={`${id}-label`}>
+      <div role="group" className="control__checks" aria-labelledby={`${id}-label`}>
         {RACES.map((r) => (
-          <label key={r.bit}>
+          <label className="control__check" key={r.bit}>
             <input
               type="checkbox"
               checked={!isAll && (value & r.bit) !== 0}
@@ -57,7 +57,7 @@ export function RaceMaskControl(props: ControlProps<number>): React.JSX.Element 
           </label>
         ))}
       </div>
-      {readOnlyReason && <p role="alert">{readOnlyReason}</p>}
+      {readOnlyReason && <p role="alert" className="control__alert">{readOnlyReason}</p>}
     </div>
   );
 }

@@ -34,11 +34,11 @@ export function ListEditor(props: ListEditorProps): React.JSX.Element {
   }
 
   return (
-    <fieldset>
-      <legend>{label}</legend>
-      {def.help && <p>{def.help}</p>}
+    <fieldset className="control">
+      <legend className="control__label">{label}</legend>
+      {def.help && <p className="control__help">{def.help}</p>}
       {value.map((row, index) => (
-        <div key={index}>
+        <div key={index} className="control__row">
           {def.members.map((m) => {
             const Control = resolveControl(m);
             return (
@@ -54,16 +54,16 @@ export function ListEditor(props: ListEditorProps): React.JSX.Element {
               />
             );
           })}
-          <button type="button" disabled={disabled} onClick={() => removeRow(index)}>
+          <button type="button" className="btn btn--small btn--danger" disabled={disabled} onClick={() => removeRow(index)}>
             {`Remove ${label} ${index + 1}`}
           </button>
         </div>
       ))}
-      <button type="button" disabled={disabled || atCap} onClick={addRow}>
+      <button type="button" className="btn btn--small" disabled={disabled || atCap} onClick={addRow}>
         Add
       </button>
-      {atCap && <p>{`At most ${def.slots} entries.`}</p>}
-      {readOnlyReason && <p role="alert">{readOnlyReason}</p>}
+      {atCap && <p className="control__note">{`At most ${def.slots} entries.`}</p>}
+      {readOnlyReason && <p role="alert" className="control__alert">{readOnlyReason}</p>}
     </fieldset>
   );
 }

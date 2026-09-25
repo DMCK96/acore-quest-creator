@@ -64,7 +64,9 @@ export function QuestFlowView({ store }: { store: AppStore }): React.JSX.Element
       const state = store.getState();
       // The map goes back to where it was opened from, like its Close button; the editor sits on top
       // of the panel that opened it, so it closes before that panel.
-      if (state.openPanel === 'map') state.setOpenPanel(mapReturnRef.current);
+      // The apply confirmation sits over everything else, so it closes first.
+      if (state.pendingApply) state.cancelApply();
+      else if (state.openPanel === 'map') state.setOpenPanel(mapReturnRef.current);
       else if (editorRef.current) setEditor(null);
       else if (state.openPanel !== null) state.setOpenPanel(null);
       else void state.backToChain();

@@ -25,14 +25,14 @@ export function ChainBody(props: ModuleBodyProps): React.JSX.Element {
           <EntityPicker id={PREV} label="Previous quest" kind="quest" value={Math.abs(prev)}
             onChange={(id) => onChange(PREV, inLog ? -id : id)} />
           {prev !== 0 && (
-            <>
+            <div className="control__sub chain__sign">
               <label htmlFor={`${PREV}.sign`}>Previous quest must be</label>
               <select id={`${PREV}.sign`} value={inLog ? 'log' : 'done'}
                 onChange={(e) => onChange(PREV, e.target.value === 'log' ? -Math.abs(prev) : Math.abs(prev))}>
                 <option value="done">Completed</option>
                 <option value="log">In the quest log</option>
               </select>
-            </>
+            </div>
           )}
         </div>
       )}

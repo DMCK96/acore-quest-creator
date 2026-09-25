@@ -9,9 +9,9 @@ export function EnumControl(props: ControlProps<number> & { type: EnumType }): R
   const options = known ? type.options : [...type.options, { value, label: `Unknown (${value})` }];
 
   return (
-    <div>
-      <label htmlFor={id}>{label}</label>
-      {help && <p>{help}</p>}
+    <div className="control">
+      <label htmlFor={id} className="control__label">{label}</label>
+      {help && <p className="control__help">{help}</p>}
       <select id={id} value={value} disabled={disabled} onChange={(e) => onChange(Number(e.target.value))}>
         {options.map((o) => (
           <option key={o.value} value={o.value}>
@@ -19,7 +19,7 @@ export function EnumControl(props: ControlProps<number> & { type: EnumType }): R
           </option>
         ))}
       </select>
-      {readOnlyReason && <p role="alert">{readOnlyReason}</p>}
+      {readOnlyReason && <p role="alert" className="control__alert">{readOnlyReason}</p>}
     </div>
   );
 }

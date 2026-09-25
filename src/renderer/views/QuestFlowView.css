@@ -70,12 +70,68 @@
 .quest-header__basics {
   display: flex;
   flex-wrap: wrap;
-  gap: 4px 20px;
-  margin-top: 10px;
+  align-items: flex-start;
+  gap: 8px 20px;
+  margin-top: 12px;
 }
 
 .quest-header__basics .field-setting {
   margin-bottom: 0;
+}
+
+/* The level boxes only ever hold two or three digits. */
+.quest-header__basics .control > input {
+  width: 90px;
+}
+
+/* Export: what the last export or apply reported, under the header's bar. */
+
+.export-status {
+  margin-top: 10px;
+  padding: 8px 12px;
+  border: 1px solid var(--green);
+  border-radius: var(--radius);
+  background: var(--green-soft);
+  font-size: 13px;
+}
+
+.export-status--error {
+  border-color: var(--red);
+  background: var(--red-soft);
+}
+
+.export-status p,
+.export-status ul {
+  margin: 0;
+}
+
+.export-status ul {
+  padding-left: 18px;
+}
+
+.export-status * + * {
+  margin-top: 4px;
+}
+
+.export-status code {
+  overflow-wrap: anywhere;
+}
+
+.export-apply__sql {
+  margin: 0;
+  padding: 10px 12px;
+  max-height: 50vh;
+  overflow: auto;
+  font-size: 12px;
+  line-height: 1.5;
+  background: var(--bg-inset);
+  border: 1px solid var(--border-soft);
+  border-radius: var(--radius);
+}
+
+.export-apply__actions {
+  display: flex;
+  gap: 8px;
 }
 
 .quest-header__bar {

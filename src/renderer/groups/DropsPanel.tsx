@@ -136,11 +136,11 @@ export function DropsPanel({ itemId, values, sharedItems, onChange }: DropsPanel
 
     const id = `${baseId}-${source.kind}-${source.entry}`;
     return (
-      <details>
+      <details className="drops__details">
         <summary>{`Advanced (${source.kind} ${source.entry})`}</summary>
         {lootField && lootRow && (
-          <fieldset>
-            <legend>{lootField.label}</legend>
+          <fieldset className="control drops__advanced">
+            <legend className="control__label">{lootField.label}</legend>
             {lootField.columns
               .filter((c) => !IDENTITY_COLUMNS.has(c.name))
               .map((c) => (
@@ -155,8 +155,8 @@ export function DropsPanel({ itemId, values, sharedItems, onChange }: DropsPanel
           </fieldset>
         )}
         {questItemField && questItemRow && (
-          <fieldset>
-            <legend>{questItemField.label}</legend>
+          <fieldset className="control drops__advanced">
+            <legend className="control__label">{questItemField.label}</legend>
             {questItemField.columns
               .filter((c) => !IDENTITY_COLUMNS.has(c.name))
               .map((c) => (
@@ -175,42 +175,54 @@ export function DropsPanel({ itemId, values, sharedItems, onChange }: DropsPanel
   }
 
   return (
-    <section role="region" aria-label={heading}>
-      <h3>{heading}</h3>
+    <section role="region" aria-label={heading} className="drops">
+      <h3 className="module-section__title">{heading}</h3>
       {shared.length > 0 && (
-        <p>{`Also used by quest ${shared.join(', ')} — changing these drops affects those quests too.`}</p>
+        <p className="control__note">{`Also used by quest ${shared.join(', ')} — changing these drops affects those quests too.`}</p>
       )}
-      <ul>
+      <ul className="drops__list">
         {sources.map((s) => (
-          <li key={`${s.source.kind}-${s.source.entry}`}>
-            <SourceName kind={s.source.kind} entry={s.source.entry} />
-            {` — ${s.chance}% chance, ${s.minCount}-${s.maxCount}`}
-            <button type="button" onClick={() => remove(s.source)}>
+          <li key={`${s.source.kind}-${s.source.entry}`} className="drops__source">
+            <span className="drops__source-line">
+              <SourceName kind={s.source.kind} entry={s.source.entry} />
+              {` — ${s.chance}% chance, ${s.minCount}-${s.maxCount}`}
+            </span>
+            <button type="button" className="btn btn--small btn--danger" onClick={() => remove(s.source)}>
               {`Remove source ${s.source.entry}`}
             </button>
             {advanced(s.source)}
           </li>
         ))}
       </ul>
-      <div>
-        <label htmlFor={`${baseId}-kind`}>Source type</label>
-        <select
-          id={`${baseId}-kind`}
-          value={kind === 'creature' ? 'Creature' : 'Object'}
-          onChange={(e) => setKind(e.target.value === 'Object' ? 'gameobject' : 'creature')}
-        >
-          <option value="Creature">Creature</option>
-          <option value="Object">Object</option>
-        </select>
-        <label htmlFor={`${baseId}-entry`}>Source ID</label>
-        <input id={`${baseId}-entry`} type="number" value={entry} onChange={(e) => setEntry(e.target.value)} />
-        <label htmlFor={`${baseId}-chance`}>Drop chance (%)</label>
-        <input id={`${baseId}-chance`} type="number" value={chance} onChange={(e) => setChance(e.target.value)} />
-        <label htmlFor={`${baseId}-min`}>Min count</label>
-        <input id={`${baseId}-min`} type="number" value={minCount} onChange={(e) => setMinCount(e.target.value)} />
-        <label htmlFor={`${baseId}-max`}>Max count</label>
-        <input id={`${baseId}-max`} type="number" value={maxCount} onChange={(e) => setMaxCount(e.target.value)} />
-        <button type="button" onClick={addSource}>
+      <div className="control__inline">
+        <div className="control__sub">
+          <label htmlFor={`${baseId}-kind`}>Source type</label>
+          <select
+            id={`${baseId}-kind`}
+            value={kind === 'creature' ? 'Creature' : 'Object'}
+            onChange={(e) => setKind(e.target.value === 'Object' ? 'gameobject' : 'creature')}
+          >
+            <option value="Creature">Creature</option>
+            <option value="Object">Object</option>
+          </select>
+        </div>
+        <div className="control__sub">
+          <label htmlFor={`${baseId}-entry`}>Source ID</label>
+          <input id={`${baseId}-entry`} type="number" value={entry} onChange={(e) => setEntry(e.target.value)} />
+        </div>
+        <div className="control__sub">
+          <label htmlFor={`${baseId}-chance`}>Drop chance (%)</label>
+          <input id={`${baseId}-chance`} type="number" value={chance} onChange={(e) => setChance(e.target.value)} />
+        </div>
+        <div className="control__sub">
+          <label htmlFor={`${baseId}-min`}>Min count</label>
+          <input id={`${baseId}-min`} type="number" value={minCount} onChange={(e) => setMinCount(e.target.value)} />
+        </div>
+        <div className="control__sub">
+          <label htmlFor={`${baseId}-max`}>Max count</label>
+          <input id={`${baseId}-max`} type="number" value={maxCount} onChange={(e) => setMaxCount(e.target.value)} />
+        </div>
+        <button type="button" className="btn" onClick={addSource}>
           Add source
         </button>
       </div>

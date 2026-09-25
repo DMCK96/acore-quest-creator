@@ -1,0 +1,136 @@
+/*
+ * The registry's field controls: a label, its help, the input, and any note or error under it.
+ * Every control's root is `.control`; lists and money group theirs in a `fieldset.control`.
+ */
+.control {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 4px;
+  min-width: 0;
+}
+
+.control__label {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-muted);
+}
+
+fieldset.control > legend.control__label {
+  padding: 0 6px;
+  margin-left: -6px;
+}
+
+.control__help,
+.control__note,
+.control__alert {
+  margin: 0;
+  font-size: 12.5px;
+  line-height: 1.45;
+}
+
+.control__help {
+  color: var(--text-faint);
+}
+
+.control__note {
+  color: var(--text-muted);
+}
+
+.control__alert {
+  color: var(--red-text);
+}
+
+/* Inputs keep a readable width instead of stretching across the modal; text areas take it all. */
+.control > input,
+.control__sub > input,
+.control > select,
+.control__sub > select {
+  width: 100%;
+  max-width: 300px;
+}
+
+.control > textarea {
+  width: 100%;
+}
+
+/* Side-by-side parts of one value: gold / silver / copper, sort mode and zone, type and ID. */
+.control__inline {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 8px 12px;
+}
+
+.control__sub {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+
+.control__sub > label {
+  font-size: 12px;
+  color: var(--text-faint);
+}
+
+.control__inline .control__sub > input[type='number'] {
+  width: 110px;
+}
+
+.control__checks {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 16px;
+}
+
+.control__check {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 13px;
+  color: var(--text);
+  cursor: pointer;
+}
+
+.control__actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+}
+
+/* One row of a list (an emote and its delay, a POI point): its fields side by side, Remove last. */
+.control__row {
+  align-self: stretch;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 8px 12px;
+  padding: 8px 10px;
+  background: var(--bg-panel-raised);
+  border: 1px solid var(--border-soft);
+  border-radius: var(--radius);
+}
+
+.control__row > .control {
+  flex: 1 1 140px;
+}
+
+.control__row > .btn {
+  margin-left: auto;
+}
+
+fieldset.control {
+  align-self: stretch;
+}
+
+.control details {
+  font-size: 12.5px;
+  color: var(--text-faint);
+}
+
+/* A row's own summary line (a condition described in words) spans the row above its fields. */
+.control__row-title {
+  flex-basis: 100%;
+}

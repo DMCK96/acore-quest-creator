@@ -49,13 +49,13 @@ export function MoneyReward({
   return (
     <div className="money-reward">
       {offerScaling && (
-        <fieldset className="money-reward__mode">
-          <legend>Money reward</legend>
-          <label>
+        <fieldset className="control money-reward__mode">
+          <legend className="control__label">Money reward</legend>
+          <label className="control__check">
             <input type="radio" name="money-mode" checked={!scales} onChange={() => onChange(TIER, 0)} />
             A fixed amount
           </label>
-          <label>
+          <label className="control__check">
             <input type="radio" name="money-mode" checked={scales} onChange={() => onChange(TIER, DEFAULT_TIER)} />
             Scales with the player&apos;s level
           </label>
@@ -83,9 +83,9 @@ function ScalingTier({ tier, onChange }: { tier: number; onChange(n: number): vo
   );
 
   return (
-    <div>
-      <label htmlFor="money-tier">Reward size</label>
-      <p>Higher tiers pay more. The quest pays the amount for the level of the player who hands it in.</p>
+    <div className="control">
+      <label htmlFor="money-tier" className="control__label">Reward size</label>
+      <p className="control__help">Higher tiers pay more. The quest pays the amount for the level of the player who hands it in.</p>
       <select id="money-tier" value={tier} onChange={(e) => onChange(Number(e.target.value))}>
         {options.map((n) => {
           const most = payAt(n, top);
@@ -97,7 +97,7 @@ function ScalingTier({ tier, onChange }: { tier: number; onChange(n: number): vo
         })}
       </select>
       {samples.length > 0 && (
-        <p className="money-reward__samples">
+        <p className="control__note money-reward__samples">
           Pays {samples.map((s) => `${formatMoney(s.copper)} at level ${s.level}`).join(', ')}.
         </p>
       )}

@@ -68,12 +68,25 @@
   gap: 8px 12px;
 }
 
+/* An objective's target: what kind of thing, then the search for it. */
 .entry-card__target {
-  display: grid;
-  grid-template-columns: auto 1fr;
-  gap: 4px 8px;
-  align-items: end;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  gap: 8px 12px;
   grid-column: 1 / -1;
+}
+
+.entry-card__target > .entity-picker {
+  flex: 1 1 240px;
+}
+
+/* A card with a single field: the field, and its Remove at the far end. */
+.entry-card--inline {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 12px;
 }
 
 .entry-list__add {
@@ -104,4 +117,62 @@
 .entry-card__own .scene-hint {
   flex-basis: 100%;
   margin: 0;
+}
+
+/* Where an objective's item drops from: the sources, then a form to add one. */
+.drops {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 8px;
+}
+
+.drops__list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.drops__source {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px 10px;
+  padding: 6px 10px;
+  background: var(--bg-panel-raised);
+  border: 1px solid var(--border-soft);
+  border-radius: var(--radius);
+  font-size: 13px;
+}
+
+.drops__details {
+  flex-basis: 100%;
+  font-size: 13px;
+}
+
+.drops__details[open] > summary {
+  margin-bottom: 6px;
+}
+
+.drops__advanced + .drops__advanced {
+  margin-top: 8px;
+}
+
+.timer__box {
+  width: 90px;
+}
+
+.money-reward {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+.chain__sign {
+  margin-top: 8px;
 }

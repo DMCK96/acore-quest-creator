@@ -17,6 +17,8 @@
   --blue-soft: rgba(79, 124, 173, 0.18);
   --red: #b1463f;
   --red-soft: rgba(177, 70, 63, 0.18);
+  /* Lighter than --red, which is too dark to read as small text on the dark panels. */
+  --red-text: #e0857d;
   --amber: #c98a3a;
   --amber-soft: rgba(201, 138, 58, 0.18);
   --font-display: Georgia, 'Times New Roman', serif;
@@ -24,6 +26,8 @@
   --radius: 8px;
   --radius-lg: 14px;
   --shadow: 0 4px 16px rgba(0, 0, 0, 0.4);
+  /* Native parts the CSS cannot reach (scrollbars, number spinners, date pickers) draw dark too. */
+  color-scheme: dark;
 }
 
 * {
@@ -50,6 +54,100 @@ button {
   cursor: pointer;
 }
 
+/*
+ * Every text box, number box, dropdown and text area starts from the app's look, so a control
+ * without styles of its own still matches. `:where` keeps these at zero specificity: any component
+ * rule overrides them.
+ */
+:where(input:not([type='checkbox'], [type='radio'], [type='range'], [type='color'], [type='file']), select, textarea) {
+  font: inherit;
+  color: var(--text);
+  background-color: var(--bg-inset);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 0.4em 0.6em;
+  min-width: 0;
+  transition: border-color 0.15s ease;
+}
+
+:where(input, select, textarea):hover:not(:disabled, :focus) {
+  border-color: var(--text-faint);
+}
+
+:where(input, select, textarea):focus {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 2px var(--accent-soft);
+}
+
+:where(input, select, textarea):disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+:where(input, select, textarea)[aria-invalid='true'] {
+  border-color: var(--red);
+}
+
+:where(input, textarea)::placeholder {
+  color: var(--text-faint);
+}
+
+:where(textarea) {
+  line-height: 1.5;
+  resize: vertical;
+}
+
+/* Dropdowns draw their own chevron: the system arrow ignores the theme. */
+:where(select) {
+  appearance: none;
+  padding-right: 2em;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6'%3E%3Cpath d='M1 1l4 4 4-4' fill='none' stroke='%23a99a80' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 0.7em center;
+  cursor: pointer;
+}
+
+:where(option, optgroup) {
+  background: var(--bg-panel-raised);
+  color: var(--text);
+}
+
+:where(input[type='checkbox'], input[type='radio']) {
+  accent-color: var(--accent);
+  width: 15px;
+  height: 15px;
+  margin: 0;
+  cursor: pointer;
+}
+
+:where(input[type='checkbox'], input[type='radio']):focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+  box-shadow: none;
+}
+
+:where(fieldset) {
+  margin: 0;
+  min-width: 0;
+  border: 1px solid var(--border-soft);
+  border-radius: var(--radius);
+  padding: 10px 12px 12px;
+}
+
+:where(legend) {
+  padding: 0 6px;
+}
+
+:where(details) > summary {
+  cursor: pointer;
+  color: var(--text-muted);
+}
+
+:where(pre, code) {
+  font-family: Consolas, 'Cascadia Mono', monospace;
+}
+
 .btn {
   appearance: none;
   border: 1px solid var(--border);
@@ -70,6 +168,43 @@ button {
 .btn:disabled {
   opacity: 0.5;
   cursor: default;
+}
+
+/* A bare button (no class of its own) is an ordinary button, so none ever falls back to the system look. */
+:where(button:not([class])) {
+  appearance: none;
+  border: 1px solid var(--border);
+  background: var(--bg-panel-raised);
+  color: var(--text);
+  border-radius: var(--radius);
+  padding: 0.45em 0.9em;
+  transition:
+    background 0.15s ease,
+    border-color 0.15s ease;
+}
+
+:where(button:not([class])):hover:not(:disabled) {
+  background: var(--border-soft);
+  border-color: var(--accent);
+}
+
+:where(button:not([class])):disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.btn--small {
+  padding: 0.25em 0.65em;
+  font-size: 12.5px;
+}
+
+.btn--danger {
+  color: var(--red-text);
+}
+
+.btn--danger:hover:not(:disabled) {
+  border-color: var(--red);
+  background: var(--red-soft);
 }
 
 .btn--primary {
@@ -129,4 +264,14 @@ button {
   background: var(--bg-inset);
   color: var(--text-muted);
   border-color: var(--border);
+}
+
+/* Read by screen readers, not shown. */
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
 }

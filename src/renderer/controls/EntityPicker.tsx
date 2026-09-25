@@ -105,8 +105,8 @@ export function EntityPicker({ id, label, kind, value, onChange, disabled, readO
   const open = editing && hits.length > 0;
 
   return (
-    <div className="entity-picker">
-      <label htmlFor={id}>{label}</label>
+    <div className="control entity-picker">
+      <label htmlFor={id} className="control__label">{label}</label>
       <div className="entity-picker__row">
         <input
           id={id}
@@ -150,8 +150,8 @@ export function EntityPicker({ id, label, kind, value, onChange, disabled, readO
             </li>
           ))}
       </ul>
-      {error && <p role="alert">{error}</p>}
-      {readOnlyReason && <p role="alert">{readOnlyReason}</p>}
+      {error && <p role="alert" className="control__alert">{error}</p>}
+      {readOnlyReason && <p role="alert" className="control__alert">{readOnlyReason}</p>}
     </div>
   );
 }

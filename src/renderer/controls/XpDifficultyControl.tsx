@@ -25,12 +25,12 @@ export function XpDifficultyControl(props: ControlProps<number>): React.JSX.Elem
   const amountsMissing = !scalesWithPlayer && tables !== null && tables.xp.every((xp) => xp === null);
 
   return (
-    <div>
-      <label htmlFor={id}>{label}</label>
-      {help && <p>{help}</p>}
-      {scalesWithPlayer && <p>This quest has no fixed level, so the XP depends on the player&apos;s level and no fixed amount can be shown.</p>}
+    <div className="control">
+      <label htmlFor={id} className="control__label">{label}</label>
+      {help && <p className="control__help">{help}</p>}
+      {scalesWithPlayer && <p className="control__note">This quest has no fixed level, so the XP depends on the player&apos;s level and no fixed amount can be shown.</p>}
       {amountsMissing && (
-        <p>
+        <p className="control__help">
           To see how much XP each tier gives, set the server data folder on the connection. The server reads these
           amounts from its QuestXP.dbc file.
         </p>
@@ -45,7 +45,7 @@ export function XpDifficultyControl(props: ControlProps<number>): React.JSX.Elem
           );
         })}
       </select>
-      {readOnlyReason && <p role="alert">{readOnlyReason}</p>}
+      {readOnlyReason && <p role="alert" className="control__alert">{readOnlyReason}</p>}
     </div>
   );
 }

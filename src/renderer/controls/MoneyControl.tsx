@@ -40,34 +40,42 @@ export function MoneyControl(props: ControlProps<number>): React.JSX.Element {
   }
 
   return (
-    <fieldset>
-      <legend>{label}</legend>
-      {help && <p>{help}</p>}
-      <label htmlFor={`${id}-gold`}>Gold</label>
-      <input
-        id={`${id}-gold`}
-        type="number"
-        value={local.gold}
-        disabled={disabled}
-        onChange={(e) => commit({ ...local, gold: Number(e.target.value) || 0 })}
-      />
-      <label htmlFor={`${id}-silver`}>Silver</label>
-      <input
-        id={`${id}-silver`}
-        type="number"
-        value={local.silver}
-        disabled={disabled}
-        onChange={(e) => commit({ ...local, silver: Number(e.target.value) || 0 })}
-      />
-      <label htmlFor={`${id}-copper`}>Copper</label>
-      <input
-        id={`${id}-copper`}
-        type="number"
-        value={local.copper}
-        disabled={disabled}
-        onChange={(e) => commit({ ...local, copper: Number(e.target.value) || 0 })}
-      />
-      <label>
+    <fieldset className="control">
+      <legend className="control__label">{label}</legend>
+      {help && <p className="control__help">{help}</p>}
+      <div className="control__inline">
+        <div className="control__sub">
+          <label htmlFor={`${id}-gold`}>Gold</label>
+          <input
+            id={`${id}-gold`}
+            type="number"
+            value={local.gold}
+            disabled={disabled}
+            onChange={(e) => commit({ ...local, gold: Number(e.target.value) || 0 })}
+          />
+        </div>
+        <div className="control__sub">
+          <label htmlFor={`${id}-silver`}>Silver</label>
+          <input
+            id={`${id}-silver`}
+            type="number"
+            value={local.silver}
+            disabled={disabled}
+            onChange={(e) => commit({ ...local, silver: Number(e.target.value) || 0 })}
+          />
+        </div>
+        <div className="control__sub">
+          <label htmlFor={`${id}-copper`}>Copper</label>
+          <input
+            id={`${id}-copper`}
+            type="number"
+            value={local.copper}
+            disabled={disabled}
+            onChange={(e) => commit({ ...local, copper: Number(e.target.value) || 0 })}
+          />
+        </div>
+      </div>
+      <label className="control__check">
         <input
           type="checkbox"
           checked={local.negative}
@@ -76,8 +84,8 @@ export function MoneyControl(props: ControlProps<number>): React.JSX.Element {
         />
         Deduct from the player instead of rewarding them
       </label>
-      {local.negative && <p>This costs the player money.</p>}
-      {readOnlyReason && <p role="alert">{readOnlyReason}</p>}
+      {local.negative && <p className="control__note">This costs the player money.</p>}
+      {readOnlyReason && <p role="alert" className="control__alert">{readOnlyReason}</p>}
     </fieldset>
   );
 }

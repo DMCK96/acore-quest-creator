@@ -65,17 +65,19 @@ export function ObjectivesBody({ open, onChange }: ModuleBodyProps): React.JSX.E
           <h3 className="module-section__title">Explore</h3>
           <div className="entry-list" data-field={TRIGGERS}>
             {triggers.map((row, i) => (
-              <section key={i} className="entry-card" aria-label={`explore ${i + 1}`}>
-                <label htmlFor={`${TRIGGERS}.${i}`}>{`Area trigger ID ${i + 1}`}</label>
-                <input
-                  id={`${TRIGGERS}.${i}`}
-                  inputMode="numeric"
-                  value={String(row.id ?? 0)}
-                  onChange={(e) => {
-                    if (!/^\d+$/.test(e.target.value)) return;
-                    onChange(TRIGGERS, triggers.map((r, j) => (j === i ? { ...r, id: Number(e.target.value) } : r)));
-                  }}
-                />
+              <section key={i} className="entry-card entry-card--inline" aria-label={`explore ${i + 1}`}>
+                <div className="control">
+                  <label htmlFor={`${TRIGGERS}.${i}`} className="control__label">{`Area trigger ID ${i + 1}`}</label>
+                  <input
+                    id={`${TRIGGERS}.${i}`}
+                    inputMode="numeric"
+                    value={String(row.id ?? 0)}
+                    onChange={(e) => {
+                      if (!/^\d+$/.test(e.target.value)) return;
+                      onChange(TRIGGERS, triggers.map((r, j) => (j === i ? { ...r, id: Number(e.target.value) } : r)));
+                    }}
+                  />
+                </div>
                 <button type="button" className="entry-card__btn entry-card__btn--danger" aria-label={`Remove explore ${i + 1}`}
                   onClick={() => onChange(TRIGGERS, removeEntry(triggers, i))}>
                   Remove

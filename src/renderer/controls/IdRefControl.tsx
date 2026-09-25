@@ -9,9 +9,9 @@ export function IdRefControl(props: ControlProps<number> & { type: IdRefType }):
   const { state, name } = useName(type.target, value);
 
   return (
-    <div>
-      <label htmlFor={id}>{label}</label>
-      {help && <p>{help}</p>}
+    <div className="control">
+      <label htmlFor={id} className="control__label">{label}</label>
+      {help && <p className="control__help">{help}</p>}
       <input
         id={id}
         type="number"
@@ -19,9 +19,9 @@ export function IdRefControl(props: ControlProps<number> & { type: IdRefType }):
         disabled={disabled}
         onChange={(e) => onChange(Number(e.target.value) || 0)}
       />
-      {state === 'found' && <p>{name}</p>}
-      {state === 'missing' && <p>ID not found in your database.</p>}
-      {readOnlyReason && <p role="alert">{readOnlyReason}</p>}
+      {state === 'found' && <p className="control__note">{name}</p>}
+      {state === 'missing' && <p className="control__alert">ID not found in your database.</p>}
+      {readOnlyReason && <p role="alert" className="control__alert">{readOnlyReason}</p>}
     </div>
   );
 }

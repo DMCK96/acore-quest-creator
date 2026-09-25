@@ -2,7 +2,7 @@ import type { ModuleId } from '@core/modules/model';
 import { moduleById } from '@core/modules/catalog';
 import type { AppStore } from '../state/app-store';
 import { FieldSetting } from '../modules/FieldSetting';
-import { ExportBar } from './ExportBar';
+import { ExportBar, ExportStatus } from './ExportBar';
 
 export interface ReadinessChip {
   id: ModuleId;
@@ -67,6 +67,7 @@ export function QuestHeader({ store, chips }: { store: AppStore; chips: readonly
           <ExportBar store={store} />
         </div>
       </div>
+      <ExportStatus store={store} />
     </div>
   );
 }

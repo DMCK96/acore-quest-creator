@@ -12,11 +12,11 @@ export function TextControl(props: ControlProps<string | null>): React.JSX.Eleme
   }
 
   return (
-    <div>
-      <label htmlFor={id}>{label}</label>
-      {help && <p>{help}</p>}
+    <div className="control">
+      <label htmlFor={id} className="control__label">{label}</label>
+      {help && <p className="control__help">{help}</p>}
       <input id={id} value={text} disabled={disabled} onChange={(e) => handleChange(e.target.value)} />
-      {readOnlyReason && <p role="alert">{readOnlyReason}</p>}
+      {readOnlyReason && <p role="alert" className="control__alert">{readOnlyReason}</p>}
     </div>
   );
 }

@@ -25,12 +25,12 @@ export function FloatControl(props: ControlProps<number | null> & { type?: Float
   }
 
   return (
-    <div>
-      <label htmlFor={id}>{label}</label>
-      {help && <p>{help}</p>}
+    <div className="control">
+      <label htmlFor={id} className="control__label">{label}</label>
+      {help && <p className="control__help">{help}</p>}
       <input id={id} value={text} disabled={disabled} onChange={(e) => handleChange(e.target.value)} />
-      {error && <p role="alert">{error}</p>}
-      {readOnlyReason && <p role="alert">{readOnlyReason}</p>}
+      {error && <p role="alert" className="control__alert">{error}</p>}
+      {readOnlyReason && <p role="alert" className="control__alert">{readOnlyReason}</p>}
     </div>
   );
 }

@@ -20,8 +20,8 @@ export function NamedSelect({
 }: NamedSelectProps & { options: readonly { id: number; name: string }[] }): React.JSX.Element {
   const known = value === 0 || options.some((o) => o.id === value);
   return (
-    <div>
-      <label htmlFor={id}>{label}</label>
+    <div className="control">
+      <label htmlFor={id} className="control__label">{label}</label>
       <select id={id} value={value} disabled={disabled} onChange={(e) => onChange(Number(e.target.value))}>
         <option value={0}>—</option>
         {!known && <option value={value}>{`#${value}`}</option>}

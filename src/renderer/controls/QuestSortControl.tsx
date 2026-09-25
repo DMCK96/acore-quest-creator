@@ -18,49 +18,45 @@ export function QuestSortControl(props: ControlProps<number>): React.JSX.Element
   }
 
   return (
-    <div>
-      <span id={`${id}-label`}>{label}</span>
-      {help && <p>{help}</p>}
-      <label htmlFor={`${id}-mode`}>Sorted by</label>
-      <select
-        id={`${id}-mode`}
-        value={mode}
-        disabled={disabled}
-        onChange={(e) => setMode(e.target.value as Mode)}
-      >
-        <option value="zone">Zone</option>
-        <option value="category">Category</option>
-      </select>
-      {mode === 'category' ? (
-        <>
-          <label htmlFor={`${id}-category`}>Category</label>
-          <select
-            id={`${id}-category`}
-            value={String(-value)}
-            disabled={disabled}
-            onChange={(e) => onChange(-Number(e.target.value))}
-          >
-            {QUEST_SORTS.map((s) => (
-              <option key={s.value} value={s.value}>
-                {s.label}
-              </option>
-            ))}
+    <div className="control">
+      <span id={`${id}-label`} className="control__label">{label}</span>
+      {help && <p className="control__help">{help}</p>}
+      <div className="control__inline">
+        <div className="control__sub">
+          <label htmlFor={`${id}-mode`}>Sorted by</label>
+          <select id={`${id}-mode`} value={mode} disabled={disabled} onChange={(e) => setMode(e.target.value as Mode)}>
+            <option value="zone">Zone</option>
+            <option value="category">Category</option>
           </select>
-        </>
-      ) : (
-        <>
-          <label htmlFor={`${id}-zone`}>Zone ID</label>
-          <input
-            id={`${id}-zone`}
-            type="number"
-            value={value}
-            disabled={disabled}
-            onChange={(e) => onChange(Number(e.target.value) || 0)}
-          />
-          <p>The client zone name is not stored in the world DB; this is the raw AreaTable.dbc ID.</p>
-        </>
+        </div>
+        {mode === 'category' ? (
+          <div className="control__sub">
+            <label htmlFor={`${id}-category`}>Category</label>
+            <select id={`${id}-category`} value={String(-value)} disabled={disabled} onChange={(e) => onChange(-Number(e.target.value))}>
+              {QUEST_SORTS.map((s) => (
+                <option key={s.value} value={s.value}>
+                  {s.label}
+                </option>
+              ))}
+            </select>
+          </div>
+        ) : (
+          <div className="control__sub">
+            <label htmlFor={`${id}-zone`}>Zone ID</label>
+            <input
+              id={`${id}-zone`}
+              type="number"
+              value={value}
+              disabled={disabled}
+              onChange={(e) => onChange(Number(e.target.value) || 0)}
+            />
+          </div>
+        )}
+      </div>
+      {mode === 'zone' && (
+        <p className="control__help">The client zone name is not stored in the world DB; this is the raw AreaTable.dbc ID.</p>
       )}
-      {readOnlyReason && <p role="alert">{readOnlyReason}</p>}
+      {readOnlyReason && <p role="alert" className="control__alert">{readOnlyReason}</p>}
     </div>
   );
 }

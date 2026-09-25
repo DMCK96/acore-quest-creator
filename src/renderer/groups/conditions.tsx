@@ -68,12 +68,12 @@ export function ConditionsControl(props: ControlProps<RowSetValue> & { def: RowS
   }
 
   return (
-    <fieldset>
-      <legend>{def.label}</legend>
-      {def.help && <p>{def.help}</p>}
+    <fieldset className="control">
+      <legend className="control__label">{def.label}</legend>
+      {def.help && <p className="control__help">{def.help}</p>}
       {rows.map((row, index) => (
-        <div key={index}>
-          <p>{describeCondition(row)}</p>
+        <div key={index} className="control__row">
+          <p className="control__note control__row-title">{describeCondition(row)}</p>
           {def.columns.map((c) => {
             const Control = resolveControl(c);
             return (
@@ -89,15 +89,15 @@ export function ConditionsControl(props: ControlProps<RowSetValue> & { def: RowS
               />
             );
           })}
-          <button type="button" disabled={disabled} onClick={() => removeRow(index)}>
+          <button type="button" className="btn btn--small btn--danger" disabled={disabled} onClick={() => removeRow(index)}>
             {`Remove ${def.label} ${index + 1}`}
           </button>
         </div>
       ))}
-      <button type="button" disabled={disabled} onClick={addRow}>
+      <button type="button" className="btn btn--small" disabled={disabled} onClick={addRow}>
         Add
       </button>
-      {readOnlyReason && <p role="alert">{readOnlyReason}</p>}
+      {readOnlyReason && <p role="alert" className="control__alert">{readOnlyReason}</p>}
     </fieldset>
   );
 }

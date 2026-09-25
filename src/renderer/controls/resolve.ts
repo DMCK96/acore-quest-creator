@@ -1,4 +1,5 @@
 import type { FieldDef, ListMemberDef, RowSetColumn, ScalarType } from '@core/registry/types';
+import './controls.css';
 import { controlRegistry, registerControl } from './control-registry';
 import { CreatureOrGoControl } from './CreatureOrGoControl';
 import { EnumControl } from './EnumControl';

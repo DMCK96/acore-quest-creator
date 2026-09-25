@@ -29,14 +29,20 @@ export function TimerBody({ open, onChange }: ModuleBodyProps): React.JSX.Elemen
   }
 
   return (
-    <div className="field-setting" data-field={FIELD}>
-      <p>The quest fails if it is not completed within this time. Zero means no limit.</p>
-      <label htmlFor={`${FIELD}.minutes`}>Minutes</label>
-      <input id={`${FIELD}.minutes`} inputMode="numeric" value={minutes} disabled={disabled}
-        onChange={(e) => update(e.target.value, seconds)} />
-      <label htmlFor={`${FIELD}.seconds`}>Seconds</label>
-      <input id={`${FIELD}.seconds`} inputMode="numeric" value={seconds} disabled={disabled}
-        onChange={(e) => update(minutes, e.target.value)} />
+    <div className="field-setting control" data-field={FIELD}>
+      <p className="control__help">The quest fails if it is not completed within this time. Zero means no limit.</p>
+      <div className="control__inline">
+        <div className="control__sub">
+          <label htmlFor={`${FIELD}.minutes`}>Minutes</label>
+          <input id={`${FIELD}.minutes`} className="timer__box" inputMode="numeric" value={minutes} disabled={disabled}
+            onChange={(e) => update(e.target.value, seconds)} />
+        </div>
+        <div className="control__sub">
+          <label htmlFor={`${FIELD}.seconds`}>Seconds</label>
+          <input id={`${FIELD}.seconds`} className="timer__box" inputMode="numeric" value={seconds} disabled={disabled}
+            onChange={(e) => update(minutes, e.target.value)} />
+        </div>
+      </div>
     </div>
   );
 }

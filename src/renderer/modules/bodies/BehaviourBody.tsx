@@ -36,7 +36,7 @@ export function BehaviourBody({ open, onChange }: ModuleBodyProps): React.JSX.El
         const value = Number(aggregate.values[fieldId] ?? 0);
         const id = `${fieldId}.${bit}`;
         return (
-          <div key={id} className="field-setting">
+          <div key={id} className="field-setting control__check">
             <input id={id} type="checkbox" checked={(value & bit) !== 0} disabled={readOnly.has(fieldId)}
               onChange={() => onChange(fieldId, value ^ bit)} />
             <label htmlFor={id}>{flagLabel(fieldId, bit)}</label>

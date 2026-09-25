@@ -59,3 +59,9 @@
 .entity-picker__option:hover {
   background: var(--accent-soft);
 }
+
+/* The search box is the control: wide enough for a quest or NPC name. */
+.entity-picker > .entity-picker__row {
+  align-self: stretch;
+  max-width: 460px;
+}

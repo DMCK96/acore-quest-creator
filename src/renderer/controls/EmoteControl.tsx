@@ -10,9 +10,9 @@ function EmoteScalar(props: ControlProps<number>): React.JSX.Element {
   const listId = `${id}-emotes`;
 
   return (
-    <div>
-      <label htmlFor={id}>{label}</label>
-      {help && <p>{help}</p>}
+    <div className="control">
+      <label htmlFor={id} className="control__label">{label}</label>
+      {help && <p className="control__help">{help}</p>}
       <input
         id={id}
         type="number"
@@ -28,8 +28,8 @@ function EmoteScalar(props: ControlProps<number>): React.JSX.Element {
           </option>
         ))}
       </datalist>
-      {value !== 0 && <p>{known ? known.label : `Custom emote (${value})`}</p>}
-      {readOnlyReason && <p role="alert">{readOnlyReason}</p>}
+      {value !== 0 && <p className="control__note">{known ? known.label : `Custom emote (${value})`}</p>}
+      {readOnlyReason && <p role="alert" className="control__alert">{readOnlyReason}</p>}
     </div>
   );
 }
@@ -56,11 +56,11 @@ function EmoteList(props: ControlProps<ListValue> & { def: ListFieldDef }): Reac
   }
 
   return (
-    <fieldset>
-      <legend>{label}</legend>
-      {def.help && <p>{def.help}</p>}
+    <fieldset className="control">
+      <legend className="control__label">{label}</legend>
+      {def.help && <p className="control__help">{def.help}</p>}
       {value.map((row, index) => (
-        <div key={index}>
+        <div key={index} className="control__row">
           <EmoteScalar
             id={`${baseId}-${index}-${emoteMember.name}`}
             label={emoteMember.label}
@@ -76,16 +76,16 @@ function EmoteList(props: ControlProps<ListValue> & { def: ListFieldDef }): Reac
             onChange={(next) => updateRow(index, delayMember.name, next ?? 0)}
             type={delayMember.type as Extract<typeof delayMember.type, { kind: 'int' }>}
           />
-          <button type="button" disabled={disabled} onClick={() => removeRow(index)}>
+          <button type="button" className="btn btn--small btn--danger" disabled={disabled} onClick={() => removeRow(index)}>
             {`Remove ${label} ${index + 1}`}
           </button>
         </div>
       ))}
-      <button type="button" disabled={disabled || atCap} onClick={addRow}>
+      <button type="button" className="btn btn--small" disabled={disabled || atCap} onClick={addRow}>
         Add
       </button>
-      {atCap && <p>{`At most ${def.slots} entries.`}</p>}
-      {readOnlyReason && <p role="alert">{readOnlyReason}</p>}
+      {atCap && <p className="control__note">{`At most ${def.slots} entries.`}</p>}
+      {readOnlyReason && <p role="alert" className="control__alert">{readOnlyReason}</p>}
     </fieldset>
   );
 }
