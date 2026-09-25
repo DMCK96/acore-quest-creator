@@ -94,6 +94,28 @@ describe('CanvasHome', () => {
     expect(store.getState().screen).toBe('preview');
     expect(screen.queryByRole('dialog')).toBeNull();
   });
+  it('searches in a modal that says when nothing matches, takes Enter, and closes on Escape', async () => {
+    const { api } = await canvas();
+    await userEvent.click(screen.getByRole('button', { name: 'Add existing quest' }));
+    const dialog = await screen.findByRole('dialog', { name: 'Add existing quest chain' });
+    expect(dialog).toHaveAttribute('aria-modal', 'true');
+    const box = within(dialog).getByRole('searchbox');
+    expect(box).toHaveFocus();
+    vi.mocked(api.searchQuests).mockResolvedValueOnce(okv([]));
+    await userEvent.type(box, 'zzz');
+    expect(await within(dialog).findByText('No quests match “zzz”.')).toBeInTheDocument();
+    await userEvent.clear(box);
+    await userEvent.type(box, 'wolves');
+    await within(dialog).findByRole('button', { name: /Wolves of Elwynn/ });
+    await userEvent.keyboard('{Enter}');
+    await waitFor(() => expect(api.addQuestChain).toHaveBeenCalledWith(5, expect.anything()));
+    expect(screen.queryByRole('dialog')).toBeNull();
+
+    await userEvent.click(screen.getByRole('button', { name: 'Add existing quest' }));
+    await screen.findByRole('dialog', { name: 'Add existing quest chain' });
+    await userEvent.keyboard('{Escape}');
+    expect(screen.queryByRole('dialog')).toBeNull();
+  });
   it('opens a node by double-click or Enter, without moving it', async () => {
     const { api } = await canvas();
     const [first, second] = await screen.findAllByTestId('quest-node');

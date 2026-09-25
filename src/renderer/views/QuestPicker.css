@@ -1,0 +1,99 @@
+/* Quest search: a search box over a scrolling list of results. */
+.quest-picker {
+  display: flex;
+  flex-direction: column;
+  gap: 0.7em;
+  min-height: 0;
+}
+
+.quest-picker__search {
+  width: 100%;
+  box-sizing: border-box;
+  font: inherit;
+  font-size: 1em;
+  padding: 0.6em 0.75em;
+  color: var(--text);
+  background: var(--bg-inset);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+}
+
+.quest-picker__search:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+
+.quest-picker__search::placeholder {
+  color: var(--text-faint);
+}
+
+.quest-picker__results {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.3em;
+  max-height: 20em;
+  overflow-y: auto;
+  /* A thin, dark bar instead of the platform's white one. */
+  scrollbar-width: thin;
+  scrollbar-color: var(--border) transparent;
+}
+
+.quest-picker__result {
+  width: 100%;
+  display: flex;
+  align-items: baseline;
+  gap: 1em;
+  padding: 0.5em 0.7em;
+  text-align: left;
+  font: inherit;
+  color: var(--text);
+  background: var(--bg-inset);
+  border: 1px solid var(--border-soft);
+  border-radius: var(--radius);
+  cursor: pointer;
+}
+
+.quest-picker__result:hover,
+.quest-picker__result:focus-visible {
+  outline: none;
+  border-color: var(--accent);
+}
+
+.quest-picker__title {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.quest-picker__meta {
+  flex-shrink: 0;
+  font-size: 0.8em;
+  color: var(--text-muted);
+}
+
+.quest-picker__empty {
+  margin: 0.4em 0;
+  font-size: 0.9em;
+  text-align: center;
+  color: var(--text-faint);
+}
+
+.quest-picker__notice {
+  margin: 0;
+  font-size: 0.8em;
+  line-height: 1.4;
+  color: var(--text-muted);
+}
+
+.quest-picker__error {
+  padding: 0.5em 0.7em;
+  font-size: 0.85em;
+  background: var(--red-soft);
+  border: 1px solid var(--red);
+  border-radius: var(--radius);
+}

@@ -1,0 +1,9 @@
+.add-existing {
+  width: min(30em, 100%);
+}
+
+.add-existing__hint {
+  margin: -0.4em 0 0.9em;
+  font-size: 0.85em;
+  color: var(--text-muted);
+}
