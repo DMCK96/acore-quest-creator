@@ -1,0 +1,1 @@
+ALTER TABLE `connection_profiles` ADD `env_seed` text;

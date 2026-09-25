@@ -33,8 +33,9 @@ describe('profileFromEnv', () => {
     expect(profileFromEnv({ ...world, ACQC_WORLD_DB_HOST: '' }, 'world')).toBeNull();
     expect(profileFromEnv(world, 'dev')).toBeNull();
   });
-  it('rejects a port that is not a number', () => {
+  it('rejects a port that is not a number, or is out of range', () => {
     expect(() => profileFromEnv({ ...world, ACQC_WORLD_DB_PORT: 'abc' }, 'world')).toThrow(/PORT/);
+    expect(() => profileFromEnv({ ...world, ACQC_WORLD_DB_PORT: '70000' }, 'world')).toThrow(/PORT/);
   });
 });
 
@@ -46,6 +47,16 @@ describe('seedEnvProfiles', () => {
     expect(seedEnvProfiles(s, { ...world, ACQC_WORLD_DB_PASSWORD: 'new' })).toBe(id);
     expect(s.profiles.list()).toHaveLength(1);
     expect(s.profiles.getWithPassword(id!).password).toBe('new');
+  });
+  it('keeps edits made in the app until the .env values themselves change', () => {
+    const s = open();
+    const id = seedEnvProfiles(s, world)!;
+    s.profiles.save({ id, name: 'World (.env)', role: 'world', host: 'edited', port: 3307, user: 'u', database: 'acore_world', clientDir: 'E:/WoW' });
+    expect(seedEnvProfiles(s, world)).toBe(id);
+    expect(s.profiles.getWithPassword(id)).toMatchObject({ host: 'edited', port: 3307, clientDir: 'E:/WoW', password: 'pw' });
+    seedEnvProfiles(s, { ...world, ACQC_WORLD_DB_HOST: 'moved' });
+    expect(s.profiles.getWithPassword(id)).toMatchObject({ host: 'moved', port: 3306 });
+    expect(s.profiles.list()).toHaveLength(1);
   });
   it('returns null when the environment has no world profile', () => {
     expect(seedEnvProfiles(open(), {})).toBeNull();

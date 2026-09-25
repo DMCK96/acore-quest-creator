@@ -1,3 +1,4 @@
+import { useEffect, useRef } from 'react';
 import { emptyDev, type ConnectionDraft, type DbFields, type DraftErrors } from './draft';
 import './ConnectionFields.css';
 
@@ -26,6 +27,19 @@ export function ConnectionFields({
   const setWorld = (patch: Partial<ConnectionDraft['world']>): void => onChange({ ...draft, world: { ...world, ...patch } });
   const setDev = (patch: Partial<DbFields>): void => {
     if (dev) onChange({ ...draft, dev: { ...dev, ...patch } });
+  };
+  // Adding or removing the dev database swaps out the button just pressed; focus follows to what
+  // replaced it rather than falling out of the form.
+  const focusNext = useRef<string | null>(null);
+  const hasDev = dev !== null;
+  useEffect(() => {
+    if (focusNext.current === null) return;
+    document.getElementById(focusNext.current)?.focus();
+    focusNext.current = null;
+  }, [hasDev]);
+  const setHasDev = (on: boolean): void => {
+    focusNext.current = on ? 'conn-dev-host' : 'conn-dev-add';
+    onChange({ ...draft, dev: on ? emptyDev() : null });
   };
   const browseInto = async (key: 'dbcDir' | 'clientDir'): Promise<void> => {
     const chosen = await browse();
@@ -68,14 +82,14 @@ export function ConnectionFields({
         {dev === null ? (
           <>
             <p className="conn-field__help">Where &ldquo;Apply to dev DB&rdquo; writes a quest to try it on a test server.</p>
-            <button type="button" className="btn" onClick={() => onChange({ ...draft, dev: emptyDev() })}>
+            <button type="button" id="conn-dev-add" className="btn" onClick={() => setHasDev(true)}>
               Add a dev database
             </button>
           </>
         ) : (
           <>
             <DbInputs prefix="conn-dev-" labelPrefix="Dev " db={dev} saved={dev.id !== undefined} errors={errors} onChange={setDev} />
-            <button type="button" className="btn conn-fields__remove" onClick={() => onChange({ ...draft, dev: null })}>
+            <button type="button" className="btn conn-fields__remove" onClick={() => setHasDev(false)}>
               Remove dev database
             </button>
           </>

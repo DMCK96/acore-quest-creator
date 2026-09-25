@@ -1,5 +1,5 @@
 import { describe, it, expect, afterEach } from 'vitest';
-import { mkdtempSync, rmSync, readFileSync } from 'node:fs';
+import { cpSync, mkdtempSync, rmSync, readFileSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import Database from 'better-sqlite3';
@@ -15,7 +15,45 @@ afterEach(() => { store?.close(); store = undefined; dirs.splice(0).forEach((d) 
 const tmp = () => { const d = mkdtempSync(join(tmpdir(), 'acqc-')); dirs.push(d); return d; };
 
 
+/** A copy of the repo's migrations that stops after the first `count`, as an older build shipped them. */
+const olderMigrations = (count: number): string => {
+  const dir = tmp();
+  cpSync('drizzle', dir, { recursive: true });
+  const journalPath = join(dir, 'meta', '_journal.json');
+  const journal = JSON.parse(readFileSync(journalPath, 'utf8'));
+  journal.entries = journal.entries.slice(0, count);
+  writeFileSync(journalPath, JSON.stringify(journal));
+  return dir;
+};
+
 describe('store', () => {
+  it('brings a settings file from an older build up to date, keeping its profiles and projects', () => {
+    const file = join(tmp(), 'app.sqlite');
+    // Up to the game client folder: before the last-connected time and the `.env` fingerprint.
+    openStore(file, box, olderMigrations(5)).close();
+    // Written as that build wrote them: today's store code expects columns the file does not have yet.
+    const old = new Database(file);
+    old.prepare('INSERT INTO connection_profiles (name, role, host, port, user, database, password_enc, dbc_dir, client_dir) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)')
+      .run('w', 'world', 'h', 3306, 'u', 'd', Buffer.from(box.encrypt('secret')), '/data', 'E:/WoW');
+    old.prepare('INSERT INTO recent_projects (path, name, opened_at) VALUES (?, ?, ?)').run('C:\a.aqc', 'A', '2026-09-20T10:00:00.000Z');
+    expect(old.prepare('SELECT * FROM connection_profiles').get()).not.toHaveProperty('last_connected_at');
+    old.close();
+    const rec = { id: 1 };
+
+    store = openStore(file, box);
+    expect(store.profiles.list()).toEqual([
+      { id: rec.id, name: 'w', role: 'world', host: 'h', port: 3306, user: 'u', database: 'd', dbcDir: '/data', clientDir: 'E:/WoW', lastConnectedAt: null },
+    ]);
+    expect(store.profiles.getWithPassword(rec.id).password).toBe('secret');
+    expect(store.profiles.envSeed(rec.id)).toBeNull();
+    store.profiles.markConnected(rec.id, new Date('2026-09-25T10:00:00Z'));
+    store.profiles.setEnvSeed(rec.id, 'abc');
+    expect(store.profiles.list()[0]!.lastConnectedAt).toBe('2026-09-25T10:00:00.000Z');
+    expect(store.profiles.envSeed(rec.id)).toBe('abc');
+    expect(store.recent.list().map((r) => r.name)).toEqual(['A']);
+  });
+
+
   it('encrypts profile passwords at rest and decrypts on request', () => {
     const dir = tmp(); const file = join(dir, 'app.sqlite');
     store = openStore(file, box);

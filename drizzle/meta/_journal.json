@@ -43,6 +43,13 @@
       "when": 1790293296598,
       "tag": "0005_profile_last_connected",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "6",
+      "when": 1790321562299,
+      "tag": "0006_profile_env_seed",
+      "breakpoints": true
     }
   ]
 }

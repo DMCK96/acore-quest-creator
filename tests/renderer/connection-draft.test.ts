@@ -74,7 +74,8 @@ describe('validateDraft', () => {
   it('port validation', () => {
     const port = (p: string) => validateDraft({ ...ok, world: { ...ok.world, port: p } })['conn-port'];
     expect(port(' 3306 ')).toBeUndefined();
-    for (const bad of ['0', '-1', '3.5', 'abc', '']) expect(port(bad)).toBe('Port must be a whole number above 0');
+    expect(port('65535')).toBeUndefined();
+    for (const bad of ['0', '-1', '3.5', 'abc', '', '65536', '99999']) expect(port(bad)).toBe('Port must be a whole number from 1 to 65535');
   });
 });
 
@@ -88,6 +89,12 @@ describe('worldChanged / devChanged', () => {
     expect(worldChanged(devEdit, original)).toBe(false);
     expect(devChanged(devEdit, original)).toBe(true);
     expect(devChanged({ ...original, dev: null }, original)).toBe(true);
+  });
+  it('ignores surrounding spaces, which are trimmed on save, but not in the password', () => {
+    const padded = { ...original, world: { ...original.world, port: '3306 ', host: ` ${original.world.host}`, clientDir: ' ' } };
+    expect(worldChanged(padded, original)).toBe(false);
+    expect(worldChanged({ ...original, world: { ...original.world, password: ' ' } }, original)).toBe(true);
+    expect(devChanged({ ...original, dev: { ...original.dev!, port: ' 3306' } }, original)).toBe(false);
   });
 });
 

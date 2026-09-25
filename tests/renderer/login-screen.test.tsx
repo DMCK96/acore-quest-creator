@@ -52,6 +52,20 @@ describe('LoginScreen', () => {
     await act(() => store2.getState().loadProfiles());
     expect(screen.getByLabelText('Host')).toHaveValue('typed');
   });
+  it('typing before the saved details load still saves over the saved rows, not beside them', async () => {
+    const dev = { ...world, id: 2, name: 'Dev', role: 'dev' as const, database: 'acore_dev', lastConnectedAt: null };
+    const api = makeMockApi({ listProfiles: async () => okv([world, dev]), saveProfile: async (p) => okv(p.role === 'world' ? world : dev), connect: async () => okv(summary) });
+    const store = createAppStore(api);
+    render(<LoginScreen store={store} />);
+    await userEvent.type(screen.getByLabelText('Host'), 'typed');
+    await act(() => store.getState().loadProfiles());
+    await userEvent.type(screen.getByLabelText('User'), 'u');
+    await userEvent.type(screen.getByLabelText('Database'), 'd');
+    await userEvent.click(screen.getByRole('button', { name: 'Connect' }));
+    await waitFor(() => expect(api.connect).toHaveBeenCalledWith(1));
+    expect(vi.mocked(api.saveProfile).mock.calls[0]![0]).toMatchObject({ id: 1, host: 'typed' });
+    expect(api.deleteProfile).not.toHaveBeenCalled();
+  });
   it('shows validation beside the fields and sends nothing', async () => {
     const api = makeMockApi();
     const store = createAppStore(api);

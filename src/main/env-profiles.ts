@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import type { ProfileInput } from '../shared/ipc';
 import type { Store } from './store/store';
 
@@ -25,7 +26,7 @@ export function profileFromEnv(env: Env, role: 'world' | 'dev'): ProfileInput | 
   const database = read('DATABASE');
   if (!host || !user || !database) return null;
   const port = Number(read('PORT') || '3306');
-  if (!Number.isInteger(port) || port <= 0) {
+  if (!Number.isInteger(port) || port <= 0 || port > 65535) {
     throw new Error(`${PREFIX[role]}PORT must be a port number, got '${read('PORT')}'`);
   }
   // The password is not trimmed: surrounding spaces could be part of it.
@@ -35,16 +36,24 @@ export function profileFromEnv(env: Env, role: 'world' | 'dev'): ProfileInput | 
 
 /**
  * Writes the environment's profiles into the store, updating the ones seeded on an earlier launch
- * rather than adding a copy each time. Returns the world profile's ID, if the environment has one.
+ * rather than adding a copy each time. A seeded profile is only rewritten when `.env` itself has
+ * changed since, so edits made in Settings survive a relaunch. Returns the world profile's ID, if
+ * the environment has one.
  */
 export function seedEnvProfiles(store: Store, env: Env): number | null {
   let worldId: number | null = null;
   for (const role of ['world', 'dev'] as const) {
     const input = profileFromEnv(env, role);
     if (!input) continue;
+    // Hashed, since the password is part of what is compared.
+    const seed = createHash('sha256').update(JSON.stringify(input)).digest('hex');
     const existing = store.profiles.list().find((p) => p.role === role && p.name === input.name);
-    const saved = store.profiles.save({ ...input, id: existing?.id });
-    if (role === 'world') worldId = saved.id;
+    let id = existing?.id;
+    if (id === undefined || store.profiles.envSeed(id) !== seed) {
+      id = store.profiles.save({ ...input, id }).id;
+      store.profiles.setEnvSeed(id, seed);
+    }
+    if (role === 'world') worldId = id;
   }
   return worldId;
 }

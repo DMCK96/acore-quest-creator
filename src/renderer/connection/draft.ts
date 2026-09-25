@@ -68,12 +68,12 @@ export function draftFromProfiles(profiles: ProfileRecord[]): ConnectionDraft {
   };
 }
 
-const PORT_ERROR = 'Port must be a whole number above 0';
+const PORT_ERROR = 'Port must be a whole number from 1 to 65535';
 
 function validateDb(db: DbFields, prefix: string, errors: DraftErrors): void {
   if (db.host.trim() === '') errors[`${prefix}host`] = 'Host is required';
   const port = db.port.trim();
-  if (!/^\d+$/.test(port) || Number(port) <= 0) errors[`${prefix}port`] = PORT_ERROR;
+  if (!/^\d+$/.test(port) || Number(port) < 1 || Number(port) > 65535) errors[`${prefix}port`] = PORT_ERROR;
   if (db.user.trim() === '') errors[`${prefix}user`] = 'User is required';
   if (db.database.trim() === '') errors[`${prefix}database`] = 'Database is required';
 }
@@ -86,13 +86,21 @@ export function validateDraft(draft: ConnectionDraft): DraftErrors {
   return errors;
 }
 
+// Compared as saved: trimmed, and the port as a number, so a stray space is not a change. The
+// password is kept as typed, since spaces can be part of it.
+const sameText = (a: string, b: string): boolean => a.trim() === b.trim();
 const sameDb = (a: DbFields & { id?: number }, b: DbFields & { id?: number }): boolean =>
-  a.id === b.id && a.host === b.host && a.port === b.port && a.user === b.user && a.database === b.database && a.password === b.password;
+  a.id === b.id &&
+  sameText(a.host, b.host) &&
+  (sameText(a.port, b.port) || Number(a.port.trim()) === Number(b.port.trim())) &&
+  sameText(a.user, b.user) &&
+  sameText(a.database, b.database) &&
+  a.password === b.password;
 
 export function worldChanged(draft: ConnectionDraft, original: ConnectionDraft): boolean {
   const a = draft.world;
   const b = original.world;
-  return !sameDb(a, b) || a.dbcDir !== b.dbcDir || a.clientDir !== b.clientDir;
+  return !sameDb(a, b) || !sameText(a.dbcDir, b.dbcDir) || !sameText(a.clientDir, b.clientDir);
 }
 
 export function devChanged(draft: ConnectionDraft, original: ConnectionDraft): boolean {

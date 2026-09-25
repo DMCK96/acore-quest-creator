@@ -116,6 +116,55 @@ describe('SettingsDialog', () => {
   });
 });
 
+describe('SettingsDialog keyboard', () => {
+  it('Escape closes Settings without reaching the quest editor behind it', async () => {
+    const behind = vi.fn();
+    document.addEventListener('keydown', behind);
+    try {
+      const { onClose } = await setup();
+      await userEvent.keyboard('{Escape}');
+      expect(onClose).toHaveBeenCalledTimes(1);
+      expect(behind).not.toHaveBeenCalled();
+    } finally {
+      document.removeEventListener('keydown', behind);
+    }
+  });
+  it('takes focus on opening and keeps Tab inside the dialog', async () => {
+    await setup();
+    const dialog = screen.getByRole('dialog', { name: 'Settings' });
+    expect(dialog).toHaveFocus();
+    await userEvent.tab({ shift: true });
+    // Save is disabled until something changes, so Cancel is the last stop.
+    expect(screen.getByRole('button', { name: 'Cancel' })).toHaveFocus();
+    await userEvent.tab();
+    expect(screen.getByRole('button', { name: 'Close' })).toHaveFocus();
+  });
+  it('moves focus to what replaces the Add and Remove dev database buttons', async () => {
+    await setup();
+    await userEvent.click(screen.getByRole('button', { name: 'Add a dev database' }));
+    expect(screen.getByLabelText('Dev host')).toHaveFocus();
+    await userEvent.click(screen.getByRole('button', { name: 'Remove dev database' }));
+    expect(screen.getByRole('button', { name: 'Add a dev database' })).toHaveFocus();
+  });
+});
+
+describe('SettingsDialog partial save', () => {
+  it('says the world details were saved when the dev ones fail, and still offers to reconnect', async () => {
+    const { api } = await setup();
+    vi.mocked(api.saveProfile).mockImplementation(async (p) => (p.role === 'world' ? okv(world) : errv('VALIDATION', 'Secret storage is unavailable')));
+    await userEvent.type(screen.getByLabelText('Game client folder (optional)'), 'E:/WoW');
+    await userEvent.click(screen.getByRole('button', { name: 'Add a dev database' }));
+    await userEvent.type(screen.getByLabelText('Dev host'), 'devhost');
+    await userEvent.type(screen.getByLabelText('Dev user'), 'u');
+    await userEvent.type(screen.getByLabelText('Dev database'), 'acore_dev');
+    await userEvent.click(screen.getByRole('button', { name: 'Save and reconnect' }));
+    expect(await screen.findByRole('alert')).toHaveTextContent('The world database was saved, but the dev database was not: Secret storage is unavailable');
+    expect(api.connect).not.toHaveBeenCalled();
+    expect(screen.getByRole('button', { name: 'Save and reconnect' })).toBeEnabled();
+    expect(screen.getByLabelText('Dev host')).toHaveValue('devhost');
+  });
+});
+
 describe('TopBar settings button', () => {
   it('opens settings', async () => {
     const onOpenSettings = vi.fn();

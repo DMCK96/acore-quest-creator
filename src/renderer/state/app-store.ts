@@ -61,11 +61,18 @@ export interface AppState {
   connect(input: ProfileSave): Promise<void>;
   /** Connects with a saved profile and its stored password. */
   connectProfile(profileId: number): Promise<void>;
-  /** Saves the draft's rows (world, then dev, then removes a dev row the user removed) and reloads the profiles. */
+  /**
+   * Saves the draft's rows (world, then dev, then removes a dev row the user removed) and reloads the
+   * profiles. A failure part way still returns what was saved (`saved`/`original`, null when
+   * nothing was), so a retry updates those rows.
+   */
   saveConnection(
     draft: ConnectionDraft,
     original: ConnectionDraft,
-  ): Promise<{ ok: true; worldId: number; saved: ConnectionDraft } | { ok: false; error: string }>;
+  ): Promise<
+    | { ok: true; worldId: number; saved: ConnectionDraft }
+    | { ok: false; error: string; saved: ConnectionDraft | null; original: ConnectionDraft | null }
+  >;
   /**
    * Connects with a saved profile from inside the app. Returns the error to show, or null. A failed
    * connect leaves everything as it was; a database with blocking drift goes to the login screen.
@@ -234,16 +241,31 @@ export function createAppStore(api: Api, opts: { saveDelayMs?: number } = {}): A
     async saveConnection(draft, original) {
       const saves = draftToSaves(draft, original);
       const world = await api.saveProfile(saves.world);
-      if (!world.ok) return { ok: false, error: world.error.message };
+      if (!world.ok) return { ok: false, error: world.error.message, saved: null, original: null };
+      // From here on the world row is saved: a later failure says so, and hands back the draft with
+      // the saved IDs, keeping the original dev row so a retry still removes a replaced one.
+      const partly = async (error: string, devRecord: ProfileRecord | null) => {
+        const saved = savedDraft(draft, world.value, devRecord);
+        const kept = devRecord ? saved.dev : draft.dev;
+        await get().loadProfiles();
+        return {
+          ok: false as const,
+          error,
+          saved: { world: saved.world, dev: kept },
+          original: { world: saved.world, dev: original.dev },
+        };
+      };
       let devRecord: ProfileRecord | null = null;
       if (saves.dev) {
         const dev = await api.saveProfile(saves.dev);
-        if (!dev.ok) return { ok: false, error: dev.error.message };
+        if (!dev.ok) return await partly(`The world database was saved, but the dev database was not: ${dev.error.message}`, null);
         devRecord = dev.value;
       }
       if (saves.removeDevId !== null) {
         const removed = await api.deleteProfile(saves.removeDevId);
-        if (!removed.ok) return { ok: false, error: removed.error.message };
+        if (!removed.ok) {
+          return await partly(`The connection was saved, but the old dev database could not be removed: ${removed.error.message}`, devRecord);
+        }
       }
       await get().loadProfiles();
       return { ok: true, worldId: world.value.id, saved: savedDraft(draft, world.value, devRecord) };
@@ -257,7 +279,20 @@ export function createAppStore(api: Api, opts: { saveDelayMs?: number } = {}): A
       const connected = await api.connect(profileId);
       if (!connected.ok) return connected.error.message;
       const summary = connected.value;
-      const closed = { open: null, dirty: false, links: null, openPanel: null };
+      // Nothing read from the old database may outlive it: the open quest and all that came with it.
+      const closed = {
+        open: null,
+        dirty: false,
+        links: null,
+        openPanel: null,
+        issues: [],
+        results: [],
+        preview: null,
+        exportResult: null,
+        exportError: null,
+        pendingApply: null,
+        appliedCount: null,
+      };
       // The session has already switched, so a blocked database leaves the editor for the login screen.
       if (summary.blocking) {
         set({ ...blockedBy(summary), ...closed });

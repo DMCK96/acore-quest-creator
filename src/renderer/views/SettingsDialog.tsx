@@ -1,6 +1,7 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import type { AppStore } from '../state/app-store';
 import { ConnectionFields } from '../connection/ConnectionFields';
+import { trapTab } from '../components/trap-tab';
 import { devChanged, draftFromProfiles, validateDraft, worldChanged, type ConnectionDraft, type DraftErrors } from '../connection/draft';
 import './ProjectDialog.css';
 import './SettingsDialog.css';
@@ -20,19 +21,37 @@ export function SettingsDialog({ store, onClose }: { store: AppStore; onClose: (
   const [busy, setBusy] = useState(false);
   // Saved but not yet connected with: the last reconnect failed, so Save offers it again.
   const [unconnected, setUnconnected] = useState(false);
+  const dialog = useRef<HTMLFormElement | null>(null);
 
   // Closing mid-save would lose a failure nobody else shows.
   const close = (): void => {
     if (!busy) onClose();
   };
 
+  // Focus moves in on opening and back to what opened it (the settings button) on closing.
+  useEffect(() => {
+    const opener = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    dialog.current?.focus();
+    return () => {
+      if (opener?.isConnected) opener.focus();
+    };
+  }, []);
+
+  // Caught before anything else hears it: the quest editor behind also closes on Escape.
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent): void => {
-      if (e.key === 'Escape' && !busy) onClose();
+      if (e.key !== 'Escape') return;
+      e.stopPropagation();
+      if (!busy) onClose();
     };
-    document.addEventListener('keydown', onKeyDown);
-    return () => document.removeEventListener('keydown', onKeyDown);
+    window.addEventListener('keydown', onKeyDown, true);
+    return () => window.removeEventListener('keydown', onKeyDown, true);
   }, [onClose, busy]);
+
+  // Saving disables the fields, which drops focus out of the dialog: take it back when done.
+  useEffect(() => {
+    if (!busy && dialog.current && !dialog.current.contains(document.activeElement)) dialog.current.focus();
+  }, [busy]);
 
   const reconnects = unconnected || worldChanged(draft, original);
   const changed = reconnects || devChanged(draft, original);
@@ -52,6 +71,12 @@ export function SettingsDialog({ store, onClose }: { store: AppStore; onClose: (
       const saved = await saveConnection(draft, original);
       if (!saved.ok) {
         setError(saved.error);
+        // What did save is kept, so a retry updates it; a saved world change is still to connect with.
+        if (saved.saved && saved.original) {
+          setOriginal(saved.original);
+          setDraft(saved.saved);
+          if (reconnects) setUnconnected(true);
+        }
         return;
       }
       // Saving again (after a failed reconnect) updates these rows instead of adding more.
@@ -74,10 +99,13 @@ export function SettingsDialog({ store, onClose }: { store: AppStore; onClose: (
   return (
     <div className="modal-backdrop" onMouseDown={(e) => e.target === e.currentTarget && close()}>
       <form
+        ref={dialog}
         className="modal settings-dialog"
         role="dialog"
         aria-modal="true"
         aria-labelledby="settings-dialog-title"
+        tabIndex={-1}
+        onKeyDown={(e) => trapTab(e, dialog.current)}
         onSubmit={(e) => void submit(e)}
         noValidate
       >

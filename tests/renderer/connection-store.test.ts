@@ -29,9 +29,30 @@ describe('saveConnection', () => {
     const api = makeMockApi({ saveProfile: async () => errv('VALIDATION', 'bad port') });
     const store = createAppStore(api);
     const original = draftFromProfiles([]);
-    expect(await store.getState().saveConnection(original, original)).toEqual({ ok: false, error: 'bad port' });
+    expect(await store.getState().saveConnection(original, original)).toEqual({ ok: false, error: 'bad port', saved: null, original: null });
     expect(api.listProfiles).not.toHaveBeenCalled();
     expect(store.getState().error).toBeNull();
+  });
+
+  it('says the world details were saved when the dev ones fail, and hands back the saved world row', async () => {
+    const api = makeMockApi({
+      saveProfile: async (p) => (p.role === 'world' ? okv(rec(1, 'world')) : errv('VALIDATION', 'Secret storage is unavailable')),
+      listProfiles: async () => okv([rec(1, 'world')]),
+    });
+    const store = createAppStore(api);
+    const original = draftFromProfiles([]);
+    const draft = {
+      world: { ...original.world, host: 'h', user: 'u', database: 'd' },
+      dev: { ...emptyDev(), host: 'x', user: 'u', database: 'd', password: 'dpw' },
+    };
+    const result = await store.getState().saveConnection(draft, original);
+    expect(result).toMatchObject({
+      ok: false,
+      error: 'The world database was saved, but the dev database was not: Secret storage is unavailable',
+      saved: { world: { id: 1 }, dev: { host: 'x', password: 'dpw' } },
+      original: { world: { id: 1 }, dev: null },
+    });
+    expect(api.listProfiles).toHaveBeenCalled();
   });
 });
 
@@ -72,6 +93,12 @@ describe('reconnect', () => {
     await store.getState().reconnect(2);
     expect(api.listNodes).toHaveBeenCalled();
     expect(store.getState().connection).toBe(epoch + 1);
+  });
+  it('drops what the last quest read from the old database', async () => {
+    const { store } = await editing();
+    store.setState({ preview: [], exportResult: { sql: 'x' } as never, pendingApply: { sql: 'x' }, appliedCount: 3, results: [{} as never] });
+    await store.getState().reconnect(2);
+    expect(store.getState()).toMatchObject({ preview: null, exportResult: null, exportError: null, pendingApply: null, appliedCount: null, results: [], issues: [] });
   });
   it('reconnect to a blocking database goes to the login screen', async () => {
     const { api, store } = await editing();

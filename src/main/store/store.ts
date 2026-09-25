@@ -35,6 +35,9 @@ export interface Store {
     remove(id: number): void;
     /** Records a successful connect; saving the profile again leaves the time alone. */
     markConnected(id: number, at: Date): void;
+    /** The fingerprint of the `.env` values the profile was last seeded from; null when none. */
+    envSeed(id: number): string | null;
+    setEnvSeed(id: number, seed: string): void;
   };
   recent: {
     /** Records a project file as just opened or saved; an existing entry moves to the top. */
@@ -101,6 +104,10 @@ export function openStore(path: string, secrets: SecretBox, migrationsFolder: st
       },
       markConnected(id, at) {
         db.update(connectionProfiles).set({ lastConnectedAt: at.toISOString() }).where(eq(connectionProfiles.id, id)).run();
+      },
+      envSeed: (id) => getProfile(id).envSeed ?? null,
+      setEnvSeed(id, seed) {
+        db.update(connectionProfiles).set({ envSeed: seed }).where(eq(connectionProfiles.id, id)).run();
       },
     },
     recent: {

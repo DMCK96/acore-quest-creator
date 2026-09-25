@@ -304,6 +304,13 @@ const TERRAIN_CACHE_SIZE = 16;
 
 export function createApi(deps: ApiDeps): Api {
   let session: Session | null = null;
+  // The folders the map was last told, so a connect that fails part way can put them back.
+  let folders: { dataDir: string | null; clientDir: string | null } = { dataDir: null, clientDir: null };
+  const setFolders = (next: typeof folders): void => {
+    folders = next;
+    deps.onServerDataDir?.(next.dataDir);
+    deps.onClientDir?.(next.clientDir);
+  };
   const terrainCache = new Map<string, TerrainFile | null>();
 
   const connected = (): Session => {
@@ -889,24 +896,35 @@ export function createApi(deps: ApiDeps): Api {
       run(async () => {
         const profile = deps.store.profiles.getWithPassword(profileId);
         const db = await deps.openWorldDb(profile);
-        const schema = await loadSchema(db, REGISTRY_TABLES);
-        const contextSchema = await loadSchema(db, CONTEXT_TABLES);
-        // Where the context list and the registry share a table, the registry's reading is the one
-        // the rest of the session already trusts, so it wins.
-        const availability = componentAvailability({ ...contextSchema.tables, ...schema.tables });
-        // Only asked of a table the schema read says this user can see, so a missing grant on
-        // item_template leaves item starts empty instead of failing the whole connection.
-        const itemStarters = contextSchema.tables.item_template?.some((c) => c.name === 'startquest')
-          ? await readItemStarters(db)
-          : [];
+        const dataDir = profile.dbcDir?.trim() || null;
+        const clientDir = profile.clientDir?.trim() || null;
+        const before = folders;
+        // Until the connect is confirmed, the old connection (and the map's folders with it) stays live.
+        let reads;
+        try {
+          const schema = await loadSchema(db, REGISTRY_TABLES);
+          const contextSchema = await loadSchema(db, CONTEXT_TABLES);
+          // Where the context list and the registry share a table, the registry's reading is the one
+          // the rest of the session already trusts, so it wins.
+          const availability = componentAvailability({ ...contextSchema.tables, ...schema.tables });
+          // Only asked of a table the schema read says this user can see, so a missing grant on
+          // item_template leaves item starts empty instead of failing the whole connection.
+          const itemStarters = contextSchema.tables.item_template?.some((c) => c.name === 'startquest')
+            ? await readItemStarters(db)
+            : [];
+          const serverData = await loadServerData(profile.dbcDir ?? '', deps.serverDataFiles ?? NO_SERVER_DATA_FILES);
+          const scriptSchema = await loadSchema(db, [...new Set<string>([...SCRIPT_TABLES, ...ENTITY_TABLES])]);
+          setFolders({ dataDir, clientDir });
+          const client = clientDir ? ((await deps.clientStatus?.()) ?? null) : null;
+          reads = { schema, contextSchema, availability, itemStarters, serverData, scriptSchema, client };
+        } catch (e) {
+          if (folders !== before) setFolders(before);
+          if (session?.db !== db) await db.close().catch(() => undefined);
+          throw e;
+        }
+        const { schema, contextSchema, availability, itemStarters, serverData, scriptSchema, client } = reads;
         const drift = diffSchema(schema, registry);
         const blocking = hasBlockingDrift(drift);
-        const serverData = await loadServerData(profile.dbcDir ?? '', deps.serverDataFiles ?? NO_SERVER_DATA_FILES);
-        deps.onServerDataDir?.(profile.dbcDir?.trim() || null);
-        const clientDir = profile.clientDir?.trim() || null;
-        deps.onClientDir?.(clientDir);
-        const client = clientDir ? ((await deps.clientStatus?.()) ?? null) : null;
-        const scriptSchema = await loadSchema(db, [...new Set<string>([...SCRIPT_TABLES, ...ENTITY_TABLES])]);
         // Swapping connections must not leave the old one open.
         if (session && session.db !== db) await session.db.close();
         session = {

@@ -31,3 +31,8 @@
   font-size: 0.8rem;
   color: var(--text-muted);
 }
+
+/* Focus lands on the dialog itself when it opens; the fields show their own rings. */
+.settings-dialog:focus {
+  outline: none;
+}

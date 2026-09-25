@@ -23,11 +23,11 @@ export function LoginScreen({ store }: { store: AppStore }): React.JSX.Element {
   const [busy, setBusy] = useState(false);
 
   // Launch lists the saved profiles after this screen mounts: take them up until the user types.
+  // Once they have typed, what they typed stays, but it is saved over the saved rows, not beside them.
   useEffect(() => {
-    if (touched) return;
     const fresh = draftFromProfiles(profiles);
     setOriginal(fresh);
-    setDraft(fresh);
+    setDraft(touched ? (d) => adoptSaved(d, fresh) : fresh);
     // Only a new profile list resets the draft.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [profiles]);
@@ -52,6 +52,11 @@ export function LoginScreen({ store }: { store: AppStore }): React.JSX.Element {
       const saved = await saveConnection(draft, original);
       if (!saved.ok) {
         setLocalError(saved.error);
+        // What did save is kept, so a retry updates it rather than adding another.
+        if (saved.saved && saved.original) {
+          setOriginal(saved.original);
+          setDraft(saved.saved);
+        }
         return;
       }
       // A retry after a failed connect updates these rows instead of adding more.
@@ -88,4 +93,20 @@ export function LoginScreen({ store }: { store: AppStore }): React.JSX.Element {
       </form>
     </main>
   );
+}
+
+/**
+ * The typed draft pointed at the saved rows: it takes their IDs and names, and a saved dev database
+ * the user had not added is kept rather than read as removed.
+ */
+function adoptSaved(draft: ConnectionDraft, saved: ConnectionDraft): ConnectionDraft {
+  const world = draft.world.id === undefined && saved.world.id !== undefined
+    ? { ...draft.world, id: saved.world.id, name: saved.world.name }
+    : draft.world;
+  let dev = draft.dev;
+  if (saved.dev) {
+    if (dev === null) dev = saved.dev;
+    else if (dev.id === undefined) dev = { ...dev, id: saved.dev.id, name: saved.dev.name };
+  }
+  return { world, dev };
 }

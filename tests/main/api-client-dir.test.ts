@@ -36,4 +36,23 @@ describe('game client folder', () => {
     expect(summary.clientDir).toBeNull();
     expect(summary.client).toBeNull();
   });
+  it('puts the folders back when a connect fails after naming new ones, keeping the old connection', async () => {
+    const onClientDir = vi.fn();
+    const onServerDataDir = vi.fn();
+    const clientStatus = vi.fn(async () => STATUS);
+    const api = createApi({
+      store: openStore(':memory:', box), openWorldDb: async () => forkDb(), openDevDb: async () => { throw new Error('x'); },
+      fs: { writeFile: async () => {}, ensureDir: async () => {}, listDir: async () => [] }, now: () => new Date(),
+      session: createProjectSession(defaultProjectMeta('P', 'C:\out')), projects: {} as ProjectController, onClientDir, onServerDataDir, clientStatus,
+    });
+    const save = (clientDir: string): any => api.saveProfile({ name: 'w', role: 'world', host: 'h', port: 1, user: 'u', database: 'd', password: 'p', clientDir });
+    const first: any = await save('E:/Old');
+    const second: any = await save('E:/New');
+    expect((await api.connect(first.value.id)).ok).toBe(true);
+    clientStatus.mockRejectedValueOnce(new Error('The client folder could not be read'));
+    expect((await api.connect(second.value.id)).ok).toBe(false);
+    expect(onClientDir).toHaveBeenLastCalledWith('E:/Old');
+    expect(onServerDataDir).toHaveBeenLastCalledWith(null);
+    expect((await api.searchQuests('a')).ok).toBe(true);
+  });
 });
