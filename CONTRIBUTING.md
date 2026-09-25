@@ -57,7 +57,7 @@ More: [Testing](https://dmck96.github.io/acore-quest-creator/contributing/testin
 - **Commits** follow [Conventional Commits](https://www.conventionalcommits.org/) with a scope: `feat(quest): …`, `fix(ui): …`, `docs(site): …`.
 - **Logic goes in `src/core`** and is unit-tested there. Write the failing test first.
 - **Creating and editing happen in centred modals**; the side panel is only for previews (the quest map is the exception).
-- **Interface copy is written in author terms**: quests, givers, NPCs, scenes — not table and column names.
+- **Interface copy is written in author terms**: quests, givers, NPCs and scenes, never table and column names.
 - **Comments explain why**, not what.
 
 ## Docs

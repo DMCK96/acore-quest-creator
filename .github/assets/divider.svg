@@ -1,0 +1,26 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 28" width="800" height="28" role="img" aria-label="">
+  <defs>
+    <linearGradient id="thread" gradientUnits="userSpaceOnUse" x1="40" y1="0" x2="760" y2="0">
+      <stop offset="0" stop-color="#cf9f3f" stop-opacity="0"/>
+      <stop offset="0.5" stop-color="#cf9f3f" stop-opacity="0.9"/>
+      <stop offset="1" stop-color="#cf9f3f" stop-opacity="0"/>
+    </linearGradient>
+    <radialGradient id="sphere" cx="0.5" cy="0.5" r="0.5">
+      <stop offset="0" stop-color="#4a3826"/>
+      <stop offset="0.55" stop-color="#604c36"/>
+      <stop offset="0.8" stop-color="#967e60"/>
+      <stop offset="0.93" stop-color="#deccae"/>
+      <stop offset="1" stop-color="#fff6e4"/>
+    </radialGradient>
+    <radialGradient id="glow" cx="0.5" cy="0.5" r="0.5">
+      <stop offset="0.45" stop-color="#e4b458" stop-opacity="0.45"/>
+      <stop offset="1" stop-color="#e4b458" stop-opacity="0"/>
+    </radialGradient>
+  </defs>
+  <!-- A canvas thread with its round handles, and the quest orb where the two halves meet. -->
+  <path d="M40 14H372M428 14H760" stroke="url(#thread)" stroke-width="1.2"/>
+  <circle cx="372" cy="14" r="3" fill="none" stroke="#cf9f3f" stroke-width="1.2"/>
+  <circle cx="428" cy="14" r="3" fill="none" stroke="#cf9f3f" stroke-width="1.2"/>
+  <circle cx="400" cy="14" r="14" fill="url(#glow)"/>
+  <circle cx="400" cy="14" r="8.5" fill="url(#sphere)"/>
+</svg>
