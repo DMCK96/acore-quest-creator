@@ -1,0 +1,34 @@
+---
+title: ACORE Quest Creator
+description: Build and script AzerothCore quests, NPCs and objects without editing database tables by hand.
+template: splash
+hero:
+  tagline: Rebuild quests for your AzerothCore server — givers, objectives, scripting, NPCs and patrols — and export them as SQL.
+  actions:
+    - text: Get started
+      link: /acore-quest-creator/getting-started/install/
+      icon: right-arrow
+    - text: View on GitHub
+      link: https://github.com/DMCK96/acore-quest-creator
+      icon: external
+      variant: minimal
+---
+
+import { Card, CardGrid } from '@astrojs/starlight/components';
+
+<CardGrid>
+	<Card title="Quests on a canvas" icon="puzzle">
+		Lay out quest chains, then fill in givers, objectives and rewards in one place.
+	</Card>
+	<Card title="Scripting without SmartAI tables" icon="setting">
+		Describe what should happen around a quest as scenes, and design fights with the combat wizard.
+	</Card>
+	<Card title="NPCs, objects and loot" icon="pencil">
+		Make new NPCs and objects, pick how they look, and give them loot.
+	</Card>
+	<Card title="Place it on the map" icon="star">
+		Put spawns where they belong, snap them to the ground and draw patrol routes.
+	</Card>
+</CardGrid>
+
+Released under the GPL-3.0-or-later licence.

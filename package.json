@@ -23,7 +23,9 @@
     "corpus": "tsx scripts/corpus.ts",
     "rebuild:node": "npm rebuild better-sqlite3",
     "rebuild:electron": "electron-rebuild -f -w better-sqlite3",
-    "release:check-tag": "tsx scripts/check-tag-version.ts"
+    "release:check-tag": "tsx scripts/check-tag-version.ts",
+    "docs:dev": "npm --prefix site run dev",
+    "docs:build": "npm --prefix site run build"
   },
   "dependencies": {
     "@tsparticles/engine": "^4.4.0",
