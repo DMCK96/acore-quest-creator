@@ -1,6 +1,6 @@
 {
   "name": "acore-quest-creator",
-  "version": "0.1.0",
+  "version": "0.1.0-rc.1",
   "private": true,
   "description": "ACORE Quest Creator",
   "author": "Daniel Mckibbin <vyrus@fourtwenty.games>",
