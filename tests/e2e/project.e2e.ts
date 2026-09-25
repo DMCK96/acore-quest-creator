@@ -83,6 +83,10 @@ test('new, name, save, reopen from recent, and recover after a crash', async () 
   await modal.getByLabel('Project name').fill('Crashed name');
   await modal.getByLabel('Project name').press('Enter');
   await expect.poll(() => (existsSync(recoveryDir) ? readdirSync(recoveryDir).length : 0), { timeout: 5000 }).toBe(1);
+  // Chromium writes `Local State`, which holds the key the saved password is encrypted with, about
+  // ten seconds after launch. Crashing before that loses the key and the relaunch cannot connect,
+  // so wait for it, as any app that has been running a while has it.
+  await expect.poll(() => existsSync(join(userData, 'Local State')), { timeout: 20000 }).toBe(true);
   // A crash takes the whole process tree down; killing only the main process on Windows leaves its
   // helper processes holding Playwright's pipes open, and the worker then never finishes.
   const crashed = app.process();
