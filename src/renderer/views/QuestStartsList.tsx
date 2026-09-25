@@ -35,19 +35,19 @@ function StartRow({ instance, questId, onOpenQuest }: RowProps): React.JSX.Eleme
   const claim = instance.claims[0];
   const owned = instance.owner === questId;
   return (
-    <li>
+    <li className="quest-starts__row">
       <span>{instance.summary}</span>
       {!instance.editable && instance.readOnlyReason && (
         <span className="quest-starts__reason"> {instance.readOnlyReason}</span>
       )}
       {instance.inactiveReason && <span className="quest-starts__inactive"> {instance.inactiveReason}</span>}
       {owned && instance.editable && claim && (
-        <button type="button" aria-label={`Edit: ${instance.summary}`} onClick={() => jumpToField(claim)}>
+        <button type="button" className="entry-card__btn" aria-label={`Edit: ${instance.summary}`} onClick={() => jumpToField(claim)}>
           Edit
         </button>
       )}
       {!owned && (
-        <button type="button" onClick={() => onOpenQuest(instance.owner)}>
+        <button type="button" className="entry-card__btn" onClick={() => onOpenQuest(instance.owner)}>
           Open quest {instance.owner}
         </button>
       )}
@@ -80,9 +80,9 @@ function LinkSection(props: {
   const { title, empty, instances, questId, onOpenQuest } = props;
   return (
     <section aria-label={title}>
-      <h3>{title}</h3>
+      <h3 className="module-section__title">{title}</h3>
       {instances.length === 0 ? (
-        <p>{empty}</p>
+        <p className="quest-starts__empty">{empty}</p>
       ) : (
         <ul>
           {instances.map((instance) => (
@@ -109,7 +109,14 @@ export function QuestStartsList({
   questId: number;
   onOpenQuest: (questId: number) => void;
 }): React.JSX.Element | null {
-  if (links === null) return null;
+  if (links === null) {
+    return (
+      <section aria-label="Quest starts" className="quest-starts">
+        <h3 className="module-section__title">How this quest starts</h3>
+        <p className="quest-starts__empty">Not available yet.</p>
+      </section>
+    );
+  }
   const starts = links.instances.filter((instance) => startsThis(instance, questId));
   const unlocks = links.instances.filter((instance) => !startsThis(instance, questId) && unlockedByThis(instance, questId));
 

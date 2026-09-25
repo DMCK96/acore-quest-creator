@@ -176,3 +176,19 @@
 .chain__sign {
   margin-top: 8px;
 }
+
+/* A title at the top of its section needs no space above it: the section's own spacing does that. */
+.module-section__title:first-child {
+  margin-top: 0;
+}
+
+/* A card's buttons at the end of its field row, level with the inputs. */
+.entry-card__actions--end {
+  margin-left: auto;
+  align-self: flex-end;
+  padding-bottom: 6px;
+}
+
+.entry-list + .entry-list {
+  margin-top: 8px;
+}

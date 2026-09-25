@@ -1,17 +1,48 @@
 .quest-starts {
-  margin-bottom: 1em;
+  margin: 8px 0 1em;
 }
 
-.quest-starts h3,
 .quest-starts h4 {
+  margin: 14px 0 6px;
   font-family: var(--font-display);
-  color: var(--text);
-  margin: 0.6em 0 0.3em;
+  font-size: 15px;
+  color: var(--accent-strong);
 }
 
 .quest-starts ul {
   margin: 0 0 0.6em;
   padding-left: 1.2em;
+}
+
+/* A start or unlock: its sentence, any reason it cannot be edited, and its Edit / Open quest. */
+.quest-starts ul:has(> .quest-starts__row) {
+  list-style: none;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.quest-starts__row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 10px;
+  padding: 6px 10px;
+  background: var(--bg-panel-raised);
+  border: 1px solid var(--border-soft);
+  border-radius: var(--radius);
+  font-size: 13px;
+}
+
+.quest-starts__row > .entry-card__btn {
+  margin-left: auto;
+}
+
+.quest-starts__empty {
+  margin: 0;
+  color: var(--text-muted);
+  font-size: 13px;
 }
 
 .quest-starts__reason {
@@ -20,4 +51,8 @@
 
 .quest-starts__inactive {
   color: var(--amber);
+}
+
+.quest-starts > section + section {
+  margin-top: 14px;
 }
