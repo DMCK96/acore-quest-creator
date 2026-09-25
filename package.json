@@ -3,6 +3,13 @@
   "version": "0.1.0",
   "private": true,
   "description": "ACORE Quest Creator",
+  "author": "Daniel Mckibbin <vyrus@fourtwenty.games>",
+  "license": "GPL-3.0-or-later",
+  "homepage": "https://dmck96.github.io/acore-quest-creator/",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/DMCK96/acore-quest-creator.git"
+  },
   "type": "module",
   "main": "./out/main/index.js",
   "scripts": {
@@ -15,7 +22,8 @@
     "dist": "npm run rebuild:electron && electron-vite build && electron-builder",
     "corpus": "tsx scripts/corpus.ts",
     "rebuild:node": "npm rebuild better-sqlite3",
-    "rebuild:electron": "electron-rebuild -f -w better-sqlite3"
+    "rebuild:electron": "electron-rebuild -f -w better-sqlite3",
+    "release:check-tag": "tsx scripts/check-tag-version.ts"
   },
   "dependencies": {
     "@tsparticles/engine": "^4.4.0",
