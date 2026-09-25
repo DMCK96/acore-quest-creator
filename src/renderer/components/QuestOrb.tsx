@@ -49,7 +49,10 @@ const canvasSupported = typeof OffscreenCanvas !== 'undefined';
 
 /** The glowing sphere behind the canvas empty-state ("Start Your Journey"), ringed by a slowly
  * rotating constellation of fine points and threads that trail off its edge. */
-export function QuestOrb(): React.JSX.Element {
+export function QuestOrb({ detail = 1 }: {
+  /** Scales the points and threads, for an image shown much smaller than it is drawn (the app icon). */
+  detail?: number;
+} = {}): React.JSX.Element {
   const canvasRef = useRef<HTMLCanvasElement>(null);
 
   useEffect(() => {
@@ -85,7 +88,7 @@ export function QuestOrb(): React.JSX.Element {
       });
 
       const linkPx = LINK_DISTANCE * sphereRadius;
-      ctx.lineWidth = 0.5 * dpr;
+      ctx.lineWidth = 0.5 * detail * dpr;
       for (let i = 0; i < pts.length; i++) {
         const a = pts[i]!;
         if (a.alpha <= 0) continue;
@@ -107,7 +110,7 @@ export function QuestOrb(): React.JSX.Element {
         if (alpha <= 0) continue;
         ctx.fillStyle = `rgba(${COLOR}, ${Math.min(1, alpha * 1.1)})`;
         ctx.beginPath();
-        ctx.arc(x, y, p.size * dpr, 0, Math.PI * 2);
+        ctx.arc(x, y, p.size * detail * dpr, 0, Math.PI * 2);
         ctx.fill();
       }
     };
@@ -129,7 +132,7 @@ export function QuestOrb(): React.JSX.Element {
       cancelAnimationFrame(frame);
       observer?.disconnect();
     };
-  }, []);
+  }, [detail]);
 
   return (
     <div className="quest-orb" aria-hidden="true">

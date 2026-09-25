@@ -74,6 +74,31 @@ test('app icon', async () => {
 
     mkdirSync(resolve(OUT, '..'), { recursive: true });
     writeFileSync(OUT, png);
+
+    // The icon at the sizes an OS shows it, side by side, to judge what survives the shrink.
+    const preview = await page.evaluate(async (b64) => {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any -- untyped browser globals, as above
+      const { Image, document } = globalThis as any;
+      const img = new Image();
+      img.src = `data:image/png;base64,${b64}`;
+      await img.decode();
+      const sizes = [128, 64, 32];
+      const c = document.createElement('canvas');
+      c.width = sizes.reduce((w, s) => w + s + 16, 16);
+      c.height = 128 + 32;
+      const ctx = c.getContext('2d');
+      ctx.fillStyle = '#ffffff';
+      ctx.fillRect(0, 0, c.width, c.height);
+      ctx.imageSmoothingQuality = 'high';
+      let x = 16;
+      for (const s of sizes) {
+        ctx.drawImage(img, x, 16, s, s);
+        x += s + 16;
+      }
+      return (c.toDataURL('image/png') as string).split(',')[1]!;
+    }, png.toString('base64'));
+    mkdirSync(resolve('test-results'), { recursive: true });
+    writeFileSync(resolve('test-results', 'icon-sizes.png'), Buffer.from(preview, 'base64'));
   } finally {
     await app.close();
   }
