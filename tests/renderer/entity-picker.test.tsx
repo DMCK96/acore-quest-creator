@@ -109,3 +109,55 @@ describe('useNameBook', () => {
     expect(await screen.findByText('Diseased Young Wolf')).toBeInTheDocument();
   });
 });
+
+describe('new NPCs and objects made with the open quest', () => {
+  // Edits reach the main process after a debounce, so its lookup does not know a just-made NPC yet.
+  const nothingFound = vi.fn(async () => okv({}));
+
+  it('names a new NPC instead of calling it missing', async () => {
+    const api = makeMockApi({ lookupNames: nothingFound });
+    render(
+      <NamesProvider api={api} local={{ creature: new Map([[11000231, 'Foreman Brask']]), gameobject: new Map() }}>
+        <EntityPicker id="p" label="NPC" kind="creature" value={11000231} onChange={vi.fn()} />
+      </NamesProvider>,
+    );
+    expect(await screen.findByDisplayValue('Foreman Brask')).toBeInTheDocument();
+    expect(screen.queryByText(/not found in your database/)).not.toBeInTheDocument();
+  });
+
+  it('follows a rename of the new NPC', async () => {
+    const api = makeMockApi({ lookupNames: nothingFound });
+    const picker = <EntityPicker id="p" label="NPC" kind="creature" value={11000231} onChange={vi.fn()} />;
+    const { rerender } = render(
+      <NamesProvider api={api} local={{ creature: new Map([[11000231, 'New NPC']]), gameobject: new Map() }}>{picker}</NamesProvider>,
+    );
+    expect(await screen.findByDisplayValue('New NPC')).toBeInTheDocument();
+    rerender(
+      <NamesProvider api={api} local={{ creature: new Map([[11000231, 'Foreman Brask']]), gameobject: new Map() }}>{picker}</NamesProvider>,
+    );
+    expect(await screen.findByDisplayValue('Foreman Brask')).toBeInTheDocument();
+  });
+
+  it('names a new object, and gives it to the name book too', async () => {
+    function Probe() {
+      const names = useNameBook();
+      return <p>{names('gameobject', 9000150) ?? 'loading'}</p>;
+    }
+    render(
+      <NamesProvider api={makeMockApi({ lookupNames: nothingFound })} local={{ creature: new Map(), gameobject: new Map([[9000150, "Brask's Ledger"]]) }}>
+        <Probe />
+      </NamesProvider>,
+    );
+    expect(await screen.findByText("Brask's Ledger")).toBeInTheDocument();
+  });
+
+  it('still asks the database for everything else', async () => {
+    const api = makeMockApi({ lookupNames: wolfNames });
+    render(
+      <NamesProvider api={api} local={{ creature: new Map([[11000231, 'Foreman Brask']]), gameobject: new Map() }}>
+        <EntityPicker id="p" label="NPC" kind="creature" value={299} onChange={vi.fn()} />
+      </NamesProvider>,
+    );
+    expect(await screen.findByDisplayValue('Diseased Young Wolf')).toBeInTheDocument();
+  });
+});

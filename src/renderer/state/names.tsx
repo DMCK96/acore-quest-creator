@@ -3,6 +3,7 @@ import type { RefKind } from '@core/db/types';
 import type { EntityHit, SearchKind } from '@core/db/world-db';
 import type { NameBook } from '@core/links/component';
 import type { Api, Result } from '@shared/ipc';
+import { readEntities } from '@core/entities/model';
 
 export type NameStatus = 'idle' | 'loading' | 'found' | 'missing' | 'unsupported';
 
@@ -22,10 +23,32 @@ function isSupported(kind: RefKind): boolean {
 const scheduleFrame: (run: () => void) => void =
   typeof requestAnimationFrame === 'function' ? requestAnimationFrame : (run) => setTimeout(run, 0);
 
+/**
+ * Names of the open quest's new NPCs and objects. They are not in the world DB, and the main
+ * process hears of them only after the edit debounce, so asking it right after "New NPC" would
+ * answer "missing" and that answer would stick.
+ */
+export interface LocalNames {
+  creature: ReadonlyMap<number, string>;
+  gameobject: ReadonlyMap<number, string>;
+}
+
+/** The `LocalNames` of a quest's values; unnamed ones are called what search calls them. */
+export function localNamesOf(values: Readonly<Record<string, unknown>> | undefined): LocalNames {
+  const { npcs, objects } = values ? readEntities(values) : { npcs: [], objects: [] };
+  return {
+    creature: new Map(npcs.map((n) => [n.entry, n.name || 'New NPC'])),
+    gameobject: new Map(objects.map((o) => [o.entry, o.name || 'New object'])),
+  };
+}
+
 interface NamesStore {
   get(kind: RefKind, id: number): NameResult;
   request(kind: RefKind, id: number): void;
   subscribe(listener: () => void): () => void;
+  /** Replaces the local names; `notify` re-renders what shows them. */
+  setLocal(local: LocalNames | undefined): void;
+  notify(): void;
 }
 
 function createNamesStore(api: Api): NamesStore {
@@ -33,6 +56,10 @@ function createNamesStore(api: Api): NamesStore {
   const pending = new Map<RefKind, Set<number>>();
   const listeners = new Set<() => void>();
   let scheduled = false;
+  let local: LocalNames | undefined;
+
+  const localName = (kind: RefKind, id: number): string | undefined =>
+    kind === 'creature' || kind === 'gameobject' ? local?.[kind].get(id) : undefined;
 
   const key = (kind: RefKind, id: number): string => `${kind}:${id}`;
   const notify = (): void => listeners.forEach((l) => l());
@@ -60,10 +87,12 @@ function createNamesStore(api: Api): NamesStore {
     get(kind, id) {
       if (id === 0) return { state: 'idle' };
       if (!isSupported(kind)) return { state: 'unsupported' };
+      const name = localName(kind, id);
+      if (name !== undefined) return { state: 'found', name };
       return cache.get(key(kind, id)) ?? { state: 'idle' };
     },
     request(kind, id) {
-      if (id === 0 || !isSupported(kind)) return;
+      if (id === 0 || !isSupported(kind) || localName(kind, id) !== undefined) return;
       const k = key(kind, id);
       if (cache.has(k)) return;
       cache.set(k, { state: 'loading' });
@@ -82,6 +111,10 @@ function createNamesStore(api: Api): NamesStore {
       listeners.add(listener);
       return () => listeners.delete(listener);
     },
+    setLocal(next) {
+      local = next;
+    },
+    notify,
   };
 }
 
@@ -92,15 +125,22 @@ const ApiContext = createContext<Api | null>(null);
 export function NamesProvider({
   api,
   epoch = 0,
+  local,
   children,
 }: {
   api: Api;
   /** The connection's count: a new connection starts an empty cache. */
   epoch?: number;
+  /** The open quest's new NPCs and objects, named before the main process knows them. */
+  local?: LocalNames;
   children: ReactNode;
 }): React.JSX.Element {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   const store = useMemo(() => createNamesStore(api), [api, epoch]);
+  // Set during render so this render's children already see them; the effect re-renders the ones
+  // that did not re-render with this provider.
+  store.setLocal(local);
+  useEffect(() => store.notify(), [store, local]);
   return (
     <ApiContext.Provider value={api}>
       <NamesContext.Provider value={store}>{children}</NamesContext.Provider>

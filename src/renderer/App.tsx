@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { createAppStore, type AppState } from './state/app-store';
 import { LoginScreen } from './views/LoginScreen';
 import { CanvasHome } from './views/CanvasHome';
-import { NamesProvider } from './state/names';
+import { NamesProvider, localNamesOf } from './state/names';
 import { RewardTablesProvider } from './state/reward-tables';
 import './App.css';
 
@@ -12,6 +12,9 @@ export function App(): React.JSX.Element {
   const store = useMemo(() => createAppStore(window.api), []);
   const screen = store((s) => s.screen);
   const connection = store((s) => s.connection);
+  // The open quest's new NPCs and objects, named in pickers before the main process has them.
+  const openValues = store((s) => s.open?.aggregate.values);
+  const local = useMemo(() => localNamesOf(openValues), [openValues]);
   // Connecting from the login screen keeps it on top of the canvas for a moment while it leaves:
   // its orb spins down into the canvas's (see LoginScreen's `leaving`).
   const [leaving, setLeaving] = useState(false);
@@ -33,7 +36,7 @@ export function App(): React.JSX.Element {
     <>
       {inApp(screen) && (
         <div className={leaving ? 'app-arriving' : undefined} style={{ display: 'contents' }}>
-          <NamesProvider api={window.api} epoch={connection}>
+          <NamesProvider api={window.api} epoch={connection} local={local}>
             <RewardTablesProvider api={window.api} epoch={connection}>
               <CanvasHome store={store} />
             </RewardTablesProvider>
