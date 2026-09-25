@@ -115,6 +115,17 @@ function toSave(db: DbFields & { id?: number; name?: string }, role: 'world' | '
   return save;
 }
 
+/**
+ * The draft as it stands once saved: it carries the saved rows' IDs and names, and blank passwords
+ * (the saved ones are kept), so saving it again updates those rows instead of adding new ones.
+ */
+export function savedDraft(draft: ConnectionDraft, world: ProfileRecord, dev: ProfileRecord | null): ConnectionDraft {
+  return {
+    world: { ...draft.world, id: world.id, name: world.name, password: '' },
+    dev: draft.dev && dev ? { ...draft.dev, id: dev.id, name: dev.name, password: '' } : null,
+  };
+}
+
 /** The saves the draft needs, and the dev row to remove when the user removed or replaced it. */
 export function draftToSaves(
   draft: ConnectionDraft,

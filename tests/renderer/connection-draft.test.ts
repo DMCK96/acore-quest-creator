@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import type { ProfileRecord } from '@shared/ipc';
-import { draftFromProfiles, draftToSaves, validateDraft, worldChanged, devChanged, emptyDev, type ConnectionDraft } from '../../src/renderer/connection/draft';
+import { draftFromProfiles, draftToSaves, validateDraft, worldChanged, devChanged, emptyDev, savedDraft, type ConnectionDraft } from '../../src/renderer/connection/draft';
 
 const rec = (over: Partial<ProfileRecord>): ProfileRecord => ({
   id: 1, name: 'World', role: 'world', host: 'h', port: 3306, user: 'u', database: 'd', dbcDir: '', clientDir: '', lastConnectedAt: null, ...over,
@@ -88,5 +88,27 @@ describe('worldChanged / devChanged', () => {
     expect(worldChanged(devEdit, original)).toBe(false);
     expect(devChanged(devEdit, original)).toBe(true);
     expect(devChanged({ ...original, dev: null }, original)).toBe(true);
+  });
+});
+
+describe('savedDraft', () => {
+  it('takes the saved rows\u2019 IDs and names and blanks the passwords, so a retry updates the same rows', () => {
+    const draft: ConnectionDraft = {
+      world: { host: 'h', port: '3306', user: 'u', database: 'd', password: 'pw', dbcDir: '/data', clientDir: '' },
+      dev: { ...emptyDev(), host: 'dh', user: 'du', database: 'dd', password: 'dpw' },
+    };
+    const saved = savedDraft(draft, rec({ id: 4 }), rec({ id: 9, role: 'dev', name: 'Dev' }));
+    expect(saved).toEqual({
+      world: { id: 4, name: 'World', host: 'h', port: '3306', user: 'u', database: 'd', password: '', dbcDir: '/data', clientDir: '' },
+      dev: { id: 9, name: 'Dev', host: 'dh', port: '3306', user: 'du', database: 'dd', password: '' },
+    });
+    const retry = draftToSaves(saved, saved);
+    expect(retry.world).toMatchObject({ id: 4 });
+    expect(retry.dev).toMatchObject({ id: 9 });
+    expect(retry.removeDevId).toBeNull();
+  });
+  it('keeps no dev when none was saved', () => {
+    const draft = draftFromProfiles([]);
+    expect(savedDraft(draft, rec({ id: 1 }), null).dev).toBeNull();
   });
 });

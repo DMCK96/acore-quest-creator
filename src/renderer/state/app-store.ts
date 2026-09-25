@@ -22,12 +22,14 @@ import type {
 } from '@shared/ipc';
 import type { ModuleId } from '@core/modules/model';
 import { resetModule } from '@core/modules/catalog';
-import { draftToSaves, type ConnectionDraft } from '../connection/draft';
+import { draftToSaves, savedDraft, type ConnectionDraft } from '../connection/draft';
 
 export interface AppState {
   screen: 'connect' | 'pick' | 'preview' | 'edit';
   profiles: ProfileRecord[];
   summary: ConnectSummary | null;
+  /** Counts the connections made; the per-connection caches (names, reward tables) start again when it moves. */
+  connection: number;
   error: string | null;
   results: QuestSummary[];
   open: OpenResult | null;
@@ -60,7 +62,10 @@ export interface AppState {
   /** Connects with a saved profile and its stored password. */
   connectProfile(profileId: number): Promise<void>;
   /** Saves the draft's rows (world, then dev, then removes a dev row the user removed) and reloads the profiles. */
-  saveConnection(draft: ConnectionDraft, original: ConnectionDraft): Promise<{ ok: true; worldId: number } | { ok: false; error: string }>;
+  saveConnection(
+    draft: ConnectionDraft,
+    original: ConnectionDraft,
+  ): Promise<{ ok: true; worldId: number; saved: ConnectionDraft } | { ok: false; error: string }>;
   /**
    * Connects with a saved profile from inside the app. Returns the error to show, or null. A failed
    * connect leaves everything as it was; a database with blocking drift goes to the login screen.
@@ -158,6 +163,7 @@ export function createAppStore(api: Api, opts: { saveDelayMs?: number } = {}): A
     screen: 'connect',
     profiles: [],
     summary: null,
+    connection: 0,
     error: null,
     results: [],
     open: null,
@@ -222,34 +228,44 @@ export function createAppStore(api: Api, opts: { saveDelayMs?: number } = {}): A
         set(blockedBy(summary));
         return;
       }
-      set({ summary, error: null, screen: 'pick' });
+      set((s) => ({ summary, error: null, screen: 'pick', connection: s.connection + 1 }));
     },
 
     async saveConnection(draft, original) {
       const saves = draftToSaves(draft, original);
       const world = await api.saveProfile(saves.world);
       if (!world.ok) return { ok: false, error: world.error.message };
+      let devRecord: ProfileRecord | null = null;
       if (saves.dev) {
         const dev = await api.saveProfile(saves.dev);
         if (!dev.ok) return { ok: false, error: dev.error.message };
+        devRecord = dev.value;
       }
       if (saves.removeDevId !== null) {
         const removed = await api.deleteProfile(saves.removeDevId);
         if (!removed.ok) return { ok: false, error: removed.error.message };
       }
       await get().loadProfiles();
-      return { ok: true, worldId: world.value.id };
+      return { ok: true, worldId: world.value.id, saved: savedDraft(draft, world.value, devRecord) };
     },
 
     async reconnect(profileId) {
       // Pending edits are written first, so switching databases cannot lose one.
       await get().flushAll();
+      // An edit that could not be saved would be lost when the quest closes: stay, and say why.
+      if (get().dirty) return get().error ?? 'Your last edit could not be saved, so the connection was not changed.';
       const connected = await api.connect(profileId);
       if (!connected.ok) return connected.error.message;
       const summary = connected.value;
       const closed = { open: null, dirty: false, links: null, openPanel: null };
       // The session has already switched, so a blocked database leaves the editor for the login screen.
-      set(summary.blocking ? { ...blockedBy(summary), ...closed } : { summary, error: null, screen: 'pick', ...closed });
+      if (summary.blocking) {
+        set({ ...blockedBy(summary), ...closed });
+        return null;
+      }
+      set((s) => ({ summary, error: null, screen: 'pick', connection: s.connection + 1, ...closed }));
+      // The canvas's links, starts and issue counts are read from the database just connected.
+      await get().loadNodes();
       return null;
     },
 

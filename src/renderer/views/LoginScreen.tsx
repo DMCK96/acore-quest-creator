@@ -54,6 +54,9 @@ export function LoginScreen({ store }: { store: AppStore }): React.JSX.Element {
         setLocalError(saved.error);
         return;
       }
+      // A retry after a failed connect updates these rows instead of adding more.
+      setOriginal(saved.saved);
+      setDraft(saved.saved);
       await connectProfile(saved.worldId);
     } finally {
       setBusy(false);

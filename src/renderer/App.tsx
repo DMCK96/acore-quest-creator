@@ -8,6 +8,7 @@ import { RewardTablesProvider } from './state/reward-tables';
 export function App(): React.JSX.Element {
   const store = useMemo(() => createAppStore(window.api), []);
   const screen = store((s) => s.screen);
+  const connection = store((s) => s.connection);
 
   useEffect(() => {
     void store.getState().start();
@@ -17,8 +18,8 @@ export function App(): React.JSX.Element {
 
   if (screen === 'pick' || screen === 'preview' || screen === 'edit') {
     return (
-      <NamesProvider api={window.api}>
-        <RewardTablesProvider api={window.api}>
+      <NamesProvider api={window.api} epoch={connection}>
+        <RewardTablesProvider api={window.api} epoch={connection}>
           <CanvasHome store={store} />
         </RewardTablesProvider>
       </NamesProvider>

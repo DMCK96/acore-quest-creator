@@ -1573,7 +1573,8 @@ export function createApi(deps: ApiDeps): Api {
         }
         const live = usable();
         const quest = questOf(questId);
-        const devProfile = deps.store.profiles.list().find((p) => p.role === 'dev');
+        // The newest dev profile: the one Settings shows and edits (profiles list oldest first).
+        const devProfile = deps.store.profiles.list().filter((p) => p.role === 'dev').at(-1);
         if (!devProfile) {
           throw fail('NO_DEV_PROFILE', 'Add a dev database profile before applying a patch to it.');
         }

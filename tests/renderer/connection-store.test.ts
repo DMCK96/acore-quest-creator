@@ -21,7 +21,7 @@ describe('saveConnection', () => {
     const store = createAppStore(api);
     const original = draftFromProfiles([rec(1, 'world'), rec(2, 'dev')]);
     const draft = { ...original, dev: { ...emptyDev(), host: 'x', user: 'u', database: 'd' } };
-    expect(await store.getState().saveConnection(draft, original)).toEqual({ ok: true, worldId: 1 });
+    expect(await store.getState().saveConnection(draft, original)).toMatchObject({ ok: true, worldId: 1, saved: { world: { id: 1 }, dev: { id: 9 } } });
     expect(calls).toEqual(['save world', 'save dev', 'delete 2', 'list']);
     expect(store.getState().hasDevProfile).toBe(true);
   });
@@ -55,6 +55,23 @@ describe('reconnect', () => {
     const before = store.getState();
     expect(await store.getState().reconnect(2)).toBe('Access denied for user');
     expect(store.getState()).toMatchObject({ screen: before.screen, open: before.open, summary: { profileId: 1 }, error: null });
+  });
+  it('refuses to reconnect while an edit cannot be saved, keeping the quest and the reason', async () => {
+    const { api, store } = await editing();
+    vi.mocked(api.updateQuest).mockResolvedValue(errv('VALIDATION', 'The project file could not be written'));
+    store.getState().setValue('quest_template.LogTitle', 'Changed');
+    expect(await store.getState().reconnect(2)).toBe('The project file could not be written');
+    expect(api.connect).not.toHaveBeenCalledWith(2);
+    expect(store.getState().open).not.toBeNull();
+    expect(store.getState().dirty).toBe(true);
+  });
+  it('reloads the canvas and starts a new connection epoch after reconnecting', async () => {
+    const { api, store } = await editing();
+    const epoch = store.getState().connection;
+    vi.mocked(api.listNodes).mockClear();
+    await store.getState().reconnect(2);
+    expect(api.listNodes).toHaveBeenCalled();
+    expect(store.getState().connection).toBe(epoch + 1);
   });
   it('reconnect to a blocking database goes to the login screen', async () => {
     const { api, store } = await editing();

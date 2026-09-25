@@ -70,6 +70,35 @@ describe('SettingsDialog', () => {
     expect(store.getState().summary?.profileId).toBe(1);
     expect(store.getState().open).not.toBeNull();
   });
+  it('can retry a failed reconnect, updating the dev row it added instead of adding another', async () => {
+    const { api, onClose } = await setup();
+    vi.mocked(api.connect).mockResolvedValueOnce(errv('CONNECTION', 'Cannot reach db.local'));
+    await userEvent.type(screen.getByLabelText('Game client folder (optional)'), 'E:/WoW');
+    await userEvent.click(screen.getByRole('button', { name: 'Add a dev database' }));
+    await userEvent.type(screen.getByLabelText('Dev host'), 'devhost');
+    await userEvent.type(screen.getByLabelText('Dev user'), 'u');
+    await userEvent.type(screen.getByLabelText('Dev database'), 'acore_dev');
+    await userEvent.click(screen.getByRole('button', { name: 'Save and reconnect' }));
+    await screen.findByText('Cannot reach db.local');
+    await userEvent.click(screen.getByRole('button', { name: 'Save and reconnect' }));
+    await waitFor(() => expect(onClose).toHaveBeenCalled());
+    const devSaves = vi.mocked(api.saveProfile).mock.calls.map((c) => c[0]).filter((p) => p.role === 'dev');
+    expect(devSaves).toHaveLength(2);
+    expect(devSaves[1]).toMatchObject({ id: 2 });
+  });
+  it('cannot be dismissed while it is reconnecting', async () => {
+    const { api, onClose } = await setup();
+    let finish: (v: unknown) => void = () => {};
+    vi.mocked(api.connect).mockImplementationOnce(() => new Promise((r) => { finish = r; }) as never);
+    await userEvent.type(screen.getByLabelText('Password'), 'x');
+    await userEvent.click(screen.getByRole('button', { name: 'Save and reconnect' }));
+    await screen.findByRole('button', { name: 'Saving…' });
+    await userEvent.keyboard('{Escape}');
+    await userEvent.click(screen.getByRole('button', { name: 'Close' }));
+    expect(onClose).not.toHaveBeenCalled();
+    finish(okv(summary(1)));
+    await waitFor(() => expect(onClose).toHaveBeenCalledTimes(1));
+  });
   it('validates before saving', async () => {
     const { api } = await setup();
     await userEvent.clear(screen.getByLabelText('Host'));

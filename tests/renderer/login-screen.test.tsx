@@ -78,6 +78,23 @@ describe('LoginScreen', () => {
     expect(store.getState().screen).toBe('connect');
     expect(screen.getByRole('button', { name: 'Connect' })).toBeEnabled();
   });
+  it('a retry after a failed connect updates the rows it saved rather than adding new ones', async () => {
+    const saved = { ...world, lastConnectedAt: null };
+    const api = makeMockApi({ saveProfile: async () => okv(saved), listProfiles: async () => okv([saved]), connect: vi.fn(async () => errv('CONNECTION', 'Access denied')) });
+    const store = createAppStore(api);
+    render(<LoginScreen store={store} />);
+    await userEvent.type(screen.getByLabelText('Host'), 'db.local');
+    await userEvent.type(screen.getByLabelText('User'), 'acore');
+    await userEvent.type(screen.getByLabelText('Database'), 'acore_world');
+    await userEvent.type(screen.getByLabelText('Password'), 'wrong');
+    await userEvent.click(screen.getByRole('button', { name: 'Save and connect' }));
+    await screen.findByRole('alert');
+    vi.mocked(api.connect).mockResolvedValueOnce(okv(summary));
+    await userEvent.type(screen.getByLabelText('Password'), 'right');
+    await userEvent.click(screen.getByRole('button', { name: 'Connect' }));
+    await waitFor(() => expect(store.getState().screen).toBe('pick'));
+    expect(vi.mocked(api.saveProfile).mock.calls[1]![0]).toMatchObject({ id: 1, password: 'right' });
+  });
   it('shows a save failure in the alert', async () => {
     const api = makeMockApi({ saveProfile: async () => errv('VALIDATION', 'Secret storage is unavailable') });
     const store = createAppStore(api);

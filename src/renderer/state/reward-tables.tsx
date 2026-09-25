@@ -43,8 +43,18 @@ function createRewardTablesStore(api: Api): RewardTablesStore {
 const RewardTablesContext = createContext<RewardTablesStore | null>(null);
 
 /** Provides `useRewardTables` to its subtree, issuing one `api.rewardTables(level)` per level. */
-export function RewardTablesProvider({ api, children }: { api: Api; children: ReactNode }): React.JSX.Element {
-  const store = useMemo(() => createRewardTablesStore(api), [api]);
+export function RewardTablesProvider({
+  api,
+  epoch = 0,
+  children,
+}: {
+  api: Api;
+  /** The connection's count: a new connection starts an empty cache. */
+  epoch?: number;
+  children: ReactNode;
+}): React.JSX.Element {
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  const store = useMemo(() => createRewardTablesStore(api), [api, epoch]);
   return <RewardTablesContext.Provider value={store}>{children}</RewardTablesContext.Provider>;
 }
 

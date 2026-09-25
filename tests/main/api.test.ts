@@ -422,6 +422,15 @@ describe('apply to dev DB', () => {
     expect(await api.applyToDev(60001, true)).toMatchObject({ ok: false, error: { code: 'NO_DEV_PROFILE' } });
     expect(devOpened).toBe(0);
   });
+  it('applies through the newest dev profile, the one Settings shows', async () => {
+    const opened: string[] = [];
+    const { api } = await connected({ openDevDb: async (p) => { opened.push(p.database); return { execute: async () => {}, close: async () => {} }; } });
+    ok(await api.saveProfile({ ...profile, name: 'Dev (.env)', role: 'dev', database: 'old_dev' }));
+    ok(await api.saveProfile({ ...profile, name: 'Dev', role: 'dev', database: 'new_dev' }));
+    ok(await api.openQuest(60001));
+    ok(await api.applyToDev(60001, true));
+    expect(opened).toEqual(['new_dev']);
+  });
   it('executes the patch statements through the dev connection', async () => {
     const { api } = await connected();
     ok(await api.saveProfile({ ...profile, name: 'dev', role: 'dev' }));

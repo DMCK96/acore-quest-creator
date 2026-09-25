@@ -89,8 +89,18 @@ const NamesContext = createContext<NamesStore | null>(null);
 const ApiContext = createContext<Api | null>(null);
 
 /** Provides `useName` to its subtree, batching id lookups per animation frame per `RefKind`. */
-export function NamesProvider({ api, children }: { api: Api; children: ReactNode }): React.JSX.Element {
-  const store = useMemo(() => createNamesStore(api), [api]);
+export function NamesProvider({
+  api,
+  epoch = 0,
+  children,
+}: {
+  api: Api;
+  /** The connection's count: a new connection starts an empty cache. */
+  epoch?: number;
+  children: ReactNode;
+}): React.JSX.Element {
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  const store = useMemo(() => createNamesStore(api), [api, epoch]);
   return (
     <ApiContext.Provider value={api}>
       <NamesContext.Provider value={store}>{children}</NamesContext.Provider>

@@ -13,21 +13,28 @@ import './SettingsDialog.css';
  */
 export function SettingsDialog({ store, onClose }: { store: AppStore; onClose: () => void }): React.JSX.Element {
   const { saveConnection, reconnect, chooseServerDataDir } = store.getState();
-  const [original] = useState<ConnectionDraft>(() => draftFromProfiles(store.getState().profiles));
+  const [original, setOriginal] = useState<ConnectionDraft>(() => draftFromProfiles(store.getState().profiles));
   const [draft, setDraft] = useState<ConnectionDraft>(original);
   const [errors, setErrors] = useState<DraftErrors>({});
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  // Saved but not yet connected with: the last reconnect failed, so Save offers it again.
+  const [unconnected, setUnconnected] = useState(false);
+
+  // Closing mid-save would lose a failure nobody else shows.
+  const close = (): void => {
+    if (!busy) onClose();
+  };
 
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent): void => {
-      if (e.key === 'Escape') onClose();
+      if (e.key === 'Escape' && !busy) onClose();
     };
     document.addEventListener('keydown', onKeyDown);
     return () => document.removeEventListener('keydown', onKeyDown);
-  }, [onClose]);
+  }, [onClose, busy]);
 
-  const reconnects = worldChanged(draft, original);
+  const reconnects = unconnected || worldChanged(draft, original);
   const changed = reconnects || devChanged(draft, original);
 
   const submit = async (e: React.FormEvent): Promise<void> => {
@@ -47,8 +54,12 @@ export function SettingsDialog({ store, onClose }: { store: AppStore; onClose: (
         setError(saved.error);
         return;
       }
+      // Saving again (after a failed reconnect) updates these rows instead of adding more.
+      setOriginal(saved.saved);
+      setDraft(saved.saved);
       if (reconnects) {
         const failed = await reconnect(saved.worldId);
+        setUnconnected(failed !== null);
         if (failed !== null) {
           setError(failed);
           return;
@@ -61,7 +72,7 @@ export function SettingsDialog({ store, onClose }: { store: AppStore; onClose: (
   };
 
   return (
-    <div className="modal-backdrop" onMouseDown={(e) => e.target === e.currentTarget && onClose()}>
+    <div className="modal-backdrop" onMouseDown={(e) => e.target === e.currentTarget && close()}>
       <form
         className="modal settings-dialog"
         role="dialog"
@@ -72,7 +83,7 @@ export function SettingsDialog({ store, onClose }: { store: AppStore; onClose: (
       >
         <header className="modal__header">
           <h2 id="settings-dialog-title">Settings</h2>
-          <button type="button" className="btn btn--icon" aria-label="Close" onClick={onClose}>
+          <button type="button" className="btn btn--icon" aria-label="Close" onClick={close}>
             ✕
           </button>
         </header>
