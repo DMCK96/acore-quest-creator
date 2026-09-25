@@ -14,12 +14,16 @@ New NPCs and objects are created in the quest as soon as you choose **Done**. **
 
 ## The NPC editor
 
-![The New NPC editor on its Look & gear tab, borrowing a Stormwind City Guard's look and weapons](../../../assets/screenshots/npc-editor.png)
+![The New NPC editor on its Look & gear tab, borrowing a Stormwind Dock Worker's look and wrench](../../../assets/screenshots/npc-editor.png)
 
 The editor has tabs:
 
 - **Basics**: name, title (the line under the name), minimum and maximum level, and faction. Faction buttons such as **Stormwind** set a common one in a click.
 - **Look & gear**: how the NPC looks. Type a creature under **Look like…** to borrow its appearance. Tick **and its weapons** to borrow its weapons too, or **and its level, faction and rank** to borrow those. **Other ways** lets you browse models by name or type a display ID. **Scale** makes it bigger or smaller. Under **Weapons** you can pick main hand, off hand and ranged items yourself; armour always comes with the look.
+
+:::note[Weapons only need a display]
+An NPC holds a weapon by its item's display alone, so any item works, even one your database lists without a proper name (it may show as `[MISSING ITEM NAME]`). The NPC still holds it in game.
+:::
 - **Fight**: how it fights. See the [combat wizard](/acore-quest-creator/guides/combat-wizard/).
 - **Loot**: what it drops. See [Loot](/acore-quest-creator/guides/loot/).
 - **Placement**: where it stands. **Add spawn**, then either paste the output of the in-game `.gps` command or place it on the [quest map](/acore-quest-creator/guides/quest-map/).
@@ -41,5 +45,5 @@ Usable objects and chests can be **Only usable while this quest is in the log**.
 On **Look**, **Other ways** lets you **Browse models** by name, such as `chest` or `book`.
 
 :::tip
-Without the [server data folder](/acore-quest-creator/getting-started/connect/#game-files-optional), models and spells cannot be searched by name. Type their IDs instead.
+Without the [server data folder](/acore-quest-creator/getting-started/connect/#folders-optional), models and spells cannot be searched by name. Type their IDs instead.
 :::

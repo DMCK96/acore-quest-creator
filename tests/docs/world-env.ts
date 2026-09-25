@@ -11,6 +11,7 @@ export interface WorldDbEnv {
   database: string;
   dbcDir?: string;
   clientDir?: string;
+  exportDir?: string;
 }
 
 function parseEnv(text: string): Map<string, string> {
@@ -42,5 +43,6 @@ export function worldDbFromEnv(text: string): WorldDbEnv {
   };
   if (get('DBC_DIR')) env.dbcDir = get('DBC_DIR');
   if (get('CLIENT_DIR')) env.clientDir = get('CLIENT_DIR');
+  if (get('EXPORT_DIR')) env.exportDir = get('EXPORT_DIR');
   return env;
 }

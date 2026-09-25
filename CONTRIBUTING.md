@@ -44,11 +44,11 @@ More: [Architecture](https://dmck96.github.io/acore-quest-creator/contributing/a
 | Command | Runs | Needs |
 | --- | --- | --- |
 | `npm run typecheck` | TypeScript | nothing |
-| `npm test` | Unit tests (Vitest) | nothing |
-| `npm run test:int` | Integration tests | `ACQC_TEST_MYSQL_URL`, `ACQC_AC_SQL_DIR` |
-| `npm run test:e2e` | End-to-end tests (Playwright) | `ACQC_TEST_MYSQL_URL` |
+| `npm test` | Unit tests (Vitest) | the fork's base SQL |
+| `npm run test:int` | Integration tests | `ACQC_TEST_MYSQL_URL`, the fork's base SQL |
+| `npm run test:e2e` | End-to-end tests (Playwright) | `ACQC_TEST_MYSQL_URL`, the server data and game client folders |
 
-`ACQC_TEST_MYSQL_URL` is `mysql://user:password@host:port/database`. Set it directly; do not `source` your `.env`, which mangles Windows paths.
+Tests read `.env` like the app does. They find the fork's base SQL (`data/sql/base/db_world`) beside your `ACQC_WORLD_DB_DBC_DIR`, or at `ACQC_AC_SQL_DIR`, and the folders from `ACQC_WORLD_DB_DBC_DIR` and `ACQC_WORLD_DB_CLIENT_DIR`. `ACQC_TEST_MYSQL_URL` is `mysql://user:password@host:port/database`. Set it directly; do not `source` your `.env`, which mangles Windows paths.
 
 More: [Testing](https://dmck96.github.io/acore-quest-creator/contributing/testing/)
 

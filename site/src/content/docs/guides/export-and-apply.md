@@ -15,7 +15,7 @@ Your work leaves the app as SQL. The quest's header has three buttons for it: **
 
 ## Export a patch
 
-**Export patch** writes the quest's changes to an `.sql` file and shows where it saved it. By default files go to `Documents/ACORE Quest Creator/sql`. Run the file against your world database, or hand it to your server admin.
+**Export patch** writes the quest's changes to an `.sql` file and shows where it saved it. Files go to the **Export folder** set in [Settings](/acore-quest-creator/reference/settings/#folders), or to `Documents/ACORE Quest Creator/sql` when none is set. Run the file against your world database, or hand it to your server admin.
 
 The app refuses to export a quest it cannot write back faithfully. The button is then disabled and says why: *Unsafe to export*. It also refuses while a module has an error, listing what to fix.
 

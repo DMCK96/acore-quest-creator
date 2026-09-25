@@ -31,6 +31,11 @@ describe('worldDbFromEnv', () => {
     expect(env.dbcDir).toContain('\\');
   });
 
+  it('reads the export folder', () => {
+    const text = full + String.raw`ACQC_WORLD_DB_EXPORT_DIR=C:\AzerothCore\data\sql\custom` + '\n';
+    expect(worldDbFromEnv(text).exportDir).toBe(String.raw`C:\AzerothCore\data\sql\custom`);
+  });
+
   it('leaves empty optional folders out', () => {
     expect(worldDbFromEnv(full)).not.toHaveProperty('clientDir');
   });

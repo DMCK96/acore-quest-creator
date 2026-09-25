@@ -56,4 +56,4 @@ A module with a problem shows a coloured dot, and a badge above the modules name
 
 ## Dialogue and rewards
 
-**Dialogue** holds the text the giver says when offering the quest, while it is in progress and when it is handed in. **Rewards** holds the experience, money, items and reputation. With the [server data folder](/acore-quest-creator/getting-started/connect/#game-files-optional) connected, the app shows how much XP each reward tier gives.
+**Dialogue** holds the text the giver says when offering the quest, while it is in progress and when it is handed in. **Rewards** holds the experience, money, items and reputation. With the [server data folder](/acore-quest-creator/getting-started/connect/#folders-optional) connected, the app shows how much XP each reward tier gives.

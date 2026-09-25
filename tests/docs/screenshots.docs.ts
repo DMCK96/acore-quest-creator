@@ -51,6 +51,7 @@ async function withGenericFields(scope: Page | Locator, take: () => Promise<void
     ['User', 'acore', world.user],
     ['Server data folder (optional)', 'C:\\AzerothCore\\data\\dbc', world.dbcDir!],
     ['Game client folder (optional)', 'C:\\Games\\World of Warcraft 3.3.5a', world.clientDir!],
+    ['Export folder (optional)', 'C:\\AzerothCore\\data\\sql\\custom\\db_world', world.exportDir ?? ''],
   ];
   for (const [label, generic] of fields) await scope.getByLabel(label, { exact: true }).fill(generic);
   await take();
@@ -129,8 +130,8 @@ test.describe.serial('docs screenshots', () => {
     await npc.getByLabel('Max level').fill('8');
     await npc.getByRole('button', { name: 'Stormwind' }).click();
     await npc.getByRole('tab', { name: 'Look & gear' }).click();
-    await npc.getByRole('combobox', { name: 'Look like…' }).fill('Stormwind City Guard');
-    await page.getByRole('option', { name: /Stormwind City Guard/ }).first().click();
+    await npc.getByRole('combobox', { name: 'Look like…' }).fill('Stormwind Dock Worker');
+    await page.getByRole('option', { name: /Stormwind Dock Worker/ }).first().click();
     await expect(npc.getByText(/^Looks like: .*\(display \d+\)$/)).toBeVisible();
     await shot(page, 'npc-editor');
     await npc.getByRole('button', { name: 'Done' }).click();
@@ -145,6 +146,8 @@ test.describe.serial('docs screenshots', () => {
     await giver.getByRole('option', { name: /Foreman Brask · new · #\d+$/ }).click();
     // Checks run after each edit; wait for the "nothing takes this quest back" warning to clear.
     await expect(giver.getByText(/^Nothing takes this quest back/)).toHaveCount(0);
+    // A new NPC is named in the pickers, never "not found in your database".
+    await expect(giver.getByText(/not found in your database/)).toHaveCount(0);
     await shot(page, 'quest-giver');
   });
 
@@ -217,6 +220,7 @@ test.describe.serial('docs screenshots', () => {
     const card = panel.getByRole('group', { name: /^Scene: / });
     await expect(card).toHaveCount(1);
     await card.getByLabel("Text ($N is the player's name)").fill('Find my crates before the kobolds do, $N.');
+    await expect(card.getByText(/not found in your database/)).toHaveCount(0);
     await shot(page, 'scripts');
     await page.keyboard.press('Escape');
     await expect(panel).toHaveCount(0);

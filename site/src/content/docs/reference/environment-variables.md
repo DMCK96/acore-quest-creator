@@ -20,6 +20,7 @@ Copy `.env.example` to `.env` in the repository. When you run the app from sourc
 | `ACQC_WORLD_DB_DATABASE` | World database name. |
 | `ACQC_WORLD_DB_DBC_DIR` | Optional. The server's data folder holding `dbc/`. |
 | `ACQC_WORLD_DB_CLIENT_DIR` | Optional. The game client folder. |
+| `ACQC_WORLD_DB_EXPORT_DIR` | Optional. Where **Export patch** writes SQL files (Settings → Export folder). |
 | `ACQC_DEV_DB_HOST` | Optional. Dev database host; leave empty to skip the dev database. |
 | `ACQC_DEV_DB_PORT` | Dev database port (default `3306`). |
 | `ACQC_DEV_DB_USER` | Dev database user. |
@@ -34,7 +35,7 @@ Variables already set in your shell win over the file.
 | --- | --- |
 | `ACQC_ENV_FILE` | Read another file instead of `.env`, or `none` to read no file. |
 | `ACQC_USER_DATA` | Use this folder for the app's data instead of the usual one. Tests set it to a fresh folder so they never touch your own. |
-| `ACQC_OUTPUT_DIR` | Where **Export patch** writes SQL files. |
+| `ACQC_OUTPUT_DIR` | Where **Export patch** writes SQL files, whatever the connection's export folder says. Tests use it to write to a scratch folder. |
 | `ACQC_RECOVERY_INTERVAL_MS` | How often the recovery copy is saved, in milliseconds (default `30000`). |
 
 ## Test variables
@@ -42,7 +43,6 @@ Variables already set in your shell win over the file.
 | Variable | Meaning |
 | --- | --- |
 | `ACQC_TEST_MYSQL_URL` | The world database for integration and end-to-end tests, as `mysql://user:password@host:port/database`. |
-| `ACQC_AC_SQL_DIR` | The AzerothCore `data/sql` folder, for integration tests that read the base SQL. |
-| `ACQC_TEST_CLIENT_DIR` | The game client folder, for end-to-end tests of the quest map. |
+| `ACQC_AC_SQL_DIR` | The fork's `data/sql` folder, for tests that read its base SQL. Without it, tests use the `sql` folder beside `ACQC_WORLD_DB_DBC_DIR`'s parent. |
 
 See [Testing](/acore-quest-creator/contributing/testing/).

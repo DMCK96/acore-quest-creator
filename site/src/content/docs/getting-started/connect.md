@@ -7,7 +7,7 @@ sidebar:
 
 The first screen asks where your world database is. Fill it in once; the app remembers it and offers it again next time.
 
-![The login screen, with the world database on the left and the optional game files and dev database on the right](../../../assets/screenshots/login.png)
+![The login screen, with the world database on the left and the optional folders and dev database on the right](../../../assets/screenshots/login.png)
 
 ## World database
 
@@ -19,10 +19,11 @@ Your server's world database, usually `acore_world`. Quests, NPCs, items and the
 
 The password is stored encrypted on your computer. Once one is saved, the field reads **Saved — leave blank to keep**.
 
-## Game files (optional)
+## Folders (optional)
 
 - **Server data folder**: the worldserver's data folder, the one holding `dbc/`. It lets the app show XP values for reward tiers, search spells and creature or object models by name, and snap spawns to the ground on the map. Everything works without it; those parts fall back to typing IDs.
 - **Game client folder**: the folder with `Wow.exe`. The quest map uses its zone art and minimap.
+- **Export folder**: where **Export patch** writes SQL files, such as your server's `data/sql/custom/db_world`. Left empty, they go to `Documents/ACORE Quest Creator/sql`.
 
 Use **Browse…** to pick a folder instead of typing it.
 

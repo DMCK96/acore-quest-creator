@@ -21,14 +21,15 @@ Choose **⚙** in the top bar to open **Settings**. It holds the same fields as 
 
 The world database is only ever read.
 
-## Game files
+## Folders
 
 | Setting | Meaning |
 | --- | --- |
 | Server data folder | The worldserver's data folder, the one holding `dbc/`. Adds XP values, name search for spells and models, ground height and floors on the map. |
 | Game client folder | The folder with `Wow.exe`. Adds zone art and the minimap to the quest map. |
+| Export folder | Where **Export patch** writes SQL files. Empty: `Documents/ACORE Quest Creator/sql`. |
 
-Both are optional.
+All three are optional.
 
 ## Dev database
 
@@ -48,4 +49,4 @@ Connection details, recent projects, recovery copies and cached map tiles live i
 | macOS | `~/Library/Application Support/acore-quest-creator` |
 | Linux | `~/.config/acore-quest-creator` |
 
-Exported SQL patches go to `Documents/ACORE Quest Creator/sql`. Projects are saved wherever you choose, as `.aqc` files.
+Exported SQL patches go to the **Export folder**, or `Documents/ACORE Quest Creator/sql` when none is set. Projects are saved wherever you choose, as `.aqc` files.

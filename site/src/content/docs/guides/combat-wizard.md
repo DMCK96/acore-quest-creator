@@ -32,7 +32,7 @@ Then change anything the preset filled in.
 - **Reactions**: what happens *when it enters combat*, *at a health %*, *when a friend is hurt*, *when one of its adds dies*, *when it kills a player*, *when it dies* or *when it gives up and resets*. A reaction can **Say or yell**, **Emote**, **Cast a spell**, **Summon adds**, **Despawn its adds**, **Go to phase**, **Flee for help**, **Call for help**, **Stop taking damage at** a health %, **Surrender** or **Give quest credit**.
 
 :::tip
-With the [server data folder](/acore-quest-creator/getting-started/connect/#game-files-optional) connected, type a spell's name to find it. Without it, type the spell ID.
+With the [server data folder](/acore-quest-creator/getting-started/connect/#folders-optional) connected, type a spell's name to find it. Without it, type the spell ID.
 :::
 
 A fight pauses a patrolling NPC's route; it carries on walking after combat.

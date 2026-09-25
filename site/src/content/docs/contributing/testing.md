@@ -8,9 +8,11 @@ sidebar:
 | Command | What it runs | Needs |
 | --- | --- | --- |
 | `npm run typecheck` | TypeScript over main and renderer | nothing |
-| `npm test` | Unit tests (Vitest): `tests/core`, `tests/main`, `tests/renderer` and more | nothing |
-| `npm run test:int` | Integration tests (`*.int.test.ts`) against a real world database | `ACQC_TEST_MYSQL_URL`, `ACQC_AC_SQL_DIR` |
-| `npm run test:e2e` | End-to-end tests (Playwright) that build and drive the app | `ACQC_TEST_MYSQL_URL` |
+| `npm test` | Unit tests (Vitest): `tests/core`, `tests/main`, `tests/renderer` and more | the fork's base SQL |
+| `npm run test:int` | Integration tests (`*.int.test.ts`) against a real world database | `ACQC_TEST_MYSQL_URL`, the fork's base SQL |
+| `npm run test:e2e` | End-to-end tests (Playwright) that build and drive the app | `ACQC_TEST_MYSQL_URL`, the server data and game client folders |
+
+The unit tests read table layouts from the Conquest of AzerothCore fork's base SQL (`data/sql/base/db_world`). They find it beside the server data folder you set in `.env` (`ACQC_WORLD_DB_DBC_DIR`), or at `ACQC_AC_SQL_DIR`. Tests read `.env` themselves, the way the app does; a variable already set in your shell wins.
 
 Run `npm run typecheck` and `npm test` before every pull request.
 
@@ -24,8 +26,8 @@ ACQC_TEST_MYSQL_URL=mysql://user:password@127.0.0.1:3306/acore_world
 
 They do not skip when it is missing; they fail, so a green run always means they ran.
 
-- Integration tests that read AzerothCore's base SQL also need `ACQC_AC_SQL_DIR`, the `data/sql` folder of your AzerothCore checkout.
-- End-to-end tests that use the map read `ACQC_WORLD_DB_DBC_DIR` (the server's `dbc/` folder) and `ACQC_TEST_CLIENT_DIR` (the game client folder).
+- End-to-end tests that use the map read the server data and game client folders from `ACQC_WORLD_DB_DBC_DIR` and `ACQC_WORLD_DB_CLIENT_DIR`.
+- A test that needs a folder you have not set fails and names the variable to set.
 - End-to-end tests launch the app with a fresh `ACQC_USER_DATA` folder, so they never touch your own connection details or projects.
 
 :::caution
