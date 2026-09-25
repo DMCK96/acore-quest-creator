@@ -1,0 +1,21 @@
+.icon-screen {
+  position: fixed;
+  inset: 0;
+  background: var(--bg);
+}
+
+/* The sphere's box. Its glow and particles reach about 1.45 times its radius, so at 66.5% of the
+   window's width everything visible stays about 4% inside the edge. */
+.icon-screen__orb {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 66.5vmin;
+  height: 66.5vmin;
+  transform: translate(-50%, -50%);
+}
+
+.icon-screen__grid {
+  position: absolute;
+  inset: 0;
+}

@@ -62,7 +62,7 @@ More: [Testing](https://dmck96.github.io/acore-quest-creator/contributing/testin
 
 ## Docs
 
-The docs site is in `site/` (Astro Starlight). Run it with `npm --prefix site ci` then `npm run docs:dev`; `npm run docs:build` fails on broken links or missing images. `npm run docs:screenshots` regenerates the screenshots from the real app using your `.env`.
+The docs site is in `site/` (Astro Starlight). Run it with `npm --prefix site ci` then `npm run docs:dev`; `npm run docs:build` fails on broken links or missing images. `npm run docs:screenshots` regenerates the screenshots from the real app using your `.env`, and `npm run app:icon` recaptures the app icon (`build/icon.png`).
 
 More: [Docs and screenshots](https://dmck96.github.io/acore-quest-creator/contributing/docs-and-screenshots/)
 

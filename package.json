@@ -26,7 +26,8 @@
     "release:check-tag": "tsx scripts/check-tag-version.ts",
     "docs:dev": "npm --prefix site run dev",
     "docs:build": "npm --prefix site run build",
-    "docs:screenshots": "npm run build && playwright test -c playwright.docs.config.ts"
+    "docs:screenshots": "npm run build && playwright test -c playwright.docs.config.ts screenshots",
+    "app:icon": "npm run build && playwright test -c playwright.docs.config.ts icon"
   },
   "dependencies": {
     "@tsparticles/engine": "^4.4.0",

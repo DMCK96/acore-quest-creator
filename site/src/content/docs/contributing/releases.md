@@ -49,7 +49,7 @@ Builds are not code-signed, so Windows and macOS warn on first open; [Install](/
 
 While the repository is private, GitHub Pages cannot publish on the free plan and only collaborators can download releases. To go public:
 
-1. Make sure `build/icon.png` (1024×1024) is in place, so the installers get the app icon.
+1. Make sure `build/icon.png` (1024×1024) is in place, so the installers get the app icon. `npm run app:icon` captures it from the app: the quest orb on the canvas grid.
 2. Make the repository public.
 3. In **Settings → Pages**, set **Source** to **GitHub Actions**.
 4. Re-run the **Docs** workflow. The site appears at `https://dmck96.github.io/acore-quest-creator/`.

@@ -36,6 +36,10 @@ It needs `.env` with a world database, the server data folder and the game clien
 
 Regenerate the screenshots after a change to a screen the docs show, and before a release. Check each image before committing. Pages use them with Markdown image syntax, such as `![The quest map](../../../assets/screenshots/quest-map.png)`.
 
+## The app icon
+
+`npm run app:icon` opens the app on its icon screen (the quest orb centred on the canvas grid, at `#icon`), captures it at 1024×1024 and saves `build/icon.png`, from which electron-builder makes each platform's icon. It fails rather than save an icon where any of the orb touches the edge. The particles fall differently each run, so look at the result before committing it.
+
 ## Publishing
 
 The **Docs** workflow builds the site on every push to `main` that touches `site/`, and deploys it to GitHub Pages once the repository is public.
