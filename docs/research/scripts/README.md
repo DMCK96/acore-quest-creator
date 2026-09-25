@@ -11,3 +11,6 @@ re-run. They expect a working folder holding:
 - `playable.json`: the playable custom quest IDs from the gap analysis
 
 `infer2.py` is the giver/ender inference and its validation against stock quests.
+
+`supertrack.py` checks the QuestSuperTrack points (`supertrack.json`, supplied separately
+and not committed) against CoA spawns and applies them to the custom quests.

@@ -3,6 +3,8 @@
 Research note, 2026-09-25. Source: [hertigservices/ascension-data](https://github.com/hertigservices/ascension-data)
 and the [AscensionDB](https://ascension-db.ascension-archive.workers.dev/) site built from it.
 
+The summary of all findings is in [ascension-custom-content-report.md](ascension-custom-content-report.md).
+
 ## Gap analysis: custom Ascension content vs azerothcore-wotlk-coa
 
 Compared against [jealous-sound/azerothcore-wotlk-coa](https://github.com/jealous-sound/azerothcore-wotlk-coa)
