@@ -30,7 +30,7 @@
   opacity: 0;
 }
 
-.login--leaving .login__card {
+.login--leaving .conn-card {
   opacity: 0;
   transform: scale(0.97);
   transition:
@@ -46,94 +46,4 @@
   aspect-ratio: 1;
   transform: translate(-50%, -50%);
   pointer-events: none;
-}
-
-.login__card {
-  position: relative;
-  z-index: 1;
-  display: flex;
-  flex-direction: column;
-  gap: 1.1rem;
-  width: min(30rem, 100%);
-  box-sizing: border-box;
-  padding: 1.6rem 1.7rem 1.5rem;
-  /* Translucent, so the orb's glow shows through the frosted card. */
-  background: rgba(34, 27, 21, 0.78);
-  backdrop-filter: blur(14px);
-  border: 1px solid rgba(207, 159, 63, 0.28);
-  border-radius: var(--radius-lg);
-  box-shadow:
-    0 24px 60px rgba(0, 0, 0, 0.55),
-    0 0 0 1px rgba(0, 0, 0, 0.3);
-}
-
-.login__header {
-  text-align: center;
-}
-
-.login__title {
-  margin: 0;
-  font-family: var(--font-display);
-  font-size: 1.7rem;
-  font-weight: normal;
-  color: #fff6e4;
-  text-shadow: 0 1px 10px rgba(207, 159, 63, 0.35);
-}
-
-.login__subtitle {
-  margin: 0.35rem 0 0;
-  font-size: 0.9rem;
-  color: var(--text-muted);
-}
-
-.login__error {
-  margin: 0;
-  padding: 0.6rem 0.8rem;
-  font-size: 0.85rem;
-  line-height: 1.4;
-  white-space: pre-line;
-  word-break: break-word;
-  background: var(--red-soft);
-  border: 1px solid var(--red);
-  border-radius: var(--radius);
-}
-
-.login__submit {
-  align-self: stretch;
-  padding: 0.7em 1em;
-  font-size: 1rem;
-}
-
-.login__submit:disabled {
-  opacity: 0.7;
-  cursor: progress;
-}
-
-/*
- * With room, the card widens to two columns (the world database on the left, the game files and
- * dev database on the right) so it fits the launch window without scrolling.
- */
-@media (min-width: 60rem) {
-  .login__card {
-    width: min(58rem, 100%);
-  }
-
-  .login .conn-fields {
-    display: grid;
-    grid-template-columns: 1fr 1fr;
-    gap: 1rem 1.6rem;
-    align-items: start;
-  }
-
-  .login .conn-fields__section:first-child {
-    grid-row: span 2;
-    align-self: stretch;
-    padding-right: 1.6rem;
-    border-right: 1px solid var(--border-soft);
-  }
-
-  .login .conn-fields__section:nth-child(2) {
-    padding-top: 0;
-    border-top: 0;
-  }
 }

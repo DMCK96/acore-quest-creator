@@ -1,38 +1,15 @@
-.settings-dialog {
-  width: min(34em, 100%);
-}
-
-.settings-dialog__error {
-  margin: 1rem 0 0;
-  padding: 0.6rem 0.8rem;
-  font-size: 0.85rem;
-  line-height: 1.4;
-  white-space: pre-line;
-  word-break: break-word;
-  background: var(--red-soft);
-  border: 1px solid var(--red);
-  border-radius: var(--radius);
-}
-
-.settings-dialog__actions {
-  display: flex;
+/* Settings shows the login screen's connection card, centred, scrolling if the window is short. */
+.settings-backdrop {
   align-items: center;
-  justify-content: flex-end;
-  flex-wrap: wrap;
-  gap: 0.6rem;
-  margin-top: 1.2rem;
-  padding-top: 1rem;
-  border-top: 1px solid var(--border-soft);
+  padding: 1rem;
 }
 
-.settings-dialog__note {
-  flex: 1 1 12rem;
-  margin: 0;
-  font-size: 0.8rem;
-  color: var(--text-muted);
+.settings-backdrop .conn-card {
+  max-height: 100%;
+  overflow-y: auto;
 }
 
 /* Focus lands on the dialog itself when it opens; the fields show their own rings. */
-.settings-dialog:focus {
+.settings-backdrop .conn-card:focus {
   outline: none;
 }

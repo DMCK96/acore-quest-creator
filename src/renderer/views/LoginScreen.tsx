@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import type { AppStore } from '../state/app-store';
 import { QuestOrb } from '../components/QuestOrb';
-import { ConnectionFields } from '../connection/ConnectionFields';
+import { ConnectionCard } from '../connection/ConnectionCard';
 import { draftFromProfiles, validateDraft, type ConnectionDraft, type DraftErrors } from '../connection/draft';
 import './LoginScreen.css';
 
@@ -116,21 +116,18 @@ export function LoginScreen({
       <div ref={orbRef} className="login__orb" aria-hidden="true">
         <QuestOrb />
       </div>
-      <form className="login__card" onSubmit={(e) => void submit(e)} noValidate>
-        <header className="login__header">
-          <h1 className="login__title">ACORE Quest Creator</h1>
-          <p className="login__subtitle">Connect to your AzerothCore world database.</p>
-        </header>
-        {error && (
-          <p className="login__error" role="alert">
-            {error}
-          </p>
-        )}
-        <ConnectionFields draft={draft} onChange={edit} errors={errors} disabled={busy} browse={chooseServerDataDir} />
-        <button type="submit" className="btn btn--primary login__submit" disabled={busy}>
-          {busy ? 'Connecting…' : returning ? 'Connect' : 'Save and connect'}
-        </button>
-      </form>
+      <ConnectionCard
+        title="ACORE Quest Creator"
+        subtitle="Connect to your AzerothCore world database."
+        error={error}
+        submitLabel={busy ? 'Connecting…' : returning ? 'Connect' : 'Save and connect'}
+        busy={busy}
+        draft={draft}
+        onChange={edit}
+        errors={errors}
+        browse={chooseServerDataDir}
+        onSubmit={(e) => void submit(e)}
+      />
     </main>
   );
 }

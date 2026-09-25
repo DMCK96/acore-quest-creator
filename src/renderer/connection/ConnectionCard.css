@@ -1,0 +1,107 @@
+/* The connection card, shared by the login screen (over the orb) and Settings (over the canvas). */
+.conn-card {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 1.1rem;
+  width: min(30rem, 100%);
+  box-sizing: border-box;
+  padding: 1.6rem 1.7rem 1.5rem;
+  /* Translucent, so the orb's glow shows through the frosted card. */
+  background: rgba(34, 27, 21, 0.78);
+  backdrop-filter: blur(14px);
+  border: 1px solid rgba(207, 159, 63, 0.28);
+  border-radius: var(--radius-lg);
+  box-shadow:
+    0 24px 60px rgba(0, 0, 0, 0.55),
+    0 0 0 1px rgba(0, 0, 0, 0.3);
+}
+
+.conn-card__header {
+  position: relative;
+  text-align: center;
+}
+
+.conn-card__title {
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: 1.7rem;
+  font-weight: normal;
+  color: #fff6e4;
+  text-shadow: 0 1px 10px rgba(207, 159, 63, 0.35);
+}
+
+.conn-card__subtitle {
+  margin: 0.35rem 0 0;
+  font-size: 0.9rem;
+  color: var(--text-muted);
+}
+
+.conn-card__close {
+  position: absolute;
+  top: -0.4rem;
+  right: -0.5rem;
+}
+
+.conn-card__error {
+  margin: 0;
+  padding: 0.6rem 0.8rem;
+  font-size: 0.85rem;
+  line-height: 1.4;
+  white-space: pre-line;
+  word-break: break-word;
+  background: var(--red-soft);
+  border: 1px solid var(--red);
+  border-radius: var(--radius);
+}
+
+.conn-card__note {
+  margin: 0 0 -0.4rem;
+  font-size: 0.8rem;
+  text-align: center;
+  color: var(--text-muted);
+}
+
+.conn-card__submit {
+  align-self: stretch;
+  padding: 0.7em 1em;
+  font-size: 1rem;
+}
+
+.conn-card__submit:disabled {
+  opacity: 0.7;
+}
+
+.conn-card[aria-busy='true'] .conn-card__submit {
+  cursor: progress;
+}
+
+/*
+ * With room, the card widens to two columns (the world database on the left, the game files and
+ * dev database on the right) so it fits the launch window without scrolling.
+ */
+@media (min-width: 60rem) {
+  .conn-card {
+    width: min(58rem, 100%);
+  }
+
+  .conn-card .conn-fields {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 1rem 1.6rem;
+    align-items: start;
+  }
+
+  .conn-card .conn-fields__section:first-child {
+    grid-row: span 2;
+    align-self: stretch;
+    padding-right: 1.6rem;
+    border-right: 1px solid var(--border-soft);
+  }
+
+  .conn-card .conn-fields__section:nth-child(2) {
+    padding-top: 0;
+    border-top: 0;
+  }
+}

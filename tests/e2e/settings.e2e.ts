@@ -61,7 +61,7 @@ test('settings add and remove the dev database, and a bad reconnect keeps the ol
   // A wrong password: the error shows in the modal and the app stays connected.
   await page.getByRole('button', { name: 'Settings' }).click();
   await settings.getByLabel('Password', { exact: true }).fill('definitely-wrong-password');
-  await settings.getByRole('button', { name: 'Save and reconnect' }).click();
+  await settings.getByRole('button', { name: 'Save' }).click();
   await expect(settings.getByRole('alert')).toContainText(/denied|password/i);
   await expect(page.getByText(`Connected: ${db.database}`)).toBeVisible();
   await settings.getByRole('button', { name: 'Close' }).click();

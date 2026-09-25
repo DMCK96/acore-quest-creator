@@ -39,10 +39,18 @@ describe('SettingsDialog', () => {
     expect(screen.getByLabelText('Host')).toHaveValue('db.local');
     expect(screen.getByLabelText('Dev database')).toHaveValue('acore_dev');
   });
+  it('looks like the login card, with Save for Connect', async () => {
+    await setup();
+    const dialog = screen.getByRole('dialog', { name: 'Settings' });
+    expect(dialog).toHaveClass('conn-card');
+    expect(screen.getByRole('button', { name: 'Save' })).toBeDisabled();
+    expect(screen.queryByRole('button', { name: /connect/i })).toBeNull();
+  });
   it('a world change saves and reconnects, then closes', async () => {
     const { api, store, onClose } = await setup();
     await userEvent.type(screen.getByLabelText('Game client folder (optional)'), 'E:/WoW');
-    await userEvent.click(screen.getByRole('button', { name: 'Save and reconnect' }));
+    expect(screen.getByText(/Saving reconnects with these details/)).toBeInTheDocument();
+    await userEvent.click(screen.getByRole('button', { name: 'Save' }));
     await waitFor(() => expect(onClose).toHaveBeenCalled());
     expect(api.saveProfile).toHaveBeenCalledWith(expect.objectContaining({ id: 1, clientDir: 'E:/WoW' }));
     expect(api.connect).toHaveBeenCalledWith(1);
@@ -63,7 +71,7 @@ describe('SettingsDialog', () => {
     const { api, store, onClose } = await setup();
     vi.mocked(api.connect).mockResolvedValueOnce(errv('CONNECTION', 'Access denied for user acore'));
     await userEvent.type(screen.getByLabelText('Password'), 'wrong');
-    await userEvent.click(screen.getByRole('button', { name: 'Save and reconnect' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Save' }));
     const dialog = screen.getByRole('dialog', { name: 'Settings' });
     await waitFor(() => expect(dialog).toHaveTextContent('Access denied for user acore'));
     expect(onClose).not.toHaveBeenCalled();
@@ -78,9 +86,9 @@ describe('SettingsDialog', () => {
     await userEvent.type(screen.getByLabelText('Dev host'), 'devhost');
     await userEvent.type(screen.getByLabelText('Dev user'), 'u');
     await userEvent.type(screen.getByLabelText('Dev database'), 'acore_dev');
-    await userEvent.click(screen.getByRole('button', { name: 'Save and reconnect' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Save' }));
     await screen.findByText('Cannot reach db.local');
-    await userEvent.click(screen.getByRole('button', { name: 'Save and reconnect' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Save' }));
     await waitFor(() => expect(onClose).toHaveBeenCalled());
     const devSaves = vi.mocked(api.saveProfile).mock.calls.map((c) => c[0]).filter((p) => p.role === 'dev');
     expect(devSaves).toHaveLength(2);
@@ -91,7 +99,7 @@ describe('SettingsDialog', () => {
     let finish: (v: unknown) => void = () => {};
     vi.mocked(api.connect).mockImplementationOnce(() => new Promise((r) => { finish = r; }) as never);
     await userEvent.type(screen.getByLabelText('Password'), 'x');
-    await userEvent.click(screen.getByRole('button', { name: 'Save and reconnect' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Save' }));
     await screen.findByRole('button', { name: 'Saving…' });
     await userEvent.keyboard('{Escape}');
     await userEvent.click(screen.getByRole('button', { name: 'Close' }));
@@ -102,16 +110,15 @@ describe('SettingsDialog', () => {
   it('validates before saving', async () => {
     const { api } = await setup();
     await userEvent.clear(screen.getByLabelText('Host'));
-    await userEvent.click(screen.getByRole('button', { name: 'Save and reconnect' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Save' }));
     expect(screen.getByText('Host is required')).toBeInTheDocument();
     expect(api.saveProfile).not.toHaveBeenCalled();
   });
-  it('closes on Escape, Cancel and the close button without saving', async () => {
+  it('closes on Escape and the close button without saving', async () => {
     const { api, onClose } = await setup();
     await userEvent.keyboard('{Escape}');
-    await userEvent.click(screen.getByRole('button', { name: 'Cancel' }));
     await userEvent.click(screen.getByRole('button', { name: 'Close' }));
-    expect(onClose).toHaveBeenCalledTimes(3);
+    expect(onClose).toHaveBeenCalledTimes(2);
     expect(api.saveProfile).not.toHaveBeenCalled();
   });
 });
@@ -134,8 +141,8 @@ describe('SettingsDialog keyboard', () => {
     const dialog = screen.getByRole('dialog', { name: 'Settings' });
     expect(dialog).toHaveFocus();
     await userEvent.tab({ shift: true });
-    // Save is disabled until something changes, so Cancel is the last stop.
-    expect(screen.getByRole('button', { name: 'Cancel' })).toHaveFocus();
+    // Save is disabled until something changes, so Add a dev database is the last stop.
+    expect(screen.getByRole('button', { name: 'Add a dev database' })).toHaveFocus();
     await userEvent.tab();
     expect(screen.getByRole('button', { name: 'Close' })).toHaveFocus();
   });
@@ -157,10 +164,10 @@ describe('SettingsDialog partial save', () => {
     await userEvent.type(screen.getByLabelText('Dev host'), 'devhost');
     await userEvent.type(screen.getByLabelText('Dev user'), 'u');
     await userEvent.type(screen.getByLabelText('Dev database'), 'acore_dev');
-    await userEvent.click(screen.getByRole('button', { name: 'Save and reconnect' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Save' }));
     expect(await screen.findByRole('alert')).toHaveTextContent('The world database was saved, but the dev database was not: Secret storage is unavailable');
     expect(api.connect).not.toHaveBeenCalled();
-    expect(screen.getByRole('button', { name: 'Save and reconnect' })).toBeEnabled();
+    expect(screen.getByRole('button', { name: 'Save' })).toBeEnabled();
     expect(screen.getByLabelText('Dev host')).toHaveValue('devhost');
   });
 });

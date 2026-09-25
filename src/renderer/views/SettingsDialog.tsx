@@ -1,16 +1,17 @@
 import { useEffect, useRef, useState } from 'react';
 import type { AppStore } from '../state/app-store';
-import { ConnectionFields } from '../connection/ConnectionFields';
+import { ConnectionCard } from '../connection/ConnectionCard';
 import { trapTab } from '../components/trap-tab';
 import { devChanged, draftFromProfiles, validateDraft, worldChanged, type ConnectionDraft, type DraftErrors } from '../connection/draft';
 import './ProjectDialog.css';
 import './SettingsDialog.css';
 
 /**
- * The Settings modal: the same connection details as the login screen, changed without leaving
- * the work. A change to the world database (or its folders) saves and reconnects, closing any
- * open quest; a change to the dev database alone just saves. A failed reconnect keeps the old
- * connection and shows why here.
+ * The Settings modal: the login screen's card, over the canvas, with Save for Connect. A change to
+ * the world database (or its folders) saves and then reconnects: the new connection is opened
+ * first and the old one closed only once it works, so a failed reconnect keeps the old connection
+ * (and shows why here). Reconnecting closes any open quest. A change to the dev database alone
+ * just saves.
  */
 export function SettingsDialog({ store, onClose }: { store: AppStore; onClose: () => void }): React.JSX.Element {
   const { saveConnection, reconnect, chooseServerDataDir } = store.getState();
@@ -97,43 +98,29 @@ export function SettingsDialog({ store, onClose }: { store: AppStore; onClose: (
   };
 
   return (
-    <div className="modal-backdrop" onMouseDown={(e) => e.target === e.currentTarget && close()}>
-      <form
-        ref={dialog}
-        className="modal settings-dialog"
+    <div className="modal-backdrop settings-backdrop" onMouseDown={(e) => e.target === e.currentTarget && close()}>
+      <ConnectionCard
+        formRef={dialog}
         role="dialog"
         aria-modal="true"
         aria-labelledby="settings-dialog-title"
         tabIndex={-1}
         onKeyDown={(e) => trapTab(e, dialog.current)}
         onSubmit={(e) => void submit(e)}
-        noValidate
-      >
-        <header className="modal__header">
-          <h2 id="settings-dialog-title">Settings</h2>
-          <button type="button" className="btn btn--icon" aria-label="Close" onClick={close}>
-            ✕
-          </button>
-        </header>
-
-        <ConnectionFields draft={draft} onChange={setDraft} errors={errors} disabled={busy} browse={chooseServerDataDir} />
-
-        {error && (
-          <p className="settings-dialog__error" role="alert">
-            {error}
-          </p>
-        )}
-
-        <div className="settings-dialog__actions">
-          {reconnects && <p className="settings-dialog__note">Reconnecting closes the open quest. Your project stays open.</p>}
-          <button type="button" className="btn" onClick={onClose} disabled={busy}>
-            Cancel
-          </button>
-          <button type="submit" className="btn btn--primary" disabled={busy || !changed}>
-            {busy ? 'Saving…' : reconnects ? 'Save and reconnect' : 'Save'}
-          </button>
-        </div>
-      </form>
+        title="Settings"
+        titleId="settings-dialog-title"
+        subtitle="Your AzerothCore world database connection."
+        error={error}
+        note={reconnects ? 'Saving reconnects with these details and closes the open quest. Your project stays open.' : null}
+        submitLabel={busy ? 'Saving…' : 'Save'}
+        submitDisabled={!changed}
+        busy={busy}
+        onClose={close}
+        draft={draft}
+        onChange={setDraft}
+        errors={errors}
+        browse={chooseServerDataDir}
+      />
     </div>
   );
 }
