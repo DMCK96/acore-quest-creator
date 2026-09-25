@@ -1,0 +1,44 @@
+---
+title: Your first quest
+description: A walkthrough from an empty canvas to an exported SQL patch.
+sidebar:
+  order: 4
+---
+
+import { Steps } from '@astrojs/starlight/components';
+
+This walkthrough builds a small quest, **The Lost Shipment**: a dockmaster asks the player to deal with a kobold and bring back some cloth. It takes about ten minutes.
+
+<Steps>
+
+1. **Start a quest.** On the canvas, choose **New quest**. The quest opens straight away. Give it a **Quest title**, a **Level** and a **Min level**.
+
+   ![A new quest with its title and levels filled in, and its modules below](../../../assets/screenshots/quest-details.png)
+
+   Below the title are the quest's **modules**: Quest Giver, Objectives, Dialogue, Rewards and more. Each card opens its own editor.
+
+2. **Give it a quest giver.** Open **Quest Giver** and choose **Add quest giver**. Pick an NPC that already exists by typing its name, or choose **New NPC** to make one. For a new NPC, give it a name, then on **Look & gear** type a creature under **Look like…** to borrow its appearance.
+
+   ![The Quest Giver editor with a new NPC as the quest's starter and ender](../../../assets/screenshots/quest-giver.png)
+
+   Add a **quest ender** the same way: the NPC the player hands the quest in to. Then choose **Place on map** to put your NPC in the world; see [Quest map](/acore-quest-creator/guides/quest-map/).
+
+3. **Say what the player must do.** Open **Objectives**. **Add kill or use** asks for a creature or object; **Add collect** asks for an item.
+
+   ![The Objectives editor with one kill and one collect objective](../../../assets/screenshots/objectives.png)
+
+4. **Fill in the rest.** Write the quest's text in **Dialogue** and pick its **Rewards**. Add a **Scripts** module if something should happen around the quest, such as the giver speaking when the player accepts it. Each module has its own page under [Guides](/acore-quest-creator/guides/).
+
+5. **Check the changes.** Choose **Changes** to see every database row the quest adds or changes.
+
+   ![The Changes dialog listing new rows](../../../assets/screenshots/changes.png)
+
+6. **Export it.** Choose **Export patch** to write the quest as an `.sql` file; the app shows where it saved it. Or, with a dev database in Settings, choose **Apply to dev DB** to write it straight to your test server.
+
+7. **Try it.** Choose **Test in game** for the commands that reload and try the quest on your test server. See [Test in game](/acore-quest-creator/guides/test-in-game/).
+
+</Steps>
+
+## Save your project
+
+Your quests live in a **project**. Choose **Project** in the top bar to save it as an `.aqc` file, open another one or start a new one. See [Projects and the quest canvas](/acore-quest-creator/guides/projects-and-canvas/).
