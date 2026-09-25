@@ -1,4 +1,5 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
+import { join } from 'node:path';
 import { createApi, type ApiDeps, type DevDb } from '../../src/main/api';
 import { openStore, type SecretBox } from '../../src/main/store/store';
 import { createProjectSession, type ProjectSession } from '../../src/main/project/session';
@@ -379,11 +380,12 @@ describe('preview, validate, export', () => {
     const { api } = await connected();
     ok(await api.openQuest(60001));
     const e = ok(await api.exportQuest(60001));
-    expect(e.path).toBe('C:\\out\\2026_09_21_00_quest_60001_wolves.sql');
+    // Joined the way the API joins, so the test holds on Linux as well as Windows.
+    expect(e.path).toBe(join('C:\\out', '2026_09_21_00_quest_60001_wolves.sql'));
     expect(files.get(e.path)).toBe(e.sql);
     expect(e.sql).toContain('DELETE FROM `quest_template` WHERE `ID` = 60001;');
     const second = ok(await api.exportQuest(60001));
-    expect(second.path).toBe('C:\\out\\2026_09_21_01_quest_60001_wolves.sql');
+    expect(second.path).toBe(join('C:\\out', '2026_09_21_01_quest_60001_wolves.sql'));
   });
 
   it('blocks export on validation errors and returns the issues', async () => {
