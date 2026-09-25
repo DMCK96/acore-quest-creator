@@ -12,7 +12,29 @@ extraResources:
 # better-sqlite3 loads a native .node binary, which cannot be required from inside the asar either.
 asarUnpack:
   - '**/node_modules/better-sqlite3/**'
+# The package name, not productName: release files get no spaces in their names.
+artifactName: ${name}-${version}-${os}-${arch}.${ext}
+# Every OS job of the release workflow uploads into the same draft release for the tag; the
+# maintainer edits its notes and publishes it by hand.
+publish:
+  provider: github
+  owner: DMCK96
+  repo: acore-quest-creator
+  releaseType: draft
+# An unpacked local build uses `npx electron-builder --dir`.
 win:
   target:
-    - dir
     - nsis
+# Unsigned by choice: people open it with right-click → Open the first time.
+mac:
+  target:
+    - dmg
+    - zip
+  category: public.app-category.developer-tools
+  identity: null
+linux:
+  target:
+    - AppImage
+    - deb
+  category: Development
+  maintainer: Daniel Mckibbin <vyrus@fourtwenty.games>
