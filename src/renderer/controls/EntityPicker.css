@@ -33,9 +33,11 @@
   padding: 2px 7px;
 }
 
+/* Under the picker: in a flex column an absolute box without a `top` would open over the input. */
 .entity-picker__list {
   position: absolute;
   z-index: 20;
+  top: 100%;
   left: 0;
   right: 0;
   margin: 2px 0 0;
@@ -64,4 +66,14 @@
 .entity-picker > .entity-picker__row {
   align-self: stretch;
   max-width: 460px;
+}
+
+/* Zone and category names run long ("Felwood: Shadows of Corruption"): room to read them. */
+.quest-sort .entity-picker__row {
+  width: 320px;
+  max-width: 100%;
+}
+
+.quest-sort .entity-picker__list {
+  min-width: 360px;
 }

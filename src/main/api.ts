@@ -74,6 +74,7 @@ import { TerrainFormatError, gridFileName, parseMapFile, terrainHeight, type Ter
 import { loadServerData, readServerDataFile, type ServerData, type ServerDataFiles } from './server-data';
 import { CAST_TIMES_FILE, RANGE_FILE, readSpellIndex, SPELL_FILE, spellDetail, spellLabel, type SpellIndex } from '../core/game/spells';
 import { readSoundIndex, SOUND_FILE, type SoundIndex } from '../core/game/sounds';
+import { QUEST_SORT_FILE, readQuestSorts, type QuestSortIndex } from '../core/game/quest-sorts';
 import { DISPLAY_FILES, readCreatureDisplays, readObjectDisplays, type DisplayIndex } from '../core/game/displays';
 import { FACTION_TEMPLATE_FILES, readFactionTemplates, type FactionTemplateIndex } from '../core/game/faction-templates';
 import type { EntityHit, LookKind } from '../core/db/entity-search';
@@ -140,6 +141,7 @@ interface Session {
   spellsReady?: SpellIndex;
   /** Sound names, loaded on the first sound search or lookup; a reason when there are none. */
   sounds?: Promise<SoundIndex | { reason: string }>;
+  questSorts?: Promise<QuestSortIndex>;
   /** Looks and factions for new NPCs and objects, each loaded on first use. */
   looks?: Partial<Record<LookKind, Promise<DisplayIndex | FactionTemplateIndex | { reason: string }>>>;
   /** Parsed navmesh tiles by file name (null when missing or unreadable), most recent last. */
@@ -707,6 +709,32 @@ export function createApi(deps: ApiDeps): Api {
     return live.sounds;
   }
 
+  /**
+   * Quest log headings: zones from the server data folder, when it has them, and categories (from
+   * `QuestSort.dbc`, or the stock list). A missing or unreadable file only loses its names.
+   */
+  function questSortsOf(live: Session): Promise<QuestSortIndex> {
+    live.questSorts ??= (async () => {
+      const dir = live.serverData?.status.dir;
+      const files = deps.serverDataFiles ?? NO_SERVER_DATA_FILES;
+      const read = async (name: string): Promise<Uint8Array | undefined> => {
+        if (!dir) return undefined;
+        try {
+          return (await readServerDataFile(dir, name, files)) ?? undefined;
+        } catch {
+          return undefined;
+        }
+      };
+      const [areas, maps, sorts] = await Promise.all([read(AREA_TABLE_FILE), read(MAP_FILE), read(QUEST_SORT_FILE)]);
+      try {
+        return readQuestSorts({ areas, maps, sorts });
+      } catch {
+        return readQuestSorts({});
+      }
+    })();
+    return live.questSorts;
+  }
+
   /** One of the look or faction indexes, read from the server data folder on first use. */
   function lookOf(live: Session, kind: LookKind): Promise<DisplayIndex | FactionTemplateIndex | { reason: string }> {
     const looks = (live.looks ??= {});
@@ -954,6 +982,7 @@ export function createApi(deps: ApiDeps): Api {
           return 'reason' in sounds ? [] : sounds.search(text, ENTITY_SEARCH_LIMIT);
         }
         if (isLookKind(kind)) return lookHits(connected(), kind, text);
+        if (kind === 'questSort') return (await questSortsOf(connected())).search(text, ENTITY_SEARCH_LIMIT);
         if (kind === 'spell') {
           const spells = await spellsOf(connected());
           if ('reason' in spells) return [];
@@ -1245,6 +1274,15 @@ export function createApi(deps: ApiDeps): Api {
           for (const id of ids) {
             const found = index.get(id);
             if (found !== undefined) names[id] = typeof found === 'string' ? found : found.name;
+          }
+          return names;
+        }
+        if (kind === 'questSort') {
+          const index = await questSortsOf(connected());
+          const names: Record<number, string> = {};
+          for (const id of ids) {
+            const name = index.get(id);
+            if (name !== undefined) names[id] = name;
           }
           return names;
         }

@@ -106,8 +106,8 @@ const scalars: ScalarFieldDef[] = [
   scalar({
     column: 'QuestSortID',
     type: { kind: 'int' },
-    label: 'Quest log category',
-    help: 'Where the quest is filed in the quest log. A positive value is a zone ID from AreaTable.dbc. A negative value is a category from QuestSort.dbc with the sign flipped, for example -22 for Seasonal or -81 for Warrior.',
+    label: 'Quest log heading',
+    help: "The heading the quest is listed under in the player's quest log: a zone such as Elwynn Forest, or a category such as Warrior or Seasonal. Search by name; zone names need the server data folder.",
     group: 'identity',
     control: 'questSort',
   }),

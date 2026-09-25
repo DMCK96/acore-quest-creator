@@ -14,10 +14,8 @@
  *   original 10 are listed here: class IDs above 30 would need bit 1<<30/1<<31, and JS's 32-bit
  *   signed bitwise operators cannot represent those bits safely for mask math, so extending this
  *   list to the fork's full 32 classes is out of scope for the mask control (see task report).
- * - `QUEST_SORTS`: `enum QuestSort` in `src/server/shared/SharedDefines.h` (the brief's
- *   `QuestDef.h` pointer was slightly off - the enum actually lives in `SharedDefines.h`, which
- *   `QuestDef.h` includes). All 40 values are positive category IDs from QuestSort.dbc; the sign
- *   flip to a negative `QuestSortID` happens in `QuestSortControl`, not here.
+ * - Quest log categories (`enum QuestSort`) live in `src/core/game/quest-sorts.ts`, beside the zones
+ *   they are searched with.
  * - `EMOTES`: `enum Emote` in `src/server/shared/SharedDefines.h` (search anchor: `EMOTE_ONESHOT_TALK`).
  *   All 174 named values are listed, labelled from their constant name with a "(one-shot)"/"(state)"
  *   suffix to disambiguate pairs like `EMOTE_ONESHOT_DANCE` vs `EMOTE_STATE_DANCE` that would
@@ -54,50 +52,6 @@ export const CLASSES: { bit: number; label: string }[] = [
   { bit: 128, label: 'Mage' },
   { bit: 256, label: 'Warlock' },
   { bit: 1024, label: 'Druid' },
-];
-
-export const QUEST_SORTS: { value: number; label: string }[] = [
-  { value: 1, label: 'Epic' },
-  { value: 21, label: 'Wailing Caverns (old)' },
-  { value: 22, label: 'Seasonal' },
-  { value: 23, label: 'Undercity (old)' },
-  { value: 24, label: 'Herbalism' },
-  { value: 25, label: 'Battlegrounds' },
-  { value: 41, label: "Uldaman (old)" },
-  { value: 61, label: 'Warlock' },
-  { value: 81, label: 'Warrior' },
-  { value: 82, label: 'Shaman' },
-  { value: 101, label: 'Fishing' },
-  { value: 121, label: 'Blacksmithing' },
-  { value: 141, label: 'Paladin' },
-  { value: 161, label: 'Mage' },
-  { value: 162, label: 'Rogue' },
-  { value: 181, label: 'Alchemy' },
-  { value: 182, label: 'Leatherworking' },
-  { value: 201, label: 'Engineering' },
-  { value: 221, label: 'Treasure Map' },
-  { value: 241, label: 'Sunken Temple (old)' },
-  { value: 261, label: 'Hunter' },
-  { value: 262, label: 'Priest' },
-  { value: 263, label: 'Druid' },
-  { value: 264, label: 'Tailoring' },
-  { value: 284, label: 'Special' },
-  { value: 304, label: 'Cooking' },
-  { value: 324, label: 'First Aid' },
-  { value: 344, label: 'Legendary' },
-  { value: 364, label: 'Darkmoon Faire' },
-  { value: 365, label: "Ahn'Qiraj War" },
-  { value: 366, label: 'Lunar Festival' },
-  { value: 367, label: 'Reputation' },
-  { value: 368, label: 'Invasion' },
-  { value: 369, label: 'Midsummer Fire Festival' },
-  { value: 370, label: 'Brewfest' },
-  { value: 371, label: 'Inscription' },
-  { value: 372, label: 'Death Knight' },
-  { value: 373, label: 'Jewelcrafting' },
-  { value: 374, label: 'Noblegarden' },
-  { value: 375, label: "Pilgrim's Bounty" },
-  { value: 376, label: 'Love is in the Air' },
 ];
 
 export const EMOTES: { value: number; label: string }[] = [

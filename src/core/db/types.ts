@@ -24,6 +24,7 @@ export type RefKind =
   | 'emote'
   | 'zone'
   | 'skill'
+  | 'questSort'
   | 'mailTemplate';
 
 export interface ColumnInfo {

@@ -2,7 +2,10 @@
 import { describe, it, expect, vi } from 'vitest';
 import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { RACES, CLASSES, ALLIANCE_MASK, HORDE_MASK, QUEST_SORTS, EMOTES } from '../../src/renderer/controls/game-data';
+import { RACES, CLASSES, ALLIANCE_MASK, HORDE_MASK, EMOTES } from '../../src/renderer/controls/game-data';
+import { QUEST_SORT_CATEGORIES } from '../../src/core/game/quest-sorts';
+import { NamesProvider } from '../../src/renderer/state/names';
+import { makeMockApi, okv } from './mock-api';
 import { RaceMaskControl } from '../../src/renderer/controls/RaceMaskControl';
 import { ClassMaskControl } from '../../src/renderer/controls/ClassMaskControl';
 import { QuestSortControl } from '../../src/renderer/controls/QuestSortControl';
@@ -21,7 +24,7 @@ describe('game data', () => {
     expect(Object.fromEntries(CLASSES.map((c) => [c.label, c.bit]))['Druid']).toBe(1024);
   });
   it('has unique, labelled sorts and emotes', () => {
-    for (const list of [QUEST_SORTS, EMOTES]) {
+    for (const list of [QUEST_SORT_CATEGORIES.map((c) => ({ value: c.id, label: c.name })), EMOTES]) {
       expect(list.length).toBeGreaterThan(5);
       expect(new Set(list.map((x) => x.value)).size).toBe(list.length);
       expect(list.every((x) => x.label.trim() !== '')).toBe(true);
@@ -69,16 +72,34 @@ describe('ClassMaskControl', () => {
 });
 
 describe('QuestSortControl', () => {
-  it('stores a sort category as a negative id and a zone as a positive id', async () => {
+  const api = () => makeMockApi({
+    lookupNames: vi.fn(async (_kind: string, ids: number[]) =>
+      okv(Object.fromEntries(ids.flatMap((i) => (i === 12 ? [[i, 'Elwynn Forest']] : i === -81 ? [[i, 'Warrior']] : []))))),
+    searchEntities: vi.fn(async () => okv([
+      { id: -81, name: 'Warrior', detail: 'Category' },
+      { id: 12, name: 'Elwynn Forest', detail: 'Zone in Eastern Kingdoms' },
+    ])),
+  });
+
+  it('shows the heading by name, zone or category', async () => {
+    const { rerender } = render(<NamesProvider api={api()}><QuestSortControl {...p} value={12} onChange={() => {}} /></NamesProvider>);
+    expect(await screen.findByDisplayValue('Elwynn Forest')).toBeInTheDocument();
+    rerender(<NamesProvider api={api()}><QuestSortControl {...p} value={-81} onChange={() => {}} /></NamesProvider>);
+    expect(await screen.findByDisplayValue('Warrior')).toBeInTheDocument();
+    expect(screen.queryByText('#-81')).toBeNull();
+  });
+
+  it('searches zones and categories together and stores what is picked', async () => {
     const onChange = vi.fn();
-    const { rerender } = render(<QuestSortControl {...p} value={-QUEST_SORTS[1].value} onChange={onChange} type={{ kind: 'int' }} />);
-    expect(screen.getByLabelText('Sorted by')).toHaveValue('category');
-    expect(screen.getByRole('combobox', { name: 'Category' })).toHaveDisplayValue(QUEST_SORTS[1].label);
-    await userEvent.selectOptions(screen.getByRole('combobox', { name: 'Category' }), QUEST_SORTS[0].label);
-    expect(onChange).toHaveBeenCalledWith(-QUEST_SORTS[0].value);
-    rerender(<QuestSortControl {...p} value={12} onChange={onChange} type={{ kind: 'int' }} />);
-    expect(screen.getByLabelText('Sorted by')).toHaveValue('zone');
-    expect(screen.getByLabelText('Zone ID')).toHaveValue(12);
+    const mock = api();
+    render(<NamesProvider api={mock}><QuestSortControl {...p} value={0} onChange={onChange} /></NamesProvider>);
+    await userEvent.type(screen.getByRole('combobox', { name: 'Field' }), 'w');
+    await userEvent.click(await screen.findByRole('option', { name: 'Warrior · Category' }));
+    expect(mock.searchEntities).toHaveBeenCalledWith('questSort', 'w');
+    expect(onChange).toHaveBeenLastCalledWith(-81);
+    await userEvent.type(screen.getByRole('combobox', { name: 'Field' }), 'e');
+    await userEvent.click(await screen.findByRole('option', { name: 'Elwynn Forest · Zone in Eastern Kingdoms · #12' }));
+    expect(onChange).toHaveBeenLastCalledWith(12);
   });
 });
 

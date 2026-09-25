@@ -413,6 +413,7 @@ const REF_KINDS = [
   'emote',
   'zone',
   'skill',
+  'questSort',
   'mailTemplate',
 ] as const;
 
@@ -479,7 +480,7 @@ const REQUEST_SCHEMAS: Record<keyof Api, z.ZodType<unknown[]>> = {
   chooseServerDataDir: z.tuple([]),
   connect: z.tuple([z.number()]),
   searchQuests: z.tuple([z.string().max(MAX_SEARCH_TEXT)]),
-  searchEntities: z.tuple([z.enum(['item', 'creature', 'gameobject', 'quest', 'spell', 'sound', 'creatureDisplay', 'objectDisplay', 'factionTemplate']), z.string().max(MAX_SEARCH_TEXT)]),
+  searchEntities: z.tuple([z.enum(['item', 'creature', 'gameobject', 'quest', 'spell', 'sound', 'questSort', 'creatureDisplay', 'objectDisplay', 'factionTemplate']), z.string().max(MAX_SEARCH_TEXT)]),
   openQuest: z.tuple([z.number(), positionSchema.optional()]),
   newQuest: z.tuple([positionSchema.optional()]),
   addQuestChain: z.tuple([z.number(), positionSchema.optional()]),

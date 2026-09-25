@@ -15,8 +15,11 @@ export interface EntityPickerProps {
 
 const SEARCH_DELAY_MS = 150;
 
+/** A negative ID is a quest log category, which players and designers know by name only. */
+const idLabel = (id: number): string => (id < 0 ? '' : ` · #${id}`);
+
 const optionLabel = (hit: EntityHit): string =>
-  hit.detail ? `${hit.name} · ${hit.detail} · #${hit.id}` : `${hit.name} · #${hit.id}`;
+  hit.detail ? `${hit.name} · ${hit.detail}${idLabel(hit.id)}` : `${hit.name}${idLabel(hit.id)}`;
 
 /**
  * Picks an item, NPC, object or quest by typing part of its name (or its ID) and choosing a
@@ -123,7 +126,7 @@ export function EntityPicker({ id, label, kind, value, onChange, disabled, readO
           onKeyDown={onKeyDown}
           onBlur={close}
         />
-        {value !== 0 && (
+        {(value > 0 || (value < 0 && state === 'missing')) && (
           <span className={state === 'missing' ? 'entity-picker__id entity-picker__id--missing' : 'entity-picker__id'}>
             {state === 'missing' ? `#${value} not found in your database` : `#${value}`}
           </span>

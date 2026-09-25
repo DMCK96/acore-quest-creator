@@ -39,7 +39,7 @@ export function QuestHeader({ store, chips }: { store: AppStore; chips: readonly
       <div className="quest-header__basics">
         <FieldSetting fieldId="quest_template.QuestLevel" label="Level" help="" aggregate={aggregate} onChange={setValue} />
         <FieldSetting fieldId="quest_template.MinLevel" label="Min level" help="" aggregate={aggregate} onChange={setValue} />
-        <FieldSetting fieldId="quest_template.QuestSortID" label="Zone or category" help="" aggregate={aggregate} onChange={setValue} />
+        <FieldSetting fieldId="quest_template.QuestSortID" label="Quest log heading" help="Where the quest is listed in the player&apos;s quest log: a zone, or a category like Warrior." aggregate={aggregate} onChange={setValue} />
       </div>
       <div className="quest-header__bar">
         <div className="quest-header__chips">

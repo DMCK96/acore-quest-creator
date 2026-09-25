@@ -1,18 +1,10 @@
 import { useEffect } from 'react';
 import { moduleById, presentModules } from '@core/modules/catalog';
 import type { AppStore } from '../state/app-store';
-import { useNameBook } from '../state/names';
-import { QUEST_SORTS } from '../controls/game-data';
+import { useName, useNameBook } from '../state/names';
 import './QuestPreview.css';
 
 const plural = (n: number, word: string): string => `${n} ${word}${n === 1 ? '' : 's'}`;
-
-/** A negative sort is a quest-log category; a positive one is a zone ID. */
-function sortName(sort: number): string | undefined {
-  if (sort < 0) return QUEST_SORTS.find((s) => s.value === -sort)?.label;
-  if (sort > 0) return `Zone #${sort}`;
-  return undefined;
-}
 
 /**
  * The drawer beside the chain canvas when a quest is selected: what the quest is and what each of
@@ -25,6 +17,9 @@ export function QuestPreview({ store }: { store: AppStore }): React.JSX.Element 
   const closeEditor = store((s) => s.closeEditor);
   const removeNode = store((s) => s.removeNode);
   const names = useNameBook();
+  // The quest log heading by name: a zone (positive) or a category (negative).
+  const sortId = Number(open?.aggregate.values['quest_template.QuestSortID'] ?? 0);
+  const sortLookup = useName('questSort', sortId);
 
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent): void => {
@@ -41,7 +36,7 @@ export function QuestPreview({ store }: { store: AppStore }): React.JSX.Element 
     ? values['quest_template.LogTitle']
     : '(untitled quest)';
   const level = Number(values['quest_template.QuestLevel'] ?? 0);
-  const sort = sortName(Number(values['quest_template.QuestSortID'] ?? 0));
+  const sort = sortId === 0 ? undefined : sortLookup.state === 'found' ? sortLookup.name : sortId > 0 ? `Zone #${sortId}` : undefined;
   const errors = issues.filter((i) => i.severity === 'error').length;
   const warnings = issues.length - errors;
 
