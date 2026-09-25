@@ -73,6 +73,90 @@ an NPC, 19 an object, 13 an item and 7 both an NPC and an object.
 - About 1,900 need NPCs or objects created first; creature cache records can seed the
   NPC template (name, subname, type, family, rank, display ids), but not stats or spawns.
 
+## Givers, enders, display IDs and spawns
+
+### Givers and enders: inferred from quest text
+
+No source records givers or enders for custom quests. The only direct evidence is the
+addon harvest `cachedata/lua/harvest/gossips.tsv`: 15 NPC gossip captures, a few of which
+list the quests offered (the Hero's Call Board among them). Useful for spot checks only.
+
+They can be inferred from the captured quest text. Method:
+
+1. Read the completion text first, then objectives, end text and the end of the
+   description, for "return to / report to / speak with / seek out / bring ... to <name>".
+2. Match the longest leading run of words against creature names (creature cache, Exiles,
+   CoA) and questgiver object names. "The call board" maps to the Hero's Call Board.
+3. When a name matches several IDs, prefer one that is in CoA and is a known questgiver
+   or ender, then any questgiver, then any in CoA.
+4. Giver: when the wording is "return to" or "report back", the giver is the ender.
+   "Seek out" and "speak with" mean a breadcrumb, so the giver stays unknown.
+
+Tested on the 8,329 stock quests where CoA holds the real ender:
+
+| Result | Quests |
+| --- | ---: |
+| Exact single guess | 6,087 (73%) |
+| Right, but among several candidates | 379 |
+| Wrong | 208 (2%) |
+| No guess | 1,655 |
+
+**When it makes a single guess, it is right 96% of the time.** The giver-is-ender rule
+holds for 85% of stock quests with "return to" wording (3,990 of 4,658).
+
+On the 8,431 playable custom quests:
+
+| Result | Quests |
+| --- | ---: |
+| Ender inferred | 6,733 (80%) |
+| of which the Hero's Call Board | 4,328 |
+| of which a single candidate | 1,580 |
+| Giver inferred as the same as the ender | 6,186 |
+| Ender only (breadcrumb wording) | 547 |
+| No guess | 1,698 |
+
+Common texts with no named target: "Return to your masters" (228), "Return to your
+trainer" (83). These need a rule per theme or a manual choice.
+
+The Hero's Call Board (402000, a questgiver object, display 138002) is not in CoA. The world
+catalogue saw it in Darnassus, Dun Morogh, Ironforge, Stormwind, Teldrassil and Westfall,
+with one example position (Darnassus 9940.68, 2274.21, 1341.39). 412000 is also named
+Hero's Call Board but was never sighted; probably the Horde copy.
+
+### Display IDs
+
+| NPCs missing from CoA | Total | With display IDs | All displays known to the CoA server |
+| --- | ---: | ---: | ---: |
+| Inferred givers and enders | 523 | 517 | not checked |
+| Quest objective targets | 1,088 | 633 | 338 |
+| All Ascension creatures | 26,804 | 22,319 | 14,754 |
+
+Display IDs come from the creature cache (`modelid1` to `modelid4`) and Exiles
+`creature.display_ids`. "Known to the CoA server" means the ID appears in CoA's
+`creature_template_model` or `creature_model_info`. The rest are Ascension-renumbered
+displays the CoA client may not have. The 455 objective targets with no display are mostly
+the 432 NPCs no source knows at all (likely invisible kill-credit triggers).
+
+### Spawn points
+
+This is the real gap. No source has world coordinates for any custom NPC.
+
+| Source | What it gives | Coverage of missing NPCs |
+| --- | --- | --- |
+| Exiles `creature_spawn`, guid 10,000,000 and above | Map, area and zone-map % at 0.1%, no x/y/z | 310 creatures, 1,354 spawns |
+| World catalogue `creatures.tsv` | One sighting with x/y/z per creature, stock-era zones only | 548 creatures in total |
+| Quest completion text | Zone or subzone name ("in Tanaris", "at Nijel's Point") | 248 of 500 unplaced givers |
+| `quest_objective_hotspot` | Objective areas | None for custom quests |
+| Quest POI in the cache | Map point | 285 custom quests |
+
+Of the 523 missing givers and enders, 23 have map-% spawns, 10 a catalogue sighting and
+490 no location. Of the 1,088 missing objective targets, 26 have map-% spawns, 5 a
+sighting and 1,057 nothing.
+
+Map-% spawns can be turned into world x/y with the zone bounds (`WorldMapArea.dbc`, also in
+Exiles `world_map_area`), then z by the quest map's snap-to-ground. For the rest, the
+importer can at best open the quest map on the named zone and let the author place the NPC.
+
 ## General survey
 
 ## The two useful sources
