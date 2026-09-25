@@ -28,7 +28,16 @@ jobs:
       - run: npm ci
       - run: npm run release:check-tag -- "$GITHUB_REF_NAME"
       - run: npm run typecheck
+      # The unit tests read table schemas from the Conquest of AzerothCore fork's base SQL; only
+      # that folder is fetched.
+      - uses: actions/checkout@v7
+        with:
+          repository: jealous-sound/azerothcore-wotlk-coa
+          path: coa
+          sparse-checkout: data/sql/base/db_world
       - run: npm test
+        env:
+          ACQC_AC_SQL_DIR: ${{ github.workspace }}/coa/data/sql
       # One draft up front, which every build job uploads its installers into.
       - name: Create the draft release
         env:
