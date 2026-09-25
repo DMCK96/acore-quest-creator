@@ -143,6 +143,8 @@ test.describe.serial('docs screenshots', () => {
     await giver.getByRole('button', { name: 'Add quest ender' }).click();
     await giver.getByRole('combobox', { name: 'Ends at 1' }).fill('Foreman Brask');
     await giver.getByRole('option', { name: /Foreman Brask · new · #\d+$/ }).click();
+    // Checks run after each edit; wait for the "nothing takes this quest back" warning to clear.
+    await expect(giver.getByText(/^Nothing takes this quest back/)).toHaveCount(0);
     await shot(page, 'quest-giver');
   });
 

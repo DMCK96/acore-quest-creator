@@ -44,8 +44,8 @@ Connection details, recent projects, recovery copies and cached map tiles live i
 
 | System | Folder |
 | --- | --- |
-| Windows | `%APPDATA%\ACORE Quest Creator` |
-| macOS | `~/Library/Application Support/ACORE Quest Creator` |
-| Linux | `~/.config/ACORE Quest Creator` |
+| Windows | `%APPDATA%\acore-quest-creator` |
+| macOS | `~/Library/Application Support/acore-quest-creator` |
+| Linux | `~/.config/acore-quest-creator` |
 
 Exported SQL patches go to `Documents/ACORE Quest Creator/sql`. Projects are saved wherever you choose, as `.aqc` files.

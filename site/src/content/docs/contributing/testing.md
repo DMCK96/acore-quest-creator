@@ -25,7 +25,7 @@ ACQC_TEST_MYSQL_URL=mysql://user:password@127.0.0.1:3306/acore_world
 They do not skip when it is missing; they fail, so a green run always means they ran.
 
 - Integration tests that read AzerothCore's base SQL also need `ACQC_AC_SQL_DIR`, the `data/sql` folder of your AzerothCore checkout.
-- End-to-end tests that use the map read `ACQC_WORLD_DB_DBC_DIR` and `ACQC_WORLD_DB_CLIENT_DIR` for the server data and game client folders.
+- End-to-end tests that use the map read `ACQC_WORLD_DB_DBC_DIR` (the server's `dbc/` folder) and `ACQC_TEST_CLIENT_DIR` (the game client folder).
 - End-to-end tests launch the app with a fresh `ACQC_USER_DATA` folder, so they never touch your own connection details or projects.
 
 :::caution

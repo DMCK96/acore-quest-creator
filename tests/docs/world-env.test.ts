@@ -8,7 +8,7 @@ const full = [
   'ACQC_WORLD_DB_USER=acore',
   'ACQC_WORLD_DB_PASSWORD="p@ss word"',
   'ACQC_WORLD_DB_DATABASE=acore_world',
-  'ACQC_WORLD_DB_DBC_DIR=E:\Repositories\azerothcore-wotlk-coa\data\dbc',
+  String.raw`ACQC_WORLD_DB_DBC_DIR=C:\AzerothCore\data\dbc`,
   'ACQC_WORLD_DB_CLIENT_DIR=',
   '',
 ].join('\n');
@@ -21,13 +21,14 @@ describe('worldDbFromEnv', () => {
       user: 'acore',
       password: 'p@ss word',
       database: 'acore_world',
-      dbcDir: 'E:\Repositories\azerothcore-wotlk-coa\data\dbc',
+      dbcDir: String.raw`C:\AzerothCore\data\dbc`,
     });
   });
 
   it('keeps Windows backslash paths exactly as written', () => {
     const env = worldDbFromEnv(full);
-    expect(env.dbcDir).toBe('E:\Repositories\azerothcore-wotlk-coa\data\dbc');
+    expect(env.dbcDir).toBe(String.raw`C:\AzerothCore\data\dbc`);
+    expect(env.dbcDir).toContain('\\');
   });
 
   it('leaves empty optional folders out', () => {

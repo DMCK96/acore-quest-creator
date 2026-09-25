@@ -29,7 +29,7 @@ jobs:
       - run: npm run release:check-tag -- "$GITHUB_REF_NAME"
       - run: npm run typecheck
       - run: npm test
-      # One draft up front: three build jobs racing to create it would each make their own.
+      # One draft up front, which every build job uploads its installers into.
       - name: Create the draft release
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -45,10 +45,13 @@ jobs:
         include:
           - os: windows-latest
             args: --win --x64
+            files: dist/*.exe
           - os: macos-latest
             args: --mac --arm64 --x64
+            files: dist/*.dmg dist/*.zip
           - os: ubuntu-latest
             args: --linux --x64
+            files: dist/*.AppImage dist/*.deb
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v7
@@ -59,9 +62,9 @@ jobs:
       - run: npm ci
       - run: npx electron-vite build
       # electron-builder rebuilds better-sqlite3 for Electron and for each target arch itself.
-      - run: npx electron-builder ${{ matrix.args }} --publish always
+      # Nothing is uploaded yet: the checks below run first.
+      - run: npx electron-builder ${{ matrix.args }} --publish never
         env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           CSC_IDENTITY_AUTO_DISCOVERY: 'false'
       # An Intel build carrying the arm64 native module would crash on launch.
       - name: Check the native module matches each Mac build
@@ -77,3 +80,8 @@ jobs:
           }
           check dist/mac-arm64 arm64
           check dist/mac x86_64
+      - name: Upload the installers to the draft release
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: gh release upload "$GITHUB_REF_NAME" ${{ matrix.files }} --clobber

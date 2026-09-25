@@ -26,7 +26,11 @@ ACORE Quest Creator is a community project and its installers are not code-signe
 ## macOS
 
 1. Open the `.dmg` and drag **ACORE Quest Creator** into **Applications**.
-2. The first time, right-click (or Control-click) the app in Applications and choose **Open**, then **Open** again in the dialog.
+2. Open the app. macOS refuses the first time, saying it cannot check it for malicious software. Choose **Done** (not Move to Trash).
+3. Open **System Settings → Privacy & Security**, scroll to **Security**, and choose **Open Anyway** next to the message about ACORE Quest Creator. Confirm with your password.
+4. Open the app again and choose **Open Anyway**. From then on it opens normally.
+
+On macOS 14 and earlier you can instead right-click (or Control-click) the app in Applications, choose **Open**, then **Open** again.
 
 :::caution[“ACORE Quest Creator is damaged and can’t be opened”]
 macOS says this about unsigned apps downloaded from the internet; the app is not damaged. Open **Terminal** and run:
@@ -48,6 +52,11 @@ Then open the app again.
   ```
 
 - **deb:** install it with `sudo apt install ./acore-quest-creator-*.deb`, then start **ACORE Quest Creator** from your applications menu.
+
+:::caution[The AppImage does not start]
+- **Needs FUSE:** AppImages need `libfuse2`. On Ubuntu 22.04 and later, install it with `sudo apt install libfuse2` (on 24.04 the package is `libfuse2t64`).
+- **Sandbox error on Ubuntu 24.04 and later:** Ubuntu restricts the sandbox Electron apps use. Install the `.deb` instead, or run the AppImage with `--no-sandbox`.
+:::
 
 ## Updating
 

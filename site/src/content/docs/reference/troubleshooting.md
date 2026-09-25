@@ -39,7 +39,8 @@ Some changes only load after a server restart: new spawns, new or changed patrol
 ## Installing
 
 - **Windows says "Windows protected your PC"**: choose **More info**, then **Run anyway**.
-- **macOS says the app "is damaged"**: see [Install](/acore-quest-creator/getting-started/install/#macos).
+- **macOS will not open it, or says it "is damaged"**: see [Install](/acore-quest-creator/getting-started/install/#macos).
+- **The Linux AppImage does not start**: see [Install](/acore-quest-creator/getting-started/install/#linux).
 
 ## Report a problem
 

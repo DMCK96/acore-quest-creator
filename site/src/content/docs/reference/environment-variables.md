@@ -43,5 +43,6 @@ Variables already set in your shell win over the file.
 | --- | --- |
 | `ACQC_TEST_MYSQL_URL` | The world database for integration and end-to-end tests, as `mysql://user:password@host:port/database`. |
 | `ACQC_AC_SQL_DIR` | The AzerothCore `data/sql` folder, for integration tests that read the base SQL. |
+| `ACQC_TEST_CLIENT_DIR` | The game client folder, for end-to-end tests of the quest map. |
 
 See [Testing](/acore-quest-creator/contributing/testing/).
