@@ -1,0 +1,213 @@
+---
+/**
+ * The app's quest orb (src/renderer/components/QuestOrb.tsx): a frosted, glowing sphere ringed by a
+ * slowly turning constellation of points and threads. Copied rather than imported, so the site
+ * never depends on app source. It fills its parent, which sets the size of the sphere.
+ */
+---
+
+<div class="quest-orb" aria-hidden="true" data-quest-orb>
+	<canvas class="quest-orb-halo"></canvas>
+	<div class="quest-orb-glow"></div>
+	<div class="quest-orb-sphere"></div>
+</div>
+
+<script>
+	// The halo canvas extends past the sphere by this fraction of the sphere's diameter on every side
+	// (must match the negative inset below).
+	const HALO_OVERHANG = 0.45;
+	const PARTICLE_COUNT = 60;
+	// Particles live in a ring from just inside the rim out to RING_OUTER sphere radii.
+	const RING_INNER = 0.92;
+	const RING_OUTER = 1.35;
+	// Two particles closer than this (in sphere radii) are joined by a line.
+	const LINK_DISTANCE = 0.32;
+	const COLOR = '255, 246, 228';
+
+	interface Particle {
+		angle: number;
+		radius: number;
+		spin: number;
+		wobblePhase: number;
+		wobbleSpeed: number;
+		size: number;
+	}
+
+	function makeParticles(): Particle[] {
+		return Array.from({ length: PARTICLE_COUNT }, (_, i) => {
+			// Bias toward the rim so the halo is densest at the edge and thins outward.
+			const t = Math.random() ** 1.8;
+			const outer = i % 3 === 0;
+			return {
+				angle: Math.random() * Math.PI * 2,
+				radius: RING_INNER + t * (RING_OUTER - RING_INNER),
+				spin: (outer ? -0.035 : 0.06) * (0.8 + Math.random() * 0.4),
+				wobblePhase: Math.random() * Math.PI * 2,
+				wobbleSpeed: 0.3 + Math.random() * 0.5,
+				size: 0.4 + Math.random() * 1.1,
+			};
+		});
+	}
+
+	// Fades a particle from full strength at the rim to nothing at the ring's outer edge.
+	function fade(radius: number): number {
+		return Math.max(0, Math.min(1, 1 - (radius - 1) / (RING_OUTER - 1)));
+	}
+
+	function start(canvas: HTMLCanvasElement): void {
+		const ctx = canvas.getContext('2d');
+		if (!ctx) return;
+		const particles = makeParticles();
+		const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+		let frame = 0;
+		let last = performance.now();
+		let elapsed = 0;
+		let visible = true;
+
+		const resize = (): void => {
+			const dpr = window.devicePixelRatio || 1;
+			canvas.width = Math.round(canvas.clientWidth * dpr);
+			canvas.height = Math.round(canvas.clientHeight * dpr);
+		};
+
+		const draw = (): void => {
+			const { width, height } = canvas;
+			const cx = width / 2;
+			const cy = height / 2;
+			const sphereRadius = width / (2 * (1 + 2 * HALO_OVERHANG));
+			const dpr = window.devicePixelRatio || 1;
+			ctx.clearRect(0, 0, width, height);
+
+			const pts = particles.map((p) => {
+				const r = p.radius + Math.sin(elapsed * p.wobbleSpeed + p.wobblePhase) * 0.025;
+				const a = p.angle + elapsed * p.spin;
+				return { x: cx + Math.cos(a) * r * sphereRadius, y: cy + Math.sin(a) * r * sphereRadius, alpha: fade(r), p };
+			});
+
+			const linkPx = LINK_DISTANCE * sphereRadius;
+			ctx.lineWidth = 0.5 * dpr;
+			for (let i = 0; i < pts.length; i++) {
+				const a = pts[i]!;
+				if (a.alpha <= 0) continue;
+				for (let j = i + 1; j < pts.length; j++) {
+					const b = pts[j]!;
+					const d = Math.hypot(a.x - b.x, a.y - b.y);
+					if (d > linkPx) continue;
+					const alpha = (1 - d / linkPx) * Math.min(a.alpha, b.alpha) * 0.55;
+					if (alpha < 0.01) continue;
+					ctx.strokeStyle = `rgba(${COLOR}, ${alpha})`;
+					ctx.beginPath();
+					ctx.moveTo(a.x, a.y);
+					ctx.lineTo(b.x, b.y);
+					ctx.stroke();
+				}
+			}
+
+			for (const { x, y, alpha, p } of pts) {
+				if (alpha <= 0) continue;
+				ctx.fillStyle = `rgba(${COLOR}, ${Math.min(1, alpha * 1.1)})`;
+				ctx.beginPath();
+				ctx.arc(x, y, p.size * dpr, 0, Math.PI * 2);
+				ctx.fill();
+			}
+		};
+
+		const tick = (now: number): void => {
+			elapsed += Math.min(now - last, 100) / 1000; // clamp so a backgrounded tab doesn't jump
+			last = now;
+			draw();
+			frame = visible ? requestAnimationFrame(tick) : 0;
+		};
+
+		resize();
+		new ResizeObserver(() => {
+			resize();
+			draw();
+		}).observe(canvas);
+		if (reducedMotion) {
+			draw();
+			return;
+		}
+		// Only turn while on screen: the docs page scrolls it away.
+		new IntersectionObserver(([entry]) => {
+			visible = entry?.isIntersecting ?? true;
+			if (visible && !frame) {
+				last = performance.now();
+				frame = requestAnimationFrame(tick);
+			}
+		}).observe(canvas);
+	}
+
+	document.querySelectorAll<HTMLCanvasElement>('[data-quest-orb] canvas').forEach(start);
+</script>
+
+<style>
+	.quest-orb {
+		position: absolute;
+		inset: 0;
+		pointer-events: none;
+	}
+
+	/* Inset must match HALO_OVERHANG above. */
+	.quest-orb-halo {
+		position: absolute;
+		inset: -45%;
+		width: 190%;
+		height: 190%;
+	}
+
+	/* The halo of light around the sphere: many gentle stops so it dissolves into the canvas. */
+	.quest-orb-glow {
+		position: absolute;
+		inset: -18%;
+		border-radius: 50%;
+		background: radial-gradient(
+			circle closest-side,
+			rgba(255, 242, 218, 0.34) 70%,
+			rgba(255, 238, 208, 0.16) 79%,
+			rgba(255, 232, 198, 0.05) 90%,
+			transparent 100%
+		);
+		animation: quest-orb-pulse 5s ease-in-out infinite;
+	}
+
+	/* Warm brown and translucent at the core, brightening toward a rim that blurs into the glow. */
+	.quest-orb-sphere {
+		position: absolute;
+		inset: 0;
+		border-radius: 50%;
+		background:
+			radial-gradient(circle at 50% 30%, rgba(255, 244, 222, 0.14) 0%, transparent 50%),
+			radial-gradient(
+				circle closest-side,
+				rgba(74, 56, 38, 0.82) 0%,
+				rgba(96, 76, 54, 0.78) 55%,
+				rgba(150, 126, 96, 0.72) 76%,
+				rgba(222, 204, 174, 0.78) 90%,
+				rgba(255, 246, 228, 0.9) 100%
+			);
+		filter: blur(1.5px);
+		box-shadow:
+			inset 0 0 36px rgba(255, 244, 222, 0.35),
+			0 0 24px 4px rgba(255, 244, 222, 0.45),
+			0 0 50px 6px rgba(255, 232, 196, 0.14);
+	}
+
+	@keyframes quest-orb-pulse {
+		0%,
+		100% {
+			opacity: 0.75;
+			transform: scale(1);
+		}
+		50% {
+			opacity: 1;
+			transform: scale(1.04);
+		}
+	}
+
+	@media (prefers-reduced-motion: reduce) {
+		.quest-orb-glow {
+			animation: none;
+		}
+	}
+</style>

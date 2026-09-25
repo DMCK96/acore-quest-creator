@@ -1,6 +1,6 @@
 /*
- * Starlight in the app's colours. Values are copied from the app's src/renderer/styles/theme.css
- * rather than imported, so the site never depends on app source.
+ * Starlight in the app's colours and materials. Values are copied from the app's
+ * src/renderer/styles/theme.css rather than imported, so the site never depends on app source.
  */
 :root {
 	--sl-color-accent-low: #3a2c15;
@@ -15,6 +15,28 @@
 	--sl-color-gray-6: #221b15;
 	--sl-color-black: #171310;
 	--sl-font: -apple-system, 'Segoe UI', Roboto, sans-serif;
+	--sl-font-mono: Consolas, 'Cascadia Mono', monospace;
+
+	/* The app's asides palette: note, tip, caution and danger read as its blue, green, amber and red. */
+	--sl-color-blue-low: rgba(79, 124, 173, 0.14);
+	--sl-color-blue: #4f7cad;
+	--sl-color-blue-high: #8fb4dc;
+	--sl-color-purple-low: rgba(90, 138, 95, 0.14);
+	--sl-color-purple: #5a8a5f;
+	--sl-color-purple-high: #93c296;
+	--sl-color-orange-low: rgba(201, 138, 58, 0.14);
+	--sl-color-orange: #c98a3a;
+	--sl-color-orange-high: #e8b16a;
+	--sl-color-red-low: rgba(177, 70, 63, 0.14);
+	--sl-color-red: #b1463f;
+	--sl-color-red-high: #e0857d;
+
+	--acqc-inset: #14100c;
+	--acqc-dot: #2e241a;
+	--acqc-glow: rgba(58, 40, 22, 0.55);
+	--acqc-shadow: 0 4px 16px rgba(0, 0, 0, 0.4);
+	--acqc-display: Georgia, 'Times New Roman', serif;
+	color-scheme: dark;
 }
 
 :root[data-theme='light'] {
@@ -24,16 +46,190 @@
 	--sl-color-white: #171310;
 	--sl-color-gray-1: #2a2119;
 	--sl-color-gray-2: #4a3d2e;
-	--sl-color-gray-3: #7a6c56;
+	--sl-color-gray-3: #6e604b;
 	--sl-color-gray-4: #b3a58c;
 	--sl-color-gray-5: #e2d8c4;
 	--sl-color-gray-6: #f3ede1;
 	--sl-color-gray-7: #f8f4ec;
 	--sl-color-black: #fbf7ef;
+
+	--sl-color-blue-low: #e3ebf4;
+	--sl-color-blue-high: #2c5584;
+	--sl-color-purple-low: #e5efe4;
+	--sl-color-purple-high: #34603a;
+	--sl-color-orange-low: #f6e9d5;
+	--sl-color-orange-high: #7a4f15;
+	--sl-color-red-low: #f6e1de;
+	--sl-color-red-high: #8e3029;
+
+	--acqc-inset: #f3ede1;
+	--acqc-dot: #e4d9c3;
+	--acqc-glow: rgba(228, 180, 88, 0.14);
+	--acqc-shadow: 0 4px 16px rgba(40, 28, 16, 0.1);
+	color-scheme: light;
 }
 
+::selection {
+	background: color-mix(in srgb, var(--sl-color-accent) 35%, transparent);
+}
+
+/* The page is the canvas: its dot grid, with a warm glow under the header like the login screen. */
+body {
+	background:
+		radial-gradient(ellipse 70% 40rem at 50% -10rem, var(--acqc-glow), transparent 70%) no-repeat,
+		radial-gradient(circle, var(--acqc-dot) 1px, transparent 1.2px) 0 0 / 18px 18px,
+		var(--sl-color-bg);
+	background-attachment: fixed;
+}
+
+/* The header is the app's top bar: a raised panel on a hairline of gold. */
+.header {
+	background-color: color-mix(in srgb, var(--sl-color-gray-6) 88%, transparent);
+	backdrop-filter: blur(10px);
+	border-bottom-color: color-mix(in srgb, var(--sl-color-accent) 22%, var(--sl-color-gray-5));
+}
+
+.site-title {
+	font-family: var(--acqc-display);
+	font-weight: 400;
+	color: var(--sl-color-white);
+}
+
+.site-title img {
+	height: 2.4rem;
+	width: auto;
+}
+
+/* Search box: one of the app's inset fields. */
+site-search button[data-open-modal] {
+	background-color: var(--acqc-inset);
+	border-color: var(--sl-color-gray-4);
+	border-radius: 8px;
+}
+
+site-search button[data-open-modal]:hover {
+	border-color: var(--sl-color-accent);
+}
+
+/* Sidebar group headings take the app's section labels ("WORLD DATABASE"): small, gold, spaced. */
+.sidebar-content .top-level > li > details > summary .large {
+	font-size: 0.72rem;
+	font-weight: 600;
+	letter-spacing: 0.08em;
+	text-transform: uppercase;
+	color: var(--sl-color-accent);
+}
+
+.sidebar-content ul ul {
+	border-inline-start-color: var(--sl-color-gray-5);
+}
+
+/* The current page is marked like the app's selected button, not filled solid. */
+.sidebar-content a[aria-current='page'],
+.sidebar-content a[aria-current='page']:hover,
+.sidebar-content a[aria-current='page']:focus {
+	background: color-mix(in srgb, var(--sl-color-accent) 16%, transparent);
+	box-shadow: inset 0 0 0 1px var(--sl-color-accent);
+	border-radius: 6px;
+	color: var(--sl-color-accent-high);
+	font-weight: 600;
+}
+
+:root[data-theme='light'] .sidebar-content a[aria-current='page'] {
+	color: var(--sl-color-accent-high);
+}
+
+.sidebar-content a:hover {
+	color: var(--sl-color-accent-high);
+}
+
+/* Headings in the app's display serif. */
 h1#_top,
-.sl-markdown-content :is(h1, h2, h3),
-.hero h1 {
-	font-family: Georgia, 'Times New Roman', serif;
+.sl-markdown-content :is(h1, h2, h3) {
+	font-family: var(--acqc-display);
+	font-weight: 400;
+	letter-spacing: -0.005em;
+	text-wrap: balance;
+}
+
+.sl-markdown-content :is(p, li) {
+	text-wrap: pretty;
+}
+
+/* Screenshots of the app sit in a window frame. */
+.sl-markdown-content img:not(:where(.not-content *)) {
+	border: 1px solid var(--sl-color-gray-4);
+	border-radius: 8px;
+	box-shadow: var(--acqc-shadow);
+}
+
+.sl-markdown-content :not(pre) > code {
+	padding: 0.1em 0.35em;
+	border: 1px solid var(--sl-color-gray-5);
+	border-radius: 5px;
+	background: var(--acqc-inset);
+}
+
+/* Code blocks: the app's inset fields. */
+.expressive-code .frame {
+	--code-background: var(--acqc-inset);
+	box-shadow: none;
+}
+
+.expressive-code .frame pre {
+	border-color: var(--sl-color-gray-4);
+}
+
+/* Tables: a header row like the app's panels. */
+.sl-markdown-content table:not(:where(.not-content *)) th {
+	background: var(--sl-color-gray-6);
+	color: var(--sl-color-white);
+}
+
+/* Asides: a whole tinted border, like the app's banners, instead of Starlight's side stripe. */
+.starlight-aside {
+	border: 1px solid color-mix(in srgb, var(--sl-color-asides-border) 55%, transparent);
+	border-radius: 8px;
+}
+
+/* Buttons in the app's primary style: gold outline on a soft gold tint. */
+.sl-link-button.primary {
+	border-radius: 8px;
+	background: color-mix(in srgb, var(--sl-color-accent) 16%, transparent);
+	border-color: var(--sl-color-accent);
+	color: var(--sl-color-accent-high);
+}
+
+.sl-link-button.primary:hover {
+	background: var(--sl-color-accent);
+	color: var(--sl-color-black);
+}
+
+/* Previous and next links: two of the app's raised panels. */
+.pagination-links a {
+	border-color: var(--sl-color-gray-4);
+	border-radius: 8px;
+	background: var(--sl-color-gray-6);
+	box-shadow: none;
+	transition: border-color 0.15s ease-out;
+}
+
+.pagination-links a:hover {
+	border-color: var(--sl-color-accent);
+}
+
+.pagination-links .link-title {
+	font-family: var(--acqc-display);
+	color: var(--sl-color-white);
+}
+
+/* Steps: the numbers are the canvas's gold handles. */
+.sl-steps > li::before {
+	background: color-mix(in srgb, var(--sl-color-accent) 16%, transparent);
+	box-shadow: inset 0 0 0 1px var(--sl-color-accent);
+	color: var(--sl-color-accent-high);
+}
+
+.sl-steps > li::after {
+	background: color-mix(in srgb, var(--sl-color-accent) 45%, transparent);
 }

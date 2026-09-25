@@ -1,0 +1,172 @@
+---
+/**
+ * The splash page's hero, drawn like the app's empty canvas: the quest orb glowing on the canvas
+ * grid, with the title and actions on the sphere. Replaces Starlight's Hero; reads the same
+ * frontmatter (`hero.title`, `hero.tagline`, `hero.actions`).
+ */
+import { Icon } from '@astrojs/starlight/components';
+import QuestOrb from './QuestOrb.astro';
+
+const { data } = Astro.locals.starlightRoute.entry;
+const { title = data.title, tagline, actions = [] } = data.hero || {};
+---
+
+<div class="orb-stage not-content">
+	<div class="orb-stage__circle">
+		<QuestOrb />
+		<div class="orb-stage__content">
+			<h1 id="_top" data-page-title set:html={title} />
+			{tagline && <p class="orb-stage__tagline" set:html={tagline} />}
+			{
+				actions.length > 0 && (
+					<div class="orb-stage__actions">
+						{actions.map(({ link, text, icon, attrs }) => (
+							<a href={link} class="orb-stage__btn" {...attrs}>
+								{text}
+								{icon?.name && <Icon name={icon.name as 'right-arrow'} size="1.1em" />}
+							</a>
+						))}
+					</div>
+				)
+			}
+		</div>
+	</div>
+</div>
+
+<style>
+	/* In the dark theme the page is already the canvas, so the orb glows straight on it. */
+	.orb-stage {
+		position: relative;
+		display: grid;
+		place-items: center;
+		overflow: hidden;
+		margin-block: 0 1rem;
+		padding-block: clamp(3.5rem, 10vw, 7.5rem);
+		border-radius: 14px;
+		background: radial-gradient(ellipse at 50% 50%, rgba(35, 26, 18, 0.9) 0%, transparent 65%);
+		color: #ece2cd;
+	}
+
+	/* The light theme sets a piece of the app's dark canvas into the page: the orb is made of light
+	   and needs the dark behind it. */
+	:global(:root[data-theme='light']) .orb-stage {
+		background:
+			radial-gradient(ellipse at 50% 50%, rgba(35, 26, 18, 0.9) 0%, transparent 70%),
+			radial-gradient(circle, #2e241a 1px, transparent 1.2px) 0 0 / 18px 18px,
+			#171310;
+		border: 1px solid #3c2f22;
+		box-shadow: 0 18px 50px rgba(40, 28, 16, 0.28);
+	}
+
+	.orb-stage__circle {
+		position: relative;
+		display: grid;
+		place-items: center;
+		/* Never narrower than the words on it need: on a phone the sphere overhangs the screen. */
+		width: clamp(23rem, 82vw, 32rem);
+		aspect-ratio: 1;
+	}
+
+	.orb-stage__content {
+		position: relative;
+		z-index: 1;
+		display: flex;
+		flex-direction: column;
+		align-items: center;
+		gap: 1rem;
+		max-width: 80%;
+		text-align: center;
+	}
+
+	h1 {
+		margin: 0;
+		font-family: Georgia, 'Times New Roman', serif;
+		font-size: clamp(2rem, 1.2rem + 3.6vw, 3.4rem);
+		font-weight: 400;
+		line-height: 1.08;
+		letter-spacing: -0.01em;
+		text-wrap: balance;
+		color: #fffaf0;
+		text-shadow: 0 1px 10px rgba(40, 28, 16, 0.65);
+	}
+
+	.orb-stage__tagline {
+		margin: 0;
+		max-width: 22em;
+		font-size: clamp(0.95rem, 0.85rem + 0.4vw, 1.1rem);
+		line-height: 1.5;
+		text-wrap: balance;
+		color: rgba(255, 248, 235, 0.92);
+		text-shadow: 0 1px 4px rgba(40, 28, 16, 0.8);
+	}
+
+	.orb-stage__actions {
+		display: flex;
+		flex-wrap: wrap;
+		justify-content: center;
+		gap: 0.7rem;
+		margin-top: 0.4rem;
+	}
+
+	/* The frosted buttons on the app's empty canvas: a faint sheen over a thin warm tint. */
+	.orb-stage__btn {
+		display: inline-flex;
+		align-items: center;
+		gap: 0.45em;
+		padding: 0.6em 1.4em;
+		border: 1px solid rgba(255, 240, 215, 0.3);
+		border-radius: 8px;
+		background:
+			linear-gradient(180deg, rgba(255, 246, 228, 0.16) 0%, rgba(255, 246, 228, 0.04) 100%),
+			rgba(60, 44, 30, 0.32);
+		backdrop-filter: blur(8px) saturate(1.2);
+		box-shadow:
+			0 2px 12px rgba(20, 14, 8, 0.3),
+			inset 0 1px 0 rgba(255, 250, 238, 0.25);
+		color: #fffaf0;
+		font-size: 0.95rem;
+		text-decoration: none;
+		text-shadow: 0 1px 3px rgba(30, 20, 10, 0.6);
+		white-space: nowrap;
+		transition:
+			background 0.2s ease-out,
+			border-color 0.2s ease-out;
+	}
+
+	.orb-stage__btn:hover {
+		background:
+			linear-gradient(180deg, rgba(255, 246, 228, 0.24) 0%, rgba(255, 246, 228, 0.08) 100%),
+			rgba(60, 44, 30, 0.32);
+		border-color: rgba(255, 244, 224, 0.55);
+		color: #fffaf0;
+	}
+
+	.orb-stage__btn:focus-visible {
+		outline: 2px solid #e4b458;
+		outline-offset: 3px;
+	}
+
+	.orb-stage__btn :global(svg) {
+		flex-shrink: 0;
+	}
+
+	@media (max-width: 30rem) {
+		.orb-stage {
+			margin-inline: calc(-1 * var(--sl-content-pad-x, 1rem));
+			border-radius: 0;
+		}
+
+		.orb-stage__content {
+			gap: 0.8rem;
+		}
+
+		.orb-stage__actions {
+			gap: 0.5rem;
+		}
+
+		.orb-stage__btn {
+			padding: 0.55em 1em;
+			font-size: 0.88rem;
+		}
+	}
+</style>

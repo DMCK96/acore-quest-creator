@@ -3,32 +3,49 @@ title: ACORE Quest Creator
 description: Build and script AzerothCore quests, NPCs and objects without editing database tables by hand.
 template: splash
 hero:
-  tagline: Rebuild quests for your AzerothCore server — givers, objectives, scripting, NPCs and patrols — and export them as SQL.
+  tagline: Build and script quests for your AzerothCore server, then export them as SQL.
   actions:
     - text: Get started
       link: /acore-quest-creator/getting-started/introduction/
       icon: right-arrow
     - text: View on GitHub
       link: https://github.com/DMCK96/acore-quest-creator
-      icon: external
-      variant: minimal
+      icon: github
 ---
 
-import { Card, CardGrid } from '@astrojs/starlight/components';
+import QuestChain from '../../components/QuestChain.astro';
 
-<CardGrid>
-	<Card title="Quests on a canvas" icon="puzzle">
-		Lay out quest chains, then fill in givers, objectives and rewards in one place.
-	</Card>
-	<Card title="Scripting without SmartAI tables" icon="setting">
-		Describe what should happen around a quest as scenes, and design fights with the combat wizard.
-	</Card>
-	<Card title="NPCs, objects and loot" icon="pencil">
-		Make new NPCs and objects, pick how they look, and give them loot.
-	</Card>
-	<Card title="Place it on the map" icon="star">
-		Put spawns where they belong, snap them to the ground and draw patrol routes.
-	</Card>
-</CardGrid>
+<QuestChain
+	steps={[
+		{
+			title: 'Quests on a canvas',
+			meta: 'Chains · givers · rewards',
+			chip: 'Canvas',
+			href: '/guides/projects-and-canvas/',
+			text: 'Lay out quest chains, then fill in givers, objectives and rewards in one place.',
+		},
+		{
+			title: 'Scripting without SmartAI tables',
+			meta: 'Scenes · combat wizard',
+			chip: 'Scripting',
+			href: '/guides/quest-scripting/',
+			text: 'Describe what should happen around a quest as scenes, and design fights with the combat wizard.',
+		},
+		{
+			title: 'NPCs, objects and loot',
+			meta: 'Looks · factions · loot',
+			chip: 'NPC',
+			href: '/guides/npcs-and-objects/',
+			text: 'Make new NPCs and objects, pick how they look, and give them loot.',
+		},
+		{
+			title: 'Place it on the map',
+			meta: 'Spawns · patrols',
+			chip: 'Map',
+			href: '/guides/quest-map/',
+			text: 'Put spawns where they belong, snap them to the ground and draw patrol routes.',
+		},
+	]}
+/>
 
 Released under the GPL-3.0-or-later licence.

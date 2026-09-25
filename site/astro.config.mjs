@@ -11,11 +11,13 @@ export default defineConfig({
 		starlight({
 			title: 'ACORE Quest Creator',
 			description: 'Build and script AzerothCore quests, NPCs and objects without editing database tables by hand.',
-			logo: { src: './src/assets/logo.svg' },
-			favicon: '/favicon.svg',
+			// The app icon's orb: bare light on the dark header, on its own dark disc on the light one.
+			logo: { dark: './src/assets/logo-dark.png', light: './src/assets/logo-light.png', alt: '' },
+			favicon: '/favicon.png',
 			social: [{ icon: 'github', label: 'GitHub', href: 'https://github.com/DMCK96/acore-quest-creator' }],
 			editLink: { baseUrl: 'https://github.com/DMCK96/acore-quest-creator/edit/main/site/' },
 			customCss: ['./src/styles/theme.css'],
+			components: { Hero: './src/components/Hero.astro' },
 			plugins: [starlightLinksValidator()],
 			sidebar: [
 				{ label: 'Getting started', items: [{ autogenerate: { directory: 'getting-started' } }] },
