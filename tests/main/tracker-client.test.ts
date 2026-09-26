@@ -44,3 +44,11 @@ describe('tracker client', () => {
     expect(JSON.parse(String(init.body))).toEqual({ kind: 'quest', key: 1209, state: 'in_progress', notes: 'Imported into P' });
   });
 });
+
+describe('tracker client redirects', () => {
+  it('never follows a redirect away from the local tracker', async () => {
+    const fetchImpl = vi.fn(async () => reply(200, { total: 0, rows: [] }));
+    await createTrackerClient(DEFAULT_TRACKER_URL, fetchImpl as never).list({});
+    expect(((fetchImpl.mock.calls[0] as unknown[])[1] as RequestInit).redirect).toBe('error');
+  });
+});

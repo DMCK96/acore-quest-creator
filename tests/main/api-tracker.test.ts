@@ -5,7 +5,7 @@ import { openStore } from '../../src/main/store/store';
 import { createProjectSession } from '../../src/main/project/session';
 import { defaultProjectMeta } from '../../src/main/project/project-file';
 import type { ProjectController } from '../../src/main/project/controller';
-import { readEntities } from '../../src/core/entities/model';
+import { ENTITIES_FIELD, newItem, readEntities, writeEntities } from '../../src/core/entities/model';
 import { forkDb } from '../helpers/fixtures';
 
 const box = { encrypt: (s: string) => Uint8Array.from(Buffer.from(s)), decrypt: (b: Uint8Array) => Buffer.from(b).toString() };
@@ -94,6 +94,56 @@ describe('importing candidates through the API', () => {
     expect(readEntities(reopened.value.aggregate.values).npcs.map((n) => n.entry)).toEqual([2]);
     const imported: any = await api.openQuest(1215);
     expect(readEntities(imported.value.aggregate.values).npcs).toEqual([]);
+  });
+  it('reports a replaced quest once, and tells the tracker once', async () => {
+    const posts: any[] = [];
+    const { api } = await setup({ trackerFetch: fakeTracker(posts) });
+    await api.trackerImport({ questIds: [1215], replace: [] });
+    posts.length = 0;
+    const replaced: any = await api.trackerImport({ questIds: [1215], replace: [1215] });
+    expect(replaced.value).toMatchObject({ imported: [], replaced: [1215], skipped: [] });
+    expect(posts.map((p) => p.key)).toEqual([1215]);
+  });
+  it('keeps the NPCs, objects and items the author made on a quest that is replaced', async () => {
+    const { api } = await setup({ trackerFetch: fakeTracker() });
+    await api.trackerImport({ questIds: [28394], replace: [] });
+    const open: any = await api.openQuest(28394);
+    const agg = open.value.aggregate;
+    agg.values[ENTITIES_FIELD] = writeEntities({ npcs: [], objects: [], items: [{ ...newItem(65359), name: 'Hand-made Orders' }] });
+    await api.updateQuest(agg);
+    await api.trackerImport({ questIds: [28394], replace: [28394] });
+    const again: any = await api.openQuest(28394);
+    expect(readEntities(again.value.aggregate.values).items.map((i) => [i.entry, i.name])).toEqual([[65359, 'Hand-made Orders']]);
+  });
+  it('creates a shared NPC on a quest that is imported when the quest that would have made it is not', async () => {
+    const clone = { ...fixture(1215), quest: { quest_template: { ...fixture(1215).quest.quest_template, ID: 91215 } } };
+    const { api } = await setup({ trackerFetch: fakeTracker([], { 91215: clone }) });
+    await api.trackerImport({ questIds: [1215], replace: [] });
+    const open: any = await api.openQuest(1215);
+    const agg = open.value.aggregate;
+    agg.values[ENTITIES_FIELD] = writeEntities({ npcs: [], objects: [], items: [] });
+    await api.updateQuest(agg);
+    const done: any = await api.trackerImport({ questIds: [1215, 91215], replace: [] });
+    expect(done.value.imported).toEqual([91215]);
+    const made: any = await api.openQuest(91215);
+    expect(readEntities(made.value.aggregate.values).npcs.map((n) => n.entry)).toEqual([2]);
+  });
+  it('imports the rest of a bulk import when one payload cannot be read', async () => {
+    const { api } = await setup({ trackerFetch: fakeTracker([], { 424242: { format: 'acqc-candidate/9' } }) });
+    const done: any = await api.trackerImport({ questIds: [1209, 424242], replace: [] });
+    expect(done.value.imported).toEqual([1209]);
+    expect(done.value.skipped).toEqual([{ questId: 424242, reason: 'This tracker is newer than the app understands (format acqc-candidate/9).' }]);
+  });
+  it('does not repeat the import note when the quest is imported into the same project again', async () => {
+    const posts: any[] = [];
+    const base = fakeTracker(posts);
+    const tracker = (async (u: any, i?: any) =>
+      new URL(String(u)).pathname === '/api/candidate'
+        ? new Response(JSON.stringify({ work: { state: 'in_progress', notes: 'Imported into P\nold note' } }), { status: 200 })
+        : base(u, i)) as typeof fetch;
+    const { api } = await setup({ trackerFetch: tracker });
+    await api.trackerImport({ questIds: [1209], replace: [] });
+    expect(posts).toEqual([{ kind: 'quest', key: 1209, state: 'in_progress', notes: 'Imported into P\nold note' }]);
   });
   it('still imports when the tracker cannot record the work state', async () => {
     const base = fakeTracker();

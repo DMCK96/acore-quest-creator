@@ -52,7 +52,8 @@ export function createTrackerClient(baseUrl: string, fetchImpl: typeof fetch = f
   async function request(path: string, timeoutMs: number, init: RequestInit = {}): Promise<unknown> {
     let response: Response;
     try {
-      response = await fetchImpl(`${base}${path}`, { ...init, signal: AbortSignal.timeout(timeoutMs) });
+      // A redirect could lead off this machine, so none is followed.
+      response = await fetchImpl(`${base}${path}`, { ...init, redirect: 'error', signal: AbortSignal.timeout(timeoutMs) });
     } catch {
       throw new TrackerError(notRunning);
     }

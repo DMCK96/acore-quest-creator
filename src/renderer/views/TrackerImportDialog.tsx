@@ -10,6 +10,8 @@ import './TrackerImportDialog.css';
 
 const PAGE_SIZE = 100;
 const SEARCH_DELAY_MS = 250;
+/** The most one import takes: the API refuses more in one call. */
+const MAX_IMPORT = 50;
 
 const STATUSES: readonly (readonly [string, string])[] = [
   ['Ready', 'Ready'], ['Needs work', 'Needs work'], ['Stub (title only)', 'Stub (title only)'], ['', 'Any'],
@@ -307,8 +309,10 @@ export function TrackerImportDialog({ store, onClose }: { store: AppStore; onClo
               Import
             </button>
           )}
+          {selected.size > MAX_IMPORT && <span className="scene-hint">Import at most {MAX_IMPORT} quests at a time.</span>}
           {selected.size > 0 && (
-            <button type="button" className="btn btn--primary" disabled={busy} onClick={() => void importQuests([...selected].sort((a, b) => a - b))}>
+            <button type="button" className="btn btn--primary" disabled={busy || selected.size > MAX_IMPORT}
+              onClick={() => void importQuests([...selected].sort((a, b) => a - b))}>
               Import {selected.size} selected
             </button>
           )}
