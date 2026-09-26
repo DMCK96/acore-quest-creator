@@ -1,0 +1,1 @@
+ALTER TABLE `connection_profiles` ADD `tracker_url` text DEFAULT '' NOT NULL;

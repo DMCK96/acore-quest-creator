@@ -12,6 +12,8 @@ export const connectionProfiles = sqliteTable('connection_profiles', {
   dbcDir: text('dbc_dir').notNull().default(''),
   clientDir: text('client_dir').notNull().default(''),
   exportDir: text('export_dir').notNull().default(''),
+  // The CoA Content Tracker to import candidates from; '' means the default local address.
+  trackerUrl: text('tracker_url').notNull().default(''),
   lastConnectedAt: text('last_connected_at'),
   // A hash of the `.env` values this profile was last seeded from; null for one the user made.
   envSeed: text('env_seed'),

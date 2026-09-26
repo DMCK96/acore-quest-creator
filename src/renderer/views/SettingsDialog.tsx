@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import type { AppStore } from '../state/app-store';
 import { ConnectionCard } from '../connection/ConnectionCard';
 import { trapTab } from '../components/trap-tab';
-import { devChanged, draftFromProfiles, validateDraft, worldChanged, type ConnectionDraft, type DraftErrors } from '../connection/draft';
+import { devChanged, draftFromProfiles, trackerChanged, validateDraft, worldChanged, type ConnectionDraft, type DraftErrors } from '../connection/draft';
 import './ProjectDialog.css';
 import './SettingsDialog.css';
 
@@ -55,7 +55,7 @@ export function SettingsDialog({ store, onClose }: { store: AppStore; onClose: (
   }, [busy]);
 
   const reconnects = unconnected || worldChanged(draft, original);
-  const changed = reconnects || devChanged(draft, original);
+  const changed = reconnects || devChanged(draft, original) || trackerChanged(draft, original);
 
   const submit = async (e: React.FormEvent): Promise<void> => {
     e.preventDefault();
