@@ -42,7 +42,7 @@ describe('store', () => {
 
     store = openStore(file, box);
     expect(store.profiles.list()).toEqual([
-      { id: rec.id, name: 'w', role: 'world', host: 'h', port: 3306, user: 'u', database: 'd', dbcDir: '/data', clientDir: 'E:/WoW', exportDir: '', trackerUrl: '', lastConnectedAt: null },
+      { id: rec.id, name: 'w', role: 'world', host: 'h', port: 3306, user: 'u', database: 'd', dbcDir: '/data', clientDir: 'E:/WoW', exportDir: '', lastConnectedAt: null },
     ]);
     expect(store.profiles.getWithPassword(rec.id).password).toBe('secret');
     expect(store.profiles.envSeed(rec.id)).toBeNull();

@@ -89,9 +89,6 @@ export function ConnectionFields({
             </div>
           )}
         </Field>
-        <Field id="conn-tracker-url" label="CoA Content Tracker URL (optional)" errors={errors} help="Where Import from tracker reads Ascension candidates. Left empty, it uses the tracker's default address on this computer.">
-          {(props) => <input {...props} value={world.trackerUrl} placeholder="http://127.0.0.1:8089" onChange={(e) => setWorld({ trackerUrl: e.target.value })} />}
-        </Field>
       </fieldset>
 
       <fieldset className="conn-fields__section" disabled={disabled}>

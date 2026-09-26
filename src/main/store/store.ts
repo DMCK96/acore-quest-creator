@@ -67,7 +67,6 @@ const toProfile = (r: ProfileRow): ProfileRecord => ({
   dbcDir: r.dbcDir,
   clientDir: r.clientDir,
   exportDir: r.exportDir,
-  trackerUrl: r.trackerUrl,
   lastConnectedAt: r.lastConnectedAt ?? null,
 });
 

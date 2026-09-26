@@ -101,8 +101,6 @@ export interface ProfileInput {
   clientDir?: string;
   /** Where Export patch writes SQL files, optional; '' or absent for the default folder. */
   exportDir?: string;
-  /** The CoA Content Tracker's address, optional; '' or absent for http://127.0.0.1:8089. */
-  trackerUrl?: string;
 }
 
 /** Saving a profile: an update (`id` given) may leave `password` out to keep the stored one. */
@@ -122,8 +120,6 @@ export interface ProfileRecord {
   clientDir: string;
   /** '' when the profile names no export folder. */
   exportDir: string;
-  /** '' when the profile names no tracker address (the default local one is used). */
-  trackerUrl: string;
   /** When this profile last connected (ISO 8601); null before its first connect. */
   lastConnectedAt: string | null;
 }
@@ -461,7 +457,6 @@ const profileFields = {
   dbcDir: z.string().optional(),
   clientDir: z.string().optional(),
   exportDir: z.string().optional(),
-  trackerUrl: z.string().optional(),
 };
 // Strict: a misspelled key must be a loud error, never a silently unsaved connection setting.
 const profileInputSchema = z.object(profileFields).strict();

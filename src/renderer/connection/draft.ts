@@ -19,7 +19,6 @@ export interface WorldDraft extends DbFields {
   dbcDir: string;
   clientDir: string;
   exportDir: string;
-  trackerUrl: string;
 }
 export interface DevDraft extends DbFields {
   id?: number;
@@ -67,27 +66,12 @@ export function draftFromProfiles(profiles: ProfileRecord[], preferId: number | 
       : newestById(worlds));
   const dev = newestById(profiles.filter((p) => p.role === 'dev'));
   return {
-    world: world
-      ? { ...dbFromProfile(world), dbcDir: world.dbcDir, clientDir: world.clientDir, exportDir: world.exportDir, trackerUrl: world.trackerUrl }
-      : { ...emptyDb(), dbcDir: '', clientDir: '', exportDir: '', trackerUrl: '' },
+    world: world ? { ...dbFromProfile(world), dbcDir: world.dbcDir, clientDir: world.clientDir, exportDir: world.exportDir } : { ...emptyDb(), dbcDir: '', clientDir: '', exportDir: '' },
     dev: dev ? dbFromProfile(dev) : null,
   };
 }
 
 const PORT_ERROR = 'Port must be a whole number from 1 to 65535';
-export const TRACKER_URL_ERROR = 'Use a local address: http://127.0.0.1:<port> or http://localhost:<port>.';
-
-/** The tracker is only ever run on this machine, so the app never talks to one anywhere else. */
-export function isLocalTrackerUrl(raw: string): boolean {
-  const text = raw.trim();
-  if (text === '') return true;
-  try {
-    const url = new URL(text);
-    return url.protocol === 'http:' && (url.hostname === '127.0.0.1' || url.hostname === 'localhost');
-  } catch {
-    return false;
-  }
-}
 
 function validateDb(db: DbFields, prefix: string, errors: DraftErrors): void {
   if (db.host.trim() === '') errors[`${prefix}host`] = 'Host is required';
@@ -101,7 +85,6 @@ function validateDb(db: DbFields, prefix: string, errors: DraftErrors): void {
 export function validateDraft(draft: ConnectionDraft): DraftErrors {
   const errors: DraftErrors = {};
   validateDb(draft.world, 'conn-', errors);
-  if (!isLocalTrackerUrl(draft.world.trackerUrl ?? '')) errors['conn-tracker-url'] = TRACKER_URL_ERROR;
   if (draft.dev) validateDb(draft.dev, 'conn-dev-', errors);
   return errors;
 }
@@ -121,11 +104,6 @@ export function worldChanged(draft: ConnectionDraft, original: ConnectionDraft):
   const a = draft.world;
   const b = original.world;
   return !sameDb(a, b) || !sameText(a.dbcDir, b.dbcDir) || !sameText(a.clientDir, b.clientDir) || !sameText(a.exportDir, b.exportDir);
-}
-
-/** The tracker address is read when it is used, so changing it needs no reconnect. */
-export function trackerChanged(draft: ConnectionDraft, original: ConnectionDraft): boolean {
-  return !sameText(draft.world.trackerUrl ?? '', original.world.trackerUrl ?? '');
 }
 
 export function devChanged(draft: ConnectionDraft, original: ConnectionDraft): boolean {
@@ -164,10 +142,7 @@ export function draftToSaves(
   draft: ConnectionDraft,
   original: ConnectionDraft,
 ): { world: ProfileSave; dev: ProfileSave | null; removeDevId: number | null } {
-  const world = {
-    ...toSave(draft.world, 'world'), dbcDir: draft.world.dbcDir.trim(), clientDir: draft.world.clientDir.trim(), exportDir: draft.world.exportDir.trim(),
-    trackerUrl: (draft.world.trackerUrl ?? '').trim(),
-  };
+  const world = { ...toSave(draft.world, 'world'), dbcDir: draft.world.dbcDir.trim(), clientDir: draft.world.clientDir.trim(), exportDir: draft.world.exportDir.trim() };
   const dev = draft.dev ? toSave(draft.dev, 'dev') : null;
   const originalDevId = original.dev?.id;
   const removeDevId = originalDevId !== undefined && draft.dev?.id !== originalDevId ? originalDevId : null;

@@ -28,9 +28,8 @@ The world database is only ever read.
 | Server data folder | The worldserver's data folder, the one holding `dbc/`. Adds XP values, name search for spells and models, ground height and floors on the map. |
 | Game client folder | The folder with `Wow.exe`. Adds zone art and the minimap to the quest map. |
 | Export folder | Where **Export patch** writes SQL files. Empty: `Documents/ACORE Quest Creator/sql`. |
-| CoA Content Tracker URL | Where **Import from tracker** reads Ascension candidates. Only an address on this computer is accepted (`http://127.0.0.1:<port>` or `http://localhost:<port>`). Empty: `http://127.0.0.1:8089`. Changing it does not reconnect. |
 
-All four are optional.
+All three are optional.
 
 ## Dev database
 
