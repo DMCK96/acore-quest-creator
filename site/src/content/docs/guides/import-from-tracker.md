@@ -7,6 +7,8 @@ sidebar:
 
 The [CoA Content Tracker](https://github.com/DMCK96/coa-content-tracker) is a separate app, run on your own computer, that lists every quest Conquest of Azeroth had on Ascension and grades each one against your world database. **Import from tracker…** brings those quests into your project, ready to finish and export.
 
+![Import from CoA Content Tracker, previewing a Ready quest](../../../assets/screenshots/tracker-import.png)
+
 ## Set it up
 
 1. Start the tracker: `python tracker.py` in its folder. It listens on `http://127.0.0.1:8089`.

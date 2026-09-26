@@ -7,6 +7,8 @@ sidebar:
 
 A quest often needs an item the world database doesn't have yet: a letter to deliver, a trophy to collect, or a reward to hand out. You make these in the **NPCs, objects & items** module, next to the quest's new NPCs and objects.
 
+![The New item editor on its Basics tab](../../../assets/screenshots/item-editor.png)
+
 ## Make a quest item
 
 1. In **NPCs, objects & items**, choose **Add item**.
@@ -36,6 +38,8 @@ On **Pages**, **Add page** and write the text. Right-clicking the item in game s
 ## Advanced fields
 
 `item_template` has many more columns: requirements, resistances, sockets, sets, flags, durability and more. Tick **Show advanced fields** to add an **Advanced** tab listing every other column your database has, grouped. An empty box keeps the column's default.
+
+![The Advanced tab, with a resistance set](../../../assets/screenshots/item-advanced.png)
 
 The choice is remembered. While advanced fields are hidden and the item has values in them (an [imported](/acore-quest-creator/guides/import-from-tracker/) item often does), **Some advanced fields have values** says so.
 
