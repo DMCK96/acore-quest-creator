@@ -11,7 +11,6 @@ export function TopBar({
   store,
   onNewQuest,
   onAddExisting,
-  onImportFromTracker,
   onFitView,
   onOpenProject,
   onOpenSettings,
@@ -19,7 +18,6 @@ export function TopBar({
   store: AppStore;
   onNewQuest: () => void;
   onAddExisting: () => void;
-  onImportFromTracker: () => void;
   onFitView: () => void;
   onOpenProject: () => void;
   onOpenSettings: () => void;
@@ -54,9 +52,6 @@ export function TopBar({
         </button>
         <button type="button" className="btn" onClick={onAddExisting}>
           Add existing quest
-        </button>
-        <button type="button" className="btn" onClick={onImportFromTracker}>
-          Import from tracker…
         </button>
         <button type="button" className="btn" onClick={onFitView}>
           Fit view

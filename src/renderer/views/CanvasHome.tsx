@@ -22,7 +22,6 @@ import { QuestFlowView } from './QuestFlowView';
 import { AddExistingDialog } from './AddExistingDialog';
 import { ProjectDialog } from './ProjectDialog';
 import { SettingsDialog } from './SettingsDialog';
-import { TrackerImportDialog } from './TrackerImportDialog';
 import { RecoveryDialog } from './RecoveryDialog';
 import { TopBar } from '../components/TopBar';
 import { ErrorBanner } from '../components/ErrorBanner';
@@ -80,7 +79,6 @@ function CanvasInner({ store }: { store: AppStore }): React.JSX.Element {
   const [showAddExisting, setShowAddExisting] = useState(false);
   const [showProject, setShowProject] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
-  const [showTrackerImport, setShowTrackerImport] = useState(false);
   // `<ReactFlow>` only honours `defaultViewport` at mount, so it stays unmounted until the saved
   // viewport has loaded, then mounts exactly once — never re-keyed, so nodes a test (or the user)
   // is holding a reference to never get silently detached from a remount.
@@ -165,7 +163,6 @@ function CanvasInner({ store }: { store: AppStore }): React.JSX.Element {
         store={store}
         onNewQuest={() => void newQuest()}
         onAddExisting={() => setShowAddExisting(true)}
-        onImportFromTracker={() => setShowTrackerImport(true)}
         onFitView={() => void fitView()}
         onOpenProject={() => setShowProject(true)}
         onOpenSettings={() => setShowSettings(true)}
@@ -243,7 +240,6 @@ function CanvasInner({ store }: { store: AppStore }): React.JSX.Element {
       {showAddExisting && <AddExistingDialog store={store} onClose={() => setShowAddExisting(false)} />}
       {showProject && <ProjectDialog store={store} onClose={() => setShowProject(false)} />}
       {showSettings && <SettingsDialog store={store} onClose={() => setShowSettings(false)} />}
-      {showTrackerImport && <TrackerImportDialog store={store} onClose={() => setShowTrackerImport(false)} />}
       <RecoveryDialog store={store} />
     </div>
   );

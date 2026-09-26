@@ -176,7 +176,7 @@ describe('TopBar settings button', () => {
   it('opens settings', async () => {
     const onOpenSettings = vi.fn();
     const store = createAppStore(makeMockApi());
-    render(<TopBar store={store} onNewQuest={() => {}} onAddExisting={() => {}} onImportFromTracker={() => {}} onFitView={() => {}} onOpenProject={() => {}} onOpenSettings={onOpenSettings} />);
+    render(<TopBar store={store} onNewQuest={() => {}} onAddExisting={() => {}} onFitView={() => {}} onOpenProject={() => {}} onOpenSettings={onOpenSettings} />);
     await userEvent.click(screen.getByRole('button', { name: 'Settings' }));
     expect(onOpenSettings).toHaveBeenCalled();
   });
