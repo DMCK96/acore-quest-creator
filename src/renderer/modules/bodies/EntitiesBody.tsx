@@ -1,5 +1,7 @@
 import { useState } from 'react';
-import { readEntities, type CustomNpc, type CustomObject } from '@core/entities/model';
+import { readEntities, type CustomItem, type CustomNpc, type CustomObject } from '@core/entities/model';
+import { classLabel } from '@core/entities/item-vocab';
+import { QUALITIES } from '../../entities/item/ItemBasics';
 import { useEntityEditor, type EditorRequest } from '../../entities/EntityEditorContext';
 import { OBJECT_TYPES } from '../../entities/object/ObjectBasics';
 import { stillNeeds } from '../../entities/still-needs';
@@ -14,8 +16,12 @@ const needs = (entity: { name: string; displayId: number }): string => {
 };
 const levels = (npc: CustomNpc): string => (npc.minLevel === npc.maxLevel ? `Level ${npc.minLevel}` : `Level ${npc.minLevel}–${npc.maxLevel}`);
 const typeLabel = (object: CustomObject): string => OBJECT_TYPES.find(([t]) => t === object.type)?.[1] ?? object.type;
+const itemFacts = (item: CustomItem): string => {
+  const quality = QUALITIES.find(([q]) => q === item.quality)?.[1] ?? item.quality;
+  return `${quality} · ${classLabel(item.itemClass)}${item.name.trim() ? '' : ' · still needs a name'}`;
+};
 
-/** The quest's new NPCs and objects as a list; making or changing one happens in its editor. */
+/** The quest's new NPCs, objects and items as a list; making or changing one happens in its editor. */
 export function EntitiesBody({ open }: ModuleBodyProps): React.JSX.Element {
   const entities = readEntities(open.aggregate.values);
   const openEditor = useEntityEditor();
@@ -39,7 +45,7 @@ export function EntitiesBody({ open }: ModuleBodyProps): React.JSX.Element {
   return (
     <div className="scripts-body">
       <p className="scene-hint">
-        These are new NPCs and objects, written with this quest. Removing one here does not remove rows an earlier export or apply
+        These are new NPCs, objects and items, written with this quest. Removing one here does not remove rows an earlier export or apply
         already put in the database.
       </p>
       {error && <p className="scene-warning">{error}</p>}
@@ -50,12 +56,17 @@ export function EntitiesBody({ open }: ModuleBodyProps): React.JSX.Element {
         <button type="button" className="btn btn--primary" onClick={() => void request({ kind: 'newObject' })}>
           Add object
         </button>
+        <button type="button" className="btn btn--primary" onClick={() => void request({ kind: 'newItem' })}>
+          Add item
+        </button>
       </div>
-      <ul aria-label="NPCs and objects" className="entity-list">
+      <ul aria-label="NPCs, objects and items" className="entity-list">
         {entities.npcs.map((npc) =>
           row(`n${npc.entry}`, npc.name.trim() || `New NPC ${npc.entry}`, `${levels(npc)} · ${placed(npc.spawns)}${needs(npc)}`, { kind: 'npc', entry: npc.entry }))}
         {entities.objects.map((object) =>
           row(`o${object.entry}`, object.name.trim() || `New object ${object.entry}`, `${typeLabel(object)} · ${placed(object.spawns)}${needs(object)}`, { kind: 'object', entry: object.entry }))}
+        {entities.items.map((item) =>
+          row(`i${item.entry}`, item.name.trim() || `New item ${item.entry}`, itemFacts(item), { kind: 'item', entry: item.entry }))}
       </ul>
     </div>
   );

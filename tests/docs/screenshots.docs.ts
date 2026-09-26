@@ -228,8 +228,8 @@ test.describe.serial('docs screenshots', () => {
 
   test('readable-object', async () => {
     // Making the giver's NPC already added this module to the quest.
-    await page.getByRole('list', { name: 'Modules' }).getByRole('button', { name: /^NPCs & objects/ }).click();
-    const panel = page.getByRole('dialog', { name: 'NPCs & objects' });
+    await page.getByRole('list', { name: 'Modules' }).getByRole('button', { name: /^NPCs, objects & items/ }).click();
+    const panel = page.getByRole('dialog', { name: 'NPCs, objects & items' });
     await panel.getByRole('button', { name: 'Add object' }).click();
     const ledger = page.getByRole('dialog', { name: 'New object' });
     await ledger.getByLabel('Name', { exact: true }).fill("Brask's Ledger");
@@ -248,7 +248,7 @@ test.describe.serial('docs screenshots', () => {
   });
 
   test('loot', async () => {
-    const panel = page.getByRole('dialog', { name: 'NPCs & objects' });
+    const panel = page.getByRole('dialog', { name: 'NPCs, objects & items' });
     await panel.getByRole('button', { name: 'Add object' }).click();
     const crate = page.getByRole('dialog', { name: 'New object' });
     await crate.getByLabel('Name', { exact: true }).fill('Salvaged Crate');
@@ -268,7 +268,7 @@ test.describe.serial('docs screenshots', () => {
   });
 
   test('combat', async () => {
-    const panel = page.getByRole('dialog', { name: 'NPCs & objects' });
+    const panel = page.getByRole('dialog', { name: 'NPCs, objects & items' });
     await panel.getByRole('button', { name: 'Add NPC' }).click();
     const npc = page.getByRole('dialog', { name: 'New NPC' });
     await npc.getByLabel('Name', { exact: true }).fill('Grel the Tunnel Boss');

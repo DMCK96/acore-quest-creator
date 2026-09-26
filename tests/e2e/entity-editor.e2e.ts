@@ -100,8 +100,8 @@ test('a new chest is made in the object modal with a look and loot, and exported
   await page.getByRole('button', { name: 'New quest', exact: true }).click();
   await page.getByLabel('Quest title').fill('Chest test');
   await page.getByRole('button', { name: 'Add module' }).click();
-  await page.getByRole('menuitem', { name: /^NPCs & objects/ }).click();
-  const panel = page.getByRole('dialog', { name: 'NPCs & objects' });
+  await page.getByRole('menuitem', { name: /^NPCs, objects & items/ }).click();
+  const panel = page.getByRole('dialog', { name: 'NPCs, objects & items' });
   await panel.getByRole('button', { name: 'Add object' }).click();
 
   const chest = page.getByRole('dialog', { name: 'New object' });

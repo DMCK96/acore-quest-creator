@@ -36,8 +36,8 @@ test('a new NPC gets a two-phase fight that exports as SmartAI', async () => {
   await page.getByRole('button', { name: 'New quest', exact: true }).click();
   await page.getByLabel('Quest title').fill('Defeat Hela');
   await page.getByRole('button', { name: 'Add module' }).click();
-  await page.getByRole('menuitem', { name: /^NPCs & objects/ }).click();
-  const panel = page.getByRole('dialog', { name: 'NPCs & objects' });
+  await page.getByRole('menuitem', { name: /^NPCs, objects & items/ }).click();
+  const panel = page.getByRole('dialog', { name: 'NPCs, objects & items' });
   await panel.getByRole('button', { name: 'Add NPC' }).click();
   const card = page.getByRole('dialog', { name: 'New NPC' });
   await card.getByLabel('Name', { exact: true }).fill('Hela');

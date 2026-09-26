@@ -3,11 +3,11 @@ import { describe, expect, it, vi } from 'vitest';
 import { screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { mountBody } from './module-harness';
-import { ENTITIES_FIELD, newNpc, newObject, newSpawn, writeEntities } from '../../src/core/entities/model';
+import { ENTITIES_FIELD, newItem, newNpc, newObject, newSpawn, writeEntities } from '../../src/core/entities/model';
 
 const values = { [ENTITIES_FIELD]: writeEntities({ npcs: [{ ...newNpc(12000001), name: 'Hela', displayId: 3167, minLevel: 10, maxLevel: 12, spawns: [newSpawn(900)] }], objects: [{ ...newObject(9100001), name: 'Crate', displayId: 1 }], items: [] }) };
 
-describe('NPCs & objects module', () => {
+describe('NPCs, objects & items module', () => {
   it('lists each NPC and object in one row with Edit', async () => {
     const openEditor = vi.fn(async () => null);
     await mountBody('entities', values, { openEditor });
@@ -35,6 +35,17 @@ describe('NPCs & objects module', () => {
     await mountBody('entities', {}, { openEditor: vi.fn(async () => 'The database is not reachable.') });
     await userEvent.click(screen.getByRole('button', { name: 'Add NPC' }));
     expect(await screen.findByText('The database is not reachable.')).toBeTruthy();
+  });
+
+  it('lists items and adds them through the editor', async () => {
+    const openEditor = vi.fn(async () => null);
+    await mountBody('entities', { [ENTITIES_FIELD]: writeEntities({ npcs: [], objects: [], items: [{ ...newItem(990300), name: 'Pearl', quality: 'epic' }] }) }, { openEditor });
+    const pearl = screen.getByRole('listitem', { name: 'Pearl' });
+    expect(within(pearl).getByText('Epic · Quest')).toBeTruthy();
+    await userEvent.click(within(pearl).getByRole('button', { name: 'Edit' }));
+    expect(openEditor).toHaveBeenCalledWith({ kind: 'item', entry: 990300 });
+    await userEvent.click(screen.getByRole('button', { name: 'Add item' }));
+    expect(openEditor).toHaveBeenCalledWith({ kind: 'newItem' });
   });
 
   it('says on a row what an NPC or object still needs', async () => {

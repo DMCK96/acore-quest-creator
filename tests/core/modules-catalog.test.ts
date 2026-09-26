@@ -22,7 +22,7 @@ describe('module catalog', () => {
       'timer', 'behaviour', 'mapMarker', 'mail', 'extraRewards', 'advanced',
     ]);
     expect(MODULES.map((m) => m.label)).toEqual([
-      'Quest Giver', 'Objectives', 'Dialogue', 'Rewards', 'Requirements', 'Chain', 'Scripts', 'NPCs & objects',
+      'Quest Giver', 'Objectives', 'Dialogue', 'Rewards', 'Requirements', 'Chain', 'Scripts', 'NPCs, objects & items',
       'Timer', 'Behaviour', 'Map marker', 'Mail reward', 'Extra rewards', 'Advanced',
     ]);
     expect(MODULES.filter((m) => m.kind === 'core').map((m) => m.id)).toEqual(['giver', 'objectives', 'dialogue', 'rewards']);
@@ -86,7 +86,7 @@ describe('module catalog', () => {
     expect(resetModule('scripts', { scripts: [{}] as never }, [])).toEqual({ scripts: [] });
   });
 
-  it('offers the NPCs & objects module on any quest', () => {
+  it('offers the NPCs, objects & items module on any quest', () => {
     expect(offeredModules({}, [])).toContain('entities');
     expect(ownerOf('entities')).toBe('entities');
     expect(resetModule('entities', { entities: { npcs: [{}], objects: [] } as never }, [])).toEqual({ entities: { npcs: [], objects: [] } });

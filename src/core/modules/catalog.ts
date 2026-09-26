@@ -140,8 +140,8 @@ const DECLARED: readonly Declared[] = [
   },
   {
     id: 'entities',
-    label: 'NPCs & objects',
-    description: 'New NPCs and objects this quest needs, and where they stand.',
+    label: 'NPCs, objects & items',
+    description: 'New NPCs, objects and items this quest needs.',
     kind: 'optional',
     owns: [ENTITIES_FIELD],
     summary: entitiesSummary,

@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { ENTITIES_FIELD, newNpc, newObject, readEntities, writeEntities } from '@core/entities/model';
+import { ENTITIES_FIELD, newItem, newNpc, newObject, readEntities, writeEntities } from '@core/entities/model';
 import { EntityEditorProvider, type EditorRequest, type OpenEditor } from '../entities/EntityEditorContext';
 import { EntityEditorHost, type EditorState } from '../entities/EntityEditorHost';
 import { MODULES, moduleById, offeredModules, presentModules } from '@core/modules/catalog';
@@ -105,25 +105,26 @@ export function QuestFlowView({ store }: { store: AppStore }): React.JSX.Element
   };
 
   const openEditor: OpenEditor = async (request) => {
-    if (request.kind === 'npc' || request.kind === 'object') {
+    if (request.kind === 'npc' || request.kind === 'object' || request.kind === 'item') {
       setEditor({ kind: request.kind, entry: request.entry, isNew: false });
       return null;
     }
     if (!api) return 'Not connected.';
     // The first `if` returned for both existing kinds; TypeScript cannot narrow a union-typed `kind` out.
-    const made = request as Extract<EditorRequest, { kind: 'newNpc' | 'newObject' }>;
-    const isNpc = made.kind === 'newNpc';
-    const result = await api.allocateIds(isNpc ? 'creature' : 'gameobject', 1);
+    const made = request as Extract<EditorRequest, { kind: 'newNpc' | 'newObject' | 'newItem' }>;
+    const result = await api.allocateIds(made.kind === 'newNpc' ? 'creature' : made.kind === 'newObject' ? 'gameobject' : 'item', 1);
     if (!result.ok || result.value.length === 0) return result.ok ? 'No free ID could be found.' : result.error.message;
     const entry = result.value[0]!;
     // Created in the quest at once, from the values as they are now (never a draft).
     const now = readEntities(store.getState().open?.aggregate.values ?? {});
     const next = made.kind === 'newNpc'
       ? { ...now, npcs: [...now.npcs, { ...newNpc(entry), ...made.preset, entry }] }
-      : { ...now, objects: [...now.objects, { ...newObject(entry), ...made.preset, entry }] };
+      : made.kind === 'newObject'
+        ? { ...now, objects: [...now.objects, { ...newObject(entry), ...made.preset, entry }] }
+        : { ...now, items: [...now.items, { ...newItem(entry), ...made.preset, entry }] };
     setValue(ENTITIES_FIELD, writeEntities(next));
     made.onCreated?.(entry);
-    setEditor({ kind: isNpc ? 'npc' : 'object', entry, isNew: true });
+    setEditor({ kind: made.kind === 'newNpc' ? 'npc' : made.kind === 'newObject' ? 'object' : 'item', entry, isNew: true });
     return null;
   };
 

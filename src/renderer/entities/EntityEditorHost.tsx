@@ -1,10 +1,12 @@
-import { useEffect } from 'react';
-import { ENTITIES_FIELD, readEntities, writeEntities, type CustomNpc, type CustomObject } from '@core/entities/model';
+import { useEffect, useState } from 'react';
+import { ENTITIES_FIELD, readEntities, writeEntities, type CustomItem, type CustomNpc, type CustomObject } from '@core/entities/model';
+import type { ColumnInfo } from '@core/db/types';
 import { readGivers, writeGivers } from '@core/modules/givers';
 import type { FieldValue } from '@core/registry/types';
 import type { AllocKind } from '@shared/ipc';
 import { PanelFrame } from '../modules/ModulePanel';
 import { useApi } from '../state/names';
+import { ItemEditor } from './item/ItemEditor';
 import { NpcEditor } from './npc/NpcEditor';
 import { ObjectEditor } from './object/ObjectEditor';
 import { stillNeeds } from './still-needs';
@@ -13,7 +15,7 @@ type Values = Readonly<Record<string, FieldValue>>;
 
 /** Which entity the editor shows, whether it was just made, and the tab it is on. */
 export interface EditorState {
-  kind: 'npc' | 'object';
+  kind: 'npc' | 'object' | 'item';
   entry: number;
   isNew: boolean;
   tab?: string;
@@ -21,7 +23,7 @@ export interface EditorState {
 
 
 /**
- * The NPC or object editor as a modal: its title, its tabs and a footer with Done and Discard (a
+ * The NPC, object or item editor as a modal: its title, its tabs and a footer with Done and Discard (a
  * new one) or Delete. Edits are written to the quest as they are made; Discard and Delete remove
  * the entity and every giver row that points at it. When the entity goes away (an undo) the editor
  * closes itself.
@@ -46,15 +48,30 @@ export function EntityEditorHost({
   const entities = readEntities(values);
   const npc = state.kind === 'npc' ? entities.npcs.find((n) => n.entry === state.entry) : undefined;
   const object = state.kind === 'object' ? entities.objects.find((o) => o.entry === state.entry) : undefined;
-  const entity = npc ?? object;
+  const item = state.kind === 'item' ? entities.items.find((i) => i.entry === state.entry) : undefined;
+  const entity = npc ?? object ?? item;
+  // The advanced item fields list the database's own columns, read once per editor.
+  const [itemColumns, setItemColumns] = useState<ColumnInfo[]>([]);
+  const isItem = state.kind === 'item';
+  useEffect(() => {
+    if (!isItem || !api) return;
+    let live = true;
+    void api.itemColumns().then((r) => {
+      if (live && r.ok) setItemColumns(r.value);
+    });
+    return () => {
+      live = false;
+    };
+  }, [api, isItem]);
 
   useEffect(() => {
     if (!entity) onClose();
   }, [entity, onClose]);
   if (!entity) return null;
 
-  const word = state.kind === 'npc' ? 'NPC' : 'object';
-  const title = state.isNew ? `New ${word}` : `${state.kind === 'npc' ? 'NPC' : 'Object'}: ${entity.name.trim() || entity.entry}`;
+  const word = { npc: 'NPC', object: 'object', item: 'item' }[state.kind];
+  const Word = { npc: 'NPC', object: 'Object', item: 'Item' }[state.kind];
+  const title = state.isNew ? `New ${word}` : `${Word}: ${entity.name.trim() || entity.entry}`;
 
   async function allocate(kind: AllocKind): Promise<number | null> {
     const result = await api?.allocateIds(kind, 1);
@@ -65,6 +82,12 @@ export function EntityEditorHost({
     onChange(ENTITIES_FIELD, writeEntities({ ...entities, npcs: entities.npcs.map((n) => (n.entry === next.entry ? next : n)) }));
   const saveObject = (next: CustomObject): void =>
     onChange(ENTITIES_FIELD, writeEntities({ ...entities, objects: entities.objects.map((o) => (o.entry === next.entry ? next : o)) }));
+  const saveItem = (next: CustomItem): void =>
+    onChange(ENTITIES_FIELD, writeEntities({ ...entities, items: entities.items.map((i) => (i.entry === next.entry ? next : i)) }));
+  async function copyLook(entry: number): Promise<Partial<CustomItem> | null> {
+    const result = await api?.entityTemplate('item', entry);
+    return result?.ok && result.value ? (result.value as Partial<CustomItem>) : null;
+  }
 
   function remove(): void {
     const verb = state.isNew ? 'Discard' : 'Delete';
@@ -73,8 +96,14 @@ export function EntityEditorHost({
       ENTITIES_FIELD,
       writeEntities(state.kind === 'npc'
         ? { ...entities, npcs: entities.npcs.filter((n) => n.entry !== state.entry) }
-        : { ...entities, objects: entities.objects.filter((o) => o.entry !== state.entry) }),
+        : state.kind === 'object'
+          ? { ...entities, objects: entities.objects.filter((o) => o.entry !== state.entry) }
+          : { ...entities, items: entities.items.filter((i) => i.entry !== state.entry) }),
     );
+    if (state.kind === 'item') {
+      onClose();
+      return;
+    }
     // A giver card must not be left pointing at something that is gone: it goes back to empty, as it
     // was before New, and one empty card per role is enough.
     const kind = state.kind === 'npc' ? 'creature' : 'gameobject';
@@ -90,7 +119,7 @@ export function EntityEditorHost({
     onClose();
   }
 
-  const needs = stillNeeds(entity);
+  const needs = stillNeeds(entity, state.kind);
   const footer = (
     <>
       <span className="scene-hint">{needs && `Still needs ${needs}.`}</span>
@@ -114,6 +143,9 @@ export function EntityEditorHost({
       {object && (
         <ObjectEditor object={object} onChange={saveObject} allocateSpawn={() => allocate('gameobjectSpawn')} allocatePage={() => allocate('page')}
           tab={state.tab} onTab={onTab} hasServerData={hasServerData} />
+      )}
+      {item && (
+        <ItemEditor item={item} onChange={saveItem} allocatePage={() => allocate('page')} copyLook={copyLook} columns={itemColumns} tab={state.tab} onTab={onTab} />
       )}
     </PanelFrame>
   );

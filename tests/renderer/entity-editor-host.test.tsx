@@ -11,7 +11,7 @@ import { RewardTablesProvider } from '../../src/renderer/state/reward-tables';
 import { registry } from '@core/registry';
 import { createNewAggregate } from '@core/import/new-quest';
 import { loadSchema } from '@core/schema/load';
-import { ENTITIES_FIELD, newNpc, newSpawn, readEntities, writeEntities } from '../../src/core/entities/model';
+import { ENTITIES_FIELD, newItem, newNpc, newSpawn, readEntities, writeEntities } from '../../src/core/entities/model';
 import { forkDb } from '../helpers/fixtures';
 import { makeMockApi, okv, sampleOpen } from './mock-api';
 
@@ -45,6 +45,16 @@ describe('entity editor host', () => {
     expect(confirm).toHaveBeenLastCalledWith('Discard this NPC? It is removed from the quest.');
     expect(entitiesIn(onChange).npcs).toEqual([]);
     expect(onChange).toHaveBeenCalledWith('creature_queststarter', [{ id: 0 }]);
+    expect(onClose).toHaveBeenCalled();
+  });
+
+  it('opens a new item, titles it, and deletes it after asking', async () => {
+    vi.spyOn(window, 'confirm').mockReturnValue(true);
+    const { onChange, onClose } = await mountEditor({ [ENTITIES_FIELD]: writeEntities({ npcs: [], objects: [], items: [newItem(990301)] }) }, { kind: 'item', entry: 990301, isNew: true });
+    const dialog = screen.getByRole('dialog', { name: 'New item' });
+    expect(within(dialog).getByRole('tab', { name: 'Basics' })).toBeTruthy();
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Discard' }));
+    expect(entitiesIn(onChange).items).toEqual([]);
     expect(onClose).toHaveBeenCalled();
   });
 
@@ -139,12 +149,12 @@ describe('the editor in the quest flow', () => {
     await userEvent.click(screen.getByRole('button', { name: 'New NPC for starts at 1' }));
     await screen.findByRole('dialog', { name: 'New NPC' });
     store.getState().setOpenPanel('entities');
-    const list = await screen.findByRole('dialog', { name: 'NPCs & objects' });
+    const list = await screen.findByRole('dialog', { name: 'NPCs, objects & items' });
     await userEvent.keyboard('{Escape}');
     await userEvent.click(within(list).getByRole('button', { name: 'Edit' }));
     const editor = await screen.findByRole('dialog', { name: /^NPC: / });
     await userEvent.click(within(editor).getByRole('button', { name: 'Delete NPC' }));
     expect(screen.queryByRole('dialog', { name: /^NPC: / })).toBeNull();
-    expect(screen.getByRole('dialog', { name: 'NPCs & objects' }).contains(document.activeElement)).toBe(true);
+    expect(screen.getByRole('dialog', { name: 'NPCs, objects & items' }).contains(document.activeElement)).toBe(true);
   });
 });

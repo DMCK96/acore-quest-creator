@@ -4,7 +4,7 @@ import { summonedEntries, type Fight } from './model';
 
 /**
  * What is wrong with a new NPC's fight. Each problem is reported once per fight, prefixed with the
- * NPC's label, and routed to the NPCs & objects module like the other entity issues.
+ * NPC's label, and routed to the NPCs, objects & items module like the other entity issues.
  */
 export function fightIssues(
   fight: Fight,

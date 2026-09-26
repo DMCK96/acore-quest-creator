@@ -88,9 +88,9 @@ test('a new quest giver is made, placed and given a patrol with a line to say, a
   await expect(page.getByRole('dialog', { name: 'Quest Giver' })).toBeVisible();
   await page.keyboard.press('Escape');
 
-  // The same NPC editor opens from NPCs & objects, with the patrol on its Placement tab.
-  await page.getByRole('list', { name: 'Modules' }).getByRole('button', { name: /^NPCs & objects/ }).click();
-  const entities = page.getByRole('dialog', { name: 'NPCs & objects' });
+  // The same NPC editor opens from NPCs, objects & items, with the patrol on its Placement tab.
+  await page.getByRole('list', { name: 'Modules' }).getByRole('button', { name: /^NPCs, objects & items/ }).click();
+  const entities = page.getByRole('dialog', { name: 'NPCs, objects & items' });
   await entities.getByRole('listitem', { name: 'Patrol Hela' }).getByRole('button', { name: 'Edit' }).click();
   const editor = page.getByRole('dialog', { name: 'NPC: Patrol Hela' });
   await editor.getByRole('tab', { name: 'Placement' }).click();

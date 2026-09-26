@@ -101,11 +101,12 @@ export function dialogueSummary(values: Values): string[] {
 
 /** How many new NPCs and objects, then the first two names. */
 export function entitiesSummary(values: Values): string[] {
-  const { npcs, objects } = readEntities(values);
-  if (npcs.length + objects.length === 0) return [];
+  const { npcs, objects, items } = readEntities(values);
+  if (npcs.length + objects.length + items.length === 0) return [];
   const count = (n: number, one: string, many: string): string => `${n} ${n === 1 ? one : many}`;
-  const names = [...npcs, ...objects].map((e) => e.name.trim() || `#${e.entry}`).slice(0, 2);
-  return [`${count(npcs.length, 'NPC', 'NPCs')}, ${count(objects.length, 'object', 'objects')}`, ...names];
+  const names = [...npcs, ...objects, ...items].map((e) => e.name.trim() || `#${e.entry}`).slice(0, 2);
+  const itemCount = items.length > 0 ? `, ${count(items.length, 'item', 'items')}` : '';
+  return [`${count(npcs.length, 'NPC', 'NPCs')}, ${count(objects.length, 'object', 'objects')}${itemCount}`, ...names];
 }
 
 /** How many scenes, then the first two in words. */
