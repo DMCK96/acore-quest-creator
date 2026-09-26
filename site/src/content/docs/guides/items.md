@@ -41,7 +41,7 @@ On **Pages**, **Add page** and write the text. Right-clicking the item in game s
 
 ![The Advanced tab, with a resistance set](../../../assets/screenshots/item-advanced.png)
 
-The choice is remembered. While advanced fields are hidden and the item has values in them, **Some advanced fields have values** says so.
+The app remembers whether you show them. If they are hidden but the item has values in some of them, the editor tells you with the note **Some advanced fields have values**.
 
 ## What export writes
 
