@@ -13,8 +13,6 @@ import type { Difference } from '@core/roundtrip/compare';
 import type { ForeignScene } from '@core/scripts/decompile';
 import type { CustomItem, CustomNpc, CustomObject } from '@core/entities/model';
 import type { ColumnInfo } from '@core/db/types';
-import type { ImportPlan } from '@core/import/candidate';
-import { candidateQuerySchema, type CandidateList, type CandidateQuery } from './candidate';
 import type { TestCommands } from '@core/testing/gm';
 import type { FidelityReport } from '@core/roundtrip/verify';
 import type { SchemaDiff } from '@core/schema/diff';
@@ -307,14 +305,6 @@ export interface QuestLinks {
 export type AllocKind = 'creature' | 'gameobject' | 'creatureSpawn' | 'gameobjectSpawn' | 'page' | 'item';
 
 /** Fields an existing NPC or object lends a new one. */
-export interface TrackerImportResult {
-  imported: number[];
-  replaced: number[];
-  skipped: { questId: number; reason: string }[];
-  /** Things that did not stop the import, such as the tracker not recording it. */
-  warnings: string[];
-}
-
 export type EntityTemplate =
   | Partial<Omit<CustomNpc, 'entry' | 'spawns'>>
   | Partial<Omit<CustomObject, 'entry' | 'spawns'>>
@@ -370,12 +360,6 @@ export interface Api {
   entityTemplate(kind: 'creature' | 'gameobject' | 'item', entry: number): Promise<Result<EntityTemplate | null>>;
   /** The `item_template` columns the export database has, for the item editor's advanced fields; none when unknown. */
   itemColumns(): Promise<Result<ColumnInfo[]>>;
-  /** A page of Ascension candidates from the CoA Content Tracker, with the listed ones already in this project. */
-  trackerCandidates(query: CandidateQuery): Promise<Result<CandidateList & { inProject: number[] }>>;
-  /** What importing these candidates would do, planned against the world and the project as they are now. */
-  trackerPreview(questIds: number[]): Promise<Result<ImportPlan>>;
-  /** Imports candidates into the project; ones already in it are replaced only when listed in `replace`. */
-  trackerImport(input: { questIds: number[]; replace: number[] }): Promise<Result<TrackerImportResult>>;
   /** The terrain height at a point, from the server data folder's map files, or why there is none. */
   groundHeight(map: number, x: number, y: number): Promise<Result<{ z: number } | { reason: string }>>;
   /** Facts of the spells the server's spell list has, or why there is no list (no server data folder, unreadable file). */
@@ -541,9 +525,6 @@ const REQUEST_SCHEMAS: Record<keyof Api, z.ZodType<unknown[]>> = {
   patrolPathId: z.tuple([z.number().int().min(1)]),
   entityTemplate: z.tuple([z.enum(['creature', 'gameobject', 'item']), z.number().int()]),
   itemColumns: z.tuple([]),
-  trackerCandidates: z.tuple([candidateQuerySchema]),
-  trackerPreview: z.tuple([z.array(z.number().int().positive()).min(1).max(50)]),
-  trackerImport: z.tuple([z.object({ questIds: z.array(z.number().int().positive()).min(1).max(50), replace: z.array(z.number().int().positive()).max(50) })]),
   exportQuest: z.tuple([z.number()]),
   applyToDev: z.tuple([z.number(), z.boolean()]),
   projectState: z.tuple([]),

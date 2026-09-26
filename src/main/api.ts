@@ -34,7 +34,6 @@ import { loadSchema } from '../core/schema/load';
 import { refCheckerFor, validateQuest, type Issue, type RefChecker } from '../core/validate/validate';
 import { TOOL_VERSION } from '../core/version';
 import type {
-  AllocKind,
   Api,
   ApiError,
   CanvasNode,
@@ -82,9 +81,6 @@ import type { EntityHit, LookKind } from '../core/db/entity-search';
 import type { ProjectQuest } from './project/project-file';
 import type { ProjectSession } from './project/session';
 import type { ProjectController } from './project/controller';
-import { createTrackerClient, TrackerError, type TrackerClient } from './tracker-client';
-import { planCandidateImport, type DependencyKind, type ImportPlan } from '../core/import/candidate';
-import type { CandidatePayload } from '../shared/candidate';
 
 export type { DevDb };
 
@@ -120,12 +116,7 @@ export interface ApiDeps {
   exportDirOverride?: string | null;
   /** Where Export patch writes when the connection names no export folder. */
   defaultExportDir?: string;
-  /** How the CoA Content Tracker is reached (a fake in tests); the global `fetch` otherwise. */
-  trackerFetch?: typeof fetch;
 }
-
-/** How far apart quests imported together are placed on the canvas, top to bottom. */
-const IMPORT_ROW_GAP = 220;
 
 const NO_SERVER_DATA_FILES: ServerDataFiles = { read: async () => null, isDir: async () => false };
 
@@ -360,175 +351,6 @@ export function createApi(deps: ApiDeps): Api {
     if (!quest) throw fail('QUEST_NOT_FOUND', `Quest ${questId} is not in this project.`);
     return quest;
   };
-
-  /** Fresh IDs of a kind: above both the database's highest and every one the project already holds. */
-  async function allocateIdsFor(live: Session, kind: AllocKind, count: number): Promise<number[]> {
-    const [table, column] = {
-      creature: ['creature_template', 'entry'],
-      gameobject: ['gameobject_template', 'entry'],
-      creatureSpawn: ['creature', 'guid'],
-      gameobjectSpawn: ['gameobject', 'guid'],
-      page: ['page_text', 'ID'],
-      item: ['item_template', 'entry'],
-    }[kind] as [string, string];
-    let dbMax = 0;
-    try {
-      dbMax = (await live.db.selectMax?.(table, column)) ?? 0;
-    } catch {
-      dbMax = 0;
-    }
-    const { npcs, objects, items } = projectEntities();
-    const used =
-      kind === 'creature' ? npcs.map((n) => n.entry)
-      : kind === 'gameobject' ? objects.map((o) => o.entry)
-      : kind === 'item' ? items.map((i) => i.entry)
-      : kind === 'creatureSpawn' ? npcs.flatMap((n) => n.spawns.map((s) => s.guid))
-      : kind === 'page' ? [...objects, ...items].flatMap((o) => o.pages.map((p) => p.id))
-      : objects.flatMap((o) => o.spawns.map((s) => s.guid));
-    const base = Math.max(dbMax, ...used, 0);
-    return Array.from({ length: count }, (_, i) => base + i + 1);
-  }
-
-  /** The tracker named by the connected profile (the default local one when it names none). */
-  function trackerFor(live: Session): TrackerClient {
-    const url = deps.store.profiles.getWithPassword(live.profileId).trackerUrl ?? '';
-    return createTrackerClient(url, deps.trackerFetch ?? fetch);
-  }
-
-  /** Tracker failures are the user's to read (not running, bad address), never an internal error. */
-  async function trackerCall<T>(work: () => Promise<T>): Promise<T> {
-    try {
-      return await work();
-    } catch (error) {
-      if (error instanceof TrackerError) throw fail('VALIDATION', error.message);
-      throw error;
-    }
-  }
-
-  const TEMPLATE_OF: Record<DependencyKind, string> = { npc: 'creature_template', object: 'gameobject_template', item: 'item_template' };
-
-  /** A fresh plan against the world and the project as they are now. */
-  async function planFor(live: Session, payloads: readonly CandidatePayload[]): Promise<ImportPlan> {
-    const questIds = payloads.map((p) => String((p.quest.quest_template as Record<string, unknown> | undefined)?.ID ?? ''));
-    const worldQuests = await rowsOrNone(live.db, 'quest_template', { ID: questIds });
-    const names = new Map<string, string>();
-    for (const kind of ['npc', 'object', 'item'] as const) {
-      const entries = [...new Set(payloads.flatMap((p) => p.dependencies.filter((d) => d.kind === kind).map((d) => String(d.entry))))];
-      for (const row of await rowsOrNone(live.db, TEMPLATE_OF[kind], { entry: entries })) names.set(`${kind}:${row.entry}`, row.name ?? '');
-    }
-    return planCandidateImport(payloads, {
-      schema: live.schema,
-      registry,
-      projectQuestIds: new Set(quests.usedQuestIds()),
-      projectEntities: projectEntities(),
-      worldQuestIds: new Set(worldQuests.map((r) => Number(r.ID))),
-      worldHas: (kind, entry) => names.has(`${kind}:${entry}`),
-      worldName: (kind, entry) => names.get(`${kind}:${entry}`) ?? null,
-    });
-  }
-
-  /** The NPCs, objects and items a quest names: its givers and enders, objectives and rewards. */
-  function namedBy(aggregate: QuestAggregate): { npcs: Set<number>; objects: Set<number>; items: Set<number> } {
-    const npcs = new Set<number>();
-    const objects = new Set<number>();
-    for (const owner of [...relationOwners(aggregate, 'starter'), ...relationOwners(aggregate, 'ender')]) {
-      if (owner.kind === 'creature') npcs.add(owner.entry);
-      else if (owner.kind === 'gameobject') objects.add(owner.entry);
-    }
-    for (const target of objectivesOf(aggregate)) {
-      if (target > 0) npcs.add(target);
-      if (target < 0) objects.add(-target);
-    }
-    const items = new Set<number>(questItemsOf(aggregate));
-    for (const field of ['quest_template.RewardItems', 'quest_template.RewardChoiceItems']) {
-      const rows = aggregate.values[field];
-      if (Array.isArray(rows)) for (const r of rows as Array<Record<string, unknown>>) if (typeof r.item === 'number' && r.item > 0) items.add(r.item);
-    }
-    const start = aggregate.values['quest_template.StartItem'];
-    if (typeof start === 'number' && start > 0) items.add(start);
-    return { npcs, objects, items };
-  }
-
-  /**
-   * Takes a quest out of the project to be replaced. What it made that another project quest still
-   * names moves to the first such quest, so replacing one quest never breaks another.
-   */
-  function removeForReplace(questId: number): void {
-    const old = quests.get(questId);
-    if (!old) return;
-    const made = readEntities(old.aggregate.values);
-    const others = quests.list().filter((q) => q.questId !== questId);
-    const moved = new Map<number, QuestEntities>();
-    const moveTo = (uses: (named: ReturnType<typeof namedBy>) => boolean, add: (into: QuestEntities) => void): void => {
-      const user = others.find((q) => uses(namedBy(q.aggregate)));
-      if (!user) return;
-      const into = moved.get(user.questId) ?? readEntities(user.aggregate.values);
-      add(into);
-      moved.set(user.questId, into);
-    };
-    for (const npc of made.npcs) moveTo((n) => n.npcs.has(npc.entry), (into) => into.npcs.push(npc));
-    for (const object of made.objects) moveTo((n) => n.objects.has(object.entry), (into) => into.objects.push(object));
-    for (const item of made.items) moveTo((n) => n.items.has(item.entry), (into) => into.items.push(item));
-    for (const [id, entities] of moved) {
-      const quest = quests.get(id)!;
-      quests.put({ ...quest, aggregate: { ...quest.aggregate, values: { ...quest.aggregate.values, [ENTITIES_FIELD]: writeEntities(entities) } } });
-    }
-    quests.remove(questId);
-  }
-
-  async function importCandidates(
-    live: Session,
-    questIds: readonly number[],
-    replace: ReadonlySet<number>,
-  ): Promise<{ imported: number[]; replaced: number[]; skipped: { questId: number; reason: string }[]; warnings: string[] }> {
-    const client = trackerFor(live);
-    const payloads = await trackerCall(() => Promise.all(questIds.map((id) => client.payload(id))));
-    const skipped: { questId: number; reason: string }[] = [];
-    const accepted = (await planFor(live, payloads)).quests.filter((q) => {
-      if (q.action === 'skip') skipped.push({ questId: q.questId, reason: q.reason ?? 'Skipped.' });
-      else if (q.action === 'replace' && !replace.has(q.questId)) skipped.push({ questId: q.questId, reason: `Quest ${q.questId} is already in this project.` });
-      else return true;
-      return false;
-    });
-    const replaced = accepted.filter((q) => q.action === 'replace').map((q) => q.questId);
-    for (const id of replaced) removeForReplace(id);
-    // Replacing may have moved entities to other quests: plan again so nothing the project holds is made twice.
-    const acceptedIds = new Set(accepted.map((q) => q.questId));
-    const plans = replaced.length > 0 ? (await planFor(live, payloads)).quests.filter((q) => acceptedIds.has(q.questId)) : accepted;
-
-    const npcGuids = await allocateIdsFor(live, 'creatureSpawn', Math.max(1, plans.reduce((n, q) => n + q.spawnsNeeded.npc, 0)));
-    const objectGuids = await allocateIdsFor(live, 'gameobjectSpawn', Math.max(1, plans.reduce((n, q) => n + q.spawnsNeeded.object, 0)));
-    const imported: number[] = [];
-    const origin = placeAt();
-    plans.forEach((plan, i) => {
-      for (const npc of plan.creates.npcs) for (const spawn of npc.spawns) spawn.guid = npcGuids.shift()!;
-      for (const object of plan.creates.objects) for (const spawn of object.spawns) spawn.guid = objectGuids.shift()!;
-      const base = createNewAggregate(live.schema, registry, plan.questId);
-      const aggregate: QuestAggregate = {
-        ...base,
-        values: { ...base.values, ...plan.values, [SCRIPTS_FIELD]: writeScenes([]), [ENTITIES_FIELD]: writeEntities(plan.creates) },
-        readOnly: plan.readOnly,
-      };
-      // Adding it to the project is what reserves its ID, as for a new quest.
-      quests.put({
-        questId: plan.questId, isNew: true, aggregate, snapshot: null, fidelity: { ok: true },
-        x: origin.x, y: origin.y + i * IMPORT_ROW_GAP, lastExportPath: null,
-      });
-      if (plan.action === 'create') imported.push(plan.questId);
-    });
-
-    const warnings: string[] = [];
-    const project = deps.session.meta().name;
-    for (const id of [...imported, ...replaced]) {
-      try {
-        const { notes } = await client.work(id);
-        await client.setWork(id, 'in_progress', `Imported into ${project}${notes ? `\n${notes}` : ''}`);
-      } catch (error) {
-        warnings.push(`Quest ${id} was imported, but the tracker did not record it: ${error instanceof Error ? error.message : String(error)}`);
-      }
-    }
-    return { imported, replaced, skipped, warnings };
-  }
 
   const placeAt = (position?: NodePosition): NodePosition =>
     position ?? nextNodePosition(quests.list().map((q) => ({ x: q.x, y: q.y })));
@@ -1208,24 +1030,34 @@ export function createApi(deps: ApiDeps): Api {
         return [...mine, ...found.filter((h) => !ids.has(h.id))].slice(0, ENTITY_SEARCH_LIMIT);
       }),
 
-    allocateIds: (kind, count) => run(async () => allocateIdsFor(connected(), kind, count)),
-
-    trackerCandidates: (query) =>
-      run(async () => {
-        const list = await trackerCall(() => trackerFor(connected()).list(query));
-        const inProject = list.rows.map((r) => r.key).filter((key) => quests.get(key) !== undefined);
-        return { ...list, inProject };
-      }),
-
-    trackerPreview: (questIds) =>
+    allocateIds: (kind, count) =>
       run(async () => {
         const live = connected();
-        const payloads = await trackerCall(() => Promise.all(questIds.map((id) => trackerFor(live).payload(id))));
-        return planFor(live, payloads);
+        const [table, column] = {
+          creature: ['creature_template', 'entry'],
+          gameobject: ['gameobject_template', 'entry'],
+          creatureSpawn: ['creature', 'guid'],
+          gameobjectSpawn: ['gameobject', 'guid'],
+          page: ['page_text', 'ID'],
+          item: ['item_template', 'entry'],
+        }[kind] as [string, string];
+        let dbMax = 0;
+        try {
+          dbMax = (await live.db.selectMax?.(table, column)) ?? 0;
+        } catch {
+          dbMax = 0;
+        }
+        const { npcs, objects, items } = projectEntities();
+        const used =
+          kind === 'creature' ? npcs.map((n) => n.entry)
+          : kind === 'gameobject' ? objects.map((o) => o.entry)
+          : kind === 'item' ? items.map((i) => i.entry)
+          : kind === 'creatureSpawn' ? npcs.flatMap((n) => n.spawns.map((s) => s.guid))
+          : kind === 'page' ? [...objects, ...items].flatMap((o) => o.pages.map((p) => p.id))
+          : objects.flatMap((o) => o.spawns.map((s) => s.guid));
+        const base = Math.max(dbMax, ...used, 0);
+        return Array.from({ length: count }, (_, i) => base + i + 1);
       }),
-
-    trackerImport: (input) =>
-      run(async () => importCandidates(usable(), input.questIds, new Set(input.replace))),
 
     patrolPathId: (guid) =>
       run(async () => {

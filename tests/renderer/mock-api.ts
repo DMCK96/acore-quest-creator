@@ -83,9 +83,6 @@ export function makeMockApi(overrides: Partial<Record<keyof Api, (...args: any[]
     patrolPathId: vi.fn(async () => okv(0)),
     entityTemplate: vi.fn(async () => okv(null)),
     itemColumns: vi.fn(async () => okv([])),
-    trackerCandidates: vi.fn(async () => okv({ total: 0, rows: [], inProject: [] })),
-    trackerPreview: vi.fn(async () => okv({ quests: [] })),
-    trackerImport: vi.fn(async () => okv({ imported: [], replaced: [], skipped: [], warnings: [] })),
     groundHeight: vi.fn(async () => okv({ reason: 'x' })),
     spellFacts: vi.fn(async () => okv({ available: false, reason: 'x', spells: {} })),
     mapList: vi.fn(async () => okv([
