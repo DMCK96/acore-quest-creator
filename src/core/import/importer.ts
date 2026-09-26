@@ -178,16 +178,7 @@ export async function importQuest(
 
   const values: Record<string, FieldValue> = {};
   const readOnly: ReadOnlyReason[] = [];
-  const decodeTable = (def: TableDef): void => {
-    if (!schema.tables[def.table]) return;
-    const fields = registry.fields.filter((f) => f.table === def.table && !excluded.has(f.id));
-    if (def.cardinality === 'one') {
-      const row = tables[def.table][0] ?? defaultRow(def.table, schema, def.keyColumns[0], questId);
-      for (const field of fields) decodeOne(field, row, values, readOnly);
-    } else {
-      for (const field of fields) decodeMany(field, tables[def.table], values, readOnly);
-    }
-  };
+  const decodeTable = (def: TableDef): void => decodeTableInto(def, tables, schema, registry, questId, excluded, values, readOnly);
 
   // Owned and verbatim rows are keyed by the quest, so they can all be read straight away.
   const byQuest = registry.tables.filter((t) => t.role !== 'linked');
@@ -208,6 +199,46 @@ export async function importQuest(
   const sharedItems = await findSharedItems(db, schema, registry, questId, itemIds);
   const aggregate: QuestAggregate = { questId, isNew: false, values, readOnly, sharedItems };
   return { aggregate, snapshot };
+}
+
+/** One registry table's rows into field values; a one-row table with no row reads as its defaults. */
+function decodeTableInto(
+  def: TableDef,
+  tables: Readonly<Record<string, readonly RawRow[]>>,
+  schema: SchemaInfo,
+  registry: Registry,
+  questId: number,
+  excluded: ReadonlySet<string>,
+  values: Record<string, FieldValue>,
+  readOnly: ReadOnlyReason[],
+): void {
+  if (!schema.tables[def.table]) return;
+  const fields = registry.fields.filter((f) => f.table === def.table && !excluded.has(f.id));
+  const rows = tables[def.table] ?? [];
+  if (def.cardinality === 'one') {
+    const row = rows[0] ?? defaultRow(def.table, schema, def.keyColumns[0], questId);
+    for (const field of fields) decodeOne(field, row, values, readOnly);
+  } else {
+    for (const field of fields) decodeMany(field, rows, values, readOnly);
+  }
+}
+
+/**
+ * The field values of the registry tables `tables` holds rows for, decoded exactly as a quest read
+ * from the database is. Tables it has no key for are left out, so a caller can lay these values over
+ * a new quest's.
+ */
+export function decodeQuestTables(
+  schema: SchemaInfo,
+  registry: Registry,
+  questId: number,
+  tables: Readonly<Record<string, readonly RawRow[]>>,
+): { values: Record<string, FieldValue>; readOnly: ReadOnlyReason[] } {
+  const excluded = excludedFields(schema, registry);
+  const values: Record<string, FieldValue> = {};
+  const readOnly: ReadOnlyReason[] = [];
+  for (const def of registry.tables) if (def.table in tables) decodeTableInto(def, tables, schema, registry, questId, excluded, values, readOnly);
+  return { values, readOnly };
 }
 
 function record(
