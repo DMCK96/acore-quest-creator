@@ -451,38 +451,30 @@ export function createApi(deps: ApiDeps): Api {
 
   /**
    * Takes a quest out of the project to be replaced. What it made that another project quest still
-   * names moves to the first such quest; the rest is returned, to stay with the quest that replaces
-   * it, so replacing a quest never loses an NPC, object or item the author made.
+   * names moves to the first such quest, so replacing one quest never breaks another.
    */
-  function removeForReplace(questId: number): QuestEntities {
-    const none: QuestEntities = { npcs: [], objects: [], items: [] };
+  function removeForReplace(questId: number): void {
     const old = quests.get(questId);
-    if (!old) return none;
+    if (!old) return;
     const made = readEntities(old.aggregate.values);
     const others = quests.list().filter((q) => q.questId !== questId);
     const moved = new Map<number, QuestEntities>();
-    const moveTo = (uses: (named: ReturnType<typeof namedBy>) => boolean, add: (into: QuestEntities) => void): boolean => {
+    const moveTo = (uses: (named: ReturnType<typeof namedBy>) => boolean, add: (into: QuestEntities) => void): void => {
       const user = others.find((q) => uses(namedBy(q.aggregate)));
-      if (!user) return false;
+      if (!user) return;
       const into = moved.get(user.questId) ?? readEntities(user.aggregate.values);
       add(into);
       moved.set(user.questId, into);
-      return true;
     };
-    const kept: QuestEntities = {
-      npcs: made.npcs.filter((npc) => !moveTo((n) => n.npcs.has(npc.entry), (into) => into.npcs.push(npc))),
-      objects: made.objects.filter((object) => !moveTo((n) => n.objects.has(object.entry), (into) => into.objects.push(object))),
-      items: made.items.filter((item) => !moveTo((n) => n.items.has(item.entry), (into) => into.items.push(item))),
-    };
+    for (const npc of made.npcs) moveTo((n) => n.npcs.has(npc.entry), (into) => into.npcs.push(npc));
+    for (const object of made.objects) moveTo((n) => n.objects.has(object.entry), (into) => into.objects.push(object));
+    for (const item of made.items) moveTo((n) => n.items.has(item.entry), (into) => into.items.push(item));
     for (const [id, entities] of moved) {
       const quest = quests.get(id)!;
       quests.put({ ...quest, aggregate: { ...quest.aggregate, values: { ...quest.aggregate.values, [ENTITIES_FIELD]: writeEntities(entities) } } });
     }
     quests.remove(questId);
-    return kept;
   }
-
-  const questIdOf = (payload: CandidatePayload): number => Number((payload.quest.quest_template as Record<string, unknown> | undefined)?.ID ?? 0);
 
   async function importCandidates(
     live: Session,
@@ -490,66 +482,47 @@ export function createApi(deps: ApiDeps): Api {
     replace: ReadonlySet<number>,
   ): Promise<{ imported: number[]; replaced: number[]; skipped: { questId: number; reason: string }[]; warnings: string[] }> {
     const client = trackerFor(live);
+    const payloads = await trackerCall(() => Promise.all(questIds.map((id) => client.payload(id))));
     const skipped: { questId: number; reason: string }[] = [];
-    // One quest the tracker cannot give is skipped with its reason; the rest still import.
-    const settled = await Promise.allSettled(questIds.map((id) => client.payload(id)));
-    const fetched: CandidatePayload[] = [];
-    settled.forEach((result, i) => {
-      if (result.status === 'fulfilled') fetched.push(result.value);
-      else if (result.reason instanceof TrackerError) skipped.push({ questId: questIds[i]!, reason: result.reason.message });
-      else throw result.reason;
-    });
-    // Nothing could be read at all (the tracker is down): say so rather than skip every quest.
-    if (fetched.length === 0 && skipped.length > 0) throw fail('VALIDATION', skipped[0]!.reason);
-
-    const decided = (await planFor(live, fetched)).quests;
-    const wanted = new Set<number>();
-    for (const q of decided) {
+    const accepted = (await planFor(live, payloads)).quests.filter((q) => {
       if (q.action === 'skip') skipped.push({ questId: q.questId, reason: q.reason ?? 'Skipped.' });
       else if (q.action === 'replace' && !replace.has(q.questId)) skipped.push({ questId: q.questId, reason: `Quest ${q.questId} is already in this project.` });
-      else wanted.add(q.questId);
-    }
-    // Planned again over only the quests going in, so nothing a skipped quest would have made is
-    // left for another to reference. Quests being replaced are still in the project here, so what
-    // their authors made is referenced, not made a second time.
-    const plans = (await planFor(live, fetched.filter((p) => wanted.has(questIdOf(p))))).quests;
+      else return true;
+      return false;
+    });
+    const replaced = accepted.filter((q) => q.action === 'replace').map((q) => q.questId);
+    for (const id of replaced) removeForReplace(id);
+    // Replacing may have moved entities to other quests: plan again so nothing the project holds is made twice.
+    const acceptedIds = new Set(accepted.map((q) => q.questId));
+    const plans = replaced.length > 0 ? (await planFor(live, payloads)).quests.filter((q) => acceptedIds.has(q.questId)) : accepted;
 
     const npcGuids = await allocateIdsFor(live, 'creatureSpawn', Math.max(1, plans.reduce((n, q) => n + q.spawnsNeeded.npc, 0)));
     const objectGuids = await allocateIdsFor(live, 'gameobjectSpawn', Math.max(1, plans.reduce((n, q) => n + q.spawnsNeeded.object, 0)));
     const imported: number[] = [];
-    const replaced: number[] = [];
     const origin = placeAt();
     plans.forEach((plan, i) => {
       for (const npc of plan.creates.npcs) for (const spawn of npc.spawns) spawn.guid = npcGuids.shift()!;
       for (const object of plan.creates.objects) for (const spawn of object.spawns) spawn.guid = objectGuids.shift()!;
-      const old = plan.action === 'replace' ? quests.get(plan.questId) : undefined;
-      const kept = plan.action === 'replace' ? removeForReplace(plan.questId) : { npcs: [], objects: [], items: [] };
-      const entities: QuestEntities = {
-        npcs: [...plan.creates.npcs, ...kept.npcs],
-        objects: [...plan.creates.objects, ...kept.objects],
-        items: [...plan.creates.items, ...kept.items],
-      };
       const base = createNewAggregate(live.schema, registry, plan.questId);
       const aggregate: QuestAggregate = {
         ...base,
-        values: { ...base.values, ...plan.values, [SCRIPTS_FIELD]: writeScenes([]), [ENTITIES_FIELD]: writeEntities(entities) },
+        values: { ...base.values, ...plan.values, [SCRIPTS_FIELD]: writeScenes([]), [ENTITIES_FIELD]: writeEntities(plan.creates) },
         readOnly: plan.readOnly,
       };
-      // Adding it to the project is what reserves its ID, as for a new quest; a replaced one keeps its place.
+      // Adding it to the project is what reserves its ID, as for a new quest.
       quests.put({
         questId: plan.questId, isNew: true, aggregate, snapshot: null, fidelity: { ok: true },
-        x: old?.x ?? origin.x, y: old?.y ?? origin.y + i * IMPORT_ROW_GAP, lastExportPath: null,
+        x: origin.x, y: origin.y + i * IMPORT_ROW_GAP, lastExportPath: null,
       });
-      (plan.action === 'replace' ? replaced : imported).push(plan.questId);
+      if (plan.action === 'create') imported.push(plan.questId);
     });
 
     const warnings: string[] = [];
-    const note = `Imported into ${deps.session.meta().name}`;
+    const project = deps.session.meta().name;
     for (const id of [...imported, ...replaced]) {
       try {
         const { notes } = await client.work(id);
-        // Imported into the same project again: the note is already there.
-        await client.setWork(id, 'in_progress', notes === note || notes.startsWith(`${note}\n`) ? notes : notes ? `${note}\n${notes}` : note);
+        await client.setWork(id, 'in_progress', `Imported into ${project}${notes ? `\n${notes}` : ''}`);
       } catch (error) {
         warnings.push(`Quest ${id} was imported, but the tracker did not record it: ${error instanceof Error ? error.message : String(error)}`);
       }

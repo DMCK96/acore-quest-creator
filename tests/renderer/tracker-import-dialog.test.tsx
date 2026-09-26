@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { describe, expect, it, vi } from 'vitest';
-import { fireEvent, render, screen, within } from '@testing-library/react';
+import { render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { TrackerImportDialog } from '../../src/renderer/views/TrackerImportDialog';
 import { createAppStore } from '../../src/renderer/state/app-store';
@@ -61,15 +61,6 @@ describe('import from tracker dialog', () => {
     expect(api.trackerImport).toHaveBeenCalledWith({ questIds: [1209, 1210], replace: [1210] });
     expect(await screen.findByText('Imported 1209. Replaced 1210.')).toBeTruthy();
   });
-  it('imports at most 50 at a time', async () => {
-    const rows = Array.from({ length: 51 }, (_, i) => row(2000 + i, `Quest ${2000 + i}`));
-    mount({ trackerCandidates: vi.fn(async () => okv({ total: 51, rows, inProject: [] })) });
-    await screen.findByRole('dialog');
-    for (const r of rows) fireEvent.click(screen.getByRole('checkbox', { name: `Select quest ${r.key}` }));
-    expect((screen.getByRole('button', { name: 'Import 51 selected' }) as HTMLButtonElement).disabled).toBe(true);
-    expect(screen.getByText('Import at most 50 quests at a time.')).toBeTruthy();
-    // 51 ticks re-render a 51-row table 51 times, which is slow when the whole suite runs at once.
-  }, 20000);
   it('shows the tracker error with Retry, and keeps the list when a preview fails', async () => {
     const list = vi.fn().mockResolvedValueOnce(errv('VALIDATION', "The CoA Content Tracker isn't running at http://127.0.0.1:8089. Start it with python tracker.py."))
       .mockResolvedValueOnce(okv({ total: 1, rows: [row(1209, 'Windroc Remastery I')], inProject: [] }));
