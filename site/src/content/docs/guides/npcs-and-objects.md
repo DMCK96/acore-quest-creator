@@ -5,7 +5,7 @@ sidebar:
   order: 5
 ---
 
-The **NPCs & objects** module lists the new NPCs and objects a quest needs and where they stand. Making a new NPC from the [Quest Giver](/acore-quest-creator/guides/givers-and-enders/) module adds this module for you.
+The **NPCs, objects & items** module lists the new NPCs, objects and [items](/acore-quest-creator/guides/items/) a quest needs. Making a new NPC from the [Quest Giver](/acore-quest-creator/guides/givers-and-enders/) module adds this module for you.
 
 - **Add NPC** and **Add object** open the editor for a new one.
 - **Edit** on a listed NPC or object opens it again.

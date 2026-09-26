@@ -11,7 +11,7 @@ A **readable object** shows pages of text when a player uses it: a ledger, a not
 
 ## Make one
 
-1. In **NPCs & objects**, choose **Add object**.
+1. In **NPCs, objects & items**, choose **Add object**.
 2. On **Basics**, give it a **Name** and set **Type** to **Readable**.
 3. On **Look**, choose **Other ways** and browse models, for example `book` or `scroll`.
 4. On **Contents**, choose **Add page** and write the text. Add as many pages as you need; using the object shows the first page, and the player turns to the next.
