@@ -41,7 +41,7 @@ On **Pages**, **Add page** and write the text. Right-clicking the item in game s
 
 ![The Advanced tab, with a resistance set](../../../assets/screenshots/item-advanced.png)
 
-The choice is remembered. While advanced fields are hidden and the item has values in them (an [imported](/acore-quest-creator/guides/import-from-tracker/) item often does), **Some advanced fields have values** says so.
+The choice is remembered. While advanced fields are hidden and the item has values in them, **Some advanced fields have values** says so.
 
 ## What export writes
 

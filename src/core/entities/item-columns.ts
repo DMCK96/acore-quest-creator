@@ -102,7 +102,7 @@ type RowValue = string | number | null | undefined;
 const keyOf = <T extends Record<string, number>>(table: T, value: number, fallback: keyof T & string): keyof T & string =>
   (Object.keys(table) as (keyof T & string)[]).find((k) => table[k] === value) ?? fallback;
 
-/** A row (from the database or the tracker) as a typed item; columns it lacks keep `newItem`'s values. */
+/** An `item_template` row as a typed item; columns it lacks keep `newItem`'s values. */
 export function itemFromRow(row: Readonly<Record<string, RowValue>>, extraStats: readonly ItemStat[] = []): CustomItem {
   const base = newItem(0);
   const has = (column: string): boolean => row[column] !== undefined && row[column] !== null && row[column] !== '';

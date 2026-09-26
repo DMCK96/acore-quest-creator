@@ -9,7 +9,6 @@ sidebar:
 One guide per part of the app: what it is for and how to use it.
 
 - [Projects and the quest canvas](/acore-quest-creator/guides/projects-and-canvas/): lay out quest chains, bring in existing quests and save your work.
-- [Import from the CoA Content Tracker](/acore-quest-creator/guides/import-from-tracker/): bring in Ascension quests with what they need.
 - [Quest details, objectives and rewards](/acore-quest-creator/guides/quest-details-and-objectives/): the quest editor and its modules.
 - [Quest givers and enders](/acore-quest-creator/guides/givers-and-enders/): who offers the quest and who takes it back.
 - [Quest scripting](/acore-quest-creator/guides/quest-scripting/): what NPCs, objects and areas do around a quest.
