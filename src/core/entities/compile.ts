@@ -3,7 +3,8 @@ import { hasPointActions } from '../patrol/compile';
 import type { CompiledScripts } from '../scripts/compile';
 import { questTagPrefix } from '../scripts/tag';
 import type { EntityContext } from './context';
-import { NPC_TYPE_VALUE, OBJECT_TYPE_VALUE, RANK_VALUE, type LootRow, type Patrol, type QuestEntities } from './model';
+import { itemRow, MODELLED_ITEM_COLUMNS } from './item-columns';
+import { NPC_TYPE_VALUE, OBJECT_TYPE_VALUE, RANK_VALUE, type LootRow, type Patrol, type Page, type QuestEntities } from './model';
 
 /**
  * New NPCs and objects to template and spawn rows, in the same shape as compiled scripts so one
@@ -69,6 +70,8 @@ export function compileEntities(input: {
   /** Items the quest requires: their drops belong to Objectives, so loot lists never write them. */
   questItems?: readonly number[];
   context: EntityContext;
+  /** The `item_template` columns the export database has; null or absent when not known. */
+  itemColumns?: ReadonlySet<string> | null;
 }): CompiledScripts {
   const { questId, entities, givers, context } = input;
   const questItems = new Set(input.questItems ?? []);
@@ -96,6 +99,11 @@ export function compileEntities(input: {
   const out: CompiledScripts = { inserts: {}, deletes: {}, updates: [], flags: [], warnings: [] };
   const insert = (table: string, row: Row): void => {
     (out.inserts[table] ??= []).push(row);
+  };
+  const writePages = (pages: readonly Page[]): void => {
+    pages.forEach((page, i) => {
+      insert('page_text', { ID: text(page.id), Text: page.text, NextPageID: text(pages[i + 1]?.id ?? 0) });
+    });
   };
   const creatureRows = new Map(context.creatures.map((r) => [num(r.entry), r]));
   const objectRows = new Map(context.gameobjects.map((r) => [num(r.entry), r]));
@@ -166,9 +174,7 @@ export function compileEntities(input: {
     insert('gameobject_template', row);
     if (object.type === 'chest') writeLoot('gameobject_loot_template', object.entry, object.loot, `Object "${object.name || object.entry}"`);
     else if (object.loot.length > 0) out.warnings.push(`Object "${object.name || object.entry}": only a chest can be looted, so its loot list is not written.`);
-    object.pages.forEach((page, i) => {
-      insert('page_text', { ID: text(page.id), Text: page.text, NextPageID: text(object.pages[i + 1]?.id ?? 0) });
-    });
+    writePages(object.pages);
     for (const spawn of object.spawns) {
       objectGuids.add(spawn.guid);
       insert('gameobject', {
@@ -178,6 +184,17 @@ export function compileEntities(input: {
         spawntimesecs: text(spawn.respawnSecs), animprogress: text(ANIM_FULL), state: text(GO_READY),
         Comment: `${questTagPrefix(questId)}obj${object.entry}`,
       });
+    }
+  }
+
+  for (const item of entities.items) {
+    insert('item_template', itemRow(item));
+    writePages(item.pages);
+    if (!input.itemColumns) continue;
+    const label = item.name.trim() ? `Item "${item.name.trim()}"` : `Item ${item.entry}`;
+    for (const column of Object.keys(item.advanced)) {
+      if (MODELLED_ITEM_COLUMNS.has(column) || input.itemColumns.has(column)) continue;
+      out.warnings.push(`${label}: the database has no item_template column ${column}, so its value is not written.`);
     }
   }
 
@@ -199,7 +216,8 @@ export function compileEntities(input: {
   add('creature', sorted(creatureGuids).map((g) => ({ guid: text(g) })));
   add('gameobject_template', sorted(entities.objects.map((o) => o.entry)).map((e) => ({ entry: text(e) })));
   add('gameobject', sorted(objectGuids).map((g) => ({ guid: text(g) })));
-  add('page_text', sorted(entities.objects.flatMap((o) => o.pages.map((p) => p.id))).map((id) => ({ ID: text(id) })));
+  add('item_template', sorted(entities.items.map((i) => i.entry)).map((e) => ({ entry: text(e) })));
+  add('page_text', sorted([...entities.objects, ...entities.items].flatMap((o) => o.pages.map((p) => p.id))).map((id) => ({ ID: text(id) })));
   // Patrols: the addon and route of every spawn this quest has or had, whether it still patrols or not.
   const addonGuids = new Set<number>((out.inserts.creature_addon ?? []).map((r) => num(r.guid)));
   const ownedPaths = new Set<number>();
