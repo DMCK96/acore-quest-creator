@@ -1,6 +1,6 @@
 import { fightIssues } from '../combat/validate';
 import type { Issue } from '../validate/validate';
-import { ENTITIES_FIELD, type CustomNpc, type CustomObject, type QuestEntities } from './model';
+import { ENTITIES_FIELD, type CustomItem, type CustomNpc, type CustomObject, type QuestEntities } from './model';
 import { missingChoice } from '../patrol/compile';
 
 /**
@@ -9,7 +9,12 @@ import { missingChoice } from '../patrol/compile';
  */
 const HELD_IN_HAND: ReadonlySet<number> = new Set([13, 14, 15, 17, 21, 22, 23, 25, 26]);
 
-/** What is wrong with the quest's new NPCs and objects, each issue routed to their module. */
+const NUMERIC_TYPES: ReadonlySet<string> = new Set(['tinyint', 'smallint', 'mediumint', 'int', 'bigint', 'float', 'double', 'decimal']);
+const NUMBER = /^-?\d+(\.\d+)?$/;
+/** `ItemClass` Quest: something the player carries for a quest, never worn. */
+const QUEST_CLASS = 12;
+
+/** What is wrong with the quest's new NPCs, objects and items, each issue routed to their module. */
 export function entityIssues(input: {
   entities: QuestEntities;
   dbNames: ReadonlyMap<string, string>;
@@ -20,6 +25,10 @@ export function entityIssues(input: {
   objectives?: readonly number[];
   /** `item_template.InventoryType` of the items NPCs hold, when read; null skips the weapon check. */
   itemInventoryTypes?: ReadonlyMap<number, number> | null;
+  /** Whether a quest is in the world or the project; null skips the check of items that start one. */
+  knownQuest?: ((id: number) => boolean) | null;
+  /** `item_template` column name to its data type; null skips the check of advanced values. */
+  itemColumnTypes?: ReadonlyMap<string, string> | null;
 }): Issue[] {
   const questItems = new Set(input.questItems ?? []);
   const issues: Issue[] = [];
@@ -74,7 +83,40 @@ export function entityIssues(input: {
       add('warning', 'ENTITY_TAKEN', `entry ${entity.entry} already holds "${existing}" in the database, which this would replace.`);
     }
   };
+  const checkItem = (item: CustomItem): void => {
+    const label = item.name.trim() ? `Item "${item.name.trim()}"` : `Item ${item.entry}`;
+    const add = (severity: Issue['severity'], code: string, message: string): void => {
+      issues.push({ severity, code, fieldId: ENTITIES_FIELD, message: `${label}: ${message}` });
+    };
+    if (item.name.trim() === '') add('error', 'ITEM_NO_NAME', 'give it a name.');
+    if (item.stackable < 1) add('error', 'ITEM_STACK', 'the stack size must be at least 1.');
+    if (item.requiredLevel < 0 || item.itemLevel < 0) add('error', 'ITEM_LEVELS', 'the item and required levels cannot be negative.');
+    if (item.stats.some((s) => s.type === 0)) add('error', 'ITEM_EMPTY_STAT', 'a stat row has no stat picked.');
+    if (item.damage.some((d) => d.max === 0 || d.min > d.max)) add('error', 'ITEM_EMPTY_DAMAGE', 'a damage row has no damage.');
+    if (item.spells.some((s) => s.spell === 0)) add('error', 'ITEM_EMPTY_SPELL', 'a spell row has no spell.');
+    if (item.displayId <= 0) add('warning', 'ITEM_NO_LOOK', 'it has no look, so it shows as a question mark; choose a display ID.');
+    if (item.inventoryType > 0 && item.itemClass === QUEST_CLASS) {
+      add('warning', 'ITEM_QUEST_EQUIP', 'it can be equipped but its class is Quest; pick the class it should be.');
+    }
+    if (item.startsQuest > 0 && input.knownQuest && !input.knownQuest(item.startsQuest)) {
+      add('warning', 'ITEM_STARTS_UNKNOWN', `it starts quest ${item.startsQuest}, which is neither in the world database nor in this project.`);
+    }
+    if (item.pages.some((p) => p.text.trim() === '')) add('warning', 'ITEM_EMPTY_PAGE', 'a page has no text.');
+    if (input.itemColumnTypes) {
+      for (const [column, value] of Object.entries(item.advanced)) {
+        const type = input.itemColumnTypes.get(column);
+        if (type !== undefined && NUMERIC_TYPES.has(type) && !NUMBER.test(value.trim())) {
+          add('error', 'ITEM_ADVANCED_TYPE', `${column} must be a number, not "${value}".`);
+        }
+      }
+    }
+    const existing = input.dbNames.get(`item:${item.entry}`);
+    if (existing !== undefined && existing !== item.name) {
+      add('warning', 'ENTITY_TAKEN', `entry ${item.entry} already holds "${existing}" in the database, which this would replace.`);
+    }
+  };
   for (const npc of input.entities.npcs) check('creature', npc);
   for (const object of input.entities.objects) check('gameobject', object);
+  for (const item of input.entities.items ?? []) checkItem(item);
   return issues;
 }
