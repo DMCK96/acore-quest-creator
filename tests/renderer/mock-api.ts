@@ -82,6 +82,7 @@ export function makeMockApi(overrides: Partial<Record<keyof Api, (...args: any[]
     allocateIds: vi.fn(async () => okv([])),
     patrolPathId: vi.fn(async () => okv(0)),
     entityTemplate: vi.fn(async () => okv(null)),
+    itemColumns: vi.fn(async () => okv([])),
     groundHeight: vi.fn(async () => okv({ reason: 'x' })),
     spellFacts: vi.fn(async () => okv({ available: false, reason: 'x', spells: {} })),
     mapList: vi.fn(async () => okv([

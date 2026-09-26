@@ -11,7 +11,8 @@ import type { QuestAggregate } from '@core/model/aggregate';
 import type { FieldValue } from '@core/registry/types';
 import type { Difference } from '@core/roundtrip/compare';
 import type { ForeignScene } from '@core/scripts/decompile';
-import type { CustomNpc, CustomObject } from '@core/entities/model';
+import type { CustomItem, CustomNpc, CustomObject } from '@core/entities/model';
+import type { ColumnInfo } from '@core/db/types';
 import type { TestCommands } from '@core/testing/gm';
 import type { FidelityReport } from '@core/roundtrip/verify';
 import type { SchemaDiff } from '@core/schema/diff';
@@ -297,10 +298,13 @@ export interface QuestLinks {
   unavailable: UnavailableComponent[];
 }
 
-export type AllocKind = 'creature' | 'gameobject' | 'creatureSpawn' | 'gameobjectSpawn' | 'page';
+export type AllocKind = 'creature' | 'gameobject' | 'creatureSpawn' | 'gameobjectSpawn' | 'page' | 'item';
 
 /** Fields an existing NPC or object lends a new one. */
-export type EntityTemplate = Partial<Omit<CustomNpc, 'entry' | 'spawns'>> | Partial<Omit<CustomObject, 'entry' | 'spawns'>>;
+export type EntityTemplate =
+  | Partial<Omit<CustomNpc, 'entry' | 'spawns'>>
+  | Partial<Omit<CustomObject, 'entry' | 'spawns'>>
+  | Pick<CustomItem, 'name' | 'displayId' | 'itemClass' | 'subclass' | 'inventoryType'>;
 
 /** What the Scripts module shows beside the quest's own scenes. */
 export interface QuestScriptsInfo {
@@ -349,7 +353,9 @@ export interface Api {
   /** The `waypoint_data` path a new NPC's spawn patrols: guid × 10 when free, else above every path in use. */
   patrolPathId(guid: number): Promise<Result<number>>;
   /** The look and stats of an existing NPC or object, to start a new one from; null when there is none. */
-  entityTemplate(kind: 'creature' | 'gameobject', entry: number): Promise<Result<EntityTemplate | null>>;
+  entityTemplate(kind: 'creature' | 'gameobject' | 'item', entry: number): Promise<Result<EntityTemplate | null>>;
+  /** The `item_template` columns the export database has, for the item editor's advanced fields; none when unknown. */
+  itemColumns(): Promise<Result<ColumnInfo[]>>;
   /** The terrain height at a point, from the server data folder's map files, or why there is none. */
   groundHeight(map: number, x: number, y: number): Promise<Result<{ z: number } | { reason: string }>>;
   /** Facts of the spells the server's spell list has, or why there is no list (no server data folder, unreadable file). */
@@ -510,9 +516,10 @@ const REQUEST_SCHEMAS: Record<keyof Api, z.ZodType<unknown[]>> = {
   mapSpawns: z.tuple([z.number().int(), z.object({ minX: z.number().finite(), maxX: z.number().finite(), minY: z.number().finite(), maxY: z.number().finite() })]),
   entitySpawns: z.tuple([z.enum(['creature', 'gameobject']), z.number().int()]),
   questMapRefs: z.tuple([z.number()]),
-  allocateIds: z.tuple([z.enum(['creature', 'gameobject', 'creatureSpawn', 'gameobjectSpawn', 'page']), z.number().int().min(1).max(50)]),
+  allocateIds: z.tuple([z.enum(['creature', 'gameobject', 'creatureSpawn', 'gameobjectSpawn', 'page', 'item']), z.number().int().min(1).max(50)]),
   patrolPathId: z.tuple([z.number().int().min(1)]),
-  entityTemplate: z.tuple([z.enum(['creature', 'gameobject']), z.number().int()]),
+  entityTemplate: z.tuple([z.enum(['creature', 'gameobject', 'item']), z.number().int()]),
+  itemColumns: z.tuple([]),
   exportQuest: z.tuple([z.number()]),
   applyToDev: z.tuple([z.number(), z.boolean()]),
   projectState: z.tuple([]),

@@ -44,6 +44,7 @@ export const API_METHODS = [
   'allocateIds',
   'patrolPathId',
   'entityTemplate',
+  'itemColumns',
   'exportQuest',
   'applyToDev',
   'projectState',

@@ -359,8 +359,18 @@ export function createApi(deps: ApiDeps): Api {
   const projectAggregates = (): Map<number, QuestAggregate> =>
     new Map(quests.list().map((q) => [q.questId, q.aggregate]));
 
+  /**
+   * The items that start a quest: the database's, with the project's new items in place of any the
+   * database has under the same entry (they replace it on export).
+   */
+  const withProjectStarters = (starters: readonly ItemStarter[]): ItemStarter[] => {
+    const mine = projectEntities().items.filter((i) => i.startsQuest > 0).map((i) => ({ entry: i.entry, questId: i.startsQuest }));
+    const entries = new Set(projectEntities().items.map((i) => i.entry));
+    return [...starters.filter((s) => !entries.has(s.entry)), ...mine].sort((a, b) => a.entry - b.entry);
+  };
+
   const linksFor = (live: Session, scope: readonly number[]): Promise<LinkSnapshot> =>
-    loadLinks(live.db, scope, projectAggregates(), live.availability.available, live.itemStarters);
+    loadLinks(live.db, scope, projectAggregates(), live.availability.available, withProjectStarters(live.itemStarters));
 
   /**
    * A quest's own validation plus what its links say about it. Only for display: the export gate
@@ -543,9 +553,10 @@ export function createApi(deps: ApiDeps): Api {
     const base = refCheckerFor(live.db);
     return {
       exists(kind, id) {
-        const { npcs, objects } = projectEntities();
+        const { npcs, objects, items } = projectEntities();
         if (kind === 'creature' && npcs.some((n) => n.entry === id)) return Promise.resolve(true);
         if (kind === 'gameobject' && objects.some((o) => o.entry === id)) return Promise.resolve(true);
+        if (kind === 'item' && items.some((i) => i.entry === id)) return Promise.resolve(true);
         return base.exists(kind, id);
       },
       questGiver(kind, id) {
@@ -560,15 +571,21 @@ export function createApi(deps: ApiDeps): Api {
 
   async function newEntityIssues(live: Session, aggregate: QuestAggregate): Promise<Issue[]> {
     const entities = readEntities(aggregate.values);
-    if (entities.npcs.length + entities.objects.length === 0) return [];
-    const [creatures, objects] = await Promise.all([
+    if (entities.npcs.length + entities.objects.length + entities.items.length === 0) return [];
+    const startedQuests = [...new Set(entities.items.map((i) => i.startsQuest).filter((q) => q > 0))];
+    const [creatures, objects, itemRows, questRows] = await Promise.all([
       rowsOrNone(live.db, 'creature_template', { entry: entities.npcs.map((n) => String(n.entry)) }),
       rowsOrNone(live.db, 'gameobject_template', { entry: entities.objects.map((o) => String(o.entry)) }),
+      rowsOrNone(live.db, 'item_template', { entry: entities.items.map((i) => String(i.entry)) }),
+      rowsOrNone(live.db, 'quest_template', { ID: startedQuests.map(String) }),
     ]);
     const dbNames = new Map<string, string>([
       ...creatures.map((r) => [`creature:${r.entry}`, r.name ?? ''] as [string, string]),
       ...objects.map((r) => [`gameobject:${r.entry}`, r.name ?? ''] as [string, string]),
+      ...itemRows.map((r) => [`item:${r.entry}`, r.name ?? ''] as [string, string]),
     ]);
+    const knownQuests = new Set([...questRows.map((r) => Number(r.ID)), ...quests.usedQuestIds()]);
+    const itemColumnTypes = new Map((live.scriptSchema.tables.item_template ?? []).map((c) => [c.name, c.dataType]));
     // Only a spell list already loaded: a validation run must not wait for, or start, the big read.
     const spells = live.spellsReady;
     const held = [...new Set(entities.npcs.flatMap((n) => [n.equipment.mainHand, n.equipment.offHand, n.equipment.ranged]).filter((i) => i > 0))];
@@ -577,6 +594,7 @@ export function createApi(deps: ApiDeps): Api {
     return entityIssues({
       entities, dbNames, questItems: questItemsOf(aggregate), objectives: objectivesOf(aggregate),
       knownSpell: spells ? (id) => spells.get(id) !== undefined : null, itemInventoryTypes,
+      knownQuest: (id) => knownQuests.has(id), itemColumnTypes: itemColumnTypes.size > 0 ? itemColumnTypes : null,
     });
   }
 
@@ -889,7 +907,10 @@ export function createApi(deps: ApiDeps): Api {
       .flatMap((o) => (o.kind === 'creature' ? [o.entry] : []));
     const entityContext = await readEntityContext(live.db, quest.questId, entities);
     const newEntities = scriptStatements(
-      compileEntities({ questId: quest.questId, entities, givers, questItems: questItemsOf(quest.aggregate), context: entityContext }),
+      compileEntities({
+        questId: quest.questId, entities, givers, questItems: questItemsOf(quest.aggregate), context: entityContext,
+        itemColumns: live.scriptSchema.tables.item_template ? new Set(live.scriptSchema.tables.item_template.map((c) => c.name)) : null,
+      }),
       exportSchema(live),
     );
     const of = (list: readonly PatchStatement[], kind: PatchStatement['kind']) => list.filter((s) => s.kind === kind);
@@ -997,13 +1018,14 @@ export function createApi(deps: ApiDeps): Api {
           return spells.search(text, ENTITY_SEARCH_LIMIT).map((f) => ({ id: f.id, name: spellLabel(f), detail: spellDetail(f) }));
         }
         const found = await connected().db.searchEntities(kind, text, ENTITY_SEARCH_LIMIT);
-        if (kind !== 'creature' && kind !== 'gameobject') return found;
-        const { npcs, objects } = projectEntities();
+        if (kind !== 'creature' && kind !== 'gameobject' && kind !== 'item') return found;
+        const { npcs, objects, items } = projectEntities();
         const needle = text.trim().toLowerCase();
         if (needle === '') return found;
-        const mine = (kind === 'creature' ? npcs : objects)
+        const word = { creature: 'NPC', gameobject: 'object', item: 'item' }[kind];
+        const mine = (kind === 'creature' ? npcs : kind === 'gameobject' ? objects : items)
           .filter((e) => e.name.toLowerCase().includes(needle) || String(e.entry) === needle)
-          .map((e) => ({ id: e.entry, name: e.name || `New ${kind === 'creature' ? 'NPC' : 'object'}`, detail: 'new' }));
+          .map((e) => ({ id: e.entry, name: e.name || `New ${word} ${e.entry}`, detail: 'new' }));
         const ids = new Set(mine.map((h) => h.id));
         return [...mine, ...found.filter((h) => !ids.has(h.id))].slice(0, ENTITY_SEARCH_LIMIT);
       }),
@@ -1017,6 +1039,7 @@ export function createApi(deps: ApiDeps): Api {
           creatureSpawn: ['creature', 'guid'],
           gameobjectSpawn: ['gameobject', 'guid'],
           page: ['page_text', 'ID'],
+          item: ['item_template', 'entry'],
         }[kind] as [string, string];
         let dbMax = 0;
         try {
@@ -1024,12 +1047,13 @@ export function createApi(deps: ApiDeps): Api {
         } catch {
           dbMax = 0;
         }
-        const { npcs, objects } = projectEntities();
+        const { npcs, objects, items } = projectEntities();
         const used =
           kind === 'creature' ? npcs.map((n) => n.entry)
           : kind === 'gameobject' ? objects.map((o) => o.entry)
+          : kind === 'item' ? items.map((i) => i.entry)
           : kind === 'creatureSpawn' ? npcs.flatMap((n) => n.spawns.map((s) => s.guid))
-          : kind === 'page' ? objects.flatMap((o) => o.pages.map((p) => p.id))
+          : kind === 'page' ? [...objects, ...items].flatMap((o) => o.pages.map((p) => p.id))
           : objects.flatMap((o) => o.spawns.map((s) => s.guid));
         const base = Math.max(dbMax, ...used, 0);
         return Array.from({ length: count }, (_, i) => base + i + 1);
@@ -1079,6 +1103,14 @@ export function createApi(deps: ApiDeps): Api {
             equipment: { mainHand: numberOf(gear?.ItemID1), offHand: numberOf(gear?.ItemID2), ranged: numberOf(gear?.ItemID3) },
           };
         }
+        if (kind === 'item') {
+          const [item] = await rowsOrNone(live.db, 'item_template', { entry: [String(entry)] });
+          if (!item) return null;
+          return {
+            name: item.name ?? '', displayId: numberOf(item.displayid), itemClass: numberOf(item.class), subclass: numberOf(item.subclass),
+            inventoryType: numberOf(item.InventoryType),
+          };
+        }
         const [row] = await rowsOrNone(live.db, 'gameobject_template', { entry: [String(entry)] });
         if (!row) return null;
         return {
@@ -1087,12 +1119,14 @@ export function createApi(deps: ApiDeps): Api {
         };
       }),
 
+    itemColumns: () => run(async () => exportSchema(connected()).tables.item_template ?? []),
+
     openQuest: (questId, position) => run(async () => openOne(questId, position)),
 
     addQuestChain: (questId, position) =>
       run(async () => {
         const live = usable();
-        const chain = await findQuestChain(live.db, questId, MAX_CHAIN_QUESTS, undefined, live.itemStarters);
+        const chain = await findQuestChain(live.db, questId, MAX_CHAIN_QUESTS, undefined, withProjectStarters(live.itemStarters));
         const slots = layoutChain(chain.questIds, chain.links);
         const rootSlot = slots.get(questId) ?? { column: 0, row: 0 };
 
@@ -1181,7 +1215,7 @@ export function createApi(deps: ApiDeps): Api {
           canvasIds,
           new Map(projectQuests.map((d) => [d.questId, d.aggregate])),
           live.availability.available,
-          live.itemStarters,
+          withProjectStarters(live.itemStarters),
         );
         const disconnected = disconnectedQuests(canvasIds, snapshot);
         const edges = snapshot.result.instances.flatMap((instance) =>
@@ -1315,9 +1349,9 @@ export function createApi(deps: ApiDeps): Api {
           return names;
         }
         const found = await connected().db.lookupNames(kind, ids);
-        // New NPCs and objects are not in the database until the quest is applied.
-        const { npcs, objects } = projectEntities();
-        const mine = kind === 'creature' ? npcs : kind === 'gameobject' ? objects : [];
+        // New NPCs, objects and items are not in the database until the quest is applied.
+        const { npcs, objects, items } = projectEntities();
+        const mine = kind === 'creature' ? npcs : kind === 'gameobject' ? objects : kind === 'item' ? items : [];
         for (const entity of mine) if (ids.includes(entity.entry) && !found.has(entity.entry)) found.set(entity.entry, entity.name || `#${entity.entry}`);
         const names: Record<number, string> = {};
         for (const [id, name] of found) names[id] = name;
