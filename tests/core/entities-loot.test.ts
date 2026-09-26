@@ -8,7 +8,7 @@ const Q = 60001;
 const chest = { ...newObject(9100001), type: 'chest' as const, name: 'Chest', displayId: 1, loot: [{ item: 2589, chance: 50, min: 1, max: 3, questOnly: false }, { item: 750, chance: 100, min: 1, max: 1, questOnly: true }] };
 const npc = { ...newNpc(12000001), name: 'Hela', displayId: 1, loot: [{ item: 117, chance: 25, min: 1, max: 2, questOnly: false }] };
 const compile = (over: Partial<Parameters<typeof compileEntities>[0]> = {}) =>
-  compileEntities({ questId: Q, entities: { npcs: [npc], objects: [chest] }, givers: [], questItems: [750], context: EMPTY_ENTITY_CONTEXT, ...over });
+  compileEntities({ questId: Q, entities: { npcs: [npc], objects: [chest], items: [] }, givers: [], questItems: [750], context: EMPTY_ENTITY_CONTEXT, ...over });
 
 describe('loot', () => {
   it('reads entities saved before loot existed', () => {
@@ -28,7 +28,7 @@ describe('loot', () => {
     expect(out.warnings.some((w) => /750/.test(w))).toBe(true);
   });
   it('leaves lootid at 0 for an NPC without loot and skips loot on objects that are not chests', () => {
-    const out = compile({ entities: { npcs: [{ ...npc, loot: [] }], objects: [{ ...chest, type: 'goober' }] } });
+    const out = compile({ entities: { npcs: [{ ...npc, loot: [] }], objects: [{ ...chest, type: 'goober' }], items: [] } });
     expect(out.inserts.creature_template![0]!.lootid ?? '0').toBe('0');
     expect(out.inserts.gameobject_loot_template).toBeUndefined();
     expect(out.warnings.some((w) => /only a chest/i.test(w))).toBe(true);
@@ -42,7 +42,7 @@ describe('loot', () => {
   });
   it('validates loot rows', () => {
     const codes = (loot: unknown[], type: 'chest' | 'goober' = 'chest') => entityIssues({
-      entities: { npcs: [], objects: [{ ...newObject(9), type, name: 'C', displayId: 1, loot: loot as never, spawns: [{ guid: 1, map: 0, x: 1, y: 0, z: 0, o: 0, respawnSecs: 1, wander: 0, patrol: null }] }] },
+      entities: { npcs: [], objects: [{ ...newObject(9), type, name: 'C', displayId: 1, loot: loot as never, spawns: [{ guid: 1, map: 0, x: 1, y: 0, z: 0, o: 0, respawnSecs: 1, wander: 0, patrol: null }] }], items: [] },
       dbNames: new Map(), questItems: [750],
     }).map((i) => i.code);
     expect(codes([])).toEqual(['LOOT_EMPTY_CHEST']);

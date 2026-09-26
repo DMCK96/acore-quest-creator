@@ -20,7 +20,7 @@ vi.mock('../../src/renderer/map/LeafletMap', () => ({
 
 const two = addPoint(addPoint(newPatrol(9000), { x: 10, y: 0, z: 50 }), { x: 10, y: 10, z: 50 });
 const start = () => ({ ...sampleOpen().aggregate.values,
-  [ENTITIES_FIELD]: writeEntities({ npcs: [{ ...newNpc(12000001), name: 'Hela', spawns: [{ ...newSpawn(900), map: 0, x: 0, y: 0, z: 50, patrol: two }] }], objects: [] }) });
+  [ENTITIES_FIELD]: writeEntities({ npcs: [{ ...newNpc(12000001), name: 'Hela', spawns: [{ ...newSpawn(900), map: 0, x: 0, y: 0, z: 50, patrol: two }] }], objects: [], items: [] }) });
 let current: Record<string, unknown> = {};
 function Live({ api }: { api: Api }) {
   const [vals, setVals] = useState<Record<string, unknown>>(start());

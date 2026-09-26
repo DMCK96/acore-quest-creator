@@ -9,7 +9,7 @@ import { emptyFight, newAbility, type Fight } from '../../src/core/combat/model'
 
 // Module bodies render from props and never re-render themselves, so each state is mounted directly.
 const last = (onChange: ReturnType<typeof vi.fn>) => onChange.mock.calls.filter(([f]) => f === ENTITIES_FIELD).at(-1)![1] as QuestEntities;
-const withFight = (fight: Fight | null): QuestEntities => ({ npcs: [{ ...newNpc(12000001), name: 'Hela', fight }], objects: [] });
+const withFight = (fight: Fight | null): QuestEntities => ({ npcs: [{ ...newNpc(12000001), name: 'Hela', fight }], objects: [], items: [] });
 const frostbolt = { id: 116, name: 'Frostbolt', rank: 'Rank 1', castMs: 1300, cooldownMs: 0, rangeYd: 30, school: 'Frost', kind: 'harmful' as const };
 const frenzy = { id: 8269, name: 'Frenzy', rank: '', castMs: 0, cooldownMs: 0, rangeYd: null, school: 'Physical', kind: 'helpful' as const };
 const spellApi = () => makeMockApi({

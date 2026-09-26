@@ -19,7 +19,7 @@ const scenes: QuestScene[] = [
   { id: 's3', name: 'Enter', owner: { kind: 'areatrigger', id: 0, area: { map: 0, x: -8800, y: -100, z: 80, radius: 12 } }, trigger: { kind: 'enterArea' }, gates: [], steps: [] },
 ];
 const values = {
-  [ENTITIES_FIELD]: writeEntities({ npcs: [hela], objects: [chest] }),
+  [ENTITIES_FIELD]: writeEntities({ npcs: [hela], objects: [chest], items: [] }),
   [SCRIPTS_FIELD]: writeScenes(scenes),
   quest_poi: [{ id: 0, ObjectiveIndex: 0, MapID: 0, WorldMapAreaId: 12, Floor: 0, Priority: 0, Flags: 0, VerifiedBuild: 0 }],
   quest_poi_points: [{ Idx1: 0, Idx2: 0, X: -8900, Y: -100, VerifiedBuild: 0 }, { Idx1: 0, Idx2: 1, X: -8800, Y: -200, VerifiedBuild: 0 }],
@@ -84,7 +84,7 @@ describe('patrol markers', () => {
     const patrol = updatePoint(addPoint(addPoint(newPatrol(9000), { x: 1, y: 2, z: 3 }), { x: 4, y: 5, z: 6 }), 1, { facing: 0.5, waitSecs: 3 });
     return { ...newNpc(12000001), name: 'Hela', spawns: [{ ...newSpawn(900), map: 1, x: 0, y: 0, z: 0, patrol }] };
   };
-  const vals = () => ({ [ENTITIES_FIELD]: writeEntities({ npcs: [walker()], objects: [] }) });
+  const vals = () => ({ [ENTITIES_FIELD]: writeEntities({ npcs: [walker()], objects: [], items: [] }) });
   it('marks each patrol point', () => {
     expect(questMarkers(vals()).filter((m) => m.kind === 'patrolPoint')).toEqual([
       expect.objectContaining({ id: 'patrol:12000001:900:0', label: 'Hela · patrol point 1', map: 1, x: 1, y: 2, z: 3, draggable: true }),

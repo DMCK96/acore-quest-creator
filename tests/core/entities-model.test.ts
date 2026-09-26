@@ -4,13 +4,13 @@ import { ENTITIES_FIELD, newNpc, newObject, newSpawn, readEntities, writeEntitie
 describe('entity model', () => {
   it('round-trips entities and reads none from an old project', () => {
     const npc = { ...newNpc(12000001), name: 'Scout Hela', spawns: [newSpawn(6000001)] };
-    const values = { [ENTITIES_FIELD]: writeEntities({ npcs: [npc], objects: [newObject(9100001)] }) };
-    expect(readEntities(values)).toEqual({ npcs: [npc], objects: [newObject(9100001)] });
-    expect(readEntities({})).toEqual({ npcs: [], objects: [] });
+    const values = { [ENTITIES_FIELD]: writeEntities({ npcs: [npc], objects: [newObject(9100001)], items: [] }) };
+    expect(readEntities(values)).toEqual({ npcs: [npc], objects: [newObject(9100001)], items: [] });
+    expect(readEntities({})).toEqual({ npcs: [], objects: [], items: [] });
   });
   it('drops entries that are not valid', () => {
     const values = { [ENTITIES_FIELD]: { npcs: [newNpc(1), { entry: 'x' }], objects: 'nope' } as never };
-    expect(readEntities(values)).toEqual({ npcs: [newNpc(1)], objects: [] });
+    expect(readEntities(values)).toEqual({ npcs: [newNpc(1)], objects: [], items: [] });
   });
   it('starts new entities with sensible defaults', () => {
     expect(newNpc(5)).toMatchObject({ entry: 5, name: '', minLevel: 1, maxLevel: 1, faction: 35, scale: 1, rank: 'normal', type: 'humanoid', questGiver: false, gossip: false, healthModifier: 1, damageModifier: 1, spawns: [] });

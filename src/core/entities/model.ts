@@ -124,6 +124,44 @@ const objectSchema = z.object({
   loot: z.array(lootSchema).default([]),
 });
 
+export const ITEM_QUALITY_VALUE = { poor: 0, common: 1, uncommon: 2, rare: 3, epic: 4, legendary: 5, artifact: 6, heirloom: 7 } as const;
+export const BONDING_VALUE = { none: 0, pickup: 1, equip: 2, use: 3, quest: 4 } as const;
+
+const itemStatSchema = z.object({ type: int, value: int });
+const itemDamageSchema = z.object({ min: num, max: num, school: int });
+const itemSpellSchema = z.object({ spell: int, trigger: int, charges: int, cooldownMs: int, category: int, categoryCooldownMs: int });
+
+/**
+ * A new item the quest needs (added with items): the columns quests and rewards use as typed
+ * fields, and any other `item_template` column as raw text in `advanced`, so an imported item keeps
+ * everything it came with. The caps are the slots `item_template` has.
+ */
+const itemSchema = z.object({
+  entry: int,
+  name: z.string(),
+  description: z.string(),
+  quality: z.enum(keysOf(ITEM_QUALITY_VALUE)),
+  itemClass: int,
+  subclass: int,
+  inventoryType: int,
+  displayId: int,
+  itemLevel: int,
+  requiredLevel: int,
+  stackable: int,
+  maxCount: int,
+  bonding: z.enum(keysOf(BONDING_VALUE)),
+  buyPrice: int,
+  sellPrice: int,
+  startsQuest: int,
+  pages: z.array(pageSchema),
+  armor: int,
+  damage: z.array(itemDamageSchema).max(2),
+  delayMs: int,
+  stats: z.array(itemStatSchema).max(10),
+  spells: z.array(itemSpellSchema).max(5),
+  advanced: z.record(z.string(), z.string()),
+});
+
 export type Spawn = z.infer<typeof spawnSchema>;
 export type Pace = (typeof PACES)[number];
 export type PointAction = z.infer<typeof pointActionSchema>;
@@ -137,10 +175,17 @@ export type CustomObject = z.infer<typeof objectSchema>;
 export type NpcRank = CustomNpc['rank'];
 export type NpcType = CustomNpc['type'];
 export type ObjectType = CustomObject['type'];
+export type CustomItem = z.infer<typeof itemSchema>;
+export type ItemStat = z.infer<typeof itemStatSchema>;
+export type ItemDamage = z.infer<typeof itemDamageSchema>;
+export type ItemSpell = z.infer<typeof itemSpellSchema>;
+export type ItemQuality = CustomItem['quality'];
+export type Bonding = CustomItem['bonding'];
 
 export interface QuestEntities {
   npcs: CustomNpc[];
   objects: CustomObject[];
+  items: CustomItem[];
 }
 
 const validItems = <T>(schema: z.ZodType<T>, raw: unknown): T[] =>
@@ -151,11 +196,11 @@ const validItems = <T>(schema: z.ZodType<T>, raw: unknown): T[] =>
       })
     : [];
 
-/** The quest's new NPCs and objects; anything not valid is left out, never thrown. */
+/** The quest's new NPCs, objects and items; anything not valid is left out, never thrown. */
 export function readEntities(values: Readonly<Record<string, unknown>>): QuestEntities {
   const raw = values[ENTITIES_FIELD];
   const record = typeof raw === 'object' && raw !== null && !Array.isArray(raw) ? (raw as Record<string, unknown>) : {};
-  return { npcs: validItems(npcSchema, record.npcs), objects: validItems(objectSchema, record.objects) };
+  return { npcs: validItems(npcSchema, record.npcs), objects: validItems(objectSchema, record.objects), items: validItems(itemSchema, record.items) };
 }
 
 /** Entities in the shape the values map carries; like scenes, nested data no column models. */
@@ -192,4 +237,13 @@ export function newObject(entry: number): CustomObject {
 
 export function newSpawn(guid: number): Spawn {
   return { guid, map: 0, x: 0, y: 0, z: 0, o: 0, respawnSecs: 300, wander: 0, patrol: null };
+}
+
+/** A new item starts as a quest item: most are things the player is asked to collect. */
+export function newItem(entry: number): CustomItem {
+  return {
+    entry, name: '', description: '', quality: 'common', itemClass: 12, subclass: 0, inventoryType: 0, displayId: 0,
+    itemLevel: 1, requiredLevel: 0, stackable: 1, maxCount: 1, bonding: 'quest', buyPrice: 0, sellPrice: 0, startsQuest: 0,
+    pages: [], armor: 0, damage: [], delayMs: 0, stats: [], spells: [], advanced: {},
+  };
 }

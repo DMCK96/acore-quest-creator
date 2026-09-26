@@ -523,13 +523,14 @@ export function createApi(deps: ApiDeps): Api {
     return (rows as Array<Record<string, unknown>>).flatMap((r) => (typeof r.item === 'number' && r.item > 0 ? [r.item] : []));
   }
 
-  /** Every new NPC and object in the project, from every quest. */
+  /** Every new NPC, object and item in the project, from every quest. */
   function projectEntities(): QuestEntities {
-    const all: QuestEntities = { npcs: [], objects: [] };
+    const all: QuestEntities = { npcs: [], objects: [], items: [] };
     for (const quest of quests.list()) {
-      const { npcs, objects } = readEntities(quest.aggregate.values);
+      const { npcs, objects, items } = readEntities(quest.aggregate.values);
       all.npcs.push(...npcs);
       all.objects.push(...objects);
+      all.items.push(...items);
     }
     return all;
   }
@@ -1136,7 +1137,7 @@ export function createApi(deps: ApiDeps): Api {
         const created = createNewAggregate(live.schema, registry, questId);
         const aggregate = {
           ...created,
-          values: { ...created.values, [SCRIPTS_FIELD]: writeScenes([]), [ENTITIES_FIELD]: writeEntities({ npcs: [], objects: [] }) },
+          values: { ...created.values, [SCRIPTS_FIELD]: writeScenes([]), [ENTITIES_FIELD]: writeEntities({ npcs: [], objects: [], items: [] }) },
         };
         const fidelity: FidelityReport = { ok: true };
 

@@ -18,7 +18,7 @@ import { makeMockApi, okv, sampleOpen } from './mock-api';
 vi.mock('../../src/renderer/map/LeafletMap', () => ({ LeafletMap: (_p: LeafletMapProps) => <div aria-label="Leaflet stand-in" /> }));
 
 const hela = { ...newNpc(12000005), name: 'Hela', displayId: 3167 };
-const withHela = (npc = hela) => ({ [ENTITIES_FIELD]: writeEntities({ npcs: [npc], objects: [] }), creature_queststarter: [{ id: npc.entry }] });
+const withHela = (npc = hela) => ({ [ENTITIES_FIELD]: writeEntities({ npcs: [npc], objects: [], items: [] }), creature_queststarter: [{ id: npc.entry }] });
 const entitiesIn = (onChange: ReturnType<typeof vi.fn>) => readEntities({ [ENTITIES_FIELD]: onChange.mock.calls.filter(([f]) => f === ENTITIES_FIELD).at(-1)![1] });
 
 describe('entity editor host', () => {
@@ -49,7 +49,7 @@ describe('entity editor host', () => {
   });
 
   it('closes when its entity goes away', async () => {
-    const { onClose } = await mountEditor({ [ENTITIES_FIELD]: writeEntities({ npcs: [], objects: [] }) }, { kind: 'npc', entry: 12000005, isNew: false });
+    const { onClose } = await mountEditor({ [ENTITIES_FIELD]: writeEntities({ npcs: [], objects: [], items: [] }) }, { kind: 'npc', entry: 12000005, isNew: false });
     expect(onClose).toHaveBeenCalled();
     expect(screen.queryByRole('dialog')).toBeNull();
   });

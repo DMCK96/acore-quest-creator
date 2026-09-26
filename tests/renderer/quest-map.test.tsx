@@ -21,7 +21,7 @@ vi.mock('../../src/renderer/map/LeafletMap', () => ({
 const hela = { ...newNpc(12000001), name: 'Hela', spawns: [{ ...newSpawn(900), map: 0, x: -8900, y: -160, z: 82 }] };
 const openWith = (npcs = [hela]) => {
   const base = sampleOpen();
-  return { ...base, aggregate: { ...base.aggregate, values: { ...base.aggregate.values, [ENTITIES_FIELD]: writeEntities({ npcs, objects: [] }) } } };
+  return { ...base, aggregate: { ...base.aggregate, values: { ...base.aggregate.values, [ENTITIES_FIELD]: writeEntities({ npcs, objects: [], items: [] }) } } };
 };
 const mount = (api = makeMockApi(), onChange = vi.fn(), open = openWith()) => {
   render(<NamesProvider api={api}><QuestMapView open={open} onChange={onChange} focusId={null} onClose={vi.fn()} /></NamesProvider>);

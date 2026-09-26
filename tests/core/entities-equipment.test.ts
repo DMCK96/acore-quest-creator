@@ -5,7 +5,7 @@ import { EMPTY_ENTITY_CONTEXT } from '../../src/core/entities/context';
 import { newNpc, newSpawn, readEntities, ENTITIES_FIELD } from '../../src/core/entities/model';
 
 const armed = { ...newNpc(12000001), name: 'Guard', displayId: 3167, equipment: { mainHand: 1899, offHand: 143, ranged: 0 }, spawns: [newSpawn(900)] };
-const compile = (npc = armed) => compileEntities({ questId: 60001, entities: { npcs: [npc], objects: [] }, givers: [], context: EMPTY_ENTITY_CONTEXT });
+const compile = (npc = armed) => compileEntities({ questId: 60001, entities: { npcs: [npc], objects: [], items: [] }, givers: [], context: EMPTY_ENTITY_CONTEXT });
 
 describe('NPC weapons', () => {
   it('starts unarmed, and reads NPCs saved before weapons as unarmed', () => {

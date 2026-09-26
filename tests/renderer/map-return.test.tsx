@@ -23,7 +23,7 @@ vi.mock('../../src/renderer/map/LeafletMap', () => ({
 async function mountFlow() {
   const schema = await loadSchema(forkDb(), registry.tables.map((t) => t.table));
   const a = createNewAggregate(schema, registry, 60123);
-  const values = { ...a.values, creature_queststarter: [{ id: 12000005 }], [ENTITIES_FIELD]: writeEntities({ npcs: [{ ...newNpc(12000005), name: 'Hela' }], objects: [] }) };
+  const values = { ...a.values, creature_queststarter: [{ id: 12000005 }], [ENTITIES_FIELD]: writeEntities({ npcs: [{ ...newNpc(12000005), name: 'Hela' }], objects: [], items: [] }) };
   const open = sampleOpen({ questId: 60123, aggregate: { ...a, values } });
   const api = makeMockApi({ newQuest: vi.fn(async () => okv(open)) });
   const store = createAppStore(api, { saveDelayMs: 0 });

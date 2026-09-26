@@ -6,13 +6,13 @@ describe('localNamesOf', () => {
   it('names the quest\'s new NPCs and objects by entry', () => {
     const npc = { ...newNpc(11000231), name: 'Foreman Brask' };
     const object = { ...newObject(9000150), name: "Brask's Ledger" };
-    const local = localNamesOf({ [ENTITIES_FIELD]: writeEntities({ npcs: [npc], objects: [object] }) });
+    const local = localNamesOf({ [ENTITIES_FIELD]: writeEntities({ npcs: [npc], objects: [object], items: [] }) });
     expect(local.creature.get(11000231)).toBe('Foreman Brask');
     expect(local.gameobject.get(9000150)).toBe("Brask's Ledger");
   });
 
   it('calls one not named yet what the editor calls it', () => {
-    const local = localNamesOf({ [ENTITIES_FIELD]: writeEntities({ npcs: [newNpc(1)], objects: [newObject(2)] }) });
+    const local = localNamesOf({ [ENTITIES_FIELD]: writeEntities({ npcs: [newNpc(1)], objects: [newObject(2)], items: [] }) });
     expect(local.creature.get(1)).toBe('New NPC');
     expect(local.gameobject.get(2)).toBe('New object');
   });

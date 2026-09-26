@@ -9,7 +9,7 @@ import { FakeWorldDb } from '../helpers/fake-world-db';
 // Stock AzerothCore names a spawn's NPC `id1`; older forks (the CoA repack among them) name it `id`.
 describe('the NPC a new spawn is of', () => {
   it('is written to whichever column the database has', async () => {
-    const out = compileEntities({ questId: 60001, entities: { npcs: [{ ...newNpc(12000001), name: 'Hela', displayId: 1, spawns: [newSpawn(900)] }], objects: [] }, givers: [], context: EMPTY_ENTITY_CONTEXT });
+    const out = compileEntities({ questId: 60001, entities: { npcs: [{ ...newNpc(12000001), name: 'Hela', displayId: 1, spawns: [newSpawn(900)] }], objects: [], items: [] }, givers: [], context: EMPTY_ENTITY_CONTEXT });
     const schema = await loadSchema(FakeWorldDb.fromFork(['creature']), ['creature']);
     const older = { ...schema, tables: { ...schema.tables, creature: schema.tables.creature!.map((c) => (c.name === 'id1' ? { ...c, name: 'id' } : c)).filter((c) => c.name !== 'id2' && c.name !== 'id3') } };
     const row = (s: typeof schema) => scriptStatements(out, s).statements.find((st) => st.kind === 'insert' && st.table === 'creature') as { row: Record<string, string | null> };

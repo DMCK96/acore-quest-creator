@@ -21,7 +21,7 @@ vi.mock('../../src/renderer/map/LeafletMap', () => ({
 const three = (): Patrol =>
   addPoint(addPoint(addPoint(newPatrol(9000), { x: 10, y: 0, z: 50 }), { x: 10, y: 10, z: 50 }), { x: 0, y: 10, z: 50 });
 const valuesWith = (patrol: Patrol | null) => ({ ...sampleOpen().aggregate.values,
-  [ENTITIES_FIELD]: writeEntities({ npcs: [{ ...newNpc(12000001), name: 'Hela', spawns: [{ ...newSpawn(900), map: 0, x: 0, y: 0, z: 50, patrol }] }], objects: [] }) });
+  [ENTITIES_FIELD]: writeEntities({ npcs: [{ ...newNpc(12000001), name: 'Hela', spawns: [{ ...newSpawn(900), map: 0, x: 0, y: 0, z: 50, patrol }] }], objects: [], items: [] }) });
 
 let current: Record<string, unknown> = {};
 let setOutside: (next: Record<string, unknown>) => void = () => {};
@@ -116,7 +116,7 @@ describe('patrol polish', () => {
 
   it('offers Draw patrol once right after placing, from the banner', async () => {
     const api = floorsApi({ allocateIds: vi.fn(async () => okv([901])) });
-    const values = { ...sampleOpen().aggregate.values, [ENTITIES_FIELD]: writeEntities({ npcs: [{ ...newNpc(12000001), name: 'Hela' }], objects: [] }) };
+    const values = { ...sampleOpen().aggregate.values, [ENTITIES_FIELD]: writeEntities({ npcs: [{ ...newNpc(12000001), name: 'Hela' }], objects: [], items: [] }) };
     render(<Live api={api} values={values} mode={{ kind: 'place', target: { kind: 'npc', entry: 12000001 } }} />);
     await screen.findByText('Click where Hela should stand.');
     await act(async () => lastProps!.onMapClick({ x: 5, y: 5 }));

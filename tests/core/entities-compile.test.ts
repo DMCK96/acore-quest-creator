@@ -7,7 +7,7 @@ const Q = 60001;
 const npc = { ...newNpc(12000001), name: 'Scout Hela', subname: 'Pathfinder', minLevel: 10, maxLevel: 12, displayId: 1234, rank: 'elite' as const,
   spawns: [{ ...newSpawn(6000001), map: 0, x: 1.5, y: 2.5, z: 3.5, o: 1, wander: 5 }] };
 const chest = { ...newObject(9100001), name: 'Old Chest', type: 'chest' as const, displayId: 259, spawns: [{ ...newSpawn(7000001), o: Math.PI }] };
-const entities: QuestEntities = { npcs: [npc], objects: [chest] };
+const entities: QuestEntities = { npcs: [npc], objects: [chest], items: [] };
 const compile = (over: Partial<Parameters<typeof compileEntities>[0]> = {}) =>
   compileEntities({ questId: Q, entities, givers: [], context: EMPTY_ENTITY_CONTEXT, ...over });
 
@@ -37,7 +37,7 @@ describe('compileEntities', () => {
   });
   it('makes an NPC that gives or takes the quest a quest giver', () => {
     expect(compile({ givers: [12000001] }).inserts.creature_template![0]!.npcflag).toBe('2');
-    const flagged = compile({ entities: { npcs: [{ ...npc, gossip: true }], objects: [] } });
+    const flagged = compile({ entities: { npcs: [{ ...npc, gossip: true }], objects: [], items: [] } });
     expect(flagged.inserts.creature_template![0]!.npcflag).toBe('1');
   });
   it('keeps what quest scripting set on the template in the database', () => {
@@ -47,7 +47,7 @@ describe('compileEntities', () => {
     expect(out.inserts.gameobject_template![0]).toMatchObject({ AIName: 'SmartGameObjectAI' });
   });
   it('leaves the spawns of an NPC the project no longer has, like its template', () => {
-    const out = compile({ entities: { npcs: [], objects: [] }, context: { ...EMPTY_ENTITY_CONTEXT,
+    const out = compile({ entities: { npcs: [], objects: [], items: [] }, context: { ...EMPTY_ENTITY_CONTEXT,
       taggedCreatureSpawns: [{ guid: '6000009', Comment: 'AQC q60001 npc12000001' }] } });
     expect(out.deletes.creature).toBeUndefined();
   });

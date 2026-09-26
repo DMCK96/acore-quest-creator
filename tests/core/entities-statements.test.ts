@@ -12,7 +12,7 @@ import type { PatchStatement } from '../../src/core/export/build-patch';
 import { FakeWorldDb } from '../helpers/fake-world-db';
 
 const Q = 60001;
-const entities: QuestEntities = { npcs: [{ ...newNpc(12000001), name: 'Scout Hela', displayId: 1234, spawns: [newSpawn(6000001)] }], objects: [] };
+const entities: QuestEntities = { npcs: [{ ...newNpc(12000001), name: 'Scout Hela', displayId: 1234, spawns: [newSpawn(6000001)] }], objects: [], items: [] };
 const scene: QuestScene = { id: 's1', name: '', owner: { kind: 'creature', entry: 12000001 },
   trigger: { kind: 'gossipOption', text: 'Ready.', greeting: 'Hi.' }, gates: [], steps: [{ kind: 'closeGossip', waitMs: 0 }] };
 

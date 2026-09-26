@@ -3,7 +3,7 @@ import { giverSummary } from '../../src/core/modules/summaries';
 import { ENTITIES_FIELD, newNpc, newObject, writeEntities } from '../../src/core/entities/model';
 
 const values = {
-  [ENTITIES_FIELD]: writeEntities({ npcs: [{ ...newNpc(12000005), name: 'Captain Vessa' }, newNpc(12000006)], objects: [{ ...newObject(9100001), name: 'Notice Board' }] }),
+  [ENTITIES_FIELD]: writeEntities({ npcs: [{ ...newNpc(12000005), name: 'Captain Vessa' }, newNpc(12000006)], objects: [{ ...newObject(9100001), name: 'Notice Board' }], items: [] }),
   creature_queststarter: [{ id: 12000005 }],
   creature_questender: [{ id: 12000006 }],
   gameobject_queststarter: [{ id: 9100001 }],

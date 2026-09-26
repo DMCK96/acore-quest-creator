@@ -67,7 +67,7 @@ describe('patrol edits', () => {
   });
   it('reads and writes the patrol of one spawn', () => {
     const npc = { ...newNpc(12000001), spawns: [newSpawn(900), newSpawn(901)] };
-    const values = { [ENTITIES_FIELD]: writeEntities({ npcs: [npc], objects: [] }) };
+    const values = { [ENTITIES_FIELD]: writeEntities({ npcs: [npc], objects: [], items: [] }) };
     expect(patrolOf(values, 12000001, 900)).toBeNull();
     const edit = setPatrol(values, 12000001, 901, route())!;
     expect(edit.field).toBe(ENTITIES_FIELD);

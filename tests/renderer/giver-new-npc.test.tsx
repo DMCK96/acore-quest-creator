@@ -29,7 +29,7 @@ describe('giver card: new NPCs and objects', () => {
 
   it('shows a project NPC by name with Edit NPC, and no fields of its own', async () => {
     const openEditor = vi.fn(async () => null);
-    const values = { creature_queststarter: [{ id: 12000005 }], [ENTITIES_FIELD]: writeEntities({ npcs: [{ ...newNpc(12000005), name: 'Hela' }], objects: [] }) };
+    const values = { creature_queststarter: [{ id: 12000005 }], [ENTITIES_FIELD]: writeEntities({ npcs: [{ ...newNpc(12000005), name: 'Hela' }], objects: [], items: [] }) };
     await mountBody('giver', values, { openEditor, openMap: vi.fn() });
     const card = screen.getByRole('region', { name: 'Starts at 1' });
     expect(within(card).queryByLabelText('NPC name')).toBeNull();
@@ -42,7 +42,7 @@ describe('giver card: new NPCs and objects', () => {
   it('shows a placed NPC on the map and offers its patrol', async () => {
     const openMap = vi.fn();
     const npc = { ...newNpc(12000005), name: 'Hela', spawns: [{ ...newSpawn(900), x: 1, y: 2 }] };
-    await mountBody('giver', { creature_queststarter: [{ id: 12000005 }], [ENTITIES_FIELD]: writeEntities({ npcs: [npc], objects: [] }) }, { openMap });
+    await mountBody('giver', { creature_queststarter: [{ id: 12000005 }], [ENTITIES_FIELD]: writeEntities({ npcs: [npc], objects: [], items: [] }) }, { openMap });
     const card = screen.getByRole('region', { name: 'Starts at 1' });
     await userEvent.click(within(card).getByRole('button', { name: 'Show on map' }));
     expect(openMap).toHaveBeenCalledWith('spawn:npc:12000005:900');

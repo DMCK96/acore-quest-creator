@@ -13,7 +13,7 @@ describe('object pages in the editor', () => {
     const api = makeMockApi({ allocateIds: vi.fn(async () => okv([5001])) });
     const onChange = vi.fn();
     const note = { ...newObject(9100001), name: 'Note', type: 'text' as const };
-    await mountEditor({ [ENTITIES_FIELD]: writeEntities({ npcs: [], objects: [note] }) }, { kind: 'object', entry: 9100001, isNew: false }, { api, onChange, tab: 'Contents' });
+    await mountEditor({ [ENTITIES_FIELD]: writeEntities({ npcs: [], objects: [note], items: [] }) }, { kind: 'object', entry: 9100001, isNew: false }, { api, onChange, tab: 'Contents' });
     const card = screen.getByRole('dialog', { name: 'Object: Note' });
     await userEvent.click(within(card).getByRole('button', { name: 'Add page' }));
     await waitFor(() => expect(last(onChange).objects[0]!.pages).toEqual([{ id: 5001, text: '' }]));
@@ -22,7 +22,7 @@ describe('object pages in the editor', () => {
   it('limits a usable object to the quest', async () => {
     const onChange = vi.fn();
     const lever = { ...newObject(9100002), name: 'Lever' };
-    await mountEditor({ [ENTITIES_FIELD]: writeEntities({ npcs: [], objects: [lever] }) }, { kind: 'object', entry: 9100002, isNew: false }, { onChange });
+    await mountEditor({ [ENTITIES_FIELD]: writeEntities({ npcs: [], objects: [lever], items: [] }) }, { kind: 'object', entry: 9100002, isNew: false }, { onChange });
     await userEvent.click(within(screen.getByRole('dialog', { name: 'Object: Lever' })).getByLabelText('Only usable while this quest is in the log'));
     expect(last(onChange).objects[0]!.onlyDuringQuest).toBe(true);
   });

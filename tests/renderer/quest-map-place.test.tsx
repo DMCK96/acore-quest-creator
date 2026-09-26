@@ -19,7 +19,7 @@ vi.mock('../../src/renderer/map/LeafletMap', () => ({
 const unplaced = { ...newNpc(12000001), name: 'Hela' };
 const openWith = () => {
   const base = sampleOpen();
-  return { ...base, aggregate: { ...base.aggregate, values: { ...base.aggregate.values, [ENTITIES_FIELD]: writeEntities({ npcs: [unplaced], objects: [] }) } } };
+  return { ...base, aggregate: { ...base.aggregate, values: { ...base.aggregate.values, [ENTITIES_FIELD]: writeEntities({ npcs: [unplaced], objects: [], items: [] }) } } };
 };
 
 describe('quest map place mode', () => {
@@ -48,7 +48,7 @@ describe('quest map place mode', () => {
   it('offers no patrol for a placed object', async () => {
     const api = makeMockApi({ allocateIds: vi.fn(async () => okv([700])), mapFloors: vi.fn(async () => okv({ floors: [], ground: 60 })) });
     const base = sampleOpen();
-    const open = { ...base, aggregate: { ...base.aggregate, values: { [ENTITIES_FIELD]: writeEntities({ npcs: [], objects: [{ entry: 9100001, name: 'Crate', type: 'goober', displayId: 1, size: 1, spawns: [], pages: [], onlyDuringQuest: false, loot: [] }] }) } } };
+    const open = { ...base, aggregate: { ...base.aggregate, values: { [ENTITIES_FIELD]: writeEntities({ npcs: [], objects: [{ entry: 9100001, name: 'Crate', type: 'goober', displayId: 1, size: 1, spawns: [], pages: [], onlyDuringQuest: false, loot: [] }], items: [] }) } } };
     render(<NamesProvider api={api}><QuestMapView open={open} onChange={vi.fn()} focusId={null} onClose={vi.fn()}
       mode={{ kind: 'place', target: { kind: 'object', entry: 9100001 } }} /></NamesProvider>);
     expect(await screen.findByText('Click where Crate should stand.')).toBeTruthy();

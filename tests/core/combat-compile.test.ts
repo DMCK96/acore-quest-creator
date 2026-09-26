@@ -237,7 +237,7 @@ describe('compileFights: sharing the NPC', () => {
 
 describe('compileEntities: AI for fighting NPCs', () => {
   it('sets SmartAI on a new NPC with a fight, and leaves one without alone', () => {
-    const out = compileEntities({ questId: Q, entities: { npcs: [npc(fight({ abilities: [ability()] })), npc(null, 12000002)], objects: [] }, givers: [], context: EMPTY_ENTITY_CONTEXT });
+    const out = compileEntities({ questId: Q, entities: { npcs: [npc(fight({ abilities: [ability()] })), npc(null, 12000002)], objects: [], items: [] }, givers: [], context: EMPTY_ENTITY_CONTEXT });
     expect(out.inserts.creature_template!.map((r) => r.AIName)).toEqual(['SmartAI', '']);
   });
 });

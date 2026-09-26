@@ -23,7 +23,7 @@ vi.mock('../../src/renderer/map/LeafletMap', () => ({
 
 const spawnAt = { ...newSpawn(900), map: 0, x: 0, y: 0, z: 50 };
 const valuesWith = (patrol: Patrol | null, spawns = [{ ...spawnAt, patrol }]) =>
-  ({ ...sampleOpen().aggregate.values, [ENTITIES_FIELD]: writeEntities({ npcs: [{ ...newNpc(12000001), name: 'Hela', spawns }], objects: [] }) });
+  ({ ...sampleOpen().aggregate.values, [ENTITIES_FIELD]: writeEntities({ npcs: [{ ...newNpc(12000001), name: 'Hela', spawns }], objects: [], items: [] }) });
 
 let current: Record<string, unknown> = {};
 function Live({ api, values, mode }: { api: Api; values: Record<string, unknown>; mode: MapMode }) {
