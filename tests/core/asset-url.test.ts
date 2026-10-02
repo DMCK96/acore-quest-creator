@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { assetUrl, parseAssetUrl } from '../../src/core/client/asset-url';
-import { worldMapDirectory } from '../../src/core/map/world-maps';
+import { WORLD_MAPS, worldMapById, worldMapDirectory } from '../../src/core/map/world-maps';
 
 describe('client file addresses', () => {
   it('names the client path a url asks for', () => {
@@ -25,5 +25,8 @@ describe('3D maps', () => {
     expect(worldMapDirectory(0)).toBe('azeroth');
     expect(worldMapDirectory(571)).toBe('northrend');
     expect(worldMapDirectory(33)).toBeNull();
+    expect(WORLD_MAPS.map((m) => m.id)).toEqual([0, 1, 530, 571]);
+    expect(worldMapById(1)?.name).toBe('Kalimdor');
+    expect(worldMapById(33)).toBeNull();
   });
 });

@@ -217,3 +217,53 @@ describe('arranging and removing', () => {
     expect(store.getState().viewport).toEqual({ x: -120, y: 40, zoom: 0.6 });
   });
 });
+
+describe('3D view', () => {
+  const opened3d = async (over: Record<string, any> = {}) => {
+    const made = await canvas({ listNodes: async () => okv([]), ...over });
+    await userEvent.click(screen.getByRole('button', { name: '3D view' }));
+    return { ...made, view3d: await screen.findByRole('dialog', { name: '3D view' }) };
+  };
+  it('opens from the top bar with no quest open, and offers the four continents', async () => {
+    const { view3d, store } = await opened3d();
+    expect(store.getState().open).toBeNull();
+    expect(within(view3d).getByRole('combobox', { name: 'Map' })).toHaveValue('0');
+    expect(within(within(view3d).getByRole('combobox', { name: 'Map' })).getAllByRole('option').map((o) => o.textContent)).toEqual(['Eastern Kingdoms', 'Kalimdor', 'Outland', 'Northrend']);
+  });
+  it('says the game client folder is needed when there is none', async () => {
+    const { view3d } = await opened3d();
+    expect(within(view3d).getByRole('status')).toHaveTextContent('Choose the game client folder');
+  });
+  it('says so when the client has no terrain for the map, instead of drawing nothing', async () => {
+    vi.stubGlobal('fetch', async () => new Response(null, { status: 404 }));
+    try {
+      const { view3d } = await opened3d({ connect: async () => okv({ profileId: 1, schemaHash: 'h', drift, blocking: false, clientDir: 'E:/WoW' }) });
+      expect(await within(view3d).findByText(/no terrain for this map/)).toBeInTheDocument();
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+  it('moves to the typed place only on Go, and Go needs all three numbers', async () => {
+    const { view3d } = await opened3d();
+    const x = within(view3d).getByLabelText('X');
+    expect(within(view3d).getByLabelText('Y')).toHaveValue(-132.49);
+    await userEvent.clear(x);
+    expect(within(view3d).getByRole('button', { name: 'Go' })).toBeDisabled();
+    await userEvent.type(x, '100');
+    expect(within(view3d).getByRole('button', { name: 'Go' })).toBeEnabled();
+  });
+  it('picks a continent and goes to its starting place', async () => {
+    const { view3d } = await opened3d();
+    await userEvent.selectOptions(within(view3d).getByRole('combobox', { name: 'Map' }), '1');
+    expect(within(view3d).getByLabelText('X')).toHaveValue(1629.36);
+  });
+  it('closes with Close and with Escape', async () => {
+    const { view3d } = await opened3d();
+    await userEvent.click(within(view3d).getByRole('button', { name: 'Close' }));
+    expect(screen.queryByRole('dialog', { name: '3D view' })).toBeNull();
+    await userEvent.click(screen.getByRole('button', { name: '3D view' }));
+    await screen.findByRole('dialog', { name: '3D view' });
+    await userEvent.keyboard('{Escape}');
+    expect(screen.queryByRole('dialog', { name: '3D view' })).toBeNull();
+  });
+});

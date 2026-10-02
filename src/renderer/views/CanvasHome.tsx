@@ -19,6 +19,7 @@ import { QuestNodeCard } from './QuestNodeCard';
 import { toFlowEdges } from './canvas-edges';
 import { QuestPreview } from './QuestPreview';
 import { QuestFlowView } from './QuestFlowView';
+import { World3DScreen } from '../world3d/World3DScreen';
 import { AddExistingDialog } from './AddExistingDialog';
 import { ProjectDialog } from './ProjectDialog';
 import { SettingsDialog } from './SettingsDialog';
@@ -79,6 +80,8 @@ function CanvasInner({ store }: { store: AppStore }): React.JSX.Element {
   const [showAddExisting, setShowAddExisting] = useState(false);
   const [showProject, setShowProject] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
+  const [show3d, setShow3d] = useState(false);
+  const hasClient = store((s) => Boolean(s.summary?.clientDir));
   // `<ReactFlow>` only honours `defaultViewport` at mount, so it stays unmounted until the saved
   // viewport has loaded, then mounts exactly once — never re-keyed, so nodes a test (or the user)
   // is holding a reference to never get silently detached from a remount.
@@ -164,6 +167,7 @@ function CanvasInner({ store }: { store: AppStore }): React.JSX.Element {
         onNewQuest={() => void newQuest()}
         onAddExisting={() => setShowAddExisting(true)}
         onFitView={() => void fitView()}
+        onOpen3d={() => setShow3d(true)}
         onOpenProject={() => setShowProject(true)}
         onOpenSettings={() => setShowSettings(true)}
       />
@@ -237,6 +241,7 @@ function CanvasInner({ store }: { store: AppStore }): React.JSX.Element {
         {screen === 'preview' && <QuestPreview store={store} />}
         {screen === 'edit' && <QuestFlowView store={store} />}
       </div>
+      {show3d && <World3DScreen hasClient={hasClient} onClose={() => setShow3d(false)} />}
       {showAddExisting && <AddExistingDialog store={store} onClose={() => setShowAddExisting(false)} />}
       {showProject && <ProjectDialog store={store} onClose={() => setShowProject(false)} />}
       {showSettings && <SettingsDialog store={store} onClose={() => setShowSettings(false)} />}

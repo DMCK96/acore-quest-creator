@@ -33,3 +33,46 @@
   border-radius: 4px;
   background: rgba(21, 17, 13, 0.85);
 }
+
+.world3d-screen {
+  position: fixed;
+  inset: 0;
+  z-index: 50;
+  display: flex;
+  flex-direction: column;
+  background: var(--bg, #15110d);
+}
+
+.world3d-screen__header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 12px;
+  padding: 10px 16px;
+  border-bottom: 1px solid var(--border-soft);
+}
+
+.world3d-screen__title {
+  margin: 0 12px 0 0;
+  font-size: 18px;
+}
+
+.world3d-screen__goto {
+  display: flex;
+  align-items: flex-end;
+  gap: 8px;
+}
+
+.world3d-screen__coordinate input {
+  width: 96px;
+}
+
+.world3d-screen__close {
+  margin-left: auto;
+}
+
+.world3d-screen__body {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+}

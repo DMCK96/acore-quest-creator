@@ -12,6 +12,7 @@ export function TopBar({
   onNewQuest,
   onAddExisting,
   onFitView,
+  onOpen3d,
   onOpenProject,
   onOpenSettings,
 }: {
@@ -19,6 +20,7 @@ export function TopBar({
   onNewQuest: () => void;
   onAddExisting: () => void;
   onFitView: () => void;
+  onOpen3d: () => void;
   onOpenProject: () => void;
   onOpenSettings: () => void;
 }): React.JSX.Element {
@@ -55,6 +57,9 @@ export function TopBar({
         </button>
         <button type="button" className="btn" onClick={onFitView}>
           Fit view
+        </button>
+        <button type="button" className="btn" onClick={onOpen3d}>
+          3D view
         </button>
         <span
           className={`status-pill${connectedDatabase ? ' status-pill--connected' : ''}`}
