@@ -10,6 +10,7 @@ import { createApi, type ApiDeps } from './api';
 import { seedEnvProfiles } from './env-profiles';
 import { mapDataFiles, nodeServerDataFiles } from './server-data';
 import { createClientImagery, nodeClientFs } from './client-imagery';
+import { ASSET_SCHEME, parseAssetUrl } from '../core/client/asset-url';
 import { createMapTiles, parseTileUrl, type MapTiles } from './map-tiles';
 import { createSecretBox } from './secret-box';
 import { openStore, type Store } from './store/store';
@@ -64,7 +65,11 @@ const unknownError = (error: unknown): { ok: false; error: ApiError } => ({
 });
 
 // The quest map's relief tiles come from the main process; the scheme must be known before `ready`.
-protocol.registerSchemesAsPrivileged([{ scheme: 'acqc-map', privileges: { standard: true, secure: true, supportFetchAPI: true } }]);
+// The 3D view reads the game client's files through `acqc-wow`; its loaders run in workers, which need CORS.
+protocol.registerSchemesAsPrivileged([
+  { scheme: 'acqc-map', privileges: { standard: true, secure: true, supportFetchAPI: true } },
+  { scheme: ASSET_SCHEME, privileges: { standard: true, secure: true, supportFetchAPI: true, corsEnabled: true } },
+]);
 
 /** Serves `acqc-map://tile/...` from the tile service; anything else is not found. */
 function registerMapTiles(tiles: MapTiles): void {
@@ -73,6 +78,16 @@ function registerMapTiles(tiles: MapTiles): void {
     if (!address) return new Response(null, { status: 404 });
     const png = await tiles.tile(address.map, address.zoom, address.tx, address.ty);
     return new Response(png, { headers: { 'content-type': 'image/png', 'cache-control': 'no-cache' } });
+  });
+}
+
+/** Serves `acqc-wow://file/<client path>` from the game client's archives; a missing file is a 404. */
+function registerClientFiles(tiles: MapTiles): void {
+  protocol.handle(ASSET_SCHEME, async (request) => {
+    const path = parseAssetUrl(request.url);
+    const bytes = path ? await tiles.clientFile(path) : null;
+    if (!bytes) return new Response(null, { status: 404, headers: { 'access-control-allow-origin': '*' } });
+    return new Response(bytes, { headers: { 'content-type': 'application/octet-stream', 'access-control-allow-origin': '*' } });
   });
 }
 
@@ -273,6 +288,7 @@ void app.whenReady().then(() => {
     },
   });
   registerMapTiles(tiles);
+  registerClientFiles(tiles);
   registerIpc(createApi(buildDeps(store, session, projects, startupProfileId, tiles)));
 
   createWindow(session, recovery, projects);

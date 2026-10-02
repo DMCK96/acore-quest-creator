@@ -1,0 +1,35 @@
+.world3d {
+  position: relative;
+  flex: 1;
+  min-width: 0;
+  background: #1c2230;
+}
+
+.world3d__stage,
+.world3d__canvas {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  display: block;
+}
+
+.world3d__area {
+  position: absolute;
+  top: 10px;
+  left: 14px;
+  margin: 0;
+  padding: 4px 10px;
+  border-radius: 4px;
+  background: rgba(21, 17, 13, 0.7);
+  pointer-events: none;
+}
+
+.world3d__note {
+  position: absolute;
+  inset: auto 14px 14px 14px;
+  margin: 0;
+  padding: 10px 14px;
+  border-radius: 4px;
+  background: rgba(21, 17, 13, 0.85);
+}

@@ -18,6 +18,8 @@ export type AreaLookup = (x: number, y: number) => number | null;
 export interface MapImagery {
   minimap(map: number, gx: number, gy: number): Promise<Uint8Array | null>;
   art(map: number, tx: number, ty: number, areaAt: AreaLookup): Promise<Uint8Array | null>;
+  /** A file from the client's archives, by its client path (any case or slash); null when it has none. */
+  read(path: string): Promise<Uint8Array | null>;
   close(): Promise<void>;
   /** The archives read, lowest priority first. */
   archives: string[];
@@ -163,6 +165,7 @@ export async function createClientImagery(dir: string, fs: ClientFs, log: (messa
         zoneAt: (x, y) => finder.zoneAt(x, y, areaAt(x, y)) ?? finder.zoneAt(x, y, null),
       });
     },
+    read: (path) => files.read(path),
     close: () => files.close(),
     archives: files.archives,
     fingerprint: files.fingerprint,

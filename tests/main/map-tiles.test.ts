@@ -125,6 +125,7 @@ function setupWithClient(
       areas.push(areaAt(-10, -10), areaAt(-600, -10));
       return solidTile(200, 0, 0, 64);
     },
+    read: async (path) => (path.toLowerCase() === 'world/maps/azeroth/azeroth.wdt' ? new Uint8Array([1, 2, 3]) : null),
     close: vi.fn(async () => {}),
     archives: ['common.MPQ'],
     fingerprint: 'common.MPQ:100:0',
@@ -226,7 +227,7 @@ describe('map tiles from the game client', () => {
   it('draws with the new client when the folder changes while the old one is still opening', async () => {
     let release!: () => void;
     const gate = new Promise<void>((resolve) => (release = resolve));
-    const clientB: MapImagery = { minimap: async () => solidTile(90, 90, 90), art: async () => null, close: async () => {}, archives: [], fingerprint: 'b', problems: [] };
+    const clientB: MapImagery = { minimap: async () => solidTile(90, 90, 90), art: async () => null, read: async () => null, close: async () => {}, archives: [], fingerprint: 'b', problems: [] };
     const { tiles, imagery } = setupWithClient({}, async (dir) => {
       if (dir === '/client') {
         await gate;
@@ -294,5 +295,12 @@ describe('game client status', () => {
     });
     tiles.setClientDir('/client');
     expect((await tiles.clientStatus())!.problems[0]).toMatch(/disk on fire/);
+  });
+  it('reads a file from the game client for the 3D view, and nothing without one', async () => {
+    const { tiles } = setupWithClient();
+    expect(await tiles.clientFile('World/Maps/Azeroth/Azeroth.wdt')).toBeNull();
+    tiles.setClientDir('/client');
+    expect(Array.from((await tiles.clientFile('World/Maps/Azeroth/Azeroth.wdt'))!)).toEqual([1, 2, 3]);
+    expect(await tiles.clientFile('world/maps/none.wdt')).toBeNull();
   });
 });
