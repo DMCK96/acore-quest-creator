@@ -4,6 +4,19 @@ import { worldMapDirectory } from '@core/map/world-maps';
 import { createWorld3D, type World3D } from './world3d';
 import './world3d.css';
 
+/** The camera's controls, as the help in the corner lists them. */
+const CONTROLS: [string, string][] = [
+  ['Right-drag', 'Look around'],
+  ['Left-drag', 'Orbit round the point under the cursor'],
+  ['Middle-drag', 'Pan'],
+  ['Wheel', 'Move forward and back'],
+  ['W / S', 'Fly forward and back'],
+  ['A / D', 'Strafe left and right'],
+  ['Q / E', 'Turn left and right'],
+  ['Space / X', 'Rise and sink'],
+  ['Shift', 'Faster'],
+];
+
 /** How long the world may load before the view says it is taking too long. */
 const SLOW_MS = 25000;
 
@@ -55,6 +68,7 @@ function WorldStage({ map, start, hasClient }: ViewProps): React.JSX.Element {
   const [problem, setProblem] = useState<string | null>(null);
   const [missing, setMissing] = useState<readonly string[]>([]);
   const [status, setStatus] = useState<'loading' | 'slow' | 'ready'>('loading');
+  const [help, setHelp] = useState(false);
   const directory = worldMapDirectory(map);
 
   useEffect(() => {
@@ -127,6 +141,24 @@ function WorldStage({ map, start, hasClient }: ViewProps): React.JSX.Element {
           {missing.slice(0, 2).join('; ')}
           {missing.length > 2 ? '; …' : ''} (all of them are in the console)
         </p>
+      )}
+      {!unavailable && (
+        <div className="world3d__help">
+          {help && (
+            <dl aria-label="Camera controls" className="world3d__help-list">
+              {CONTROLS.map(([input, does]) => (
+                <div key={input}>
+                  <dt>{input}</dt>
+                  <dd>{does}</dd>
+                </div>
+              ))}
+              <p>Keys work once the view has been clicked.</p>
+            </dl>
+          )}
+          <button type="button" className="world3d__help-toggle" aria-expanded={help} aria-label="Camera controls" onClick={() => setHelp((open) => !open)}>
+            ?
+          </button>
+        </div>
       )}
       {(unavailable ?? problem ?? progress) && (
         <p role="status" className="world3d__note">

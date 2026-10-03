@@ -24,6 +24,8 @@
           onError: (message) => state.errors.push(`failed: ${message}`),
         });
       };
+      // Where the camera is and which way it looks
+      window.__camera = () => world?.camera();
       window.__close = () => {
         world?.dispose();
         world = null;

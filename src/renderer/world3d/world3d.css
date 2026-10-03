@@ -88,3 +88,51 @@
   font-size: 12px;
   background: rgba(21, 17, 13, 0.85);
 }
+
+.world3d__help {
+  position: absolute;
+  right: 14px;
+  bottom: 14px;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 8px;
+}
+
+.world3d__help-toggle {
+  width: 28px;
+  height: 28px;
+  border: 1px solid rgba(255, 255, 255, 0.25);
+  border-radius: 50%;
+  background: rgba(21, 17, 13, 0.85);
+  color: inherit;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.world3d__help-list {
+  margin: 0;
+  padding: 10px 14px;
+  border-radius: 4px;
+  font-size: 12px;
+  background: rgba(21, 17, 13, 0.9);
+}
+
+.world3d__help-list div {
+  display: flex;
+  gap: 12px;
+  justify-content: space-between;
+}
+
+.world3d__help-list dt {
+  font-weight: 600;
+}
+
+.world3d__help-list dd {
+  margin: 0;
+}
+
+.world3d__help-list p {
+  margin: 6px 0 0;
+  opacity: 0.75;
+}

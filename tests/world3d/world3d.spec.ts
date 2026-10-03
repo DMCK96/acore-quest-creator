@@ -126,6 +126,38 @@ test('draws liquid: magma covering a tile, its look read from LiquidType.dbc and
   expect((await state(page)).errors).toEqual([]);
 });
 
+test('the camera looks around in place on a right-drag and flies forward on W', async ({ page }) => {
+  await openPage(page);
+  await open(page, 'azeroth', 0);
+  await page.waitForFunction('window.__state.ready', null, { timeout: 45000 });
+  type Camera = { position: { x: number; y: number; z: number }; direction: { x: number; y: number; z: number } };
+  const camera = async () => (await page.evaluate('window.__camera()')) as Camera;
+  const box = (await page.locator('canvas.world3d__canvas').boundingBox())!;
+  const [cx, cy] = [box.x + box.width / 2, box.y + box.height / 2];
+
+  const before = await camera();
+  await page.mouse.move(cx, cy);
+  await page.mouse.down({ button: 'right' });
+  await page.mouse.move(cx + 200, cy, { steps: 10 });
+  await page.mouse.up({ button: 'right' });
+  const looked = await camera();
+  // Turned (the direction changed) without moving: not the wide orbit that read as a fast pan
+  const moved = Math.hypot(looked.position.x - before.position.x, looked.position.y - before.position.y, looked.position.z - before.position.z);
+  expect(moved).toBeLessThan(0.01);
+  const dot = before.direction.x * looked.direction.x + before.direction.y * looked.direction.y + before.direction.z * looked.direction.z;
+  expect(dot).toBeLessThan(0.95);
+
+  // The view has focus from the click: W flies the way it now looks
+  await page.keyboard.down('KeyW');
+  await page.waitForTimeout(600);
+  await page.keyboard.up('KeyW');
+  const flown = await camera();
+  const step = { x: flown.position.x - looked.position.x, y: flown.position.y - looked.position.y, z: flown.position.z - looked.position.z };
+  const length = Math.hypot(step.x, step.y, step.z);
+  expect(length).toBeGreaterThan(5);
+  expect((step.x * looked.direction.x + step.y * looked.direction.y + step.z * looked.direction.z) / length).toBeGreaterThan(0.99);
+});
+
 test('a world can be left and another opened, again and again, without an error', async ({ page }) => {
   await openPage(page);
   for (const [directory, map] of [['azeroth', 0], ['kalimdor', 1], ['azeroth', 0], ['northrend', 571]] as const) {

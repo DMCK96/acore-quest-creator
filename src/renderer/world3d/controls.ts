@@ -1,0 +1,244 @@
+import * as THREE from 'three';
+
+/**
+ * The 3D view's camera, driven as in the game and in Noggit. Right-drag looks around in place;
+ * left-drag on empty space orbits round the point under the cursor; middle-drag pans; the wheel moves
+ * along the view. W/S fly forward and back the way the camera looks, A/D strafe, Q/E turn, Space/X
+ * rise and sink, Shift goes faster. Keys act only while the view itself has focus, so typing in a
+ * field never moves the camera. Z is up; angles are radians.
+ */
+
+/** Radians turned per pixel dragged, looking around and orbiting */
+const LOOK_SPEED = 0.004;
+/** Tilt stops this short of straight up and straight down */
+const PITCH_LIMIT = Math.PI / 2 - 0.02;
+/** Yards a second flown with the keys, and how much faster with Shift */
+const FLY_SPEED = 30;
+const FAST = 4;
+/** Radians a second turned with Q and E */
+const TURN_SPEED = 1.6;
+/** Where an orbit turns when nothing is under the cursor: this many yards ahead */
+const ORBIT_FALLBACK = 30;
+/** A wheel notch (100 units) moves this share of the distance to what is ahead, but at least MIN_STEP */
+const WHEEL_SHARE = 0.15;
+const MIN_STEP = 2;
+/** Yards panned per pixel, per yard to what is ahead */
+const PAN_SCALE = 0.0015;
+
+type Pick = (ndcX: number, ndcY: number) => THREE.Vector3 | null;
+
+type WorldControlsOptions = {
+  /** The world point under a place on screen (normalised device coordinates), or null for sky */
+  pick?: Pick;
+};
+
+const UP = new THREE.Vector3(0, 0, 1);
+
+class WorldControls {
+  /** Where the map streams from: under the camera */
+  readonly target = new THREE.Vector3();
+
+  readonly #camera: THREE.PerspectiveCamera;
+  readonly #dom: HTMLElement;
+  readonly #pick: Pick;
+
+  #yaw = 0;
+  #pitch = 0;
+  #pivot = new THREE.Vector3();
+  #keys = new Set<string>();
+  #drag: { button: number; x: number; y: number; panScale: number } | null = null;
+
+  constructor(camera: THREE.PerspectiveCamera, dom: HTMLElement, options: WorldControlsOptions = {}) {
+    this.#camera = camera;
+    this.#dom = dom;
+    this.#pick = options.pick ?? (() => null);
+
+    // Focusable, so keys can be kept to the view
+    if (!dom.hasAttribute('tabindex')) dom.tabIndex = 0;
+    dom.addEventListener('pointerdown', this.#onPointerDown);
+    dom.addEventListener('pointermove', this.#onPointerMove);
+    dom.addEventListener('pointerup', this.#onPointerUp);
+    dom.addEventListener('pointercancel', this.#onPointerUp);
+    dom.addEventListener('wheel', this.#onWheel, { passive: false });
+    dom.addEventListener('contextmenu', this.#onContextMenu);
+    dom.addEventListener('blur', this.#onBlur);
+    window.addEventListener('keydown', this.#onKeyDown);
+    window.addEventListener('keyup', this.#onKeyUp);
+
+    this.#apply();
+  }
+
+  /** Puts the camera at `target + offset`, looking at `target` */
+  setView(target: THREE.Vector3, offset: THREE.Vector3): void {
+    this.#camera.position.copy(target).add(offset);
+    this.#face(target.clone().sub(this.#camera.position));
+    this.#apply();
+  }
+
+  /** Looks around in place, by pixels dragged */
+  look(dx: number, dy: number): void {
+    this.#yaw -= dx * LOOK_SPEED;
+    this.#pitch = THREE.MathUtils.clamp(this.#pitch - dy * LOOK_SPEED, -PITCH_LIMIT, PITCH_LIMIT);
+    this.#apply();
+  }
+
+  /** Picks what an orbit will turn round: the point under the cursor, else a short way ahead */
+  startOrbit(ndcX: number, ndcY: number): void {
+    this.#pivot = this.#pick(ndcX, ndcY) ?? this.#camera.position.clone().addScaledVector(this.#forward(), ORBIT_FALLBACK);
+  }
+
+  /** Orbits round the pivot, by pixels dragged, still looking at it */
+  orbit(dx: number, dy: number): void {
+    const offset = this.#camera.position.clone().sub(this.#pivot);
+    const distance = offset.length();
+    if (distance < 1e-6) return;
+
+    // Round the vertical through the pivot, then up or down over it, short of the poles
+    offset.applyAxisAngle(UP, -dx * LOOK_SPEED);
+    const horizontal = Math.hypot(offset.x, offset.y);
+    const elevation = THREE.MathUtils.clamp(Math.atan2(offset.z, horizontal) + dy * LOOK_SPEED, -PITCH_LIMIT, PITCH_LIMIT);
+    const heading = Math.atan2(offset.y, offset.x);
+    offset.set(Math.cos(elevation) * Math.cos(heading), Math.cos(elevation) * Math.sin(heading), Math.sin(elevation)).multiplyScalar(distance);
+
+    this.#camera.position.copy(this.#pivot).add(offset);
+    this.#face(offset.clone().negate());
+    this.#apply();
+  }
+
+  /** Moves sideways and up or down with the view, by pixels dragged */
+  pan(dx: number, dy: number, yardsPerPixel: number): void {
+    const right = new THREE.Vector3().crossVectors(this.#forward(), UP).normalize();
+    const up = new THREE.Vector3().crossVectors(right, this.#forward()).normalize();
+    this.#camera.position.addScaledVector(right, -dx * yardsPerPixel).addScaledVector(up, dy * yardsPerPixel);
+    this.#apply();
+  }
+
+  /** Moves along the view: positive is forward */
+  dolly(yards: number): void {
+    this.#camera.position.addScaledVector(this.#forward(), yards);
+    this.#apply();
+  }
+
+  keyDown(code: string): void {
+    if (this.#hasFocus()) this.#keys.add(code);
+  }
+
+  keyUp(code: string): void {
+    this.#keys.delete(code);
+  }
+
+  /** Flies and turns with the keys held; `delta` in seconds */
+  update(delta: number): void {
+    if (this.#keys.size === 0 || !this.#hasFocus()) return;
+    const held = (...codes: string[]) => codes.some((code) => this.#keys.has(code));
+    const speed = FLY_SPEED * (held('ShiftLeft', 'ShiftRight') ? FAST : 1) * delta;
+
+    const turn = (held('KeyQ') ? 1 : 0) - (held('KeyE') ? 1 : 0);
+    if (turn !== 0) this.#yaw += turn * TURN_SPEED * delta;
+
+    const forward = this.#forward();
+    const right = new THREE.Vector3().crossVectors(forward, UP).normalize();
+    const ahead = (held('KeyW', 'ArrowUp') ? 1 : 0) - (held('KeyS', 'ArrowDown') ? 1 : 0);
+    const side = (held('KeyD', 'ArrowRight') ? 1 : 0) - (held('KeyA', 'ArrowLeft') ? 1 : 0);
+    const rise = (held('Space') ? 1 : 0) - (held('KeyX') ? 1 : 0);
+    this.#camera.position.addScaledVector(forward, ahead * speed).addScaledVector(right, side * speed).addScaledVector(UP, rise * speed);
+    this.#apply();
+  }
+
+  dispose(): void {
+    const dom = this.#dom;
+    dom.removeEventListener('pointerdown', this.#onPointerDown);
+    dom.removeEventListener('pointermove', this.#onPointerMove);
+    dom.removeEventListener('pointerup', this.#onPointerUp);
+    dom.removeEventListener('pointercancel', this.#onPointerUp);
+    dom.removeEventListener('wheel', this.#onWheel);
+    dom.removeEventListener('contextmenu', this.#onContextMenu);
+    dom.removeEventListener('blur', this.#onBlur);
+    window.removeEventListener('keydown', this.#onKeyDown);
+    window.removeEventListener('keyup', this.#onKeyUp);
+  }
+
+  #forward(): THREE.Vector3 {
+    const c = Math.cos(this.#pitch);
+    return new THREE.Vector3(c * Math.cos(this.#yaw), c * Math.sin(this.#yaw), Math.sin(this.#pitch));
+  }
+
+  /** Takes yaw and pitch from a direction to face */
+  #face(direction: THREE.Vector3): void {
+    this.#yaw = Math.atan2(direction.y, direction.x);
+    this.#pitch = THREE.MathUtils.clamp(Math.atan2(direction.z, Math.hypot(direction.x, direction.y)), -PITCH_LIMIT, PITCH_LIMIT);
+  }
+
+  #apply(): void {
+    const camera = this.#camera;
+    camera.up.copy(UP);
+    camera.lookAt(camera.position.clone().add(this.#forward()));
+    camera.updateMatrixWorld();
+    this.target.set(camera.position.x, camera.position.y, camera.position.z);
+  }
+
+  #hasFocus(): boolean {
+    return document.activeElement === this.#dom;
+  }
+
+  #ndc(event: PointerEvent | WheelEvent): [number, number] {
+    const rect = this.#dom.getBoundingClientRect();
+    return [((event.clientX - rect.left) / Math.max(1, rect.width)) * 2 - 1, -((event.clientY - rect.top) / Math.max(1, rect.height)) * 2 + 1];
+  }
+
+  /** Yards to what is at a place on screen, or a default when it is sky */
+  #distanceAt(ndcX: number, ndcY: number): number {
+    const hit = this.#pick(ndcX, ndcY);
+    return hit ? hit.distanceTo(this.#camera.position) : ORBIT_FALLBACK * 2;
+  }
+
+  #onPointerDown = (event: PointerEvent): void => {
+    this.#dom.focus();
+    const [x, y] = this.#ndc(event);
+    if (event.button === 0) this.startOrbit(x, y);
+    const panScale = event.button === 1 ? Math.max(0.02, this.#distanceAt(x, y) * PAN_SCALE) : 0;
+    this.#drag = { button: event.button, x: event.clientX, y: event.clientY, panScale };
+    this.#dom.setPointerCapture?.(event.pointerId);
+    if (event.button === 1) event.preventDefault();
+  };
+
+  #onPointerMove = (event: PointerEvent): void => {
+    const drag = this.#drag;
+    if (!drag) return;
+    const dx = event.clientX - drag.x;
+    const dy = event.clientY - drag.y;
+    drag.x = event.clientX;
+    drag.y = event.clientY;
+    if (drag.button === 2) this.look(dx, dy);
+    else if (drag.button === 0) this.orbit(dx, dy);
+    else if (drag.button === 1) this.pan(dx, dy, drag.panScale);
+  };
+
+  #onPointerUp = (event: PointerEvent): void => {
+    this.#drag = null;
+    this.#dom.releasePointerCapture?.(event.pointerId);
+  };
+
+  #onWheel = (event: WheelEvent): void => {
+    event.preventDefault();
+    const [x, y] = this.#ndc(event);
+    const step = Math.max(MIN_STEP, this.#distanceAt(x, y) * WHEEL_SHARE) * (event.shiftKey ? FAST : 1);
+    this.dolly((-event.deltaY / 100) * step);
+  };
+
+  #onContextMenu = (event: Event): void => event.preventDefault();
+
+  #onBlur = (): void => this.#keys.clear();
+
+  #onKeyDown = (event: KeyboardEvent): void => {
+    if (!this.#hasFocus()) return;
+    this.keyDown(event.code);
+    // Space would scroll the page and the arrows would move a focused list
+    if (['Space', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(event.code)) event.preventDefault();
+  };
+
+  #onKeyUp = (event: KeyboardEvent): void => this.keyUp(event.code);
+}
+
+export { WorldControls };
+export type { WorldControlsOptions };

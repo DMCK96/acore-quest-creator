@@ -21,6 +21,7 @@ Other people have built similar editors but not shared the code. We are not copy
 - Drawing is done with Three.js. The terrain, props and animated models come from Wowser's scene classes, which now live in `src/renderer/world3d/scene/` (see the README there for exactly what differs from upstream).
 - World units are the server's: yards, X north, Y west, Z up. A spawn's `position_x/y/z` is its place in the 3D view with no conversion.
 - The loaders run in Web Workers; the main thread only builds Three.js objects.
+- The camera (`src/renderer/world3d/controls.ts`) works as in the game and in Noggit: right-drag looks around in place, left-drag on empty space orbits round the point under the cursor, middle-drag pans, the wheel moves along the view, W/S/A/D fly and strafe, Q/E turn, Space/X rise and sink, Shift goes faster. Keys act only while the view has focus. A "?" in the corner lists them. Left-click is kept free for selecting things later.
 - Entry points:
   - **3D view** button in the top bar: `src/renderer/world3d/World3DScreen.tsx` (pick a continent, go to X/Y/Z).
   - **3D view** toggle in the quest map: same view, starting where the map was looking.

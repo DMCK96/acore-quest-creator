@@ -1,5 +1,6 @@
 import * as THREE from 'three';
-import { DbManager, MapControls, MapManager, TextureManager, type SoundManager } from './scene';
+import { DbManager, MapManager, TextureManager, type SoundManager } from './scene';
+import { WorldControls } from './controls';
 import { clearProblems, onProblems } from './scene/diagnostics';
 import { ASSET_BASE_URL } from '@core/client/asset-url';
 
@@ -28,6 +29,8 @@ export interface World3DOptions {
 export interface World3D {
   /** Moves the camera to look at a world point. */
   lookAt(x: number, y: number, z: number): void;
+  /** Where the camera is and which way it looks (a unit vector). */
+  camera(): { position: { x: number; y: number; z: number }; direction: { x: number; y: number; z: number } };
   dispose(): void;
 }
 
@@ -84,7 +87,15 @@ export function createWorld3D(options: World3DOptions): World3D {
   // Z is up in the game's world, and the orbit controls turn about the camera's up axis.
   camera.up.set(0, 0, 1);
 
-  const controls = new MapControls(camera, renderer.domElement);
+  // What is under a place on screen, for orbiting round it and for how far a wheel notch moves: the
+  // terrain and buildings only (models and liquid are thin or see-through)
+  const raycaster = new THREE.Raycaster();
+  const pick = (x: number, y: number): THREE.Vector3 | null => {
+    raycaster.setFromCamera(new THREE.Vector2(x, y), camera);
+    const solid = manager.root.children.filter((group) => group.name === 'terrain' || group.name === 'buildings');
+    return raycaster.intersectObjects(solid, true)[0]?.point ?? null;
+  };
+  const controls = new WorldControls(camera, renderer.domElement, { pick });
   const { textures, databases } = sharedManagers();
   const manager = new MapManager({ host: HOST, textureManager: textures, dbManager: databases, soundManager: SILENT });
   manager.addEventListener('area:change', (event) => {
@@ -149,6 +160,10 @@ export function createWorld3D(options: World3DOptions): World3D {
 
   return {
     lookAt,
+    camera() {
+      const direction = camera.getWorldDirection(new THREE.Vector3());
+      return { position: { ...camera.position }, direction: { x: direction.x, y: direction.y, z: direction.z } };
+    },
     dispose() {
       disposed = true;
       cancelAnimationFrame(frame);
