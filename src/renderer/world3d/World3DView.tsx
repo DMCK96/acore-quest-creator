@@ -363,6 +363,12 @@ function WorldStage({ map, start, hasClient, own, onSelect, onOwnEdit }: ViewPro
         />
       )}
       {!unavailable && spawnNote(spawns) && <p className="world3d__spawn-note">{spawnNote(spawns)}</p>}
+      {!unavailable && (spawns?.loading ?? 0) > 0 && (
+        <p role="status" className="world3d__loading">
+          <span className="world3d__loading-dot" aria-hidden="true" />
+          Loading NPCs and objects… ({spawns!.loading} {spawns!.loading === 1 ? 'area' : 'areas'})
+        </p>
+      )}
       {!unavailable && (
         <div className="world3d__help">
           {help && (

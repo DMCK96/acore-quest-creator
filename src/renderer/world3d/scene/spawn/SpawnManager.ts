@@ -42,7 +42,8 @@ type SpawnManagerOptions = {
   now?: () => number;
 };
 
-type SpawnStatus = { capped: { creatures: boolean; objects: boolean }; error: string | null };
+/** Whether a kind was capped, why none could be read, and how many areas are still loading */
+type SpawnStatus = { capped: { creatures: boolean; objects: boolean }; error: string | null; loading?: number };
 
 /** A marker: a small upright box standing on the spawn point */
 const MARKER_SIZE = { width: 0.6, height: 1.8 };
@@ -133,6 +134,13 @@ class SpawnManager {
     this.#createBuilding = options.createBuilding;
     this.#source = options.source;
     this.#now = options.now ?? Date.now;
+  }
+
+  /** Areas asked for and not yet drawn (their spawns on their way, or their models loading) */
+  get loading(): number {
+    let count = 0;
+    for (const areaId of this.#wanted.keys()) if (!this.#areas.has(areaId)) count += 1;
+    return count;
   }
 
   /** A new source: areas that failed may be asked for again at once */

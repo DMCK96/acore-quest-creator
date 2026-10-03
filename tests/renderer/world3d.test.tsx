@@ -5,13 +5,14 @@ import userEvent from '@testing-library/user-event';
 
 const created = vi.hoisted(() => [] as { directory: string; map: number; dispose: ReturnType<typeof vi.fn>; lookAt: ReturnType<typeof vi.fn>; ready: () => void }[]);
 const failing = vi.hoisted(() => ({ on: false }));
+const loadingAreas = vi.hoisted(() => ({ n: 0 }));
 
 vi.mock('../../src/renderer/world3d/world3d', () => ({
   createWorld3D: (options: { directory: string; map: number; onReady?: () => void }) => {
     if (failing.on) throw new Error('WebGL is not available');
     const world = {
       directory: options.directory, map: options.map, dispose: vi.fn(), lookAt: vi.fn(), ready: () => options.onReady?.(),
-      setSpawnVisibility: vi.fn(), spawnStatus: () => ({ capped: { creatures: false, objects: false }, error: null }),
+      setSpawnVisibility: vi.fn(), spawnStatus: () => ({ capped: { creatures: false, objects: false }, error: null, loading: loadingAreas.n }),
     };
     created.push(world);
     return world;
@@ -23,6 +24,7 @@ import { World3DScreen } from '../../src/renderer/world3d/World3DScreen';
 afterEach(() => {
   created.length = 0;
   failing.on = false;
+  loadingAreas.n = 0;
   vi.unstubAllGlobals();
 });
 
@@ -103,5 +105,16 @@ describe('3D view screen', () => {
     canvas.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
     expect(onClose).toHaveBeenCalledTimes(1);
     canvas.remove();
+  });
+
+  it('says while NPCs and objects are still loading, and how many areas are left', async () => {
+    clientHasEverything();
+    loadingAreas.n = 2;
+    render(<World3DScreen hasClient onClose={() => {}} />);
+    expect(await screen.findByText('Loading NPCs and objects… (2 areas)', {}, { timeout: 3000 })).toBeInTheDocument();
+    loadingAreas.n = 1;
+    expect(await screen.findByText('Loading NPCs and objects… (1 area)', {}, { timeout: 3000 })).toBeInTheDocument();
+    loadingAreas.n = 0;
+    await waitFor(() => expect(screen.queryByText(/Loading NPCs and objects/)).toBeNull(), { timeout: 3000 });
   });
 });

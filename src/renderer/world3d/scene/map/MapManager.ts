@@ -220,7 +220,7 @@ class MapManager extends EventTarget {
 
   /** Whether the spawn source capped a kind, or why it could give none */
   get spawnStatus() {
-    return this.#spawnManager.status;
+    return { ...this.#spawnManager.status, loading: this.#spawnManager.loading };
   }
 
   get root() {

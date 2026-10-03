@@ -271,3 +271,21 @@ describe('the world layer in the view', () => {
     expect(m.pickRoutePoint(down(10), 9)).toBeNull();
   });
 });
+
+describe('how many areas are still loading', () => {
+  it('counts an area from when it is asked for until it is drawn, or its answer fails', async () => {
+    let answer!: (v: unknown) => void;
+    const m = manager(null, { source: () => new Promise((r) => (answer = r)) as any });
+    expect(m.loading).toBe(0);
+    const loading = m.loadArea(1, 0, box);
+    expect(m.loading).toBe(1);
+    answer({ creatures: [creature(1, 1)], objects: [], capped: { creatures: false, objects: false } });
+    await loading;
+    expect(m.loading).toBe(0);
+    const failing = m.loadArea(2, 0, box);
+    expect(m.loading).toBe(1);
+    answer({ error: 'not connected' });
+    await failing;
+    expect(m.loading).toBe(0);
+  });
+});
