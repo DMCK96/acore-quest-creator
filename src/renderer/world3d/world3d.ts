@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { MapControls, MapManager } from '@wowserhq/scene';
+import { DbManager, MapControls, MapManager, TextureManager, type SoundManager } from '@wowserhq/scene';
 import { ASSET_BASE_URL } from '@core/client/asset-url';
 
 /**
@@ -17,6 +17,8 @@ export interface World3DOptions {
   start: { x: number; y: number; z: number };
   /** Told when the terrain around the camera changes to another area. */
   onArea?(name: string): void;
+  /** Told once, when the first piece of the world has loaded and drawn. */
+  onReady?(): void;
   onError?(message: string): void;
 }
 
@@ -33,6 +35,30 @@ const WORLD_EDGE = 17066;
 const NEAR = 0.5;
 const FOV = 60;
 
+const HOST = { baseUrl: ASSET_BASE_URL, normalizePath: true };
+/** Textures and database tables are the same for every map, so every world shares them (and their workers). */
+let shared: { textures: TextureManager; databases: DbManager } | null = null;
+const sharedManagers = (): NonNullable<typeof shared> => (shared ??= { textures: new TextureManager({ host: HOST }), databases: new DbManager({ host: HOST }) });
+
+/**
+ * Wowser's sound manager plays each area's zone music, which an editor must not, and it throws when
+ * disposed before any music has started. The map only ever asks it to set the zone's music.
+ */
+const SILENT = { setZoneMusic() {}, dispose() {} } as unknown as SoundManager;
+
+/** Frees what a world drew; each step on its own, so one failing cannot stop the rest. */
+function release(root: THREE.Object3D): void {
+  root.traverse((object) => {
+    const drawn = object as THREE.Mesh;
+    try {
+      drawn.geometry?.dispose();
+      for (const material of Array.isArray(drawn.material) ? drawn.material : drawn.material ? [drawn.material] : []) material.dispose();
+    } catch {
+      // Already freed.
+    }
+  });
+}
+
 export function createWorld3D(options: World3DOptions): World3D {
   const { container } = options;
   const renderer = new THREE.WebGLRenderer({ antialias: true });
@@ -46,7 +72,8 @@ export function createWorld3D(options: World3DOptions): World3D {
   camera.up.set(0, 0, 1);
 
   const controls = new MapControls(camera, renderer.domElement);
-  const manager = new MapManager({ host: { baseUrl: ASSET_BASE_URL, normalizePath: true } });
+  const { textures, databases } = sharedManagers();
+  const manager = new MapManager({ host: HOST, textureManager: textures, dbManager: databases, soundManager: SILENT });
   manager.addEventListener('area:change', (event) => {
     const name = (event as CustomEvent<{ areaName?: string }>).detail.areaName;
     if (name) options.onArea?.(name);
@@ -80,6 +107,7 @@ export function createWorld3D(options: World3DOptions): World3D {
 
   const clock = new THREE.Clock();
   let frame = 0;
+  let ready = false;
   const tick = (): void => {
     if (disposed) return;
     frame = requestAnimationFrame(tick);
@@ -93,6 +121,10 @@ export function createWorld3D(options: World3DOptions): World3D {
       manager.update(delta, camera);
       renderer.setClearColor(manager.clearColor);
       renderer.render(scene, camera);
+      if (!ready && manager.root.children.length > 0) {
+        ready = true;
+        options.onReady?.();
+      }
     } catch (error) {
       options.onError?.(error instanceof Error ? error.message : String(error));
       disposed = true;
@@ -106,9 +138,14 @@ export function createWorld3D(options: World3DOptions): World3D {
       disposed = true;
       cancelAnimationFrame(frame);
       observer.disconnect();
-      controls.dispose?.();
-      manager.dispose();
-      renderer.dispose();
+      // Nothing here may throw: this runs while React unmounts the view, and a throw would take the whole screen with it.
+      for (const step of [() => controls.dispose?.(), () => manager.dispose(), () => release(manager.root), () => renderer.dispose()]) {
+        try {
+          step();
+        } catch (error) {
+          console.warn(`3D view cleanup: ${error instanceof Error ? error.message : String(error)}`);
+        }
+      }
       renderer.domElement.remove();
     },
   };

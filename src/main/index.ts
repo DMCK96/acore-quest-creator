@@ -83,10 +83,18 @@ function registerMapTiles(tiles: MapTiles): void {
 
 /** Serves `acqc-wow://file/<client path>` from the game client's archives; a missing file is a 404. */
 function registerClientFiles(tiles: MapTiles): void {
+  const missing = new Set<string>();
   protocol.handle(ASSET_SCHEME, async (request) => {
     const path = parseAssetUrl(request.url);
     const bytes = path ? await tiles.clientFile(path) : null;
-    if (!bytes) return new Response(null, { status: 404, headers: { 'access-control-allow-origin': '*' } });
+    if (!bytes) {
+      // Once per file: the 3D view asks for the same missing one on every frame it is short of it.
+      if (!missing.has(request.url)) {
+        missing.add(request.url);
+        console.warn(`[3D view] the game client has no file ${path ?? request.url}`);
+      }
+      return new Response(null, { status: 404, headers: { 'access-control-allow-origin': '*' } });
+    }
     return new Response(bytes, { headers: { 'content-type': 'application/octet-stream', 'access-control-allow-origin': '*' } });
   });
 }
