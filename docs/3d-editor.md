@@ -62,14 +62,17 @@ Looked at and **not** used: `wowserhq/client` (it is the game's UI layer), `vjeu
 - NPCs and objects from the world database, near the camera (`src/renderer/world3d/scene/spawn/`): each drawn with its display's model from the client's own tables, at its position, facing and scale. Creatures wear their skins; humanoid NPCs are their race's body in their baked clothes, with one hairstyle and beard, holding their weapons (a shield on the arm). Objects whose display is a building are drawn as buildings. Patrol routes show as lines with points and arrows, wanderers as a circle. The open quest's own new NPCs and objects show too. Checkboxes hide NPCs, objects and paths. A spawn that cannot be drawn is a marker, named once in the console.
   - Spawns load for the camera's tile and the eight round it, and are drawn within 100 yards, as in the game. Loading every tile the terrain streams made Goldshire 18,000 draw calls at 1 frame a second.
   - Read through the `viewSpawns` call (`src/core/db/view-spawns.ts`), capped at 2000 of each kind per tile.
+  - Spawns that appear only during a game event (a positive `eventEntry` in `game_event_creature` or `game_event_gameobject`) are left out until the "Event spawns" checkbox is ticked. Spawns an event removes (a negative `eventEntry`) are there the rest of the time, so they are drawn.
+  - Held weapons follow the hand's bone in the model's own space. Wowser's bone matrices are in the camera's space; used as they were, weapons were drawn tens of yards from their NPC, under the ground.
+- Clicking an NPC or object selects it: an outline round it, and a card with its name, entry, spawn id, position and any event. In the quest map's 3D view, selecting one of the quest's own spawns selects its marker in the side panel too. Picking uses each spawn's bounds from its vertices; a model's stored bounds take in every animation's reach and are far too big.
 - A browser test that runs the real 3D code against a fake game client (`npm run test:world3d`).
 
 ### Known gaps
 
 Things that are missing or approximate. Roughly in order of how much they matter.
 
-1. **No editing at all yet.** The 3D view is look-only: no selection, no gizmos, no patrol points.
-2. **NPCs and objects are approximate:** only the idle animation; no armour pieces as separate models, capes, mounts or spell effects; no names over them. Every spawn is drawn whatever its phase or game event, so towns full of holiday spawns (Goldshire has hundreds) are cluttered and slow: hiding spawns that belong to a game event is the obvious next step. A custom item held as a weapon, not in the client's `Item.dbc`, is not drawn.
+1. **No editing yet.** Spawns can be selected, but there are no gizmos and no patrol point editing.
+2. **NPCs and objects are approximate:** only the idle animation; no armour pieces as separate models, capes, mounts or spell effects; no names over them. Spawns are drawn whatever their phase; members of a spawn pool are all drawn, though the server shows only some at a time. A custom item held as a weapon, not in the client's `Item.dbc`, is not drawn.
 3. **Props inside buildings** (furniture in the Abbey) are not drawn. Buildings carry them as "doodad sets".
 4. **Textures the client does not ship.** The user's client places custom modern-expansion buildings (Kul Tiras, Draenor, Dragonflight) whose textures are not in its archives; those parts draw grey. Not loose in the `Data` folder either. Where the references come from is not established; reports now name the building or model that asked, so the next run will show it.
 5. **Tree leaves are unconfirmed on real data.** Three causes were found and fixed (see the commit `e8972f1`), and each fix has a test, but it has not yet been confirmed on the user's client. The original `Invalid typed array length: 4294791348` texture error is believed to come from garbage in unused mip slots; if canopies are still grey, the report now includes the file's size and first bytes.
@@ -91,12 +94,11 @@ In order. Each is meant to be a step the user can try before the next begins.
 
 The maintainer's eight asked-for features are split into sub-projects A to E. A (camera) and B (the spawn layer) are done. Edits not part of a quest go to a project-level world layer, exported as its own patch.
 
-1. **C: select and transform.** Click to select a spawn or patrol point; gizmos to move, rotate and scale objects and to move and rotate NPCs; patrol points draggable; drop on the ground (the server's own floor heights). Every edit through the same change path the quest map uses, so undo, export and "changes" keep working. C's spec defines the world layer.
+1. **C: select and transform.** Selecting a spawn is done; next, selecting a patrol point; gizmos to move, rotate and scale objects and to move and rotate NPCs; patrol points draggable; drop on the ground (the server's own floor heights). Every edit through the same change path the quest map uses, so undo, export and "changes" keep working. C's spec defines the world layer.
 2. **D: create from 3D.** Place new objects (chests that can be looted, with a loot table) and new NPCs (loot, faction, level), opening the existing editors.
 3. **E: edit existing.** Place copies of existing NPCs; change existing spawns and templates (loot, faction, level).
-4. **Hide event spawns.** A toggle (on by default) leaving out spawns that belong to a game event.
-5. **Reshape the quest grid** into a chain builder beside the 3D view. Needs a design conversation first: what "managing a chain" should mean day to day.
-6. **Fill the gaps** above as they get in the way: props inside buildings first, then the remaining building shaders.
+4. **Reshape the quest grid** into a chain builder beside the 3D view. Needs a design conversation first: what "managing a chain" should mean day to day.
+5. **Fill the gaps** above as they get in the way: props inside buildings first, then the remaining building shaders.
 
 Open questions for the user:
 
