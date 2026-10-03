@@ -183,7 +183,13 @@ class ModelMaterial extends THREE.RawShaderMaterial {
 
     for (let i = 0; i < this.#textureTransformIndices.length; i++) {
       const transformIndex = this.#textureTransformIndices[i];
-      const { translation, rotation, scaling } = animation.textureTransforms[transformIndex];
+      // A transform with no animation state (none of its tracks has keys, so none was made) leaves
+      // the texture where it is; reading it used to throw and stop the whole view
+      const transform = animation.textureTransforms[transformIndex];
+      if (!transform) {
+        continue;
+      }
+      const { translation, rotation, scaling } = transform;
       this.#setTextureTransform(i, translation, rotation, scaling);
     }
   }

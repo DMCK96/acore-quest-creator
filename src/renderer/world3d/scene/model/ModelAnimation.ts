@@ -126,10 +126,11 @@ class ModelAnimation extends THREE.Object3D {
 
     // Automatically play sequence id 0
     if (this.#animator.sequences.has(0)) {
+      // Variations are stored by their index, and some models start past 0 (stand as only 1 and 2)
       const variations = this.#animator.sequences.get(0);
-      const sequence = variations[0];
+      const sequence = variations.find((variation) => variation !== undefined);
 
-      if (sequence.flags & 0x20) {
+      if (sequence && sequence.flags & 0x20) {
         const action = this.#animator.getSequence(this, sequence.id, sequence.variationIndex);
         action.play();
 
