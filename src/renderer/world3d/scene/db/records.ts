@@ -117,7 +117,7 @@ class CreatureDisplayInfoExtraRecord extends ClientDbRecord {
   }
 }
 
-/** ChrRaces.dbc: 69 fields; only the body displays are read */
+/** ChrRaces.dbc: 69 fields; the body displays and the client prefix are read */
 const chrRacesIo = io.struct({
   id: io.int32le,
   flags: io.int32le,
@@ -125,7 +125,9 @@ const chrRacesIo = io.struct({
   explorationSoundId: io.int32le,
   maleDisplayId: io.int32le,
   femaleDisplayId: io.int32le,
-  rest: rest(63),
+  // The race's short name in file names, e.g. Hu: a helmet's model for a human male is <name>_HuM
+  clientPrefix: string,
+  rest: rest(62),
 });
 
 class ChrRacesRecord extends ClientDbRecord {
@@ -134,6 +136,7 @@ class ChrRacesRecord extends ClientDbRecord {
   explorationSoundId: number;
   maleDisplayId: number;
   femaleDisplayId: number;
+  clientPrefix: string;
 
   constructor() {
     super(chrRacesIo);
@@ -234,17 +237,28 @@ class ItemRecord extends ClientDbRecord {
   }
 }
 
-/** ItemDisplayInfo.dbc: 25 fields; an item's model files and their textures (left and right) */
+/** ItemDisplayInfo.dbc: 25 fields; an item's models and their textures, the shapes it gives a body, and its pieces painted on one */
 const itemDisplayInfoIo = io.struct({
   id: io.int32le,
   modelNames: io.array(string, { size: 2 }),
   modelTextures: io.array(string, { size: 2 }),
-  rest: rest(20),
+  icons: io.array(string, { size: 2 }),
+  // The shapes the item gives a body: values in its geoset groups (gloves, sleeves, robe, cape…)
+  geosetGroups: io.array(io.int32le, { size: 3 }),
+  flags: io.int32le,
+  spellVisualId: io.int32le,
+  groupSoundIndex: io.int32le,
+  helmetGeosetVis: io.array(io.int32le, { size: 2 }),
+  // Its pieces painted on a body, by region: arm upper and lower, hand, torso upper and lower, leg upper and lower, foot
+  regionTextures: io.array(string, { size: 8 }),
+  rest: rest(2),
 });
 
 class ItemDisplayInfoRecord extends ClientDbRecord {
   modelNames: string[];
   modelTextures: string[];
+  geosetGroups: number[];
+  regionTextures: string[];
 
   constructor() {
     super(itemDisplayInfoIo);
