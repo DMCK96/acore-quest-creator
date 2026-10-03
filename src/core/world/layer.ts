@@ -50,19 +50,34 @@ export const NEW_POINT_REST: Record<string, string | null> = {
   wpguid: '0',
 };
 
-const samePlacement = (a: Placement, b: Placement): boolean =>
-  a.x === b.x &&
-  a.y === b.y &&
-  a.z === b.z &&
-  a.orientation === b.orientation &&
-  (a.rotation === null || b.rotation === null ? a.rotation === b.rotation : a.rotation.every((v, i) => v === b.rotation![i]));
+/**
+ * What the 3D view sends back has been through its own maths (a facing turned into a quaternion and
+ * back), so places and turns this close are the same
+ */
+const NEAR = 1e-4;
+const near = (a: number, b: number): boolean => Math.abs(a - b) <= NEAR;
+const samePlace = (a: { x: number; y: number; z: number }, b: { x: number; y: number; z: number }): boolean => near(a.x, b.x) && near(a.y, b.y) && near(a.z, b.z);
+
+/** The turn an object is drawn with: its rotation, or upright when it has none (all zero, as older rows do) */
+const drawnTurn = (p: Placement): [number, number, number, number] =>
+  p.rotation && p.rotation.some((v) => v !== 0) ? p.rotation : [0, 0, 0, 1];
+
+/** Whether two placements face the same way: an NPC by its facing, an object by its drawn turn (q and -q alike) */
+function sameTurn(kind: WorldSpawnKind, a: Placement, b: Placement): boolean {
+  if (kind === 'creature') {
+    const apart = Math.abs(a.orientation - b.orientation) % (Math.PI * 2);
+    return Math.min(apart, Math.PI * 2 - apart) <= NEAR;
+  }
+  const qa = drawnTurn(a);
+  const qb = drawnTurn(b);
+  const dot = qa.reduce((sum, v, i) => sum + v * qb[i]!, 0);
+  return Math.abs(Math.abs(dot) - 1) <= NEAR;
+}
 
 const samePoint = (a: RoutePoint, b: RoutePoint): boolean => {
   const keys = Object.keys(a.rest);
   return (
-    a.x === b.x &&
-    a.y === b.y &&
-    a.z === b.z &&
+    samePlace(a, b) &&
     keys.length === Object.keys(b.rest).length &&
     keys.every((k) => Object.prototype.hasOwnProperty.call(b.rest, k) && a.rest[k] === b.rest[k])
   );
@@ -70,11 +85,19 @@ const samePoint = (a: RoutePoint, b: RoutePoint): boolean => {
 
 const sameRoute = (a: readonly RoutePoint[], b: readonly RoutePoint[]): boolean => a.length === b.length && a.every((p, i) => samePoint(p, b[i]!));
 
-/** Moves or turns a spawn; its first original is kept, and an entry back where it began is dropped */
+/**
+ * Moves or turns a spawn; its first original is kept, and an entry back where it began is dropped. A
+ * spawn that still faces the way it was stored keeps the stored facing and rotation as they were, so
+ * a move alone never rewrites them (an object stored with no rotation is drawn upright, and the view
+ * would otherwise send that upright turn back as its own)
+ */
 export function moveSpawn(layer: WorldLayer, spawn: Omit<WorldSpawnEdit, 'current'>, to: Placement): WorldLayer {
   const known = layer.spawns.find((s) => s.kind === spawn.kind && s.guid === spawn.guid);
-  const entry: WorldSpawnEdit = known ? { ...known, current: to } : { ...spawn, current: to };
-  const unchanged = samePlacement(entry.current, entry.original);
+  const original = known ? known.original : spawn.original;
+  const turned = !sameTurn(spawn.kind, original, to);
+  const current = turned ? to : { ...to, orientation: original.orientation, rotation: original.rotation };
+  const entry: WorldSpawnEdit = known ? { ...known, current } : { ...spawn, current };
+  const unchanged = !turned && samePlace(current, original);
   const spawns = known
     ? layer.spawns.flatMap((s) => (s === known ? (unchanged ? [] : [entry]) : [s]))
     : unchanged

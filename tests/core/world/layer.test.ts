@@ -32,6 +32,37 @@ describe('world layer: spawns', () => {
   });
 });
 
+describe('world layer: what the 3D view sends back', () => {
+  it('drops an NPC put back where it was, though its facing came back through a quaternion', () => {
+    const npc = { ...guard, original: at(1, { orientation: 3.9 }) };
+    const layer = moveSpawn(moveSpawn(EMPTY_WORLD, npc, at(5, { orientation: 3.9 })), npc, at(1.00000001, { orientation: 3.8999999999999995 }));
+    expect(layer.spawns).toEqual([]);
+  });
+
+  it('drops an object put back where it was, its rotation the same turn written the other way round', () => {
+    const box = { ...mailbox, original: at(10, { orientation: 1, rotation: [0, 0, 0.5, 0.8660254] }) };
+    const layer = moveSpawn(moveSpawn(EMPTY_WORLD, box, at(12, { orientation: 1, rotation: [0, 0, 0.5, 0.8660254] })), box, at(10, { orientation: 1.0471975, rotation: [-0, -0, -0.5, -0.8660254] }));
+    expect(layer.spawns).toEqual([]);
+  });
+
+  it('keeps the stored facing of an object only moved, even one stored with no rotation (drawn upright)', () => {
+    const old = { ...mailbox, original: at(10, { orientation: 2.5, rotation: [0, 0, 0, 0] }) };
+    const layer = moveSpawn(EMPTY_WORLD, old, at(14, { orientation: 0, rotation: [0, 0, 0, 1] }));
+    expect(layer.spawns[0]!.current).toEqual(at(14, { orientation: 2.5, rotation: [0, 0, 0, 0] }));
+  });
+
+  it('keeps the stored facing of an NPC only moved', () => {
+    const npc = { ...guard, original: at(1, { orientation: 0.0174533 }) };
+    const layer = moveSpawn(EMPTY_WORLD, npc, at(9, { orientation: 0.017453299999999998 }));
+    expect(layer.spawns[0]!.current.orientation).toBe(0.0174533);
+  });
+
+  it('takes a real turn as it is', () => {
+    const layer = moveSpawn(EMPTY_WORLD, { ...guard, original: at(1, { orientation: 1 }) }, at(1, { orientation: 2 }));
+    expect(layer.spawns[0]!.current.orientation).toBe(2);
+  });
+});
+
 describe('world layer: routes', () => {
   it('records the original route and walkers at the first edit, and drops it when put back', () => {
     let layer = setRoute(EMPTY_WORLD, route, [point(1), point(9), point(2)]);

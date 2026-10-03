@@ -1567,9 +1567,18 @@ export function createApi(deps: ApiDeps): Api {
     worldMoveSpawn: (kind, guid, to) =>
       run(async () => {
         const db = connected().db;
-        const layer = deps.session.world.get();
-        const known = layer.spawns.find((s) => s.kind === kind && s.guid === guid);
-        const read = known ? null : await readPlacement(db, kind, guid);
+        const knownIn = (layer: WorldLayer) => layer.spawns.find((s) => s.kind === kind && s.guid === guid);
+        // The database is read first and the layer after it, with nothing awaited before the layer is
+        // put back, so an edit to another spawn made meanwhile is kept
+        let read = knownIn(deps.session.world.get()) ? null : await readPlacement(db, kind, guid);
+        let layer = deps.session.world.get();
+        let known = knownIn(layer);
+        if (!known && !read) {
+          // Reverted while the database was not being read: read it now after all
+          read = await readPlacement(db, kind, guid);
+          layer = deps.session.world.get();
+          known = knownIn(layer);
+        }
         if (!known && !read) throw fail('BAD_REQUEST', `Spawn ${guid} is no longer in the database.`);
         const spawn = known ?? { kind, guid, entry: read!.entry, name: read!.name, map: read!.map, original: read!.placement };
         const next = moveSpawn(layer, spawn, to);
@@ -1587,9 +1596,17 @@ export function createApi(deps: ApiDeps): Api {
 
     worldSetRoute: (pathId, points) =>
       run(async () => {
-        const layer = deps.session.world.get();
-        const known = layer.routes.find((r) => r.pathId === pathId);
-        const route = known ?? { pathId, ...(await routeFromDatabase(pathId)) };
+        const knownIn = (layer: WorldLayer) => layer.routes.find((r) => r.pathId === pathId);
+        // Database first, layer after, as worldMoveSpawn does, so an edit made meanwhile is kept
+        let read = knownIn(deps.session.world.get()) ? null : await routeFromDatabase(pathId);
+        let layer = deps.session.world.get();
+        let known = knownIn(layer);
+        if (!known && !read) {
+          read = await routeFromDatabase(pathId);
+          layer = deps.session.world.get();
+          known = knownIn(layer);
+        }
+        const route = known ?? { pathId, ...read! };
         const next = setRoute(layer, route, points);
         deps.session.world.put(next);
         return next;

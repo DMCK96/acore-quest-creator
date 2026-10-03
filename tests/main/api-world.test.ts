@@ -130,4 +130,13 @@ describe('the world layer through the API', () => {
     const sql = written.get(out.value.applyPath)!;
     expect(sql).toMatch(/INSERT INTO `waypoint_data` .*`velocity`.*VALUES \(801, 3, 30, 0, 1,/);
   });
+
+  it('keeps both of two edits to different spawns that overlap', async () => {
+    const { api, session } = await setup(world);
+    await Promise.all([
+      api.worldMoveSpawn('creature', 80330, to(-9470)),
+      api.worldMoveSpawn('gameobject', 5, { x: -9461, y: 40, z: 57, orientation: 1, rotation: [0, 0, 0.5, 0.8660254] }),
+    ]);
+    expect(session.world.get().spawns.map((s) => s.guid).sort()).toEqual([5, 80330]);
+  });
 });
