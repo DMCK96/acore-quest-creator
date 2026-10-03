@@ -82,6 +82,7 @@ compiler setting than this project's.
   water, which is not done here. Buildings' water (canals, fountains, moonwells) uses the same
   materials. It has no depth, so it is drawn half way between shallow and solid. Not done yet: the
   underwater look, and waves or reflections.
+- `character/`: dressed humanoids, which upstream does not draw. `composite.ts` paints layers into the 3.3.5 body texture's regions (scaled for larger skins); `outfit.ts` holds which geosets items show; `CharacterTexture.ts` reads and decodes the layers (with the app's own BLP decoder) and registers the built texture with the `TextureManager` under a path of its own (`register`), so models ask for it like any other.
 - `spawn/`: the world database's NPCs and objects near the camera, which upstream does not draw.
   `DisplayResolver` turns a display id into a model, its replaceable skins and its geosets, from the
   client's own tables (record classes in `db/records.ts`, each reading the field count the Ascension
