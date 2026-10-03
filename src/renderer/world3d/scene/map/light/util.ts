@@ -88,6 +88,10 @@ const getTableKeys = (table: any[], key: number) => {
  * @param color
  */
 const interpolateColorTable = (table: any[], key: number, color: THREE.Color): void => {
+  if (!table || table.length === 0) {
+    return;
+  }
+
   const { previous, previousKey, next, nextKey } = getTableKeys(table, key);
 
   const previousValue = table[previous * 2 + 1];
@@ -95,8 +99,11 @@ const interpolateColorTable = (table: any[], key: number, color: THREE.Color): v
 
   const keyDistance = nextKey - previousKey;
 
+  // Two keys at the same time: the first one's value as it is. Upstream returned it without writing
+  // it to `color`, which then kept whatever the light before had left there
   if (Math.abs(keyDistance) < 0.001) {
-    return previousValue;
+    color.copy(previousValue);
+    return;
   }
 
   const factor = (key - previousKey) / keyDistance;

@@ -31,6 +31,12 @@ export interface World3D {
   dispose(): void;
 }
 
+// The game's colours (light bands, vertex colours) are used as they are, as wowserhq's own viewer
+// (spelunker) does. With Three's colour management on, every `new THREE.Color(hex)` was taken as sRGB
+// and darkened to linear, and the raw scene shaders never brightened it back: the whole world was
+// drawn too dark and too red (a #FF8300 sun lost more than half its green)
+THREE.ColorManagement.enabled = false;
+
 /** The camera's first distance from its target, in yards: behind, beside and above. */
 const START_OFFSET = new THREE.Vector3(-30, -30, 30);
 /** A client's maps run ±17066 yards from the middle. */
