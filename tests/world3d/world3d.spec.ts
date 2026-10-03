@@ -100,3 +100,11 @@ test('a world can be left and another opened, again and again, without an error'
   const { errors } = await state(page);
   expect(errors.filter((e) => !/Error loading asset: 404/.test(e) && !/Failed to fetch/.test(e))).toEqual([]);
 });
+
+test('every model shader compiles, and none the game uses is missing', async ({ page }) => {
+  await openPage(page);
+  const result = (await page.evaluate('window.__compileModelShaders()')) as { failures: string[]; unimplemented: string[] };
+  expect(result.failures).toEqual([]);
+  // The game's shaders 0-22 are all implemented (a missing one drew its model without its leaves).
+  expect(result.unimplemented).toEqual([]);
+});

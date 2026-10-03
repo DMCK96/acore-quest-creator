@@ -36,6 +36,43 @@
         context.drawImage(bitmap, 0, 0);
         return Array.from(context.getImageData(Math.floor(bitmap.width * fx), Math.floor(bitmap.height * fy), 1, 1).data);
       };
+      // Every model fragment shader, with the vertex shader it is used with, compiled on a real graphics
+      // context: a shader that does not compile draws nothing, and says so only in the console.
+      window.__compileModelShaders = async () => {
+        const THREE = await import('three');
+        const { getFragmentShader } = await import('/src/renderer/world3d/scene/model/shader/fragment.ts');
+        const { getVertexShader } = await import('/src/renderer/world3d/scene/model/shader/vertex.ts');
+        const { default: ModelMaterial } = await import('/src/renderer/world3d/scene/model/ModelMaterial.ts');
+        const { SceneLight } = await import('/src/renderer/world3d/scene/light/SceneLight.ts');
+        const canvas = document.createElement('canvas');
+        const renderer = new THREE.WebGLRenderer({ canvas });
+        const failures = [];
+        const unimplemented = [];
+        let current = '';
+        renderer.debug.onShaderError = (gl, program, vertex, fragment) =>
+          failures.push(current + ': ' + (gl.getShaderInfoLog(vertex) || '') + (gl.getShaderInfoLog(fragment) || '') + (gl.getProgramInfoLog(program) || ''));
+        const warn = console.warn;
+        console.warn = (...args) => (/unimplemented/.test(String(args[0])) ? unimplemented.push(String(args[0])) : warn(...args));
+        const geometry = new THREE.BufferGeometry();
+        geometry.setAttribute('position', new THREE.BufferAttribute(new Float32Array([0, 0, -2, 1, 0, -2, 0, 1, -2]), 3));
+        const scene = new THREE.Scene();
+        const camera = new THREE.PerspectiveCamera();
+        const texture = new THREE.DataTexture(new Uint8Array(16).fill(255), 2, 2);
+        texture.needsUpdate = true;
+        // Fragment shaders 0-5 take one texture, 6-22 two (VERTEX_T1 = 0 and VERTEX_T1_T2 = 3 serve them).
+        for (let shader = 0; shader <= 22; shader++) {
+          const two = shader >= 6;
+          current = 'fragment shader ' + shader;
+          const material = new ModelMaterial(getVertexShader(two ? 3 : 0), getFragmentShader(shader), two ? [texture, texture] : [texture], -1, [], -1, false, 0, { ...new SceneLight().uniforms });
+          const mesh = new THREE.Mesh(geometry, material);
+          scene.add(mesh);
+          renderer.render(scene, camera);
+          scene.remove(mesh);
+        }
+        console.warn = warn;
+        renderer.dispose();
+        return { failures, unimplemented };
+      };
       window.__loaded = true;
     </script>
   </body>

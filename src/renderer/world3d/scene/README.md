@@ -26,7 +26,13 @@ compiler setting than this project's.
   - `texture/TextureManager.ts`: a texture that cannot be loaded is reported and replaced by a plain
     grey one, so its model or terrain still draws (upstream drops the whole model).
   - `texture/loader/TextureLoaderWorker.ts`: a texture that cannot be read is reported with its size
-    and first bytes; uncompressed (ARGB) textures are converted to RGBA, which upstream rejects.
+    and first bytes; uncompressed (ARGB) textures are converted to RGBA, which upstream rejects;
+    mip slots the file cannot really have (past the levels its size allows, or running off its end)
+    are cleared, because some files leave garbage there and the reader trusts every slot.
+  - The grey stand-in for a texture that cannot be loaded is opaque: leaves and fences are
+    alpha-tested, and a see-through stand-in removed them.
+  - `model/shader/fragment.ts`: the four combiners upstream lacks (`Mod_Mod2xNA`, `Mod_AddNA`,
+    `Add_Mod`, `Mod2x_Mod2x`); a model using one drew without its textures.
 
 ## What is added
 

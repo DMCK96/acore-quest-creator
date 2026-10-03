@@ -74,7 +74,11 @@ class TextureManager {
 
   #getPlaceholder() {
     if (!this.#placeholder) {
+      // Opaque: leaves and fences are alpha-tested, and a see-through stand-in would remove them
       const data = new Uint8Array(2 * 2 * 4).fill(128);
+      for (let i = 3; i < data.length; i += 4) {
+        data[i] = 255;
+      }
       this.#placeholder = new THREE.DataTexture(data, 2, 2, THREE.RGBAFormat);
       this.#placeholder.wrapS = this.#placeholder.wrapT = THREE.RepeatWrapping;
       this.#placeholder.needsUpdate = true;

@@ -109,6 +109,9 @@ function grassTexture(): Buffer {
   out.writeUInt32LE(1172, 20);
   out.writeUInt32LE(data.length, 84);
   data.copy(out, 1172);
+  // The slot after the one real level, left holding garbage: a size of four billion. The reader used to fail on it.
+  out.writeUInt32LE(1172, 20 + 1 * 4);
+  out.writeUInt32LE(4294791348, 84 + 1 * 4);
   return out;
 }
 

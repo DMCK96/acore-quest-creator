@@ -107,6 +107,26 @@ void combineModMod2x(inout vec4 color, in vec4 tex0, in vec4 tex1) {
   color.rgb = (color.rgb * tex0.rgb) * tex1.rgb * 2.0;
   color.a = (color.a * tex0.a) * tex1.a * 2.0;
 }
+
+void combineModMod2xNa(inout vec4 color, in vec4 tex0, in vec4 tex1) {
+  color.rgb = (color.rgb * tex0.rgb) * tex1.rgb * 2.0;
+  color.a = color.a * tex0.a;
+}
+
+void combineModAddNa(inout vec4 color, in vec4 tex0, in vec4 tex1) {
+  color.rgb = (color.rgb * tex0.rgb) + tex1.rgb;
+  color.a = color.a * tex0.a;
+}
+
+void combineAddMod(inout vec4 color, in vec4 tex0, in vec4 tex1) {
+  color.rgb = (color.rgb + tex0.rgb) * tex1.rgb;
+  color.a = (color.a + tex0.a) * tex1.a;
+}
+
+void combineMod2xMod2x(inout vec4 color, in vec4 tex0, in vec4 tex1) {
+  color.rgb = (color.rgb * tex0.rgb * 2.0) * tex1.rgb * 2.0;
+  color.a = (color.a * tex0.a * 2.0) * tex1.a * 2.0;
+}
 `;
 
 const FRAGMENT_SHADER_MAIN_ALPHATEST = `
@@ -229,6 +249,10 @@ const FRAGMENT_SHADER = {
   [M2_FRAGMENT_SHADER.FRAGMENT_MOD_MOD]: createFragmentShader(2, 'combineModMod'),
   [M2_FRAGMENT_SHADER.FRAGMENT_MOD_ADD]: createFragmentShader(2, 'combineModAdd'),
   [M2_FRAGMENT_SHADER.FRAGMENT_MOD_MOD2X]: createFragmentShader(2, 'combineModMod2x'),
+  [M2_FRAGMENT_SHADER.FRAGMENT_MOD_MOD2XNA]: createFragmentShader(2, 'combineModMod2xNa'),
+  [M2_FRAGMENT_SHADER.FRAGMENT_MOD_ADDNA]: createFragmentShader(2, 'combineModAddNa'),
+  [M2_FRAGMENT_SHADER.FRAGMENT_ADD_MOD]: createFragmentShader(2, 'combineAddMod'),
+  [M2_FRAGMENT_SHADER.FRAGMENT_MOD2X_MOD2X]: createFragmentShader(2, 'combineMod2xMod2x'),
   [M2_FRAGMENT_SHADER.FRAGMENT_UNKNOWN]: createFragmentShader(0, ''),
 };
 
