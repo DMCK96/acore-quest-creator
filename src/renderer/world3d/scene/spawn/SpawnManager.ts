@@ -9,7 +9,7 @@
 import * as THREE from 'three';
 import { ViewCreature, ViewObject, ViewPoint, ViewSpawns } from '../../../../core/db/view-spawns.js';
 import { WorldLayer } from '../../../../core/world/layer.js';
-import { DisplayResolver, Look, ModelLook } from './DisplayResolver.js';
+import { BodyTexture, DisplayResolver, Look, ModelLook } from './DisplayResolver.js';
 import { creatureTransform, objectTransform, Transform } from './placement.js';
 import { routeObject, wanderObject } from './paths.js';
 
@@ -38,6 +38,8 @@ type SpawnManagerOptions = {
   createModel(look: ModelLook): Promise<THREE.Object3D>;
   createBuilding(path: string): Promise<THREE.Object3D>;
   source: SpawnSource | null;
+  /** Builds a dressed NPC's body texture, giving the path it can be asked for by; null when it cannot */
+  bodyTexture?(body: BodyTexture): Promise<string | null>;
   /** The time in milliseconds (for when to ask again after a failure); Date.now by default */
   now?: () => number;
 };
@@ -102,6 +104,7 @@ class SpawnManager {
   #resolver: DisplayResolver;
   #createModel: SpawnManagerOptions['createModel'];
   #createBuilding: SpawnManagerOptions['createBuilding'];
+  #bodyTexture: SpawnManagerOptions['bodyTexture'];
   #source: SpawnSource | null;
 
   #areas = new globalThis.Map<number, THREE.Group>();
@@ -132,6 +135,7 @@ class SpawnManager {
     this.#resolver = options.resolver;
     this.#createModel = options.createModel;
     this.#createBuilding = options.createBuilding;
+    this.#bodyTexture = options.bodyTexture;
     this.#source = options.source;
     this.#now = options.now ?? Date.now;
   }
@@ -492,10 +496,18 @@ class SpawnManager {
     let drawn: THREE.Object3D | null = null;
     let lookScale = 1;
     try {
-      const look = await resolve();
+      let look = await resolve();
+      // A dressed NPC wears the body texture built for it; without one, its bare skin stays
+      if (look?.kind === 'model' && look.body && this.#bodyTexture) {
+        const built = await this.#bodyTexture(look.body);
+        if (built) look = { ...look, textures: { ...look.textures, 1: built } };
+      }
       if (look) {
         lookScale = look.scale;
         drawn = look.kind === 'building' ? await this.#createBuilding(look.path) : await this.#createModel(look);
+        if (look.kind === 'model' && look.attachments?.length && typeof drawn.attachmentObject === 'function') {
+          await Promise.all(look.attachments.map((worn) => this.#wear(drawn, worn)));
+        }
       } else if (spawn.displayId > 0) {
         this.#warnOnce(
           `${kind}:${spawn.displayId}`,
@@ -531,6 +543,16 @@ class SpawnManager {
       position: { x: spawn.x, y: spawn.y, z: spawn.z },
     };
     return object;
+  }
+
+  /** A worn model (a helmet, a shoulder pad) at its attachment point; one that cannot be drawn is left off */
+  async #wear(model, worn: { point: number; look: ModelLook }) {
+    try {
+      const point = model.attachmentObject(worn.point);
+      if (point) point.add(await this.#createModel(worn.look));
+    } catch (error) {
+      this.#warnOnce(`worn:${worn.look.path}`, `3D view: ${worn.look.path} could not be drawn: ${error instanceof Error ? error.message : String(error)}`);
+    }
   }
 
   /** A weapon in one of a model's hands; one that cannot be drawn is left out (the resolver says why) */

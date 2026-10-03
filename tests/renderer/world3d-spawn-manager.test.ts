@@ -301,3 +301,34 @@ describe('NPCs dressed by a display preset', () => {
     expect(asked).toEqual([[50, preset], [1, null]]);
   });
 });
+
+describe('dressed NPCs', () => {
+  it('wears the body texture built for it, and its helmet and shoulders at their points', async () => {
+    const attached: number[] = [];
+    const created: any[] = [];
+    const model = () => Object.assign(new THREE.Object3D(), { attachmentObject: (point: number) => { attached.push(point); return new THREE.Object3D(); } });
+    const look = { kind: 'model', path: 'Body.m2', textures: { 1: 'Skin.blp' }, geosets: [0], scale: 1, body: { base: 'Skin.blp', layers: [] },
+      attachments: [{ point: 11, look: { kind: 'model', path: 'Helm.m2', textures: {}, geosets: null, scale: 1 } }] };
+    const m = manager({ creatures: [creature(1, 50)], objects: [], capped: { creatures: false, objects: false } }, {
+      resolver: { creature: async () => look, object: async () => null, weapon: async () => null } as any,
+      createModel: async (l: any) => { created.push(l); return model(); },
+      bodyTexture: async () => 'composed\\abc.blp',
+    });
+    await m.loadArea(1, 0, box);
+    expect(created[0].textures[1]).toBe('composed\\abc.blp');
+    expect(created[1].path).toBe('Helm.m2');
+    expect(attached).toEqual([11]);
+  });
+
+  it('keeps the bare skin when the body texture cannot be built', async () => {
+    const created: any[] = [];
+    const look = { kind: 'model', path: 'Body.m2', textures: { 1: 'Skin.blp' }, geosets: [0], scale: 1, body: { base: 'Skin.blp', layers: [] } };
+    const m = manager({ creatures: [creature(1, 50)], objects: [], capped: { creatures: false, objects: false } }, {
+      resolver: { creature: async () => look, object: async () => null } as any,
+      createModel: async (l: any) => { created.push(l); return new THREE.Object3D(); },
+      bodyTexture: async () => null,
+    });
+    await m.loadArea(1, 0, box);
+    expect(created[0].textures[1]).toBe('Skin.blp');
+  });
+});

@@ -15,6 +15,8 @@ import DoodadManager from './DoodadManager.js';
 import WmoManager from '../wmo/WmoManager.js';
 import LiquidManager from './liquid/LiquidManager.js';
 import SpawnManager, { SpawnSource, SpawnVisibility } from '../spawn/SpawnManager.js';
+import { CharacterTexture } from '../character/CharacterTexture.js';
+import { getAssetUrl } from '../asset.js';
 import DisplayResolver from '../spawn/DisplayResolver.js';
 import { areaBox, nearbyAreas } from '../spawn/placement.js';
 import { DISPLAY_RECORDS } from '../db/records.js';
@@ -140,11 +142,20 @@ class MapManager extends EventTarget {
     const resolver = new DisplayResolver({
       get: (name) => this.#dbManager.get(`${name}.dbc`, DISPLAY_RECORDS[name]),
     });
+    // Dressed NPCs' body textures, built from the client's own files and given to the texture manager
+    const characterTexture = new CharacterTexture({
+      read: async (path) => {
+        const response = await fetch(getAssetUrl(options.host, path));
+        return response.ok ? new Uint8Array(await response.arrayBuffer()) : null;
+      },
+      register: (path, texture) => this.#textureManager.register(path, texture),
+    });
     this.#spawnManager = new SpawnManager({
       resolver,
       createModel: (look) => this.#doodadManager.modelManager.get(look.path, look),
       createBuilding: (path) => this.#wmoManager.createInstance(path),
       source: null,
+      bodyTexture: (body) => characterTexture.build(body),
     });
 
     this.#root = new THREE.Group();

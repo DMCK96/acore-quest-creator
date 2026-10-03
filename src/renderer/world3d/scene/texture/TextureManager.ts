@@ -29,6 +29,8 @@ class TextureManager {
 
   // Textures that could not be loaded; asked for again, they are not fetched again
   #failed = new Set<string>();
+  // Textures made here rather than loaded (a dressed NPC's body), by normalized path; never freed by a deref
+  #registered = new Map<string, THREE.Texture>();
   #placeholder: THREE.DataTexture;
 
   constructor(options: TextureManagerOptions) {
@@ -45,6 +47,11 @@ class TextureManager {
     // What asked for it (a building or model), so a report can say where a missing texture is used
     usedBy?: string,
   ) {
+    const registered = this.#registered.get(normalizePath(path));
+    if (registered) {
+      return Promise.resolve(registered);
+    }
+
     const refId = [normalizePath(path), wrapS, wrapT, minFilter, magFilter].join(':');
     this.#ref(refId);
 
@@ -110,6 +117,11 @@ class TextureManager {
 
     this.#ref(refId);
     return texture;
+  }
+
+  /** A texture made rather than loaded, given to any later `get` of its path */
+  register(path: string, texture: THREE.Texture) {
+    this.#registered.set(normalizePath(path), texture);
   }
 
   #getPlaceholder() {
