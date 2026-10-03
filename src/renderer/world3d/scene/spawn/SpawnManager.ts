@@ -10,6 +10,7 @@ import * as THREE from 'three';
 import { ViewCreature, ViewObject, ViewSpawns } from '../../../../core/db/view-spawns.js';
 import { DisplayResolver, Look, ModelLook } from './DisplayResolver.js';
 import { creatureTransform, objectTransform, Transform } from './placement.js';
+import { routeObject, wanderObject } from './paths.js';
 
 type Box = { minX: number; maxX: number; minY: number; maxY: number };
 
@@ -142,6 +143,14 @@ class SpawnManager {
       ),
     );
     for (const drawn of drawnCreatures) creatures.add(drawn);
+
+    // How they move: patrol routes and wander circles, in world coordinates
+    for (const creature of spawns.creatures) {
+      const route = routeObject(creature);
+      if (route) paths.add(route);
+      const ring = wanderObject(creature);
+      if (ring) paths.add(ring);
+    }
 
     const drawnObjects = await Promise.all(
       spawns.objects.map((object) =>

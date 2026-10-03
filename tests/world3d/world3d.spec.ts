@@ -185,6 +185,35 @@ test('draws spawns: a marker where a display cannot be drawn, and asks the clien
   expect(after).not.toEqual([r, g, b, 255]);
 });
 
+test('draws a patrol route as a line over the ground', async ({ page }) => {
+  await openPage(page);
+  // Away from the house at START. The route runs through the camera's target (it draws over the terrain)
+  const SPOT = { x: START.x + 60, y: START.y - 60, z: START.z };
+  // A route crossing the middle of the picture, with no model for its NPC (display 0, a marker off to the side)
+  await page.evaluate(`window.__spawns = { creatures: [
+    { guid: 9, entry: 1, name: 'P', map: 0, x: ${SPOT.x - 20}, y: ${SPOT.y + 20}, z: ${SPOT.z}, orientation: 0, displayId: 0, scale: 1, wander: 0,
+      path: [ { x: ${SPOT.x - 6}, y: ${SPOT.y + 6}, z: ${SPOT.z} }, { x: ${SPOT.x + 6}, y: ${SPOT.y - 6}, z: ${SPOT.z} } ],
+      equipment: [0,0,0], own: false }
+  ], objects: [], capped: { creatures: false, objects: false } }`);
+  await page.evaluate(`window.__open('azeroth', 0, ${JSON.stringify(SPOT)})`);
+  await page.waitForFunction('window.__state.ready', null, { timeout: 45000 });
+  await page.waitForTimeout(1500);
+  const picture = await page.locator('canvas.world3d__canvas').screenshot();
+  if (process.env['WORLD3D_SHOT']) writeFileSync(process.env['WORLD3D_SHOT'].replace(/.png$/, '-route.png'), picture);
+  // The route's yellow (0xf0d060) runs through the middle: the yellowest pixel of the 9 x 9 there (a line is a pixel wide)
+  let best = [0, 0, 0];
+  for (let dy = -4; dy <= 4; dy++) {
+    for (let dx = -4; dx <= 4; dx++) {
+      const p = (await page.evaluate(`window.__pixel(${JSON.stringify(picture.toString('base64'))}, ${0.5 + dx / 960}, ${0.5 + dy / 600})`)) as number[];
+      if (p[0]! + p[1]! - 2 * p[2]! > best[0]! + best[1]! - 2 * best[2]!) best = p;
+    }
+  }
+  const [r, g, b] = best;
+  expect(r!).toBeGreaterThan(200);
+  expect(g!).toBeGreaterThan(170);
+  expect(b!).toBeLessThan(140);
+});
+
 test('a world can be left and another opened, again and again, without an error', async ({ page }) => {
   await openPage(page);
   for (const [directory, map] of [['azeroth', 0], ['kalimdor', 1], ['azeroth', 0], ['northrend', 571]] as const) {
