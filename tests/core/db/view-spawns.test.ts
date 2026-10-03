@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { SPAWN_VIEW_CAP, orderPath, toViewCreature, toViewObject } from '../../../src/core/db/view-spawns';
+import { SPAWN_VIEW_CAP, orderPath, pickPreset, toViewCreature, toViewObject, toViewPreset } from '../../../src/core/db/view-spawns';
 
 const creatureRow = {
   guid: '79970', entry: '197', name: 'Marshal McBride', map: '0',
@@ -13,7 +13,7 @@ describe('a creature spawn for the 3D view', () => {
     expect(c).toEqual({
       guid: 79970, entry: 197, name: 'Marshal McBride', map: 0,
       x: -8902.59, y: -162.606, z: 82.0223, orientation: 1.5,
-      displayId: 1953, scale: 1.25, wander: 5, path: null, equipment: [0, 0, 0], own: false, event: null, pathId: 0,
+      displayId: 1953, scale: 1.25, wander: 5, path: null, equipment: [0, 0, 0], own: false, event: null, pathId: 0, preset: null,
     });
   });
 
@@ -91,5 +91,27 @@ describe('route data for editing in the 3D view', () => {
   it('carries each point\'s other columns, not its id, point or position', () => {
     const [p] = orderPath([{ id: '801', guid: '5', point: '1', position_x: '1', position_y: '2', position_z: '3', delay: '3000', action: null }]);
     expect(p).toEqual({ x: 1, y: 2, z: 3, carry: { delay: '3000', action: null } });
+  });
+});
+
+describe('an NPC dressed by a display preset (creature_display_preset)', () => {
+  const row = (display: string, over: Record<string, string> = {}) => ({
+    entry: '161700', display_id: display, race: '1', gender: '1', class: '1', skin: '1', face: '3', hair: '7', haircolor: '0', facialhair: '3', guild_id: '0',
+    item_head: '0', item_shoulders: '0', item_body: '10037', item_chest: '13122', item_waist: '13062', item_legs: '13059', item_feet: '1246',
+    item_wrists: '0', item_hands: '0', item_back: '0', item_tabard: '0', ...over,
+  });
+
+  it('carries the look the preset gives: race, sex, skin, face, hair, beard and items by slot', () => {
+    expect(toViewPreset(row('50'))).toEqual({
+      race: 1, sex: 1, skin: 1, face: 3, hairStyle: 7, hairColour: 0, facialHair: 3,
+      items: { head: 0, shoulders: 0, body: 10037, chest: 13122, waist: 13062, legs: 13059, feet: 1246, wrists: 0, hands: 0, back: 0, tabard: 0 },
+    });
+  });
+
+  it('is the preset for the entry and its display, else the entry\'s first, as the server picks it', () => {
+    const rows = [row('60', { skin: '6' }), row('50', { skin: '5' }), { ...row('50'), entry: '9' }];
+    expect(pickPreset(rows, 161700, 50)!.skin).toBe(5);
+    expect(pickPreset(rows, 161700, 999)!.skin).toBe(5);
+    expect(pickPreset(rows, 4242, 50)).toBeNull();
   });
 });

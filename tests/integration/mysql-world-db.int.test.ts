@@ -96,6 +96,12 @@ describe('MysqlWorldDb', () => {
     expect(await readRoute(db, walker.pathId)).toHaveLength(walker.path!.length);
     expect(await countWalkers(db, walker.pathId)).toBeGreaterThanOrEqual(1);
   });
+  it('dresses Bianca Spada in Northshire by her display preset', async () => {
+    const { creatures } = await db.spawnsForView!(0, { minX: -8930, maxX: -8910, minY: -140, maxY: -125 }, 2000);
+    const bianca = creatures.find((c) => c.guid === 7500251)!;
+    expect(bianca.preset).toMatchObject({ race: 1, sex: 1, hairStyle: 7, items: { chest: 13122, feet: 1246 } });
+    expect(creatures.find((c) => c.entry === 823)?.preset ?? null).toBeNull();
+  });
   it('reports a named error when the server is unreachable', async () => {
     await expect(openMysqlWorldDb({ ...opts(), port: 1 })).rejects.toBeInstanceOf(WorldDbConnectionError);
   });

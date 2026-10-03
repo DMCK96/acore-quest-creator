@@ -21,6 +21,26 @@ export interface ViewEvent {
   name: string;
 }
 
+/** The equipment slots a display preset dresses, in the table's order */
+export const PRESET_SLOTS = ['head', 'shoulders', 'body', 'chest', 'waist', 'legs', 'feet', 'wrists', 'hands', 'back', 'tabard'] as const;
+export type PresetSlot = (typeof PRESET_SLOTS)[number];
+
+/**
+ * How a display preset (`creature_display_preset`, a CoA table) dresses an NPC: a race's body in a
+ * player's look, wearing items by slot, as the server sends it to the game
+ */
+export interface ViewPreset {
+  race: number;
+  sex: number;
+  skin: number;
+  face: number;
+  hairStyle: number;
+  hairColour: number;
+  facialHair: number;
+  /** Item ids by slot; 0 for none */
+  items: Record<PresetSlot, number>;
+}
+
 export interface ViewCreature {
   guid: number;
   entry: number;
@@ -45,6 +65,8 @@ export interface ViewCreature {
   /** One of the open project's own (not yet exported) */
   own: boolean;
   event: ViewEvent | null;
+  /** The display preset that dresses it, when the database has one for it */
+  preset: ViewPreset | null;
 }
 
 export interface ViewObject {
@@ -90,7 +112,7 @@ const num = (value: string | null | undefined, fallback = 0): number => {
   return Number.isFinite(n) ? n : fallback;
 };
 
-export function toViewCreature(row: Row, path: ViewPoint[] | null, equipment: [number, number, number]): ViewCreature {
+export function toViewCreature(row: Row, path: ViewPoint[] | null, equipment: [number, number, number], preset: ViewPreset | null = null): ViewCreature {
   return {
     guid: num(row.guid),
     entry: num(row.entry),
@@ -108,6 +130,7 @@ export function toViewCreature(row: Row, path: ViewPoint[] | null, equipment: [n
     equipment,
     own: false,
     event: eventOf(row),
+    preset,
   };
 }
 
@@ -126,6 +149,30 @@ export function toViewObject(row: Row): ViewObject {
     own: false,
     event: eventOf(row),
   };
+}
+
+/** A `creature_display_preset` row as the look it gives */
+export function toViewPreset(row: Row): ViewPreset {
+  return {
+    race: num(row.race),
+    sex: num(row.gender),
+    skin: num(row.skin),
+    face: num(row.face),
+    hairStyle: num(row.hair),
+    hairColour: num(row.haircolor),
+    facialHair: num(row.facialhair),
+    items: Object.fromEntries(PRESET_SLOTS.map((slot) => [slot, num(row[`item_${slot}`])])) as Record<PresetSlot, number>,
+  };
+}
+
+/**
+ * The preset the server dresses a creature in: the one for its entry and display, else its entry's
+ * first (the lowest display id, as the server's table loads); null when its entry has none
+ */
+export function pickPreset(rows: readonly Row[], entry: number, displayId: number): ViewPreset | null {
+  const mine = rows.filter((r) => num(r.entry) === entry).sort((a, b) => num(a.display_id) - num(b.display_id));
+  const chosen = mine.find((r) => num(r.display_id) === displayId) ?? mine[0];
+  return chosen ? toViewPreset(chosen) : null;
 }
 
 /** The columns of a route row that say which route, which point and where; the rest is carried */

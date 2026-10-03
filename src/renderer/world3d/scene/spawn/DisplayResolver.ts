@@ -7,6 +7,10 @@
  */
 import { ClientDb } from '@wowserhq/format';
 import { CreatureDisplayInfoRecord, CreatureModelDataRecord, GameObjectDisplayInfoRecord } from '../db/records.js';
+import { ViewPreset } from '../../../../core/db/view-spawns.js';
+
+/** How a humanoid looks: a CreatureDisplayInfoExtra row, or a display preset (with no baked texture) */
+type Appearance = { race: number; sex: number; skin: number; hairStyle: number; hairColour: number; facialHair: number; bakeName: string };
 
 /** The client's tables by name (without `.dbc`); a table the client cannot give resolves to null */
 type DisplayTables = { get(name: string): Promise<ClientDb<any> | null> };
@@ -70,17 +74,24 @@ class DisplayResolver {
     this.#tables = tables;
   }
 
-  async creature(displayId: number): Promise<Look | null> {
-    if (!(displayId > 0)) {
-      return null;
+  /**
+   * A creature's look by its display, or by the display preset that dresses it (the preset's race
+   * and look, whatever the display is, as the server sends it)
+   */
+  async creature(displayId: number, preset: ViewPreset | null = null): Promise<Look | null> {
+    const display = displayId > 0 ? (await this.#table('CreatureDisplayInfo'))?.getRecord(displayId) : null;
+    const scale = display && Number.isFinite(display.creatureModelScale) && display.creatureModelScale > 0 ? display.creatureModelScale : 1;
+    if (preset) {
+      return this.#character({ race: preset.race, sex: preset.sex, skin: preset.skin, hairStyle: preset.hairStyle, hairColour: preset.hairColour, facialHair: preset.facialHair, bakeName: '' }, scale);
     }
-
-    const display = (await this.#table('CreatureDisplayInfo'))?.getRecord(displayId);
     if (!display) {
       return null;
     }
-
-    return display.extendedDisplayInfoId > 0 ? this.#humanoid(display) : this.#plain(display);
+    if (display.extendedDisplayInfoId > 0) {
+      const extra = (await this.#table('CreatureDisplayInfoExtra'))?.getRecord(display.extendedDisplayInfoId);
+      return extra ? this.#character(extra, scale) : null;
+    }
+    return this.#plain(display);
   }
 
   /** A creature that is its own model, in up to three skins */
@@ -134,13 +145,13 @@ class DisplayResolver {
   }
 
   /**
-   * A humanoid NPC: its race's body, in its baked skin-and-clothes texture and its hair texture, with
-   * the geosets of its hairstyle and beard showing instead of every one the body carries
+   * A humanoid NPC: its race's body, in its baked skin-and-clothes texture (or its bare skin colour
+   * without one) and its hair texture, with the geosets of its hairstyle and beard showing instead of
+   * every one the body carries
    */
-  async #humanoid(display) {
-    const extra = (await this.#table('CreatureDisplayInfoExtra'))?.getRecord(display.extendedDisplayInfoId);
-    const race = extra ? (await this.#table('ChrRaces'))?.getRecord(extra.race) : null;
-    const bodyId = race ? (extra.sex === 0 ? race.maleDisplayId : race.femaleDisplayId) : 0;
+  async #character(look: Appearance, scale: number) {
+    const race = (await this.#table('ChrRaces'))?.getRecord(look.race);
+    const bodyId = race ? (look.sex === 0 ? race.maleDisplayId : race.femaleDisplayId) : 0;
     const bodyDisplay = bodyId > 0 ? (await this.#table('CreatureDisplayInfo'))?.getRecord(bodyId) : null;
     const body = bodyDisplay ? await this.#plain(bodyDisplay) : null;
     if (!body) {
@@ -148,25 +159,25 @@ class DisplayResolver {
     }
 
     const textures: Record<number, string> = {};
-    if (extra.bakeName) {
-      textures[BODY_SLOT] = `Textures\\BakedNpcTextures\\${extra.bakeName}`;
+    if (look.bakeName) {
+      textures[BODY_SLOT] = `Textures\\BakedNpcTextures\\${look.bakeName}`;
     } else {
       // No baked texture: its skin colour at least, rather than a body drawn black
-      const skin = await this.#skin(extra.race, extra.sex, extra.skin);
+      const skin = await this.#skin(look.race, look.sex, look.skin);
       if (skin) textures[BODY_SLOT] = skin;
     }
     const hairSection = (await this.#index('CharSections', (r) => r.baseSection === HAIR_SECTION ? `${r.race}:${r.sex}:${r.variation}:${r.colour}` : null, 'CharSections:hair'))
-      .get(`${extra.race}:${extra.sex}:${extra.hairStyle}:${extra.hairColour}`);
+      .get(`${look.race}:${look.sex}:${look.hairStyle}:${look.hairColour}`);
     if (hairSection?.textures[0]) {
       textures[HAIR_SLOT] = hairSection.textures[0];
     }
 
     const geosets = new Set(DEFAULT_CHARACTER_GEOSETS);
-    const hair = (await this.#index('CharHairGeosets', (r) => `${r.race}:${r.sex}:${r.variation}`)).get(`${extra.race}:${extra.sex}:${extra.hairStyle}`);
+    const hair = (await this.#index('CharHairGeosets', (r) => `${r.race}:${r.sex}:${r.variation}`)).get(`${look.race}:${look.sex}:${look.hairStyle}`);
     if (hair && hair.geoset > 0) {
       geosets.add(hair.geoset);
     }
-    const beard = (await this.#index('CharacterFacialHairStyles', (r) => `${r.race}:${r.sex}:${r.variation}`)).get(`${extra.race}:${extra.sex}:${extra.facialHair}`);
+    const beard = (await this.#index('CharacterFacialHairStyles', (r) => `${r.race}:${r.sex}:${r.variation}`)).get(`${look.race}:${look.sex}:${look.facialHair}`);
     if (beard) {
       [100, 200, 300].forEach((group, i) => {
         if (beard.geosets[i] > 0) {
@@ -176,7 +187,6 @@ class DisplayResolver {
       });
     }
 
-    const scale = Number.isFinite(display.creatureModelScale) && display.creatureModelScale > 0 ? display.creatureModelScale : 1;
     return { kind: 'model', path: body.path, textures, geosets: [...geosets].sort((a, b) => a - b), scale };
   }
 

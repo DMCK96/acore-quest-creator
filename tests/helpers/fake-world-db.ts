@@ -10,7 +10,7 @@ import {
 import { loadFork } from './ddl';
 import { SPAWN_TABLES, spawnEntryColumn, toSpawnDot, type MapBox, type SpawnDot, type SpawnKind } from '@core/db/spawns';
 import { ENTITY_TABLES, ID_TEXT, rankHits, toHit, type DbSearchKind, type EntityHit } from '@core/db/entity-search';
-import { orderPath, toViewCreature, toViewObject, type ViewCreature, type ViewObject } from '@core/db/view-spawns';
+import { orderPath, pickPreset, toViewCreature, toViewObject, type ViewCreature, type ViewObject } from '@core/db/view-spawns';
 
 type MutableRow = Record<string, RawValue>;
 interface Table {
@@ -186,6 +186,7 @@ export class FakeWorldDb implements WorldDb {
       : new Map<string | null, string | null>();
     const waypoints = await this.selectRows('waypoint_data', {});
     const equips = await this.selectRows('creature_equip_template', {});
+    const presets = this.tables.has('creature_display_preset') ? await this.selectRows('creature_display_preset', {}) : [];
     const creatures = (await this.selectRows('creature', {})).filter(inBox).sort(byGuid).slice(0, limit).map((r) => {
       const entry = r[entryColumn] ?? null;
       const model = models.get(entry ?? '');
@@ -197,6 +198,7 @@ export class FakeWorldDb implements WorldDb {
         { ...r, entry, name: names.get(entry) ?? null, display_id: model?.CreatureDisplayID ?? null, display_scale: model?.DisplayScale ?? null, path_id: pathId ?? null },
         points.length > 0 ? orderPath(points) : null,
         equip ? [Number(equip.ItemID1 ?? 0), Number(equip.ItemID2 ?? 0), Number(equip.ItemID3 ?? 0)] : [0, 0, 0],
+        presets.length > 0 ? pickPreset(presets, Number(entry), Number(model?.CreatureDisplayID ?? 0)) : null,
       );
     });
 

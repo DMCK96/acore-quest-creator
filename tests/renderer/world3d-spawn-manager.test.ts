@@ -5,7 +5,7 @@ import type { WorldLayer } from '../../src/core/world/layer';
 import SpawnManager from '../../src/renderer/world3d/scene/spawn/SpawnManager';
 
 const creature = (guid: number, displayId: number, extra: object = {}) => ({
-  guid, entry: 1, name: 'n', map: 0, x: 0, y: 0, z: 0, orientation: 0, displayId, scale: 1, wander: 0, path: null, equipment: [0, 0, 0] as [number, number, number], own: false, event: null, pathId: 0, ...extra,
+  guid, entry: 1, name: 'n', map: 0, x: 0, y: 0, z: 0, orientation: 0, displayId, scale: 1, wander: 0, path: null, equipment: [0, 0, 0] as [number, number, number], own: false, event: null, pathId: 0, preset: null, ...extra,
 });
 const object = (guid: number, displayId: number, extra: object = {}) => ({
   guid, entry: 2, name: 'o', map: 0, x: 0, y: 0, z: 0, rotation: [0, 0, 0, 1] as [number, number, number, number], displayId, scale: 1, own: false, event: null, ...extra,
@@ -287,5 +287,17 @@ describe('how many areas are still loading', () => {
     answer({ error: 'not connected' });
     await failing;
     expect(m.loading).toBe(0);
+  });
+});
+
+describe('NPCs dressed by a display preset', () => {
+  it('asks for the look of its display with its preset', async () => {
+    const asked: unknown[][] = [];
+    const preset = { race: 1, sex: 1, skin: 1, face: 3, hairStyle: 7, hairColour: 0, facialHair: 3, items: {} };
+    const m = manager({ creatures: [creature(1, 50, { preset }), creature(2, 1)], objects: [], capped: { creatures: false, objects: false } }, {
+      resolver: { creature: async (...args: unknown[]) => { asked.push(args); return null; }, object: async () => null } as any,
+    });
+    await m.loadArea(1, 0, box);
+    expect(asked).toEqual([[50, preset], [1, null]]);
   });
 });

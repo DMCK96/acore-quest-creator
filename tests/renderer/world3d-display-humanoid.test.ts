@@ -80,6 +80,22 @@ describe('a humanoid NPC\'s look', () => {
     expect(look).toMatchObject({ path: 'Creature\\Turkey\\Turkey.m2', textures: {} });
   });
 
+  it('is dressed by its display preset: the preset\'s race in its skin, hair and beard, whatever the display', async () => {
+    const skins = () => db(CharSectionsRecord, [
+      [7, 1, 0, 3, 'Character\\Human\\Hair04_02.blp', '', '', 0, 4, 2],
+      [9, 1, 0, 0, 'Character\\Human\\Male\\HumanMaleSkin00_03.blp', '', '', 0, 0, 3],
+    ], 10);
+    const preset = { race: 1, sex: 0, skin: 3, face: 0, hairStyle: 4, hairColour: 2, facialHair: 3, items: {} as any };
+    const look = (await resolver({ ...tables, CharSections: skins }).creature(3167, preset)) as any;
+    expect(look).toEqual({
+      kind: 'model',
+      path: 'Character\\Human\\Male\\HumanMale.m2',
+      textures: { 1: 'Character\\Human\\Male\\HumanMaleSkin00_03.blp', 6: 'Character\\Human\\Hair04_02.blp' },
+      geosets: [0, 5, 102, 201, 303, 401, 501, 702, 1301],
+      scale: 1,
+    });
+  });
+
   it('has no hair texture, but still draws, when the client has no hair section for it', async () => {
     const look = (await resolver({ ...tables, CharSections: () => db(CharSectionsRecord, [], 10) }).creature(3167)) as any;
     expect(look.textures).toEqual({ 1: 'Textures\\BakedNpcTextures\\CreatureDisplayExtra-00500.blp' });

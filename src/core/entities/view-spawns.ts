@@ -26,6 +26,7 @@ export function ownViewSpawns(entities: { npcs: readonly CustomNpc[]; objects: r
       equipment: [npc.equipment.mainHand, npc.equipment.offHand, npc.equipment.ranged],
       own: true,
       event: null,
+      preset: null,
     })),
   );
 

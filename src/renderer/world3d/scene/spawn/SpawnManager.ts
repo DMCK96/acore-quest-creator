@@ -427,7 +427,7 @@ class SpawnManager {
 
     const drawnCreatures = await Promise.all(
       spawns.creatures.map((creature) =>
-        this.#drawSpawn('creature', creature, () => this.#resolver.creature(creature.displayId), creatureTransform(creature)),
+        this.#drawSpawn('creature', creature, () => this.#resolver.creature(creature.displayId, creature.preset ?? null), creatureTransform(creature)),
       ),
     );
     for (const drawn of drawnCreatures) creatures.add(drawn);

@@ -5,7 +5,7 @@ import type { ColumnInfo, RawRow, RawValue, RefKind, Where } from './types';
 import { isNumericColumn } from './types';
 import { ENTITY_TABLES, ID_TEXT, toHit, type DbSearchKind, type EntityHit } from './entity-search';
 import { SPAWN_TABLES, spawnEntryColumn, toSpawnDot, type MapBox, type SpawnDot, type SpawnKind } from './spawns';
-import { orderPath, toViewCreature, toViewObject, type ViewCreature, type ViewObject } from './view-spawns';
+import { orderPath, toViewCreature, toViewObject, type ViewCreature, type ViewObject, pickPreset } from './view-spawns';
 import { LOOKUP_KINDS, UnknownColumnError, UnknownTableError, type QuestSummary, type WorldDb } from './world-db';
 
 export interface MysqlWorldDbOptions {
@@ -385,9 +385,20 @@ class MysqlWorldDb implements WorldDb {
         }
       }
     }
+    // How the server dresses an NPC from a display preset (a CoA table; a database without it has none)
+    const entries = [...new Set(creatureRows.map((r) => r.entry).filter((e): e is string => e !== null))];
+    const presets =
+      entries.length > 0 && (await this.columns('creature_display_preset')).length > 0
+        ? await query('reading creature_display_preset', `SELECT * FROM creature_display_preset WHERE entry IN (${entries.map(() => '?').join(', ')})`, entries)
+        : [];
     const creatures = creatureRows.map((r) => {
       const route = paths.get(r.path_id ?? '');
-      return toViewCreature(r, route && route.length > 0 ? orderPath(route) : null, equipment.get(`${r.entry}:${r.equipment_id}`) ?? [0, 0, 0]);
+      return toViewCreature(
+        r,
+        route && route.length > 0 ? orderPath(route) : null,
+        equipment.get(`${r.entry}:${r.equipment_id}`) ?? [0, 0, 0],
+        presets.length > 0 ? pickPreset(presets, Number(r.entry), Number(r.display_id ?? 0)) : null,
+      );
     });
 
     const objectEvents = await eventOf('game_event_gameobject');

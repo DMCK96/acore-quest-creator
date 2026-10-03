@@ -40,7 +40,7 @@ describe('spawns for the 3D view', () => {
       guid: 1, entry: 68, name: 'Stormwind City Guard', map: 0, x: -8900, y: -150, z: 82, orientation: 3.14,
       displayId: 3167, scale: 1.1, wander: 0, pathId: 10,
       path: [expect.objectContaining({ x: -8895, y: -150, z: 82 }), expect.objectContaining({ x: -8890, y: -150, z: 82 })],
-      equipment: [1899, 143, 0], own: false, event: null,
+      equipment: [1899, 143, 0], own: false, event: null, preset: null,
     });
     expect(out.value.capped).toEqual({ creatures: false, objects: false });
   });

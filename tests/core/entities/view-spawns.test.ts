@@ -10,8 +10,8 @@ describe('the open quest\'s own spawns for the 3D view', () => {
       patrol: { pathId: 8000020, startPace: 'walk' as const, points: [{ x: 6, y: 6, z: 7, waitSecs: 0, facing: null, paceFromHere: null, actions: [] }] } };
     const out = ownViewSpawns({ npcs: [{ ...npc, spawns: [standing, walking] }], objects: [] });
     expect(out.creatures).toEqual([
-      { guid: 800001, entry: 900100, name: 'Dock Worker', map: 0, x: 1, y: 2, z: 3, orientation: 0.5, displayId: 3167, scale: 1.2, wander: 4, path: null, equipment: [1899, 0, 0], own: true, event: null, pathId: 0 },
-      { guid: 800002, entry: 900100, name: 'Dock Worker', map: 0, x: 5, y: 6, z: 7, orientation: 0, displayId: 3167, scale: 1.2, wander: 0, path: [{ x: 6, y: 6, z: 7, carry: walking.patrol.points[0] }], equipment: [1899, 0, 0], own: true, event: null, pathId: 8000020 },
+      { guid: 800001, entry: 900100, name: 'Dock Worker', map: 0, x: 1, y: 2, z: 3, orientation: 0.5, displayId: 3167, scale: 1.2, wander: 4, path: null, equipment: [1899, 0, 0], own: true, event: null, pathId: 0, preset: null },
+      { guid: 800002, entry: 900100, name: 'Dock Worker', map: 0, x: 5, y: 6, z: 7, orientation: 0, displayId: 3167, scale: 1.2, wander: 0, path: [{ x: 6, y: 6, z: 7, carry: walking.patrol.points[0] }], equipment: [1899, 0, 0], own: true, event: null, pathId: 8000020, preset: null },
     ]);
     expect(out.capped).toEqual({ creatures: false, objects: false });
   });
