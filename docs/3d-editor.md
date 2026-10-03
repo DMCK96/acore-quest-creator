@@ -2,7 +2,7 @@
 
 A living document. Update it in the same change as the work it describes.
 
-Last updated: 2026-10-03. Branch: `claude/vigilant-volta-ebcgyr`.
+Last updated: 2026-10-03. Branch: `feature/3d-editor`.
 
 ## Goal
 
@@ -64,7 +64,7 @@ Looked at and **not** used: `wowserhq/client` (it is the game's UI layer), `vjeu
   - Read through the `viewSpawns` call (`src/core/db/view-spawns.ts`), capped at 2000 of each kind per tile.
   - Spawns that appear only during a game event (a positive `eventEntry` in `game_event_creature` or `game_event_gameobject`) are left out until the "Event spawns" checkbox is ticked. Spawns an event removes (a negative `eventEntry`) are there the rest of the time, so they are drawn.
   - Held weapons follow the hand's bone in the model's own space. Wowser's bone matrices are in the camera's space; used as they were, weapons were drawn tens of yards from their NPC, under the ground.
-- Clicking an NPC or object selects it: an outline round it, and a card with its name, entry, spawn id, position and any event. In the quest map's 3D view, selecting one of the quest's own spawns selects its marker in the side panel too. Picking uses each spawn's bounds from its vertices; a model's stored bounds take in every animation's reach and are far too big.
+- Clicking an NPC or object selects it: an outline round it, and a card with its name, entry, spawn id, position and any event. In the quest map's 3D view, selecting one of the quest's own spawns selects its marker in the side panel too. Picking uses each spawn's bounds from its vertices; a model's stored bounds take in every animation's reach and are far too big. An NPC standing inside a tent (or any other object) is picked in preference to the object holding it: the nearest box along the ray is the tent's, so a spawn whose centre is inside another's bounds, and which is the smaller, wins over it. A tent with nobody inside is still picked. This is by bounds only: an NPC behind a wall of a building that is part of the map's own terrain files (not a spawn) is still hidden by that wall, as it should be.
 - Editing in 3D (sub-project C, `src/renderer/world3d/editing.ts`, `scene/edit/`):
   - **G** moves the selected spawn and **R** rotates it, with Three's own transform gizmo. NPCs turn about Z only; objects turn every way. A move along the ground keeps the spawn on the drawn ground while dragging, and on release drops it on the server's floor nearest where it was (the same floor heights the quest map uses). Only the Z arrow lifts it freely.
   - The selected NPC's route can be edited: click a point and drag it, **Shift-click** on a leg to insert a point there (or on the ground to add one after the selected point), **Delete** to remove one. A route keeps at least two points. Each point keeps its other data: an existing point's `waypoint_data` columns (delay, action), or an own NPC's wait, facing and actions.
@@ -72,6 +72,12 @@ Looked at and **not** used: `wowserhq/client` (it is the game's UI layer), `vjeu
   - The open quest's own spawns are edited through the quest, as the 2D map does, so its Changes panel and export pick them up. A tilted own object is exported with its full rotation.
   - Everything else goes into the project's **world layer** (saved in the project file, version 2). It keeps what the database had at the first edit. **World changes** lists each edit with before and after, flags any the database has moved off since, reverts them one by one, and exports `<date>_<nn>_world.sql` (UPDATE by guid; routes deleted and written again by path id) with a matching `_world_revert.sql`.
   - The first change to a route other spawns walk (a shared `path_id`, or a `creature_template_addon` route) asks first, saying how many walk it.
+- **Placing existing NPCs and objects** (sub-project D, first half; `placing.ts`, `PlaceDialog.tsx`, `core/world/layer.ts`):
+  - **Place…** in the layers panel opens a search of the database's NPCs or objects (by name or id). Picking one starts placing: each click on the ground (terrain or a building) puts one there, on the server's floor nearest the click (the height from the drawn ground, with a note, when the server has none), facing the camera, and selects it so the gizmo can move or turn it at once. **Esc** or **Done** stops placing; a click then selects again.
+  - A placed spawn is an entry of the world layer's `added` list (project format version 3; a version 2 file opens with none): kind, spawn id, entry, name, map, placement, and the template's look as it was when placed (display, size, held items, preset), so it is drawn without asking the database again. It takes the next free spawn id (past the database's, the open project's NPCs' and objects' and earlier placements'; the quest spawn allocator keeps off placed ids too). Moving or turning it changes its entry; it has no original.
+  - **World changes** lists it ("new spawn", with a **Remove** button, and a flag if the database has since taken its id), and so does its card. Export writes `DELETE` by guid then `INSERT` of a row with every column the database has (`creature` or `gameobject`; an NPC's entry in `id` and `id1`, whichever exists; respawn 300 seconds, an NPC holding its template's first equipment row, an object's whole rotation), and the revert deletes it.
+  - Placing does not go through the open quest: a placed spawn belongs to the world patch, not to a quest's. Undo (Ctrl+Z) covers moving and turning a placed spawn, not placing or removing it; **Remove** takes it back.
+  - Not yet: wander distance, a patrol route, a respawn time, or phase for a placed NPC; copying another spawn's settings; placing in a dungeon.
 - A browser test that runs the real 3D code against a fake game client (`npm run test:world3d`).
 
 - Dressed NPCs (`src/renderer/world3d/scene/character/`): humanoids that are not one baked texture are built as the game builds them, painting their skin, face, underwear and each item's pieces into the body texture's regions, and showing the shapes their items give (gloves, boots, sleeves, a robe's skirt, a belt, a tabard, a cape). Helmets and shoulder pads hang at their attachment points in the race and sex's own model. This covers the CoA fork's display presets (`creature_display_preset`, whose item columns are item display ids, as the server sends them to the game) and display extras with no baked texture. NPCs with a baked texture keep it and gain their items' shapes, cape and worn models. Each outfit's texture is built once and shared.
@@ -83,7 +89,7 @@ Looked at and **not** used: `wowserhq/client` (it is the game's UI layer), `vjeu
 
 Things that are missing or approximate. Roughly in order of how much they matter.
 
-1. **Editing is partial.** No scale yet (a template change, so step E). A route cannot be given to, or taken from, an existing NPC (step E). Waits and actions on existing routes are kept but cannot be edited in 3D; the 2D map edits them for the quest's own NPCs.
+1. **Editing is partial.** No scale yet (a template change, so step E). A route cannot be given to, or taken from, an existing NPC (step E). A placed NPC has the defaults (it stands still, respawns in 300 seconds); its settings cannot be edited in 3D. Waits and actions on existing routes are kept but cannot be edited in 3D; the 2D map edits them for the quest's own NPCs.
 2. **NPCs and objects are approximate:** only the idle animation; no mounts or spell effects; no names over them. Hair shows through some helmets (the game hides it with `HelmetGeosetVisData`, not read yet), and item visual effects (enchant glows) are not drawn. Items newer than the client's files (some Ascension backports) are left off, named once in the console. Spawns are drawn whatever their phase; members of a spawn pool are all drawn, though the server shows only some at a time. A custom item held as a weapon, not in the client's `Item.dbc`, is not drawn.
 3. **Props inside buildings** (furniture in the Abbey) are not drawn. Buildings carry them as "doodad sets".
 4. **Textures the client does not ship.** The user's client places custom modern-expansion buildings (Kul Tiras, Draenor, Dragonflight) whose textures are not in its archives; those parts draw grey. Not loose in the `Data` folder either. Where the references come from is not established; reports now name the building or model that asked, so the next run will show it.
@@ -106,8 +112,8 @@ In order. Each is meant to be a step the user can try before the next begins.
 
 The maintainer's eight asked-for features are split into sub-projects A to E. A (camera), B (the spawn layer) and C (select and transform, and the world layer) are done. Edits not part of a quest go to a project-level world layer, exported as its own patch.
 
-1. **D: create from 3D.** Place new objects (chests that can be looted, with a loot table) and new NPCs (loot, faction, level), opening the existing editors.
-2. **E: edit existing.** Place copies of existing NPCs; change existing spawns and templates (loot, faction, level).
+1. **D: create from 3D.** Placing existing NPCs and objects is done (see Done). Still to do: create new objects (chests that can be looted, with a loot table) and new NPCs (loot, faction, level), opening the existing editors.
+2. **E: edit existing.** Change existing spawns and templates (loot, faction, level); settings of a placed spawn (wander, route, respawn); copy another spawn with its settings.
 3. **Reshape the quest grid** into a chain builder beside the 3D view. Needs a design conversation first: what "managing a chain" should mean day to day.
 4. **Fill the gaps** above as they get in the way: props inside buildings first, then the remaining building shaders.
 

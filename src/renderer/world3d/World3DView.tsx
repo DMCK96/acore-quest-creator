@@ -141,8 +141,6 @@ function WorldStage({ map, start, hasClient, own, onSelect, onOwnEdit }: ViewPro
   // Choosing an existing NPC or object to place, and the one being placed (each click on the ground puts one down)
   const [choosing, setChoosing] = useState(false);
   const [placing, setPlacing] = useState<Chosen | null>(null);
-  const placingRef = useRef(placing);
-  placingRef.current = placing;
   /** A layer from the World changes list (after a revert): kept and drawn */
   const takeLayer = (next: WorldLayer): void => {
     layerRef.current = next;
@@ -294,7 +292,6 @@ function WorldStage({ map, start, hasClient, own, onSelect, onOwnEdit }: ViewPro
             },
           });
           created.setSpawnVisibility(layersRef.current);
-          created.setPlacing(placingRef.current ? { kind: placingRef.current.kind, entry: placingRef.current.entry } : null);
           if (ownRef.current) created.setOwnSpawns(ownRef.current);
           world.current = created;
           void apiRef.current?.worldLayer().then((result) => live && result.ok && applyLayer(result.value));

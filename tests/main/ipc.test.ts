@@ -11,13 +11,16 @@ describe('parseRequest', () => {
       'openQuest', 'previewChanges', 'questLinks', 'removeNode', 'rewardTables', 'updateQuest', 'saveProfile', 'saveViewport', 'searchQuests', 'searchEntities', 'startupProfile',
       'testConnection', 'validate', 'questScripts', 'testCommands', 'groundHeight', 'spellFacts', 'mapList', 'mapFloors', 'mapSpawns', 'viewSpawns', 'entitySpawns', 'questMapRefs', 'allocateIds', 'entityTemplate', 'itemColumns',
       'patrolPathId', 'renameProject', 'newProject', 'openProject', 'saveProject', 'saveProjectAs', 'recentProjects', 'forgetRecent', 'recoveries', 'restoreRecovery', 'discardRecovery',
-      'worldLayer', 'worldMoveSpawn', 'worldRoute', 'worldSetRoute', 'worldRevert', 'worldChanges', 'exportWorld',
+      'worldLayer', 'worldMoveSpawn', 'worldAddSpawn', 'worldRoute', 'worldSetRoute', 'worldRevert', 'worldChanges', 'exportWorld',
     ].sort());
   });
   it('refuses world edits with a bad kind, a missing rotation or a point without its columns', () => {
     const at = { x: 1, y: 2, z: 3, orientation: 0, rotation: null };
     expect(parseRequest('worldMoveSpawn', ['creature', 5, at]).ok).toBe(true);
     expect(parseRequest('worldMoveSpawn', ['npc', 5, at]).ok).toBe(false);
+    expect(parseRequest('worldAddSpawn', ['creature', 1423, 0, at]).ok).toBe(true);
+    expect(parseRequest('worldAddSpawn', ['creature', 0, 0, at]).ok).toBe(false);
+    expect(parseRequest('worldAddSpawn', ['npc', 1423, 0, at]).ok).toBe(false);
     expect(parseRequest('worldMoveSpawn', ['creature', 5, { x: 1, y: 2, z: 3, orientation: 0 }]).ok).toBe(false);
     expect(parseRequest('worldSetRoute', [801, [{ x: 1, y: 2, z: 3 }]]).ok).toBe(false);
     expect(parseRequest('worldRevert', [{ kind: 'route', pathId: 801 }]).ok).toBe(true);

@@ -53,6 +53,8 @@ interface PageState {
   edits: any[];
   notices: string[];
   escapes: number;
+  placed: { target: { kind: string; entry: number }; at: { x: number; y: number; z: number; orientation: number; rotation: number[] | null } }[];
+  placeEnds: number;
 }
 const state = async (page: Page): Promise<PageState> => (await page.evaluate('window.__state')) as PageState;
 const open = (page: Page, directory: string, map: number): Promise<unknown> =>
@@ -312,6 +314,49 @@ test('Esc clears the selection and goes no further; with nothing selected it is 
   expect((await state(page)).escapes).toBe(0);
   await page.keyboard.press('Escape');
   expect((await state(page)).escapes).toBe(1);
+});
+
+test('while placing, a click puts the NPC or object on the ground facing the camera; Esc stops, and a click selects again', async ({ page }) => {
+  await openPage(page);
+  const SPOT = { x: START.x + 60, y: START.y - 60, z: START.z };
+  await page.evaluate(`window.__spawns = { creatures: [
+    { guid: 5, entry: 1, name: 'Here', map: 0, x: ${SPOT.x}, y: ${SPOT.y}, z: ${SPOT.z}, orientation: 0, displayId: 0, scale: 4, wander: 0, path: null, pathId: 0, equipment: [0,0,0], own: false, event: null }
+  ], objects: [], capped: { creatures: false, objects: false } }`);
+  await page.evaluate(`window.__floorZ = ${SPOT.z + 0.25}`);
+  await page.evaluate(`window.__open('azeroth', 0, ${JSON.stringify(SPOT)})`);
+  await page.waitForFunction('window.__state.ready', null, { timeout: 45000 });
+  await page.waitForTimeout(1000);
+  const box = (await page.locator('canvas.world3d__canvas').boundingBox())!;
+  const [cx, cy] = [box.x + box.width / 2, box.y + box.height / 2];
+
+  // Placing an NPC: the click on the NPC's own spot places, and selects nothing
+  await page.evaluate("window.__placing({ kind: 'creature', entry: 1423 })");
+  await page.mouse.click(cx, cy);
+  await expect.poll(async () => (await state(page)).placed.length).toBe(1);
+  const [first] = (await state(page)).placed;
+  expect(first).toMatchObject({ target: { kind: 'creature', entry: 1423 }, at: { z: SPOT.z + 0.25, rotation: null } });
+  expect((await state(page)).selected).toBeNull();
+  // Faces the camera: the angle from where it stands to where the camera is
+  const camera = (await page.evaluate('window.__camera()')) as { position: { x: number; y: number } };
+  const toCamera = Math.atan2(camera.position.y - first!.at.y, camera.position.x - first!.at.x);
+  expect(Math.cos(first!.at.orientation - toCamera)).toBeCloseTo(1, 3);
+
+  // Placing an object keeps the whole turn about Z, and each click places another
+  await page.evaluate("window.__placing({ kind: 'object', entry: 143981 })");
+  await page.mouse.click(cx, cy);
+  await expect.poll(async () => (await state(page)).placed.length).toBe(2);
+  const second = (await state(page)).placed[1]!;
+  expect(second.target).toEqual({ kind: 'object', entry: 143981 });
+  expect(second.at.rotation).toHaveLength(4);
+
+  // Esc stops placing and goes no further; the next click selects the NPC again
+  await page.keyboard.press('Escape');
+  expect((await state(page)).placeEnds).toBe(1);
+  expect((await state(page)).escapes).toBe(0);
+  await page.mouse.click(cx, cy);
+  expect((await state(page)).selected).toMatchObject({ guid: 5 });
+  expect((await state(page)).placed).toHaveLength(2);
+  expect((await state(page)).errors).toEqual([]);
 });
 
 test('draws the patrol route of the selected NPC as a line over the ground', async ({ page }) => {
