@@ -95,7 +95,7 @@ describe('the world layer through the API', () => {
     await api.worldSetRoute(801, [{ x: 1, y: 1, z: 1, rest: {} }, { x: 2, y: 2, z: 2, rest: {} }]);
     await api.worldRevert({ kind: 'spawn', spawnKind: 'creature', guid: 80330 });
     const out: any = await api.worldRevert({ kind: 'route', pathId: 801 });
-    expect(out.value).toEqual({ spawns: [], routes: [] });
+    expect(out.value).toEqual({ spawns: [], routes: [], added: [] });
   });
 
   it('says which changes the database has moved away from since', async () => {
@@ -138,5 +138,80 @@ describe('the world layer through the API', () => {
       api.worldMoveSpawn('gameobject', 5, { x: -9461, y: 40, z: 57, orientation: 1, rotation: [0, 0, 0.5, 0.8660254] }),
     ]);
     expect(session.world.get().spawns.map((s) => s.guid).sort()).toEqual([5, 80330]);
+  });
+
+  describe('placing existing NPCs and objects', () => {
+    const at = { x: -9400, y: 30, z: 57, orientation: 1, rotation: null };
+    const templates = (db: ReturnType<typeof forkDb>) => {
+      world(db);
+      db.insert('creature_template_model', { CreatureID: '1423', Idx: '0', CreatureDisplayID: '3167', DisplayScale: '1.25', Probability: '1' });
+      db.insert('creature_template_model', { CreatureID: '1423', Idx: '1', CreatureDisplayID: '9999', DisplayScale: '1', Probability: '1' });
+    };
+
+    it('places an NPC with its template\'s look, at the next free spawn id', async () => {
+      const { api, session } = await setup(templates);
+      const out: any = await api.worldAddSpawn('creature', 1423, 0, at);
+      expect(out.value.guid).toBe(80333);
+      expect(out.value.layer.added).toEqual([{ kind: 'creature', guid: 80333, entry: 1423, name: 'Stormwind Guard', map: 0, placement: at, look: { displayId: 3167, scale: 1.25, equipment: [0, 0, 0], preset: null } }]);
+      expect(session.world.get()).toEqual(out.value.layer);
+      expect(session.dirty()).toBe(true);
+    });
+
+    it('gives two placements made together different ids, and keeps the kinds apart', async () => {
+      const { api, session } = await setup(templates);
+      await Promise.all([api.worldAddSpawn('creature', 1423, 0, at), api.worldAddSpawn('creature', 1423, 0, at), api.worldAddSpawn('gameobject', 143981, 0, at)]);
+      expect(session.world.get().added.map((a) => [a.kind, a.guid]).sort()).toEqual([['creature', 80333], ['creature', 80334], ['gameobject', 6]]);
+      expect(session.world.get().added.find((a) => a.kind === 'gameobject')!.look).toMatchObject({ displayId: 1949, scale: 1 });
+    });
+
+    it('refuses an NPC or object the database does not have', async () => {
+      const { api, session } = await setup(templates);
+      const out: any = await api.worldAddSpawn('creature', 31337, 0, at);
+      expect(out.ok).toBe(false);
+      expect(out.error.message).toBe('NPC 31337 is not in the database.');
+      expect(session.world.get().added).toEqual([]);
+    });
+
+    it('moves a placed spawn in the layer alone, and a revert removes it', async () => {
+      const { api, db } = await setup(templates);
+      await api.worldAddSpawn('creature', 1423, 0, at);
+      const moved: any = await api.worldMoveSpawn('creature', 80333, { ...at, x: -9300 });
+      expect(moved.ok).toBe(true);
+      expect(moved.value.spawns).toEqual([]);
+      expect(moved.value.added[0].placement.x).toBe(-9300);
+      expect(await db.selectRows('creature', { guid: '80333' })).toEqual([]);
+      const reverted: any = await api.worldRevert({ kind: 'spawn', spawnKind: 'creature', guid: 80333 });
+      expect(reverted.value.added).toEqual([]);
+    });
+
+    it('keeps a later quest spawn off a placed spawn\'s id', async () => {
+      const { api } = await setup(templates);
+      await api.worldAddSpawn('creature', 1423, 0, at);
+      expect(((await api.allocateIds('creatureSpawn', 1)) as any).value).toEqual([80334]);
+    });
+
+    it('lists a placed spawn among the changes, flagged when the database has taken its id since', async () => {
+      const { api, db } = await setup(templates);
+      await api.worldAddSpawn('creature', 1423, 0, at);
+      expect(((await api.worldChanges()) as any).value.map((c: any) => [c.type, c.guid, c.drifted])).toEqual([['added', 80333, false]]);
+      db.insert('creature', { guid: '80333', id1: '1423', map: '0', position_x: '0', position_y: '0', position_z: '0', orientation: '0' });
+      expect(((await api.worldChanges()) as any).value[0].drifted).toBe(true);
+    });
+
+    it('exports a placed NPC and object as inserts with every column, and a revert that deletes them', async () => {
+      const { api, written } = await setup(templates);
+      await api.worldAddSpawn('creature', 1423, 0, at);
+      await api.worldAddSpawn('gameobject', 143981, 0, { ...at, rotation: null });
+      const out: any = await api.exportWorld();
+      expect(out.ok).toBe(true);
+      const sql = written.get(out.value.applyPath)!;
+      expect(sql).toMatch(/DELETE FROM `creature` WHERE `guid` = 80333;/);
+      expect(sql).toMatch(/INSERT INTO `creature` \(.*`id1`.*VALUES \(80333, 1423,/s);
+      expect(sql).toMatch(/INSERT INTO `gameobject` \(.*`rotation3`.*VALUES \(6, 143981,/s);
+      const revert = written.get(out.value.revertPath)!;
+      expect(revert).toMatch(/DELETE FROM `creature` WHERE `guid` = 80333;/);
+      expect(revert).toMatch(/DELETE FROM `gameobject` WHERE `guid` = 6;/);
+      expect(revert).not.toMatch(/INSERT/);
+    });
   });
 });

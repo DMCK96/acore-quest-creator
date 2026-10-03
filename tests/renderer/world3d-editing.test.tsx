@@ -24,8 +24,8 @@ import { World3DScreen } from '../../src/renderer/world3d/World3DScreen';
 
 afterEach(() => { worlds.length = 0; vi.unstubAllGlobals(); });
 const clientHasEverything = () => vi.stubGlobal('fetch', async () => new Response(new Uint8Array([1]), { status: 200 }));
-const EMPTY = { spawns: [], routes: [] };
-const moved = { spawns: [{ kind: 'creature', guid: 80330, entry: 1423, name: 'Guard', map: 0, original: { x: 0, y: 0, z: 0, orientation: 0, rotation: null }, current: { x: 1, y: 2, z: 3, orientation: 0, rotation: null } }], routes: [] };
+const EMPTY = { spawns: [], routes: [], added: [] };
+const moved = { spawns: [{ kind: 'creature', guid: 80330, entry: 1423, name: 'Guard', map: 0, original: { x: 0, y: 0, z: 0, orientation: 0, rotation: null }, current: { x: 1, y: 2, z: 3, orientation: 0, rotation: null } }], routes: [], added: [] };
 const place = (own: boolean, guid: number, entry: number) => ({ kind: 'place', spawn: { kind: 'creature', guid, entry, own }, to: { x: 1, y: 2, z: 3, orientation: 1.5, rotation: null } });
 
 const patrol = addPoint(addPoint(newPatrol(9000), { x: 1, y: 1, z: 1 }), { x: 2, y: 2, z: 2 });

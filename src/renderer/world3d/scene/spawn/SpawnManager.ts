@@ -27,6 +27,8 @@ type PickedSpawn = {
   entry: number;
   name: string;
   own: boolean;
+  /** One placed in the 3D view and not in the database (yet) */
+  added: boolean;
   /** An NPC's route id; 0 for one without a route, and for objects */
   pathId: number;
   event: { id: number; name: string } | null;
@@ -121,7 +123,7 @@ class SpawnManager {
   #failed = new globalThis.Map<number, number>();
 
   /** Edits to database spawns and routes, drawn over what the database has */
-  #layer: WorldLayer = { spawns: [], routes: [] };
+  #layer: WorldLayer = { spawns: [], routes: [], added: [] };
 
   /** Routes edited in the view and not yet stored by its host, drawn in place of what it has */
   #pendingRoutes = new globalThis.Map<number, ViewPoint[]>();
@@ -256,9 +258,24 @@ class SpawnManager {
       const at = placed('gameobject', o.guid);
       return at ? { ...o, x: at.x, y: at.y, z: at.z, ...(at.rotation ? { rotation: at.rotation } : {}) } : o;
     };
+    // Spawns placed in the view, drawn as their template looked when they were placed
+    const placedCreatures = this.#layer.added.filter((a) => a.kind === 'creature').map(
+      (a): ViewCreature => ({
+        guid: a.guid, entry: a.entry, name: a.name, map: a.map, x: a.placement.x, y: a.placement.y, z: a.placement.z, orientation: a.placement.orientation,
+        displayId: a.look.displayId, scale: a.look.scale, wander: 0, path: null, pathId: 0, equipment: a.look.equipment, own: false, added: true, event: null, preset: a.look.preset,
+      }),
+    );
+    const placedObjects = this.#layer.added.filter((a) => a.kind === 'gameobject').map(
+      (a): ViewObject => ({
+        guid: a.guid, entry: a.entry, name: a.name, map: a.map, x: a.placement.x, y: a.placement.y, z: a.placement.z,
+        // Turned about Z by its facing unless it was tilted
+        rotation: a.placement.rotation ?? [0, 0, Math.sin(a.placement.orientation / 2), Math.cos(a.placement.orientation / 2)],
+        displayId: a.look.displayId, scale: a.look.scale, own: false, added: true, event: null,
+      }),
+    );
     return {
-      creatures: [...spawns.creatures.filter((c) => !ownCreatures.has(c.guid) && shown(c)).map(creature), ...this.#own.creatures.filter(inBox)].map(pending),
-      objects: [...spawns.objects.filter((o) => !ownObjects.has(o.guid) && shown(o)).map(object), ...this.#own.objects.filter(inBox)],
+      creatures: [...spawns.creatures.filter((c) => !ownCreatures.has(c.guid) && shown(c)).map(creature), ...this.#own.creatures.filter(inBox), ...placedCreatures.filter(inBox)].map(pending),
+      objects: [...spawns.objects.filter((o) => !ownObjects.has(o.guid) && shown(o)).map(object), ...this.#own.objects.filter(inBox), ...placedObjects.filter(inBox)],
       capped: spawns.capped,
     };
   }
@@ -552,6 +569,7 @@ class SpawnManager {
       entry: spawn.entry,
       name: spawn.name,
       own: spawn.own,
+      added: spawn.added ?? false,
       pathId: kind === 'creature' ? ((spawn as ViewCreature).pathId ?? 0) : 0,
       event: spawn.event ?? null,
       position: { x: spawn.x, y: spawn.y, z: spawn.z },

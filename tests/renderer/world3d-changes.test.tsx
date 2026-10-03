@@ -27,7 +27,7 @@ describe('the World changes modal', () => {
   });
 
   it('reverts one change and hands the new layer back', async () => {
-    const layer = { spawns: [], routes: [] };
+    const layer = { spawns: [], routes: [], added: [] };
     const worldRevert = vi.fn(async () => okv(layer));
     const worldChanges = vi.fn().mockResolvedValueOnce(okv([spawn])).mockResolvedValue(okv([]));
     const onLayer = vi.fn();

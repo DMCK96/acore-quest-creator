@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
-  EMPTY_WORLD, NEW_POINT_REST, moveSpawn, revertRoute, revertSpawn, setRoute, worldStatements,
-  type Placement, type RoutePoint, type WorldSpawnEdit,
+  EMPTY_WORLD, NEW_POINT_REST, addSpawn, hasWorldChanges, isAdded, moveSpawn, revertRoute, revertSpawn, setRoute, worldStatements,
+  type Placement, type RoutePoint, type WorldAddedSpawn, type WorldSpawnEdit,
 } from '../../../src/core/world/layer';
 
 const at = (x: number, over: Partial<Placement> = {}): Placement => ({ x, y: 2, z: 3, orientation: 0.5, rotation: null, ...over });
@@ -114,5 +114,55 @@ describe('world layer: statements', () => {
 
   it('has nothing to write for an empty layer', () => {
     expect(worldStatements(EMPTY_WORLD)).toEqual({ apply: [], revert: [] });
+  });
+});
+
+describe('world layer: placed spawns', () => {
+  const look = { displayId: 3167, scale: 1, equipment: [0, 0, 0] as [number, number, number], preset: null };
+  const placedGuard: WorldAddedSpawn = { kind: 'creature', guid: 90001, entry: 1423, name: 'Stormwind Guard', map: 0, placement: at(7, { orientation: 1 }), look: { ...look, equipment: [1, 0, 0] } };
+  const placedTent: WorldAddedSpawn = { kind: 'gameobject', guid: 90002, entry: 2000, name: 'Tent', map: 0, placement: at(9, { orientation: 0, rotation: null }), look: { ...look, scale: 1.5 } };
+  const creatureColumns = { guid: '0', id: '0', id1: '0', map: '0', spawnMask: '1', phaseMask: '1', equipment_id: '0', position_x: '0', position_y: '0', position_z: '0', orientation: '0', spawntimesecs: '120', wander_distance: '0', MovementType: '0', Comment: null };
+  const objectColumns = { guid: '0', id: '0', map: '0', spawnMask: '1', phaseMask: '1', position_x: '0', position_y: '0', position_z: '0', orientation: '0', rotation0: '0', rotation1: '0', rotation2: '0', rotation3: '1', spawntimesecs: '0', animprogress: '0', state: '0', Comment: null };
+
+  it('counts as a change, and is told apart from a database spawn', () => {
+    const layer = addSpawn(EMPTY_WORLD, placedGuard);
+    expect(hasWorldChanges(layer)).toBe(true);
+    expect(hasWorldChanges(EMPTY_WORLD)).toBe(false);
+    expect([isAdded(layer, 'creature', 90001), isAdded(layer, 'gameobject', 90001), isAdded(layer, 'creature', 1)]).toEqual([true, false, false]);
+    expect(EMPTY_WORLD.added).toEqual([]);
+  });
+
+  it('moves where it stands without keeping an original, and is taken back by a revert', () => {
+    let layer = addSpawn(EMPTY_WORLD, placedGuard);
+    layer = moveSpawn(layer, { kind: 'creature', guid: 90001, entry: 1423, name: 'Stormwind Guard', map: 0, original: placedGuard.placement }, at(20, { orientation: 2 }));
+    expect(layer.spawns).toEqual([]);
+    expect(layer.added[0]!.placement).toEqual(at(20, { orientation: 2 }));
+    expect(revertSpawn(layer, 'creature', 90001).added).toEqual([]);
+  });
+
+  it('writes an NPC as a row of the database\'s own columns, whichever it calls its entry, and removes it by guid', () => {
+    const { apply, revert } = worldStatements(addSpawn(EMPTY_WORLD, placedGuard), undefined, { creature: creatureColumns });
+    expect(apply).toEqual([
+      { kind: 'delete', table: 'creature', key: { guid: '90001' } },
+      { kind: 'insert', table: 'creature', row: { ...creatureColumns, guid: '90001', id: '1423', id1: '1423', map: '0', equipment_id: '1', position_x: '7', position_y: '2', position_z: '3', orientation: '1', spawntimesecs: '300', Comment: 'ACQC 3D view' } },
+    ]);
+    expect(revert).toEqual([{ kind: 'delete', table: 'creature', key: { guid: '90001' } }]);
+    // A fork with `id` only has no `id1` written
+    const { id1: _id1, ...forked } = creatureColumns;
+    const row = (worldStatements(addSpawn(EMPTY_WORLD, placedGuard), undefined, { creature: forked }).apply[1] as { row: Record<string, string | null> }).row;
+    expect('id1' in row).toBe(false);
+    expect(row.id).toBe('1423');
+  });
+
+  it('writes an object turned about Z by its facing, or with the whole rotation the view gave it', () => {
+    const turned = addSpawn(EMPTY_WORLD, { ...placedTent, placement: at(9, { orientation: 1, rotation: null }) });
+    const row = (worldStatements(turned, undefined, { gameobject: objectColumns }).apply[1] as { row: Record<string, string | null> }).row;
+    expect(row).toMatchObject({ id: '2000', rotation0: '0', rotation1: '0', rotation2: '0.479426', rotation3: '0.877583', animprogress: '100', state: '1', spawntimesecs: '300' });
+    const tilted = addSpawn(EMPTY_WORLD, { ...placedTent, placement: at(9, { rotation: [0.5, 0, 0, 0.8660254] }) });
+    expect((worldStatements(tilted, undefined, { gameobject: objectColumns }).apply[1] as { row: Record<string, string | null> }).row).toMatchObject({ rotation0: '0.5', rotation3: '0.866025' });
+  });
+
+  it('says so when the columns of the table are not known, instead of writing a partial row', () => {
+    expect(() => worldStatements(addSpawn(EMPTY_WORLD, placedGuard))).toThrow(/creature table's columns/);
   });
 });

@@ -11,8 +11,8 @@ import type { Viewport } from '../../shared/ipc';
  */
 
 export const PROJECT_FORMAT = 'acore-quest-creator/project';
-/** 2 added the world layer; a version 1 file opens with an empty one. */
-export const PROJECT_VERSION = 2;
+/** 2 added the world layer (a version 1 file opens with an empty one); 3 added the spawns placed in it. */
+export const PROJECT_VERSION = 3;
 export const PROJECT_EXTENSION = 'aqc';
 export const DEFAULT_PROJECT_NAME = 'Untitled Project';
 export const DEFAULT_ID_RANGE = { start: 60000, end: 99999 } as const;
@@ -126,6 +126,10 @@ export function serializeProject(doc: ProjectDocument): string {
         kind: s.kind, guid: s.guid, entry: s.entry, name: s.name, map: s.map, original: placement(s.original), current: placement(s.current),
       })),
       routes: doc.world.routes.map((r) => ({ pathId: r.pathId, walkers: r.walkers, original: r.original.map(point), current: r.current.map(point) })),
+      added: doc.world.added.map((a) => ({
+        kind: a.kind, guid: a.guid, entry: a.entry, name: a.name, map: a.map, placement: placement(a.placement),
+        look: { displayId: a.look.displayId, scale: a.look.scale, equipment: a.look.equipment, preset: a.look.preset },
+      })),
     },
   };
   return `${JSON.stringify(file, null, 2)}\n`;
@@ -156,6 +160,19 @@ const placementSchema = z.object({
   rotation: z.tuple([z.number(), z.number(), z.number(), z.number()]).nullable(),
 });
 const pointSchema = z.object({ x: z.number(), y: z.number(), z: z.number(), rest: z.record(z.string(), z.string().nullable()) });
+const presetSchema = z.object({
+  race: z.number(),
+  sex: z.number(),
+  skin: z.number(),
+  face: z.number(),
+  hairStyle: z.number(),
+  hairColour: z.number(),
+  facialHair: z.number(),
+  items: z.object({
+    head: z.number(), shoulders: z.number(), body: z.number(), chest: z.number(), waist: z.number(), legs: z.number(),
+    feet: z.number(), wrists: z.number(), hands: z.number(), back: z.number(), tabard: z.number(),
+  }),
+});
 const worldSchema = z.object({
   spawns: z.array(
     z.object({
@@ -169,6 +186,25 @@ const worldSchema = z.object({
     }),
   ),
   routes: z.array(z.object({ pathId: z.number().int(), walkers: z.number().int(), original: z.array(pointSchema), current: z.array(pointSchema) })),
+  // Absent from a project saved before spawns could be placed
+  added: z
+    .array(
+      z.object({
+        kind: z.enum(['creature', 'gameobject']),
+        guid: z.number().int(),
+        entry: z.number().int(),
+        name: z.string(),
+        map: z.number().int(),
+        placement: placementSchema,
+        look: z.object({
+          displayId: z.number(),
+          scale: z.number(),
+          equipment: z.tuple([z.number(), z.number(), z.number()]),
+          preset: presetSchema.nullable(),
+        }),
+      }),
+    )
+    .default([]),
 });
 
 const fileSchema = z.object({

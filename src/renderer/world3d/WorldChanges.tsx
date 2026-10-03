@@ -26,7 +26,7 @@ export function WorldChanges({ api, onLayer, onClose }: { api: Api; onLayer(laye
 
   const revert = async (change: WorldChange): Promise<void> => {
     const result = await api.worldRevert(
-      change.type === 'spawn' ? { kind: 'spawn', spawnKind: change.kind, guid: change.guid } : { kind: 'route', pathId: change.pathId },
+      change.type === 'route' ? { kind: 'route', pathId: change.pathId } : { kind: 'spawn', spawnKind: change.kind, guid: change.guid },
     );
     if (!result.ok) {
       setError(result.error.message);
@@ -76,7 +76,7 @@ export function WorldChanges({ api, onLayer, onClose }: { api: Api; onLayer(laye
             </thead>
             <tbody>
               {changes.map((change) => (
-                <ChangeRow key={change.type === 'spawn' ? `${change.kind}:${change.guid}` : `route:${change.pathId}`} change={change} onRevert={() => void revert(change)} />
+                <ChangeRow key={change.type === 'route' ? `route:${change.pathId}` : `${change.type}:${change.kind}:${change.guid}`} change={change} onRevert={() => void revert(change)} />
               ))}
             </tbody>
           </table>
@@ -106,7 +106,26 @@ const where = (p: Placement): string => `${p.x.toFixed(2)}, ${p.y.toFixed(2)}, $
 const points = (route: readonly RoutePoint[]): string => `${route.length} ${route.length === 1 ? 'point' : 'points'}`;
 
 function ChangeRow({ change, onRevert }: { change: WorldChange; onRevert(): void }): React.JSX.Element {
-  const drift = change.drifted && <span className="world-changes__drift">Changed in the database since</span>;
+  const drift = change.drifted && (
+    <span className="world-changes__drift">{change.type === 'added' ? 'The database has a spawn with this id now' : 'Changed in the database since'}</span>
+  );
+  if (change.type === 'added') {
+    const name = change.name || `${change.kind === 'creature' ? 'NPC' : 'Object'} ${change.entry}`;
+    return (
+      <tr>
+        <td>
+          {name} · {change.kind === 'creature' ? 'NPC' : 'Object'} {change.entry} · new spawn {change.guid} {drift}
+        </td>
+        <td>Not placed yet</td>
+        <td>{where(change.placement)}</td>
+        <td>
+          <button type="button" className="btn" aria-label={`Remove ${name}`} onClick={onRevert}>
+            Remove
+          </button>
+        </td>
+      </tr>
+    );
+  }
   if (change.type === 'spawn') {
     const name = change.name || `${change.kind === 'creature' ? 'NPC' : 'Object'} ${change.entry}`;
     return (

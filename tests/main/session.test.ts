@@ -110,7 +110,7 @@ describe('ProjectSession', () => {
 
 
 describe('ProjectSession: the world layer', () => {
-  const layer = { spawns: [], routes: [{ pathId: 801, walkers: 1, original: [], current: [{ x: 1, y: 2, z: 3, rest: {} }] }] };
+  const layer = { spawns: [], routes: [{ pathId: 801, walkers: 1, original: [], current: [{ x: 1, y: 2, z: 3, rest: {} }] }], added: [] };
 
   it('starts empty, and a put is a change that toDocument and load carry', () => {
     const s = fresh();

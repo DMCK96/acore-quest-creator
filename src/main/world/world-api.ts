@@ -1,7 +1,8 @@
 import type { RawRow, SchemaInfo } from '../../core/db/types';
 import type { WorldDb } from '../../core/db/world-db';
 import { spawnEntryColumn } from '../../core/db/spawns';
-import type { Placement, RoutePoint, WorldRouteEdit, WorldSpawnEdit, WorldSpawnKind } from '../../core/world/layer';
+import { pickPreset } from '../../core/db/view-spawns';
+import type { Placement, RoutePoint, WorldAddedSpawn, WorldLook, WorldRouteEdit, WorldSpawnEdit, WorldSpawnKind } from '../../core/world/layer';
 
 /**
  * What the world layer reads from the world database: a spawn's placement and a route's points as
@@ -44,6 +45,36 @@ export async function readPlacement(
   const template = kind === 'creature' ? 'creature_template' : 'gameobject_template';
   const [named] = await db.selectRows(template, { entry: String(entry) });
   return { entry, name: named?.name ?? '', map: num(row.map), placement: placementOf(kind, row) };
+}
+
+/**
+ * What an existing NPC or object looks like, as the 3D view draws it: its name, first model (display
+ * and scale) and, for an NPC, the weapons of its first equipment row and the preset that dresses it.
+ * Null when the database has no such template.
+ */
+export async function readTemplateLook(db: WorldDb, kind: WorldSpawnKind, entry: number): Promise<{ name: string; look: WorldLook } | null> {
+  const key = { entry: String(entry) };
+  if (kind === 'gameobject') {
+    const [row] = await db.selectRows('gameobject_template', key);
+    return row ? { name: row.name ?? '', look: { displayId: num(row.displayId), scale: num(row.size, 1) || 1, equipment: [0, 0, 0], preset: null } } : null;
+  }
+  const [row] = await db.selectRows('creature_template', key);
+  if (!row) return null;
+  // The first model, as the view draws a spawn of it; a database before `creature_template_model` keeps it in `modelid1`
+  const models = (await hasTable(db, 'creature_template_model')) ? await db.selectRows('creature_template_model', { CreatureID: String(entry) }) : [];
+  const model = [...models].sort((a, b) => num(a.Idx) - num(b.Idx))[0];
+  const displayId = model ? num(model.CreatureDisplayID) : num(row.modelid1);
+  const scale = (model ? num(model.DisplayScale, 1) : num(row.scale, 1)) || 1;
+  // A spawn is written holding its template's first equipment row (equipment_id 1), as a quest's export does
+  const [held] = (await hasTable(db, 'creature_equip_template')) ? await db.selectRows('creature_equip_template', { CreatureID: String(entry), ID: '1' }) : [];
+  const equipment: [number, number, number] = held ? [num(held.ItemID1), num(held.ItemID2), num(held.ItemID3)] : [0, 0, 0];
+  const presets = (await hasTable(db, 'creature_display_preset')) ? await db.selectRows('creature_display_preset', key) : [];
+  return { name: row.name ?? '', look: { displayId, scale, equipment, preset: presets.length > 0 ? pickPreset(presets, entry, displayId) : null } };
+}
+
+/** Whether the database now has a spawn with a placed spawn's id (the patch would then replace it) */
+export async function addedDrifted(db: WorldDb, spawn: WorldAddedSpawn): Promise<boolean> {
+  return (await readPlacement(db, spawn.kind, spawn.guid)) !== null;
 }
 
 /** Every `waypoint_data` column a point keeps as it is; the rest are what the view edits */

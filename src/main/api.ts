@@ -34,8 +34,8 @@ import { diffSchema, hasBlockingDrift } from '../core/schema/diff';
 import { loadSchema } from '../core/schema/load';
 import { refCheckerFor, validateQuest, type Issue, type RefChecker } from '../core/validate/validate';
 import { TOOL_VERSION } from '../core/version';
-import { moveSpawn, revertRoute, revertSpawn, setRoute, worldStatements, type RoutePoint, type WorldLayer } from '../core/world/layer';
-import { countWalkers, readPlacement, readRoute, routeDrifted, spawnDrifted, worldSchema } from './world/world-api';
+import { addSpawn, hasWorldChanges, isAdded, moveSpawn, revertRoute, revertSpawn, setRoute, worldStatements, type RoutePoint, type SpawnDefaults, type WorldLayer } from '../core/world/layer';
+import { addedDrifted, countWalkers, readPlacement, readRoute, readTemplateLook, routeDrifted, spawnDrifted, worldSchema } from './world/world-api';
 import type {
   Api,
   ApiError,
@@ -1043,6 +1043,8 @@ export function createApi(deps: ApiDeps): Api {
 
     allocateIds: (kind, count) =>
       run(async () => {
+        // Spawns placed in the 3D view are not in the database yet, but their ids are taken
+        const placedGuids = (spawnKind: 'creature' | 'gameobject'): number[] => deps.session.world.get().added.filter((a) => a.kind === spawnKind).map((a) => a.guid);
         const live = connected();
         const [table, column] = {
           creature: ['creature_template', 'entry'],
@@ -1063,9 +1065,9 @@ export function createApi(deps: ApiDeps): Api {
           kind === 'creature' ? npcs.map((n) => n.entry)
           : kind === 'gameobject' ? objects.map((o) => o.entry)
           : kind === 'item' ? items.map((i) => i.entry)
-          : kind === 'creatureSpawn' ? npcs.flatMap((n) => n.spawns.map((s) => s.guid))
+          : kind === 'creatureSpawn' ? [...npcs.flatMap((n) => n.spawns.map((s) => s.guid)), ...placedGuids('creature')]
           : kind === 'page' ? [...objects, ...items].flatMap((o) => o.pages.map((p) => p.id))
-          : objects.flatMap((o) => o.spawns.map((s) => s.guid));
+          : [...objects.flatMap((o) => o.spawns.map((s) => s.guid)), ...placedGuids('gameobject')];
         const base = Math.max(dbMax, ...used, 0);
         return Array.from({ length: count }, (_, i) => base + i + 1);
       }),
@@ -1564,9 +1566,37 @@ export function createApi(deps: ApiDeps): Api {
 
     worldLayer: () => run(async () => deps.session.world.get()),
 
+    worldAddSpawn: (kind, entry, map, at) =>
+      run(async () => {
+        const db = connected().db;
+        const template = await readTemplateLook(db, kind, entry);
+        if (!template) throw fail('BAD_REQUEST', `${kind === 'creature' ? 'NPC' : 'Object'} ${entry} is not in the database.`);
+        let dbMax = 0;
+        try {
+          dbMax = (await db.selectMax?.(kind, 'guid')) ?? 0;
+        } catch {
+          dbMax = 0;
+        }
+        // Nothing is awaited from here to the layer being put back, so two placements in quick
+        // succession cannot be given the same id
+        const { npcs, objects } = projectEntities();
+        const quests = (kind === 'creature' ? npcs : objects).flatMap((e) => e.spawns.map((s) => s.guid));
+        const layer = deps.session.world.get();
+        const guid = Math.max(dbMax, ...quests, ...layer.added.filter((a) => a.kind === kind).map((a) => a.guid), 0) + 1;
+        const next = addSpawn(layer, { kind, guid, entry, name: template.name, map, placement: at, look: template.look });
+        deps.session.world.put(next);
+        return { layer: next, guid };
+      }),
+
     worldMoveSpawn: (kind, guid, to) =>
       run(async () => {
         const db = connected().db;
+        // A spawn placed in the view is in the layer only: it just stands where it is put
+        if (isAdded(deps.session.world.get(), kind, guid)) {
+          const next = moveSpawn(deps.session.world.get(), { kind, guid, entry: 0, name: '', map: 0, original: to }, to);
+          deps.session.world.put(next);
+          return next;
+        }
         const knownIn = (layer: WorldLayer) => layer.spawns.find((s) => s.kind === kind && s.guid === guid);
         // The database is read first and the layer after it, with nothing awaited before the layer is
         // put back, so an edit to another spawn made meanwhile is kept
@@ -1616,7 +1646,7 @@ export function createApi(deps: ApiDeps): Api {
       run(async () => {
         const layer = deps.session.world.get();
         const next = target.kind === 'spawn' ? revertSpawn(layer, target.spawnKind, target.guid) : revertRoute(layer, target.pathId);
-        if (next.spawns.length !== layer.spawns.length || next.routes.length !== layer.routes.length) deps.session.world.put(next);
+        if (next.spawns.length !== layer.spawns.length || next.routes.length !== layer.routes.length || next.added.length !== layer.added.length) deps.session.world.put(next);
         return next;
       }),
 
@@ -1626,6 +1656,7 @@ export function createApi(deps: ApiDeps): Api {
         const layer = deps.session.world.get();
         return [
           ...(await Promise.all(layer.spawns.map(async (s) => ({ ...s, type: 'spawn' as const, drifted: await spawnDrifted(db, s) })))),
+          ...(await Promise.all(layer.added.map(async (a) => ({ ...a, type: 'added' as const, drifted: await addedDrifted(db, a) })))),
           ...(await Promise.all(layer.routes.map(async (r) => ({ ...r, type: 'route' as const, drifted: await routeDrifted(db, r) })))),
         ];
       }),
@@ -1634,9 +1665,14 @@ export function createApi(deps: ApiDeps): Api {
       run(async () => {
         const live = connected();
         const layer: WorldLayer = deps.session.world.get();
-        if (layer.spawns.length === 0 && layer.routes.length === 0) throw fail('BAD_REQUEST', 'There are no world changes to export.');
+        if (!hasWorldChanges(layer)) throw fail('BAD_REQUEST', 'There are no world changes to export.');
         const schema = await worldSchema(live.db, live.schema.hash);
-        const { apply, revert } = worldStatements(layer, defaultColumnValues('waypoint_data', schema));
+        // The rows of placed spawns are made of the database's own columns, so a fork's extra ones are filled
+        const spawnDefaults: SpawnDefaults = {};
+        for (const kind of ['creature', 'gameobject'] as const) {
+          if (layer.added.some((a) => a.kind === kind)) spawnDefaults[kind] = defaultColumnValues(kind, schema);
+        }
+        const { apply, revert } = worldStatements(layer, defaultColumnValues('waypoint_data', schema), spawnDefaults);
         const date = patchDate(deps.now());
         const sql = renderPatch(apply, schema, { toolVersion: TOOL_VERSION, date, label: 'World changes' });
         const revertSql = renderPatch(revert, schema, { toolVersion: TOOL_VERSION, date, label: 'World changes: revert' });

@@ -4,12 +4,16 @@ import type { EntityHit, QuestSummary, SearchKind } from '@core/db/world-db';
 import type { SpellFacts } from '@core/game/spells';
 import type { MapBox, SpawnDot } from '@core/db/spawns';
 import type { ViewSpawns } from '@core/db/view-spawns';
-import type { Placement, RoutePoint, WorldLayer, WorldRouteEdit, WorldSpawnEdit, WorldSpawnKind } from '@core/world/layer';
+import type { Placement, RoutePoint, WorldAddedSpawn, WorldLayer, WorldRouteEdit, WorldSpawnEdit, WorldSpawnKind } from '@core/world/layer';
 
-export type { Placement, RoutePoint, WorldLayer, WorldRouteEdit, WorldSpawnEdit, WorldSpawnKind };
+export type { Placement, RoutePoint, WorldAddedSpawn, WorldLayer, WorldRouteEdit, WorldSpawnEdit, WorldSpawnKind };
 
 /** One world layer entry as the World changes list shows it, and whether the database has moved off its original since. */
-export type WorldChange = (WorldSpawnEdit & { type: 'spawn'; drifted: boolean }) | (WorldRouteEdit & { type: 'route'; drifted: boolean });
+export type WorldChange =
+  | (WorldSpawnEdit & { type: 'spawn'; drifted: boolean })
+  | (WorldRouteEdit & { type: 'route'; drifted: boolean })
+  /** A spawn placed in the view; `drifted` when the database now has a spawn with its id */
+  | (WorldAddedSpawn & { type: 'added'; drifted: boolean });
 
 /** What a world revert takes back: one spawn, or one route. */
 export type WorldRevertTarget = { kind: 'spawn'; spawnKind: WorldSpawnKind; guid: number } | { kind: 'route'; pathId: number };
@@ -382,6 +386,8 @@ export interface Api {
   worldLayer(): Promise<Result<WorldLayer>>;
   /** Moves or turns an existing spawn in the world layer; its original is read from the database at the first edit. */
   worldMoveSpawn(kind: WorldSpawnKind, guid: number, to: Placement): Promise<Result<WorldLayer>>;
+  /** Places a new spawn of an existing NPC or object on a map: it gets the next free spawn id, and is written by the world patch. */
+  worldAddSpawn(kind: WorldSpawnKind, entry: number, map: number, at: Placement): Promise<Result<{ layer: WorldLayer; guid: number }>>;
   /** A route's points as the layer has them (else the database), and how many spawns walk it. */
   worldRoute(pathId: number): Promise<Result<{ points: RoutePoint[]; walkers: number }>>;
   /** Sets an existing route's points in the world layer. */
@@ -547,6 +553,7 @@ const REQUEST_SCHEMAS: Record<keyof Api, z.ZodType<unknown[]>> = {
   viewSpawns: z.tuple([z.number().int(), z.object({ minX: z.number().finite(), maxX: z.number().finite(), minY: z.number().finite(), maxY: z.number().finite() })]),
   worldLayer: z.tuple([]),
   worldMoveSpawn: z.tuple([worldKindArg, z.number().int(), placementArg]),
+  worldAddSpawn: z.tuple([worldKindArg, z.number().int().min(1), z.number().int().min(0), placementArg]),
   worldRoute: z.tuple([z.number().int().min(1)]),
   worldSetRoute: z.tuple([z.number().int().min(1), z.array(routePointArg)]),
   worldRevert: z.tuple([z.discriminatedUnion('kind', [

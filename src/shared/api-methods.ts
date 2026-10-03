@@ -42,6 +42,7 @@ export const API_METHODS = [
   'viewSpawns',
   'worldLayer',
   'worldMoveSpawn',
+  'worldAddSpawn',
   'worldRoute',
   'worldSetRoute',
   'worldRevert',

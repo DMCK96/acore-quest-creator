@@ -67,6 +67,8 @@ export interface ViewCreature {
   equipment: [number, number, number];
   /** One of the open project's own (not yet exported) */
   own: boolean;
+  /** One placed in the 3D view, kept in the world layer until it is exported */
+  added?: boolean;
   event: ViewEvent | null;
   /** The display preset that dresses it, when the database has one for it */
   preset: ViewPreset | null;
@@ -85,6 +87,8 @@ export interface ViewObject {
   displayId: number;
   scale: number;
   own: boolean;
+  /** One placed in the 3D view, kept in the world layer until it is exported */
+  added?: boolean;
   event: ViewEvent | null;
 }
 

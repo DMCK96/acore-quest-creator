@@ -276,6 +276,7 @@ describe('the world layer in the view', () => {
       { kind: 'gameobject' as const, guid: 3, entry: 2, name: 'o', map: 0, original: { x: 0, y: 0, z: 0, orientation: 0, rotation: [0, 0, 0, 1] as [number, number, number, number] }, current: { x: 40, y: 0, z: 0, orientation: 0, rotation: [0, 0, 1, 0] as [number, number, number, number] } },
     ],
     routes: [{ pathId: 77, walkers: 1, original: [], current: [{ x: 5, y: 0, z: 0, rest: { delay: '0' } }, { x: 6, y: 0, z: 0, rest: {} }] }],
+    added: [],
   };
 
   it('draws moved spawns where the layer has them, and edited routes as edited', async () => {
@@ -286,6 +287,43 @@ describe('the world layer in the view', () => {
     expect(byGuid('creatures', 1).position.x).toBe(30);
     expect(byGuid('objects', 3).quaternion.toArray()).toEqual([0, 0, 1, 0]);
     expect(m.route(2)).toMatchObject({ pathId: 77, own: false, points: [{ x: 5, carry: { delay: '0' } }, { x: 6, carry: {} }] });
+  });
+
+  describe('spawns placed in the view', () => {
+    const look = { displayId: 1, scale: 1, equipment: [0, 0, 0] as [number, number, number], preset: null };
+    const placed: WorldLayer = {
+      spawns: [],
+      routes: [],
+      added: [
+        { kind: 'creature', guid: 90001, entry: 5, name: 'Placed', map: 0, placement: { x: 0.5, y: 0.5, z: 0, orientation: 1, rotation: null }, look },
+        { kind: 'gameobject', guid: 90002, entry: 6, name: 'Placed object', map: 0, placement: { x: 0.2, y: 0.2, z: 0, orientation: Math.PI, rotation: null }, look: { ...look, displayId: 2, scale: 2 } },
+        { kind: 'creature', guid: 90003, entry: 5, name: 'Elsewhere', map: 1, placement: { x: 0.5, y: 0.5, z: 0, orientation: 0, rotation: null }, look },
+        { kind: 'creature', guid: 90004, entry: 5, name: 'Out of the area', map: 0, placement: { x: 500, y: 0.5, z: 0, orientation: 0, rotation: null }, look },
+      ],
+    };
+
+    it('draws them in the area that holds them, as their template looked, and tags them as placed', async () => {
+      const m = manager({ creatures: [creature(1, 1)], objects: [], capped: { creatures: false, objects: false } });
+      const group = (await m.loadArea(1, 0, box))!;
+      await m.setWorldLayer(placed);
+      const creatures = group.getObjectByName('creatures')!.children;
+      expect(creatures.map((c) => [c.userData.spawn.guid, c.userData.spawn.added])).toEqual([[1, false], [90001, true]]);
+      expect(creatures[1]!.userData.spawn).toMatchObject({ kind: 'creature', entry: 5, name: 'Placed', own: false });
+      const [object] = group.getObjectByName('objects')!.children;
+      expect(object!.userData.spawn).toMatchObject({ guid: 90002, added: true });
+      // An object turned a half turn about Z by its facing, at its template's size
+      expect(object!.quaternion.z).toBeCloseTo(1);
+      expect(object!.scale.x).toBe(2);
+    });
+
+    it('takes them out again when the layer no longer has them', async () => {
+      const m = manager({ creatures: [creature(1, 1)], objects: [], capped: { creatures: false, objects: false } });
+      const group = (await m.loadArea(1, 0, box))!;
+      await m.setWorldLayer(placed);
+      await m.setWorldLayer({ spawns: [], routes: [], added: [] });
+      expect(group.getObjectByName('creatures')!.children.map((c) => c.userData.spawn.guid)).toEqual([1]);
+      expect(group.getObjectByName('objects')!.children).toHaveLength(0);
+    });
   });
 
   it('picks a route point of the selected NPC by its ball', async () => {
