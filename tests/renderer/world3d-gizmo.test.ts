@@ -13,6 +13,15 @@ describe('a placed spawn as the gizmo leaves it', () => {
     expect(p.orientation).toBeCloseTo(1.25, 6);
   });
 
+  it('reads an NPC drawn lifted onto the ground at the height it is stored at, so turning it does not change its Z', () => {
+    const o = new THREE.Object3D();
+    o.position.set(1, 2, 3.4);
+    o.userData.lift = 0.4;
+    expect(placementOf(o, 'creature').z).toBeCloseTo(3);
+    o.userData.lift = 0;
+    expect(placementOf(o, 'creature').z).toBeCloseTo(3.4);
+  });
+
   it('gives an object its whole rotation and the facing it turns to', () => {
     const o = new THREE.Object3D();
     o.quaternion.setFromEuler(new THREE.Euler(0.3, 0, 2, 'ZYX'));

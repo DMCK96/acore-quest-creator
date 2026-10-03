@@ -44,6 +44,11 @@ type SpawnManagerOptions = {
   bodyTexture?(body: BodyTexture): Promise<string | null>;
   /** The time in milliseconds (for when to ask again after a failure); Date.now by default */
   now?: () => number;
+  /**
+   * The height of the drawn ground (terrain or a building's floor) nearest below `fromZ`, no further
+   * down than `distance`; null when there is none (or the terrain there has not loaded yet)
+   */
+  groundBelow?(x: number, y: number, fromZ: number, distance: number): number | null;
 };
 
 /** Whether a kind was capped, why none could be read, and how many areas are still loading */
@@ -72,6 +77,18 @@ const SHIELD_POINT = 0;
 
 /** How long to wait before asking again for an area whose answer failed */
 const RETRY_MS = 30000;
+
+/**
+ * A database Z is where the server put an NPC, and the server snaps NPCs to the real floor as they
+ * spawn, so a stored Z is often a little below the drawn ground. An NPC is drawn lifted onto the
+ * ground when that is within this many yards above its Z; further than that is taken as meant.
+ */
+const GROUND_REACH = 1.5;
+/** Where the ground is not there yet (its terrain still loading), asked again this often, this many times */
+const GROUND_RETRY_MS = 2000;
+const GROUND_TRIES = 4;
+/** NPCs grounded in one frame at most, so a crowd coming into range does not stall it */
+const GROUNDS_PER_FRAME = 16;
 
 /**
  * Each geometry's bounds from its own vertices, kept once worked out. A model's stored bounds take in
@@ -119,6 +136,7 @@ class SpawnManager {
   #own: ViewSpawns = { creatures: [], objects: [], capped: { creatures: false, objects: false } };
   #warned = new Set<string>();
   #now: () => number;
+  #groundBelow: SpawnManagerOptions['groundBelow'];
   /** Areas whose answer failed, and when they may be asked for again */
   #failed = new globalThis.Map<number, number>();
 
@@ -140,6 +158,7 @@ class SpawnManager {
     this.#bodyTexture = options.bodyTexture;
     this.#source = options.source;
     this.#now = options.now ?? Date.now;
+    this.#groundBelow = options.groundBelow;
   }
 
   /** Areas asked for and not yet drawn (their spawns on their way, or their models loading) */
@@ -413,10 +432,12 @@ class SpawnManager {
 
   /** Draws only the spawns within the draw distance of the camera; a hidden model stops animating */
   cull(cameraPosition: THREE.Vector3) {
+    let grounding = GROUNDS_PER_FRAME;
     for (const group of this.#areas.values()) {
       for (const name of ['creatures', 'objects']) {
         for (const spawn of group.getObjectByName(name)?.children ?? []) {
           const near = spawn.position.distanceTo(cameraPosition) <= SPAWN_DRAW_DISTANCE;
+          if (near && name === 'creatures' && grounding > 0 && this.#ground(spawn)) grounding -= 1;
           if (typeof spawn.show === 'function') {
             if (near) spawn.show();
             else spawn.hide();
@@ -431,6 +452,33 @@ class SpawnManager {
         shown.visible = shown.userData.guid === selected;
       }
     }
+  }
+
+  /**
+   * Lifts an NPC that stands below the drawn ground onto it, once the ground is there to be found
+   * (a few tries, for terrain still loading). Drawing only: the spawn's own position, which is what
+   * the card shows and an edit writes, is not touched (see `userData.lift`). True when it asked.
+   */
+  #ground(spawn: THREE.Object3D): boolean {
+    const data = spawn.userData;
+    if (!this.#groundBelow || data.grounded || !data.spawn || spawn.name === 'marker') return false;
+    const now = this.#now();
+    if (data.groundAfter !== undefined && now < data.groundAfter) return false;
+    const { x, y, z } = data.spawn.position;
+    const found = this.#groundBelow(x, y, z + GROUND_REACH, GROUND_REACH);
+    data.tries = (data.tries ?? 0) + 1;
+    if (found === null && data.tries < GROUND_TRIES) {
+      data.groundAfter = now + GROUND_RETRY_MS;
+      return true;
+    }
+    data.grounded = true;
+    const lift = found === null ? 0 : Math.min(Math.max(found - z, 0), GROUND_REACH);
+    if (lift > 0.001) {
+      data.lift = lift;
+      spawn.position.z = z + lift;
+      spawn.updateMatrixWorld(true);
+    }
+    return true;
   }
 
   /** Models animate through the shared model manager; nothing of the spawns' own moves yet */

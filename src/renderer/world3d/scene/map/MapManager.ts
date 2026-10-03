@@ -41,6 +41,8 @@ type MapManagerOptions = {
   dbManager?: DbManager;
   soundManager?: SoundManager;
   viewDistance?: number;
+  /** The drawn ground nearest below a point, for standing NPCs on it; see `SpawnManager` */
+  groundBelow?(x: number, y: number, fromZ: number, distance: number): number | null;
 };
 
 class MapManager extends EventTarget {
@@ -158,6 +160,7 @@ class MapManager extends EventTarget {
       createBuilding: (path) => this.#wmoManager.createInstance(path),
       source: null,
       bodyTexture: (body) => characterTexture.build(body),
+      groundBelow: options.groundBelow,
     });
 
     this.#root = new THREE.Group();

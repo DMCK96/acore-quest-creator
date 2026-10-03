@@ -15,7 +15,10 @@ const TWO_PI = Math.PI * 2;
 /** How far above a point the ground is looked for, so a hill under it is still found */
 const GROUND_PROBE = 50;
 
-/** Where an object stands and how it is turned, as a spawn stores it: facing between 0 and 2π */
+/**
+ * Where an object stands and how it is turned, as a spawn stores it: facing between 0 and 2π. An NPC
+ * drawn lifted onto the ground (`userData.lift`) is read at the height it is stored at.
+ */
 export function placementOf(object: THREE.Object3D, kind: 'creature' | 'object'): Placement {
   const facing = X.clone().applyQuaternion(object.quaternion);
   const yaw = Math.atan2(facing.y, facing.x);
@@ -23,7 +26,7 @@ export function placementOf(object: THREE.Object3D, kind: 'creature' | 'object')
   return {
     x: object.position.x,
     y: object.position.y,
-    z: object.position.z,
+    z: object.position.z - (object.userData.lift ?? 0),
     orientation: yaw < 0 ? yaw + TWO_PI : yaw,
     rotation: kind === 'object' ? [q.x, q.y, q.z, q.w] : null,
   };

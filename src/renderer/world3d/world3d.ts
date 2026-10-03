@@ -249,7 +249,14 @@ export function createWorld3D(options: World3DOptions): World3D {
     if (drawn) spawnBounds(drawn, outline.box);
   };
   const { textures, databases, characterTexture } = sharedManagers();
-  const manager = new MapManager({ host: HOST, textureManager: textures, dbManager: databases, characterTexture, soundManager: SILENT });
+  // The drawn ground a short way below a point, for standing NPCs on it
+  const down = new THREE.Raycaster();
+  const groundBelow = (x: number, y: number, fromZ: number, distance: number): number | null => {
+    down.set(new THREE.Vector3(x, y, fromZ), new THREE.Vector3(0, 0, -1));
+    down.far = distance;
+    return down.intersectObjects(solid(), true)[0]?.point.z ?? null;
+  };
+  const manager = new MapManager({ host: HOST, textureManager: textures, dbManager: databases, characterTexture, soundManager: SILENT, groundBelow });
   manager.addEventListener('area:change', (event) => {
     const name = (event as CustomEvent<{ areaName?: string }>).detail.areaName;
     if (name) options.onArea?.(name);

@@ -193,6 +193,9 @@ export class Editor {
     this.#before = null;
     if (!selected || !target || !before) return;
 
+    // A move puts the NPC where it was dragged to, so what it was lifted onto the ground by no longer applies
+    if (this.#mode === 'move') target.userData.lift = 0;
+
     // Dropped along the ground: onto the server's floor nearest where it was dragged, when it has one
     const { x, y } = target.position;
     let z = target.position.z;

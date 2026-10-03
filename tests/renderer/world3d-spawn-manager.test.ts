@@ -91,6 +91,83 @@ describe('how far spawns are drawn', () => {
   });
 });
 
+describe('standing NPCs on the drawn ground', () => {
+  const spawns = (creatures: object[], objects: object[] = []) => ({ creatures, objects, capped: { creatures: false, objects: false } });
+  const eye = new THREE.Vector3(0, 0, 0);
+
+  it('lifts an NPC that stands below the ground onto it, and leaves its own Z alone', async () => {
+    const calls: number[][] = [];
+    const m = manager(spawns([creature(1, 1, { z: 10 })]), { groundBelow: (x, y, from, distance) => (calls.push([x, y, from, distance]), 10.4) });
+    const group = (await m.loadArea(1, 0, box))!;
+    m.cull(eye);
+    const [npc] = group.getObjectByName('creatures')!.children;
+    expect(npc!.position.z).toBeCloseTo(10.4);
+    expect(npc!.userData.lift).toBeCloseTo(0.4);
+    expect(npc!.userData.spawn.position.z).toBe(10);
+    // Looked for from a yard and a half above its Z, no further down than that
+    expect(calls).toEqual([[0, 0, 11.5, 1.5]]);
+    // Once is enough
+    m.cull(eye);
+    expect(calls).toHaveLength(1);
+  });
+
+  it('leaves an NPC alone that stands on or above the ground, or whose ground is further off than it can be lifted', async () => {
+    const above = manager(spawns([creature(1, 1, { z: 10 })]), { groundBelow: () => 9.9 });
+    const aboveGroup = (await above.loadArea(1, 0, box))!;
+    above.cull(eye);
+    expect(aboveGroup.getObjectByName('creatures')!.children[0]!.position.z).toBe(10);
+    // A ground reported higher than the probe could have reached is still only lifted as far as the limit
+    const far = manager(spawns([creature(1, 1, { z: 10 })]), { groundBelow: () => 14 });
+    const farGroup = (await far.loadArea(1, 0, box))!;
+    far.cull(eye);
+    expect(farGroup.getObjectByName('creatures')!.children[0]!.position.z).toBeCloseTo(11.5);
+  });
+
+  it('asks again a few times when the terrain is not there yet, then gives up and leaves the NPC', async () => {
+    let clock = 0;
+    let ground: number | null = null;
+    const asked = vi.fn(() => ground);
+    const m = manager(spawns([creature(1, 1, { z: 10 })]), { groundBelow: asked, now: () => clock });
+    const group = (await m.loadArea(1, 0, box))!;
+    const npc = () => group.getObjectByName('creatures')!.children[0]!;
+    m.cull(eye);
+    // Not again before the wait is up
+    m.cull(eye);
+    expect(asked).toHaveBeenCalledTimes(1);
+    clock = 2500;
+    ground = 10.3;
+    m.cull(eye);
+    expect(npc().position.z).toBeCloseTo(10.3);
+
+    // An NPC with nothing under it (flying) is asked about only a few times
+    const nothing = vi.fn(() => null);
+    const flying = manager(spawns([creature(2, 1, { z: 10 })]), { groundBelow: nothing, now: () => clock });
+    await flying.loadArea(1, 0, box);
+    for (let i = 0; i < 10; i += 1) {
+      clock += 2500;
+      flying.cull(eye);
+    }
+    expect(nothing).toHaveBeenCalledTimes(4);
+  });
+
+  it('does not lift objects, markers, or NPCs out of range', async () => {
+    const asked = vi.fn(() => 12);
+    const m = manager(spawns([creature(1, 0, { z: 10 }), creature(2, 1, { z: 10, x: 400 })], [object(3, 2, { z: 10 })]), { groundBelow: asked });
+    const group = (await m.loadArea(1, 0, box))!;
+    m.cull(eye);
+    expect(asked).not.toHaveBeenCalled();
+    expect(group.getObjectByName('objects')!.children[0]!.position.z).toBe(10);
+  });
+
+  it('draws a spawn at the Z the layer gives it, lifted from there, when it was moved', async () => {
+    const m = manager(spawns([creature(1, 1, { z: 10 })]), { groundBelow: (_x, _y, from) => from - 1.5 + 0.2 });
+    const group = (await m.loadArea(1, 0, box))!;
+    await m.setWorldLayer({ spawns: [{ kind: 'creature', guid: 1, entry: 1, name: 'n', map: 0, original: { x: 0, y: 0, z: 10, orientation: 0, rotation: null }, current: { x: 0, y: 0, z: 20, orientation: 0, rotation: null } }], routes: [], added: [] });
+    m.cull(eye);
+    expect(group.getObjectByName('creatures')!.children[0]!.position.z).toBeCloseTo(20.2);
+  });
+});
+
 describe('which routes are drawn', () => {
   it('draws only the route and wander circle of the selected NPC, however far away it is', async () => {
     const m = manager({
