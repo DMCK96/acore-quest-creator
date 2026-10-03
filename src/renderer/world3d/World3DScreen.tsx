@@ -1,6 +1,8 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { WORLD_MAPS, worldMapById } from '@core/map/world-maps';
 import { World3DView } from './World3DView';
+import { TeleportDialog } from './TeleportDialog';
+import type { TeleportSpot } from '@core/map/teleports';
 import './world3d.css';
 
 /**
@@ -21,6 +23,15 @@ export function World3DScreen({ hasClient, onClose }: { hasClient: boolean; onCl
     setMapId(id);
     goTo(worldMapById(id)!.start);
   };
+  const [teleporting, setTeleporting] = useState(false);
+  const teleportingRef = useRef(teleporting);
+  teleportingRef.current = teleporting;
+  /** A place from the teleport list: its map, and the camera on it */
+  const teleport = (spot: TeleportSpot): void => {
+    setTeleporting(false);
+    if (spot.map !== mapId) setMapId(spot.map);
+    goTo({ x: spot.x, y: spot.y, z: spot.z });
+  };
   const parsed = { x: Number(typed.x), y: Number(typed.y), z: Number(typed.z) };
   const valid = [typed.x, typed.y, typed.z].every((v) => v.trim() !== '') && Object.values(parsed).every(Number.isFinite);
 
@@ -28,6 +39,12 @@ export function World3DScreen({ hasClient, onClose }: { hasClient: boolean; onCl
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent): void => {
       if (e.key !== 'Escape') return;
+      // The teleport panel sits over the screen: Esc closes it first
+      if (teleportingRef.current) {
+        e.stopPropagation();
+        setTeleporting(false);
+        return;
+      }
       // While something is selected in the view, Esc clears that first
       if (e.target instanceof HTMLElement && e.target.dataset.selection === 'on') return;
       e.stopPropagation();
@@ -72,6 +89,9 @@ export function World3DScreen({ hasClient, onClose }: { hasClient: boolean; onCl
             Go
           </button>
         </form>
+        <button type="button" className="btn" onClick={() => setTeleporting(true)}>
+          Teleport
+        </button>
         <button type="button" className="btn world3d-screen__close" onClick={onClose}>
           Close
         </button>
@@ -79,6 +99,7 @@ export function World3DScreen({ hasClient, onClose }: { hasClient: boolean; onCl
       <div className="world3d-screen__body">
         <World3DView map={mapId} start={at} hasClient={hasClient} />
       </div>
+      {teleporting && <TeleportDialog onPick={teleport} onClose={() => setTeleporting(false)} />}
     </div>
   );
 }

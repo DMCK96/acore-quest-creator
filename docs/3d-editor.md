@@ -77,6 +77,8 @@ Looked at and **not** used: `wowserhq/client` (it is the game's UI layer), `vjeu
 - Dressed NPCs (`src/renderer/world3d/scene/character/`): humanoids that are not one baked texture are built as the game builds them, painting their skin, face, underwear and each item's pieces into the body texture's regions, and showing the shapes their items give (gloves, boots, sleeves, a robe's skirt, a belt, a tabard, a cape). Helmets and shoulder pads hang at their attachment points in the race and sex's own model. This covers the CoA fork's display presets (`creature_display_preset`, whose item columns are item display ids, as the server sends them to the game) and display extras with no baked texture. NPCs with a baked texture keep it and gain their items' shapes, cape and worn models. Each outfit's texture is built once and shared.
 - The client's archives load in the game's order: a locale patch (`patch-enUS-3`) just after the general patch of its suffix, so custom patches (CoA's `patch-M`) outrank the stock locale tables. Before this, CoA's custom NPCs and objects were drawn as markers.
 
+- A **Teleport** panel in the 3D screen: 1,300 named places from AzerothAdmin's teleport list (`src/core/map/teleports.json`, made by `scripts/teleports.ts`), searched by place or zone or browsed by region. Picking one switches the map and moves the camera there; places on maps the 3D view does not draw (dungeons, battlegrounds) are listed but cannot be picked.
+
 ### Known gaps
 
 Things that are missing or approximate. Roughly in order of how much they matter.
