@@ -84,11 +84,150 @@ class GameObjectDisplayInfoRecord extends ClientDbRecord {
   }
 }
 
+/** CreatureDisplayInfoExtra.dbc: 21 fields; how a humanoid NPC is built from its race's body */
+const creatureDisplayInfoExtraIo = io.struct({
+  id: io.int32le,
+  race: io.int32le,
+  sex: io.int32le,
+  skin: io.int32le,
+  face: io.int32le,
+  hairStyle: io.int32le,
+  hairColour: io.int32le,
+  facialHair: io.int32le,
+  itemDisplays: io.array(io.int32le, { size: 11 }),
+  flags: io.int32le,
+  // Its skin, face and clothes in one texture, under Textures\BakedNpcTextures
+  bakeName: string,
+});
+
+class CreatureDisplayInfoExtraRecord extends ClientDbRecord {
+  race: number;
+  sex: number;
+  skin: number;
+  face: number;
+  hairStyle: number;
+  hairColour: number;
+  facialHair: number;
+  itemDisplays: number[];
+  flags: number;
+  bakeName: string;
+
+  constructor() {
+    super(creatureDisplayInfoExtraIo);
+  }
+}
+
+/** ChrRaces.dbc: 69 fields; only the body displays are read */
+const chrRacesIo = io.struct({
+  id: io.int32le,
+  flags: io.int32le,
+  factionId: io.int32le,
+  explorationSoundId: io.int32le,
+  maleDisplayId: io.int32le,
+  femaleDisplayId: io.int32le,
+  rest: rest(63),
+});
+
+class ChrRacesRecord extends ClientDbRecord {
+  flags: number;
+  factionId: number;
+  explorationSoundId: number;
+  maleDisplayId: number;
+  femaleDisplayId: number;
+
+  constructor() {
+    super(chrRacesIo);
+  }
+}
+
+/** CharHairGeosets.dbc: 6 fields; which geoset a hairstyle shows */
+const charHairGeosetsIo = io.struct({
+  id: io.int32le,
+  race: io.int32le,
+  sex: io.int32le,
+  variation: io.int32le,
+  geoset: io.int32le,
+  showScalp: io.int32le,
+});
+
+class CharHairGeosetsRecord extends ClientDbRecord {
+  race: number;
+  sex: number;
+  variation: number;
+  geoset: number;
+  showScalp: number;
+
+  constructor() {
+    super(charHairGeosetsIo);
+  }
+}
+
+/** CharSections.dbc: 10 fields; base section 3 is hair */
+const charSectionsIo = io.struct({
+  id: io.int32le,
+  race: io.int32le,
+  sex: io.int32le,
+  baseSection: io.int32le,
+  textures: io.array(string, { size: 3 }),
+  flags: io.int32le,
+  variation: io.int32le,
+  colour: io.int32le,
+});
+
+class CharSectionsRecord extends ClientDbRecord {
+  race: number;
+  sex: number;
+  baseSection: number;
+  textures: string[];
+  flags: number;
+  variation: number;
+  colour: number;
+
+  constructor() {
+    super(charSectionsIo);
+  }
+}
+
+/** CharacterFacialHairStyles.dbc: 8 fields and no id (read it through `records`) */
+const characterFacialHairStylesIo = io.struct({
+  race: io.int32le,
+  sex: io.int32le,
+  variation: io.int32le,
+  // Geoset values for groups 1, 2 and 3 (then two unused)
+  geosets: io.array(io.int32le, { size: 5 }),
+});
+
+class CharacterFacialHairStylesRecord extends ClientDbRecord {
+  race: number;
+  sex: number;
+  variation: number;
+  geosets: number[];
+
+  constructor() {
+    super(characterFacialHairStylesIo);
+  }
+}
+
 /** The record class each display table is read with, by table name */
 const DISPLAY_RECORDS = {
   CreatureDisplayInfo: CreatureDisplayInfoRecord,
   CreatureModelData: CreatureModelDataRecord,
   GameObjectDisplayInfo: GameObjectDisplayInfoRecord,
+  CreatureDisplayInfoExtra: CreatureDisplayInfoExtraRecord,
+  ChrRaces: ChrRacesRecord,
+  CharHairGeosets: CharHairGeosetsRecord,
+  CharSections: CharSectionsRecord,
+  CharacterFacialHairStyles: CharacterFacialHairStylesRecord,
 };
 
-export { CreatureDisplayInfoRecord, CreatureModelDataRecord, DISPLAY_RECORDS, GameObjectDisplayInfoRecord };
+export {
+  CharHairGeosetsRecord,
+  CharSectionsRecord,
+  CharacterFacialHairStylesRecord,
+  ChrRacesRecord,
+  CreatureDisplayInfoExtraRecord,
+  CreatureDisplayInfoRecord,
+  CreatureModelDataRecord,
+  DISPLAY_RECORDS,
+  GameObjectDisplayInfoRecord,
+};
