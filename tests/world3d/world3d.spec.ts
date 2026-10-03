@@ -50,6 +50,8 @@ interface PageState {
   problems: string[];
   errors: string[];
   selected: { kind: string; guid: number; event: { id: number } | null } | null;
+  edits: any[];
+  notices: string[];
 }
 const state = async (page: Page): Promise<PageState> => (await page.evaluate('window.__state')) as PageState;
 const open = (page: Page, directory: string, map: number): Promise<unknown> =>
@@ -216,6 +218,80 @@ test('a click selects the NPC under it, and event spawns only once they are show
   await page.waitForTimeout(500);
   expect(await click(0.5, 0.5)).toMatchObject({ guid: 5 });
   expect((await state(page)).errors).toEqual([]);
+});
+
+test('dragging the move gizmo moves the selected NPC and drops it on the server\'s floor', async ({ page }) => {
+  await openPage(page);
+  const SPOT = { x: START.x + 60, y: START.y - 60, z: START.z };
+  await page.evaluate(`window.__spawns = { creatures: [
+    { guid: 5, entry: 1, name: 'Here', map: 0, x: ${SPOT.x}, y: ${SPOT.y}, z: ${SPOT.z}, orientation: 0, displayId: 0, scale: 4, wander: 0, path: null, pathId: 0, equipment: [0,0,0], own: false, event: null }
+  ], objects: [], capped: { creatures: false, objects: false } }`);
+  await page.evaluate(`window.__floorZ = ${SPOT.z + 0.25}`);
+  await page.evaluate(`window.__open('azeroth', 0, ${JSON.stringify(SPOT)})`);
+  await page.waitForFunction('window.__state.ready', null, { timeout: 45000 });
+  await page.waitForTimeout(1000);
+  const box = (await page.locator('canvas.world3d__canvas').boundingBox())!;
+  const [cx, cy] = [box.x + box.width / 2, box.y + box.height / 2];
+  await page.mouse.click(cx, cy);
+  expect((await state(page)).selected).toMatchObject({ guid: 5 });
+  await page.keyboard.press('KeyG');
+  // The gizmo's middle handle sits on the NPC's origin, which is the middle of the picture
+  await page.mouse.move(cx, cy);
+  await page.mouse.down();
+  await page.mouse.move(cx + 60, cy + 20, { steps: 10 });
+  await page.mouse.up();
+  await expect.poll(async () => (await state(page)).edits.length).toBe(1);
+  const [edit] = (await state(page)).edits;
+  expect(edit).toMatchObject({ kind: 'place', spawn: { kind: 'creature', guid: 5, own: false }, to: { z: SPOT.z + 0.25, rotation: null } });
+  expect(Math.hypot(edit.to.x - SPOT.x, edit.to.y - SPOT.y)).toBeGreaterThan(1);
+  // A drag of the gizmo is not an orbit: the camera stayed where it was
+  expect((await state(page)).errors).toEqual([]);
+});
+
+test('Shift-click on the selected NPC\'s route inserts a point there, and Ctrl+Z takes it back out', async ({ page }) => {
+  await openPage(page);
+  const SPOT = { x: START.x + 60, y: START.y - 60, z: START.z };
+  await page.evaluate(`window.__spawns = { creatures: [
+    { guid: 9, entry: 1, name: 'P', map: 0, x: ${SPOT.x - 20}, y: ${SPOT.y + 20}, z: ${SPOT.z}, orientation: 0, displayId: 0, scale: 1, wander: 0, pathId: 77,
+      path: [ { x: ${SPOT.x - 6}, y: ${SPOT.y + 6}, z: ${SPOT.z}, carry: { delay: '0' } }, { x: ${SPOT.x + 6}, y: ${SPOT.y - 6}, z: ${SPOT.z}, carry: { delay: '9' } } ],
+      equipment: [0,0,0], own: false, event: null }
+  ], objects: [], capped: { creatures: false, objects: false } }`);
+  await page.evaluate(`window.__open('azeroth', 0, ${JSON.stringify(SPOT)})`);
+  await page.waitForFunction('window.__state.ready', null, { timeout: 45000 });
+  await page.evaluate(`window.__select({ kind: 'creature', guid: 9 })`);
+  await page.waitForTimeout(1500);
+  const box = (await page.locator('canvas.world3d__canvas').boundingBox())!;
+  await page.keyboard.down('Shift');
+  await page.mouse.click(box.x + box.width / 2, box.y + box.height / 2);
+  await page.keyboard.up('Shift');
+  await expect.poll(async () => (await state(page)).edits.length).toBe(1);
+  const inserted = (await state(page)).edits[0];
+  expect(inserted).toMatchObject({ kind: 'route', pathId: 77, spawn: { guid: 9 } });
+  expect(inserted.points.map((p: any) => p.carry ?? null)).toEqual([{ delay: '0' }, null, { delay: '9' }]);
+  expect(Math.hypot(inserted.points[1].x - SPOT.x, inserted.points[1].y - SPOT.y)).toBeLessThan(2);
+  await page.keyboard.press('Control+KeyZ');
+  await expect.poll(async () => (await state(page)).edits.length).toBe(2);
+  expect((await state(page)).edits[1].points).toHaveLength(2);
+});
+
+test('a route never goes below two points', async ({ page }) => {
+  await openPage(page);
+  const SPOT = { x: START.x + 60, y: START.y - 60, z: START.z };
+  await page.evaluate(`window.__spawns = { creatures: [
+    { guid: 9, entry: 1, name: 'P', map: 0, x: ${SPOT.x - 20}, y: ${SPOT.y + 20}, z: ${SPOT.z}, orientation: 0, displayId: 0, scale: 1, wander: 0, pathId: 77,
+      path: [ { x: ${SPOT.x}, y: ${SPOT.y}, z: ${SPOT.z} }, { x: ${SPOT.x + 6}, y: ${SPOT.y - 6}, z: ${SPOT.z} } ],
+      equipment: [0,0,0], own: false, event: null }
+  ], objects: [], capped: { creatures: false, objects: false } }`);
+  await page.evaluate(`window.__open('azeroth', 0, ${JSON.stringify(SPOT)})`);
+  await page.waitForFunction('window.__state.ready', null, { timeout: 45000 });
+  await page.evaluate(`window.__select({ kind: 'creature', guid: 9 })`);
+  await page.waitForTimeout(1500);
+  const box = (await page.locator('canvas.world3d__canvas').boundingBox())!;
+  // The first point is at the middle of the picture
+  await page.mouse.click(box.x + box.width / 2, box.y + box.height / 2);
+  await page.keyboard.press('Delete');
+  await expect.poll(async () => (await state(page)).notices).toContain('A route keeps at least two points.');
+  expect((await state(page)).edits).toEqual([]);
 });
 
 test('draws the patrol route of the selected NPC as a line over the ground', async ({ page }) => {

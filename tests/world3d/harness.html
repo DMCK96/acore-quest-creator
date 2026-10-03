@@ -6,7 +6,7 @@
       import { createWorld3D } from '/src/renderer/world3d/world3d.ts';
 
       // Each world the page makes is kept so a test can leave it; what a test reads is in `__state`.
-      const state = (window.__state = { ready: false, problems: [], errors: [], selected: null });
+      const state = (window.__state = { ready: false, problems: [], errors: [], selected: null, edits: [], notices: [] });
       window.addEventListener('error', (e) => state.errors.push(String(e.message)));
       window.addEventListener('unhandledrejection', (e) => state.errors.push(`rejected: ${e.reason}`));
       let world = null;
@@ -15,6 +15,8 @@
         state.ready = false;
         state.problems = [];
         state.selected = null;
+        state.edits = [];
+        state.notices = [];
         world = createWorld3D({
           container: document.getElementById('stage'),
           directory,
@@ -24,6 +26,11 @@
           onProblems: (all) => (state.problems = all),
           onError: (message) => state.errors.push(`failed: ${message}`),
           onSelect: (spawn) => (state.selected = spawn),
+          onEdit: (edit) => state.edits.push(edit),
+          // The server's floor where a spawn is dropped: what the test sets, else none
+          floorZ: () => Promise.resolve(window.__floorZ ?? null),
+          beforeRouteEdit: () => Promise.resolve(true),
+          onNotice: (message) => message && state.notices.push(message),
           // Spawns the test sets in window.__spawns (none by default)
           spawns: () => Promise.resolve(window.__spawns ?? { creatures: [], objects: [], capped: { creatures: false, objects: false } }),
         });
@@ -32,6 +39,8 @@
       window.__camera = () => world?.camera();
       window.__setVisibility = (visibility) => world?.setSpawnVisibility(visibility);
       window.__select = (spawn) => world?.select(spawn);
+      window.__mode = (mode) => world?.setMode(mode);
+      window.__undo = () => world?.undo();
       window.__close = () => {
         world?.dispose();
         world = null;

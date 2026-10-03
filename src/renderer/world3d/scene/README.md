@@ -92,6 +92,11 @@ compiler setting than this project's.
   the buildings' manager, so spawned models animate with the doodads.
   - `model/attachments.ts` reads a model's attachment points from the raw M2 (the format package
     drops them); `Model.attachmentObject` follows a point's bone, for held weapons.
+- `edit/`: editing, which upstream does not do. `Gizmo.ts` puts Three's own `TransformControls` on a
+  stand-in and copies it onto the spawn or route point being edited (the map's groups do not update
+  their matrices themselves); `route.ts` and `history.ts` are the route rules and undo, without Three.
+  `SpawnManager` draws the world layer's edits over the database, and routes edited in the view until
+  the host stores them.
 - `../world3d.ts` switches Three's colour management off, as wowserhq's own viewer (spelunker) does.
   With it on, every light colour was darkened to linear and never brightened back, and the world was
   drawn too dark and too red.

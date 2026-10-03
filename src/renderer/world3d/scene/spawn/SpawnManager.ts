@@ -27,6 +27,8 @@ type PickedSpawn = {
   entry: number;
   name: string;
   own: boolean;
+  /** An NPC's route id; 0 for one without a route, and for objects */
+  pathId: number;
   event: { id: number; name: string } | null;
   position: { x: number; y: number; z: number };
 };
@@ -117,6 +119,9 @@ class SpawnManager {
   /** Edits to database spawns and routes, drawn over what the database has */
   #layer: WorldLayer = { spawns: [], routes: [] };
 
+  /** Routes edited in the view and not yet stored by its host, drawn in place of what it has */
+  #pendingRoutes = new globalThis.Map<number, ViewPoint[]>();
+
   /** The selected spawn, whose paths are the ones drawn */
   #selected: { kind: 'creature' | 'object'; guid: number } | null = null;
 
@@ -206,6 +211,7 @@ class SpawnManager {
    */
   async setOwnSpawns(spawns: ViewSpawns) {
     this.#own = spawns;
+    this.#pendingRoutes.clear();
     await this.#redraw();
   }
 
@@ -230,21 +236,44 @@ class SpawnManager {
         ...(route ? { path: route.map((p): ViewPoint => ({ x: p.x, y: p.y, z: p.z, carry: p.rest })) } : {}),
       };
     };
+    const pending = (c: ViewCreature): ViewCreature => {
+      const route = this.#pendingRoutes.get(c.guid);
+      return route ? { ...c, path: route } : c;
+    };
     const object = (o: ViewObject): ViewObject => {
       const at = placed('gameobject', o.guid);
       return at ? { ...o, x: at.x, y: at.y, z: at.z, ...(at.rotation ? { rotation: at.rotation } : {}) } : o;
     };
     return {
-      creatures: [...spawns.creatures.filter((c) => !ownCreatures.has(c.guid) && shown(c)).map(creature), ...this.#own.creatures.filter(inBox)],
+      creatures: [...spawns.creatures.filter((c) => !ownCreatures.has(c.guid) && shown(c)).map(creature), ...this.#own.creatures.filter(inBox)].map(pending),
       objects: [...spawns.objects.filter((o) => !ownObjects.has(o.guid) && shown(o)).map(object), ...this.#own.objects.filter(inBox)],
       capped: spawns.capped,
     };
   }
 
-  /** Draws the world layer's edits over the database's spawns and routes */
+  /** Draws the world layer's edits over the database's spawns and routes; routes still pending are dropped */
   async setWorldLayer(layer: WorldLayer) {
     this.#layer = layer;
+    this.#pendingRoutes.clear();
     await this.#redraw();
+  }
+
+  /** Draws a route edited in the view until its host stores it (or says no, and it goes back) */
+  async setPendingRoute(guid: number, points: ViewPoint[]) {
+    this.#pendingRoutes.set(guid, points);
+    await this.#redraw();
+  }
+
+  /** The ball drawn for one point of an NPC's route, or null when it is not drawn */
+  routeBall(guid: number, point: number): THREE.Object3D | null {
+    for (const group of this.#areas.values()) {
+      for (const shown of group.getObjectByName('paths')?.children ?? []) {
+        if (shown.userData.guid !== guid) continue;
+        const ball = shown.children.find((child) => child.userData.point === point);
+        if (ball) return ball;
+      }
+    }
+    return null;
   }
 
   /** A drawn NPC's route as the view has it (with the layer's edits), or null when it has none */
@@ -489,6 +518,7 @@ class SpawnManager {
       entry: spawn.entry,
       name: spawn.name,
       own: spawn.own,
+      pathId: kind === 'creature' ? ((spawn as ViewCreature).pathId ?? 0) : 0,
       event: spawn.event ?? null,
       position: { x: spawn.x, y: spawn.y, z: spawn.z },
     };

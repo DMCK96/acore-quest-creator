@@ -33,7 +33,9 @@ type WorldControlsOptions = {
   /** The world point under a place on screen (normalised device coordinates), or null for sky */
   pick?: Pick;
   /** A left click, without dragging, at a place on screen (normalised device coordinates) */
-  onClick?(ndcX: number, ndcY: number): void;
+  onClick?(ndcX: number, ndcY: number, shift: boolean): void;
+  /** True while a press belongs to something else on the view (the edit gizmo): no orbit, no click */
+  blocked?(): boolean;
 };
 
 const UP = new THREE.Vector3(0, 0, 1);
@@ -45,7 +47,8 @@ class WorldControls {
   readonly #camera: THREE.PerspectiveCamera;
   readonly #dom: HTMLElement;
   readonly #pick: Pick;
-  readonly #onClick: (ndcX: number, ndcY: number) => void;
+  readonly #onClick: (ndcX: number, ndcY: number, shift: boolean) => void;
+  readonly #blocked: () => boolean;
 
   #yaw = 0;
   #pitch = 0;
@@ -58,6 +61,7 @@ class WorldControls {
     this.#dom = dom;
     this.#pick = options.pick ?? (() => null);
     this.#onClick = options.onClick ?? (() => {});
+    this.#blocked = options.blocked ?? (() => false);
 
     // Focusable, so keys can be kept to the view
     if (!dom.hasAttribute('tabindex')) dom.tabIndex = 0;
@@ -200,6 +204,10 @@ class WorldControls {
 
   #onPointerDown = (event: PointerEvent): void => {
     this.#dom.focus();
+    if (event.button === 0 && this.#blocked()) {
+      this.#drag = null;
+      return;
+    }
     const [x, y] = this.#ndc(event);
     if (event.button === 0) this.startOrbit(x, y);
     const panScale = event.button === 1 ? Math.max(0.02, this.#distanceAt(x, y) * PAN_SCALE) : 0;
@@ -225,7 +233,8 @@ class WorldControls {
     this.#drag = null;
     this.#dom.releasePointerCapture?.(event.pointerId);
     if (event.type === 'pointerup' && drag?.button === 0 && Math.hypot(event.clientX - drag.startX, event.clientY - drag.startY) < CLICK_SLOP) {
-      this.#onClick(...this.#ndc(event));
+      const [x, y] = this.#ndc(event);
+      this.#onClick(x, y, event.shiftKey);
     }
   };
 

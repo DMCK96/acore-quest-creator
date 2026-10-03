@@ -193,6 +193,16 @@ class MapManager extends EventTarget {
     return this.#spawnManager.pickRoutePoint(ray, guid);
   }
 
+  /** Draws a route edited in the view until its host stores it */
+  setPendingRoute(guid: number, points: { x: number; y: number; z: number; carry?: unknown }[]) {
+    this.#spawnManager.setPendingRoute(guid, points).catch((error) => console.warn(`3D view: the route could not be drawn: ${describeError(error)}`));
+  }
+
+  /** The ball of one point of an NPC's route, while it is drawn */
+  routeBall(guid: number, point: number) {
+    return this.#spawnManager.routeBall(guid, point);
+  }
+
   /** A drawn NPC's route as the view has it, or null */
   spawnRoute(guid: number) {
     return this.#spawnManager.route(guid);

@@ -5,6 +5,9 @@ import { spawnBounds, type PickedSpawn, type SpawnSource, type SpawnStatus, type
 import type { ViewSpawns } from '@core/db/view-spawns';
 import { clearProblems, onProblems } from './scene/diagnostics';
 import { ASSET_BASE_URL } from '@core/client/asset-url';
+import type { WorldLayer } from '@core/world/layer';
+import { Editor } from './editing';
+import type { SpawnEdit, SpawnRef } from './edits';
 
 /**
  * The 3D world: the game's own terrain, props and models for one map, read from the client's
@@ -28,8 +31,16 @@ export interface World3DOptions {
   onError?(message: string): void;
   /** Where the world's NPCs and objects come from; none draws none. */
   spawns?: SpawnSource;
-  /** Told which NPC or object was clicked, or null when a click hit neither. */
+  /** Told which NPC or object was clicked, or null when a click hit neither (or Esc cleared it). */
   onSelect?(spawn: PickedSpawn | null): void;
+  /** Told each edit made in the view: a whole placement or a whole route, to store. */
+  onEdit?(edit: SpawnEdit): void;
+  /** The server's floor nearest a height at a place, or null when it has none there. */
+  floorZ?(x: number, y: number, nearZ: number): Promise<number | null>;
+  /** Asked once per route before the first change to a world route that is not the quest's. */
+  beforeRouteEdit?(spawn: SpawnRef, pathId: number): Promise<boolean>;
+  /** Told something about the last edit worth saying (a height not from the server), or null. */
+  onNotice?(message: string | null): void;
 }
 
 export interface World3D {
@@ -45,6 +56,12 @@ export interface World3D {
   setOwnSpawns(spawns: ViewSpawns): void;
   /** Marks a spawn as selected (outlined while it is drawn), or clears the selection. */
   select(spawn: { kind: 'creature' | 'object'; guid: number } | null): void;
+  /** Draws the world layer's edits over the database's spawns and routes. */
+  setWorldLayer(layer: WorldLayer): void;
+  /** Whether the gizmo moves or rotates. */
+  setMode(mode: 'move' | 'rotate'): void;
+  undo(): void;
+  redo(): void;
   dispose(): void;
 }
 
@@ -110,17 +127,55 @@ export function createWorld3D(options: World3DOptions): World3D {
     const solid = manager.root.children.filter((group) => group.name === 'terrain' || group.name === 'buildings');
     return raycaster.intersectObjects(solid, true)[0]?.point ?? null;
   };
-  // A click selects the nearest NPC or object under it that nothing solid stands in front of
+  // A click selects the nearest NPC or object under it that nothing solid stands in front of, unless
+  // it was on the selected NPC's route (a point, or Shift to add one)
   let selected: { kind: 'creature' | 'object'; guid: number } | null = null;
-  const click = (x: number, y: number): void => {
+  const choose = (spawn: { kind: 'creature' | 'object'; guid: number } | null): void => {
+    selected = spawn ? { kind: spawn.kind, guid: spawn.guid } : null;
+    manager.setSelectedSpawn(selected);
+    editor.select(selected);
+  };
+  const click = (x: number, y: number, shift: boolean): void => {
+    if (editor.click(x, y, shift)) return;
     raycaster.setFromCamera(new THREE.Vector2(x, y), camera);
     const ground = pick(x, y);
     const spawn = manager.pickSpawn(raycaster.ray, ground ? ground.distanceTo(camera.position) : Infinity);
-    selected = spawn ? { kind: spawn.kind, guid: spawn.guid } : null;
-    manager.setSelectedSpawn(selected);
+    choose(spawn);
     options.onSelect?.(spawn);
   };
-  const controls = new WorldControls(camera, renderer.domElement, { pick, onClick: click });
+  const controls = new WorldControls(camera, renderer.domElement, { pick, onClick: click, blocked: () => editor.blocked });
+  const solid = (): THREE.Object3D[] => manager.root.children.filter((group) => group.name === 'terrain' || group.name === 'buildings');
+  const editor = new Editor(
+    {
+      camera,
+      dom: renderer.domElement,
+      scene,
+      ground: solid,
+      pickGround: pick,
+      rayAt: (x, y) => {
+        raycaster.setFromCamera(new THREE.Vector2(x, y), camera);
+        return raycaster.ray.clone();
+      },
+      findSpawn: (kind, guid) => manager.findSpawn(kind, guid),
+      spawnRoute: (guid) => manager.spawnRoute(guid),
+      pickRoutePoint: (ray, guid) => manager.pickRoutePoint(ray, guid),
+      routeBall: (guid, point) => manager.routeBall(guid, point),
+      setPendingRoute: (guid, points) => manager.setPendingRoute(guid, points),
+    },
+    options,
+  );
+  // The editing keys, only while the view has focus (typing in a field edits nothing here)
+  const onKeyDown = (event: KeyboardEvent): void => {
+    if (document.activeElement !== renderer.domElement) return;
+    if (event.code === 'Escape' && selected) {
+      choose(null);
+      options.onSelect?.(null);
+      event.preventDefault();
+      return;
+    }
+    if (editor.keyDown(event)) event.preventDefault();
+  };
+  window.addEventListener('keydown', onKeyDown);
 
   // The selected spawn's outline: its bounds, followed every frame (it may be redrawn, or leave)
   const outline = new THREE.Box3Helper(new THREE.Box3(), SELECTED_COLOUR);
@@ -184,6 +239,7 @@ export function createWorld3D(options: World3DOptions): World3D {
       camera.updateMatrixWorld();
       manager.update(delta, camera);
       followSelected();
+      editor.update();
       renderer.setClearColor(manager.clearColor);
       renderer.render(scene, camera);
       if (!ready && manager.root.children.length > 0) {
@@ -202,10 +258,11 @@ export function createWorld3D(options: World3DOptions): World3D {
     setSpawnVisibility: (visibility) => manager.setSpawnVisibility(visibility),
     spawnStatus: () => manager.spawnStatus,
     setOwnSpawns: (spawns) => manager.setOwnSpawns(spawns),
-    select: (spawn) => {
-      selected = spawn;
-      manager.setSelectedSpawn(spawn);
-    },
+    select: (spawn) => choose(spawn),
+    setWorldLayer: (layer) => manager.setWorldLayer(layer),
+    setMode: (mode) => editor.setMode(mode),
+    undo: () => editor.undo(),
+    redo: () => editor.redo(),
     camera() {
       const direction = camera.getWorldDirection(new THREE.Vector3());
       return { position: { ...camera.position }, direction: { x: direction.x, y: direction.y, z: direction.z } };
@@ -215,7 +272,7 @@ export function createWorld3D(options: World3DOptions): World3D {
       cancelAnimationFrame(frame);
       observer.disconnect();
       // Nothing here may throw: this runs while React unmounts the view, and a throw would take the whole screen with it.
-      for (const step of [() => controls.dispose?.(), stopProblems, () => manager.dispose(), () => release(manager.root), () => release(outline), () => renderer.dispose()]) {
+      for (const step of [() => controls.dispose?.(), () => window.removeEventListener('keydown', onKeyDown), () => editor.dispose(), stopProblems, () => manager.dispose(), () => release(manager.root), () => release(outline), () => renderer.dispose()]) {
         try {
           step();
         } catch (error) {
