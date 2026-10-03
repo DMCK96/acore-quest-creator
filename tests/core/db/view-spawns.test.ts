@@ -13,7 +13,7 @@ describe('a creature spawn for the 3D view', () => {
     expect(c).toEqual({
       guid: 79970, entry: 197, name: 'Marshal McBride', map: 0,
       x: -8902.59, y: -162.606, z: 82.0223, orientation: 1.5,
-      displayId: 1953, scale: 1.25, wander: 5, path: null, equipment: [0, 0, 0], own: false,
+      displayId: 1953, scale: 1.25, wander: 5, path: null, equipment: [0, 0, 0], own: false, event: null,
     });
   });
 
@@ -31,6 +31,18 @@ describe('a creature spawn for the 3D view', () => {
     const c = toViewCreature(creatureRow, [{ x: 1, y: 2, z: 3 }], [1899, 0, 2551]);
     expect(c.path).toEqual([{ x: 1, y: 2, z: 3 }]);
     expect(c.equipment).toEqual([1899, 0, 2551]);
+  });
+});
+
+describe('a spawn that belongs to a game event', () => {
+  it('carries the event it appears for', () => {
+    const row = { ...creatureRow, event_entry: '12', event_name: "Hallow's End" };
+    expect(toViewCreature(row, null, [0, 0, 0]).event).toEqual({ id: 12, name: "Hallow's End" });
+    expect(toViewObject(row).event).toEqual({ id: 12, name: "Hallow's End" });
+  });
+
+  it('has none when it has no event row', () => {
+    expect(toViewCreature({ ...creatureRow, event_entry: null, event_name: null }, null, [0, 0, 0]).event).toBeNull();
   });
 });
 
@@ -55,7 +67,7 @@ describe('an object spawn for the 3D view', () => {
     });
     expect(o).toEqual({
       guid: 5, entry: 143981, name: 'Mailbox', map: 0, x: -9000, y: -100, z: 80,
-      rotation: [0, 0, 0.5, 0.8660254], displayId: 1949, scale: 1.5, own: false,
+      rotation: [0, 0, 0.5, 0.8660254], displayId: 1949, scale: 1.5, own: false, event: null,
     });
   });
 

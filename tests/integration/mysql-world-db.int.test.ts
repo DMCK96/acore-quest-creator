@@ -72,6 +72,14 @@ describe('MysqlWorldDb', () => {
     for (const c of creatures) if (c.path) expect(c.path.length).toBeGreaterThan(0);
     expect(objects.some((o) => o.displayId > 0)).toBe(true);
   });
+  it('tells the 3D view which Goldshire spawns appear only during a game event', async () => {
+    const box = { minX: -9500, maxX: -9400, minY: 0, maxY: 100 };
+    const { creatures, objects } = await db.spawnsForView!(0, box, 2000);
+    const evented = [...creatures, ...objects].filter((s) => s.event);
+    expect(evented.length).toBeGreaterThan(0);
+    for (const s of evented) expect(s.event!.id).toBeGreaterThan(0);
+    expect([...creatures, ...objects].some((s) => s.event === null)).toBe(true);
+  });
   it('reports a named error when the server is unreachable', async () => {
     await expect(openMysqlWorldDb({ ...opts(), port: 1 })).rejects.toBeInstanceOf(WorldDbConnectionError);
   });

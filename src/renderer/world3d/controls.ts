@@ -24,12 +24,16 @@ const WHEEL_SHARE = 0.15;
 const MIN_STEP = 2;
 /** Yards panned per pixel, per yard to what is ahead */
 const PAN_SCALE = 0.0015;
+/** A left press that moves less than this many pixels before it is let go is a click, not an orbit */
+const CLICK_SLOP = 4;
 
 type Pick = (ndcX: number, ndcY: number) => THREE.Vector3 | null;
 
 type WorldControlsOptions = {
   /** The world point under a place on screen (normalised device coordinates), or null for sky */
   pick?: Pick;
+  /** A left click, without dragging, at a place on screen (normalised device coordinates) */
+  onClick?(ndcX: number, ndcY: number): void;
 };
 
 const UP = new THREE.Vector3(0, 0, 1);
@@ -41,17 +45,19 @@ class WorldControls {
   readonly #camera: THREE.PerspectiveCamera;
   readonly #dom: HTMLElement;
   readonly #pick: Pick;
+  readonly #onClick: (ndcX: number, ndcY: number) => void;
 
   #yaw = 0;
   #pitch = 0;
   #pivot = new THREE.Vector3();
   #keys = new Set<string>();
-  #drag: { button: number; x: number; y: number; panScale: number } | null = null;
+  #drag: { button: number; x: number; y: number; startX: number; startY: number; panScale: number } | null = null;
 
   constructor(camera: THREE.PerspectiveCamera, dom: HTMLElement, options: WorldControlsOptions = {}) {
     this.#camera = camera;
     this.#dom = dom;
     this.#pick = options.pick ?? (() => null);
+    this.#onClick = options.onClick ?? (() => {});
 
     // Focusable, so keys can be kept to the view
     if (!dom.hasAttribute('tabindex')) dom.tabIndex = 0;
@@ -197,7 +203,7 @@ class WorldControls {
     const [x, y] = this.#ndc(event);
     if (event.button === 0) this.startOrbit(x, y);
     const panScale = event.button === 1 ? Math.max(0.02, this.#distanceAt(x, y) * PAN_SCALE) : 0;
-    this.#drag = { button: event.button, x: event.clientX, y: event.clientY, panScale };
+    this.#drag = { button: event.button, x: event.clientX, y: event.clientY, startX: event.clientX, startY: event.clientY, panScale };
     this.#dom.setPointerCapture?.(event.pointerId);
     if (event.button === 1) event.preventDefault();
   };
@@ -215,8 +221,12 @@ class WorldControls {
   };
 
   #onPointerUp = (event: PointerEvent): void => {
+    const drag = this.#drag;
     this.#drag = null;
     this.#dom.releasePointerCapture?.(event.pointerId);
+    if (event.type === 'pointerup' && drag?.button === 0 && Math.hypot(event.clientX - drag.startX, event.clientY - drag.startY) < CLICK_SLOP) {
+      this.#onClick(...this.#ndc(event));
+    }
   };
 
   #onWheel = (event: WheelEvent): void => {

@@ -4,9 +4,11 @@ import { describe, expect, it, vi } from 'vitest';
 import SpawnManager from '../../src/renderer/world3d/scene/spawn/SpawnManager';
 
 const creature = (guid: number, displayId: number, extra: object = {}) => ({
-  guid, entry: 1, name: 'n', map: 0, x: 0, y: 0, z: 0, orientation: 0, displayId, scale: 1, wander: 0, path: null, equipment: [0, 0, 0] as [number, number, number], own: false, ...extra,
+  guid, entry: 1, name: 'n', map: 0, x: 0, y: 0, z: 0, orientation: 0, displayId, scale: 1, wander: 0, path: null, equipment: [0, 0, 0] as [number, number, number], own: false, event: null, ...extra,
 });
-const object = (guid: number, displayId: number) => ({ guid, entry: 2, name: 'o', map: 0, x: 0, y: 0, z: 0, rotation: [0, 0, 0, 1] as [number, number, number, number], displayId, scale: 1, own: false });
+const object = (guid: number, displayId: number, extra: object = {}) => ({
+  guid, entry: 2, name: 'o', map: 0, x: 0, y: 0, z: 0, rotation: [0, 0, 0, 1] as [number, number, number, number], displayId, scale: 1, own: false, event: null, ...extra,
+});
 const box = { minX: 0, maxX: 1, minY: 0, maxY: 1 };
 
 const manager = (spawns: any, overrides: Partial<ConstructorParameters<typeof SpawnManager>[0]> = {}) =>
@@ -68,7 +70,7 @@ describe('the spawn layer', () => {
   it('hides and shows each kind without unloading it', async () => {
     const m = manager({ creatures: [creature(1, 1)], objects: [object(3, 2)], capped: { creatures: false, objects: false } });
     const group = (await m.loadArea(1, 0, box))!;
-    m.setVisibility({ creatures: false, objects: true, paths: false });
+    m.setVisibility({ creatures: false, objects: true, paths: false, events: false });
     expect(group.getObjectByName('creatures')!.visible).toBe(false);
     expect(group.getObjectByName('objects')!.visible).toBe(true);
     expect(group.getObjectByName('paths')!.visible).toBe(false);
@@ -181,5 +183,53 @@ describe('the final review\'s findings', () => {
     m.setOwnSpawns({ creatures: [creature(8, 1, { own: true, map: 1, x: 0.5, y: 0.5 }), creature(9, 1, { own: true, map: 0, x: 0.5, y: 0.5 })], objects: [], capped: { creatures: false, objects: false } });
     const group = (await m.loadArea(1, 0, box))!;
     expect(group.getObjectByName('creatures')!.children.map((c) => c.userData.spawn.guid)).toEqual([9]);
+  });
+});
+
+describe('event spawns', () => {
+  const holiday = { id: 12, name: "Hallow's End" };
+
+  it('leaves out spawns that appear only during a game event, and draws them once asked for', async () => {
+    const m = manager({ creatures: [creature(1, 1), creature(2, 1, { event: holiday })], objects: [object(3, 2, { event: holiday })], capped: { creatures: false, objects: false } });
+    const group = (await m.loadArea(1, 0, box))!;
+    const guids = () => [...group.getObjectByName('creatures')!.children, ...group.getObjectByName('objects')!.children].map((c) => c.userData.spawn.guid);
+    expect(guids()).toEqual([1]);
+    await m.setVisibility({ creatures: true, objects: true, paths: true, events: true });
+    expect(guids()).toEqual([1, 2, 3]);
+    await m.setVisibility({ creatures: true, objects: true, paths: true, events: false });
+    expect(guids()).toEqual([1]);
+  });
+});
+
+describe('picking a spawn', () => {
+  const marker = async (spawns: object[]) => {
+    const m = manager({ creatures: spawns, objects: [], capped: { creatures: false, objects: false } });
+    await m.loadArea(1, 0, box);
+    return m;
+  };
+  // Looking north (+X) along the ground at waist height
+  const ray = (from = -20) => new THREE.Ray(new THREE.Vector3(from, 0, 1), new THREE.Vector3(1, 0, 0));
+
+  it('gives the nearest drawn spawn along the ray, with what it is', async () => {
+    const m = await marker([creature(1, 0, { x: 10, name: 'Far', entry: 7 }), creature(2, 0, { x: 5, name: 'Near', entry: 8 })]);
+    expect(m.pick(ray())).toMatchObject({ kind: 'creature', guid: 2, entry: 8, name: 'Near', own: false, event: null, position: { x: 5, y: 0, z: 0 } });
+  });
+
+  it('gives nothing when something solid is nearer, or the spawn is hidden', async () => {
+    const m = await marker([creature(1, 0, { x: 10 })]);
+    expect(m.pick(ray(), 15)).toBeNull();
+    m.setVisibility({ creatures: false, objects: true, paths: true, events: false });
+    expect(m.pick(ray())).toBeNull();
+  });
+
+  it('passes over a spawn the ray starts inside', async () => {
+    const m = await marker([creature(1, 0, { x: 0 }), creature(2, 0, { x: 10 })]);
+    expect(m.pick(ray(0))?.guid).toBe(2);
+  });
+
+  it('finds the drawn object of a spawn for its outline', async () => {
+    const m = await marker([creature(1, 0, { x: 10 })]);
+    expect(m.find('creature', 1)?.userData.spawn.guid).toBe(1);
+    expect(m.find('creature', 9)).toBeNull();
   });
 });

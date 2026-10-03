@@ -174,7 +174,17 @@ class MapManager extends EventTarget {
   }
 
   setSpawnVisibility(visibility: SpawnVisibility) {
-    this.#spawnManager.setVisibility(visibility);
+    this.#spawnManager.setVisibility(visibility).catch((error) => console.warn(`3D view: the NPCs and objects could not be redrawn: ${describeError(error)}`));
+  }
+
+  /** The nearest drawn NPC or object along a ray, no further than `maxDistance` */
+  pickSpawn(ray: THREE.Ray, maxDistance?: number) {
+    return this.#spawnManager.pick(ray, maxDistance);
+  }
+
+  /** A spawn's drawn object, while it is drawn */
+  findSpawn(kind: 'creature' | 'object', guid: number) {
+    return this.#spawnManager.find(kind, guid);
   }
 
   /** Whether the spawn source capped a kind, or why it could give none */

@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { DbManager, MapManager, TextureManager, type SoundManager } from './scene';
 import { WorldControls } from './controls';
-import type { SpawnSource, SpawnStatus, SpawnVisibility } from './scene/spawn/SpawnManager';
+import { spawnBounds, type PickedSpawn, type SpawnSource, type SpawnStatus, type SpawnVisibility } from './scene/spawn/SpawnManager';
 import type { ViewSpawns } from '@core/db/view-spawns';
 import { clearProblems, onProblems } from './scene/diagnostics';
 import { ASSET_BASE_URL } from '@core/client/asset-url';
@@ -28,6 +28,8 @@ export interface World3DOptions {
   onError?(message: string): void;
   /** Where the world's NPCs and objects come from; none draws none. */
   spawns?: SpawnSource;
+  /** Told which NPC or object was clicked, or null when a click hit neither. */
+  onSelect?(spawn: PickedSpawn | null): void;
 }
 
 export interface World3D {
@@ -41,6 +43,8 @@ export interface World3D {
   spawnStatus(): SpawnStatus;
   /** The open quest's own NPCs and objects, drawn with the world's in place of their database rows. */
   setOwnSpawns(spawns: ViewSpawns): void;
+  /** Marks a spawn as selected (outlined while it is drawn), or clears the selection. */
+  select(spawn: { kind: 'creature' | 'object'; guid: number } | null): void;
   dispose(): void;
 }
 
@@ -56,6 +60,7 @@ const START_OFFSET = new THREE.Vector3(-30, -30, 30);
 const WORLD_EDGE = 17066;
 const NEAR = 0.5;
 const FOV = 60;
+const SELECTED_COLOUR = 0xffd34d;
 
 const HOST = { baseUrl: ASSET_BASE_URL, normalizePath: true };
 /** Textures and database tables are the same for every map, so every world shares them (and their workers). */
@@ -105,7 +110,28 @@ export function createWorld3D(options: World3DOptions): World3D {
     const solid = manager.root.children.filter((group) => group.name === 'terrain' || group.name === 'buildings');
     return raycaster.intersectObjects(solid, true)[0]?.point ?? null;
   };
-  const controls = new WorldControls(camera, renderer.domElement, { pick });
+  // A click selects the nearest NPC or object under it that nothing solid stands in front of
+  let selected: { kind: 'creature' | 'object'; guid: number } | null = null;
+  const click = (x: number, y: number): void => {
+    raycaster.setFromCamera(new THREE.Vector2(x, y), camera);
+    const ground = pick(x, y);
+    const spawn = manager.pickSpawn(raycaster.ray, ground ? ground.distanceTo(camera.position) : Infinity);
+    selected = spawn ? { kind: spawn.kind, guid: spawn.guid } : null;
+    options.onSelect?.(spawn);
+  };
+  const controls = new WorldControls(camera, renderer.domElement, { pick, onClick: click });
+
+  // The selected spawn's outline: its bounds, followed every frame (it may be redrawn, or leave)
+  const outline = new THREE.Box3Helper(new THREE.Box3(), SELECTED_COLOUR);
+  (outline.material as THREE.LineBasicMaterial).depthTest = false;
+  outline.renderOrder = 1;
+  outline.visible = false;
+  scene.add(outline);
+  const followSelected = (): void => {
+    const drawn = selected ? manager.findSpawn(selected.kind, selected.guid) : null;
+    outline.visible = drawn !== null;
+    if (drawn) spawnBounds(drawn, outline.box);
+  };
   const { textures, databases } = sharedManagers();
   const manager = new MapManager({ host: HOST, textureManager: textures, dbManager: databases, soundManager: SILENT });
   manager.addEventListener('area:change', (event) => {
@@ -156,6 +182,7 @@ export function createWorld3D(options: World3DOptions): World3D {
       camera.updateProjectionMatrix();
       camera.updateMatrixWorld();
       manager.update(delta, camera);
+      followSelected();
       renderer.setClearColor(manager.clearColor);
       renderer.render(scene, camera);
       if (!ready && manager.root.children.length > 0) {
@@ -174,6 +201,9 @@ export function createWorld3D(options: World3DOptions): World3D {
     setSpawnVisibility: (visibility) => manager.setSpawnVisibility(visibility),
     spawnStatus: () => manager.spawnStatus,
     setOwnSpawns: (spawns) => manager.setOwnSpawns(spawns),
+    select: (spawn) => {
+      selected = spawn;
+    },
     camera() {
       const direction = camera.getWorldDirection(new THREE.Vector3());
       return { position: { ...camera.position }, direction: { x: direction.x, y: direction.y, z: direction.z } };
@@ -183,7 +213,7 @@ export function createWorld3D(options: World3DOptions): World3D {
       cancelAnimationFrame(frame);
       observer.disconnect();
       // Nothing here may throw: this runs while React unmounts the view, and a throw would take the whole screen with it.
-      for (const step of [() => controls.dispose?.(), stopProblems, () => manager.dispose(), () => release(manager.root), () => renderer.dispose()]) {
+      for (const step of [() => controls.dispose?.(), stopProblems, () => manager.dispose(), () => release(manager.root), () => release(outline), () => renderer.dispose()]) {
         try {
           step();
         } catch (error) {

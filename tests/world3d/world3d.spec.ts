@@ -49,6 +49,7 @@ interface PageState {
   ready: boolean;
   problems: string[];
   errors: string[];
+  selected: { kind: string; guid: number; event: { id: number } | null } | null;
 }
 const state = async (page: Page): Promise<PageState> => (await page.evaluate('window.__state')) as PageState;
 const open = (page: Page, directory: string, map: number): Promise<unknown> =>
@@ -183,6 +184,38 @@ test('draws spawns: a marker where a display cannot be drawn, and asks the clien
   const hidden = await page.locator('canvas.world3d__canvas').screenshot();
   const after = (await page.evaluate(`window.__pixel(${JSON.stringify(hidden.toString('base64'))}, 0.5, 0.5)`)) as number[];
   expect(after).not.toEqual([r, g, b, 255]);
+});
+
+test('a click selects the NPC under it, and event spawns only once they are shown', async ({ page }) => {
+  await openPage(page);
+  const SPOT = { x: START.x + 60, y: START.y - 60, z: START.z };
+  // A marker NPC at the camera's target (the middle of the picture), and one that only comes with an event
+  await page.evaluate(`window.__spawns = { creatures: [
+    { guid: 5, entry: 1, name: 'Here', map: 0, x: ${SPOT.x}, y: ${SPOT.y}, z: ${SPOT.z}, orientation: 0, displayId: 0, scale: 4, wander: 0, path: null, equipment: [0,0,0], own: false, event: null },
+    { guid: 6, entry: 1, name: 'Holiday', map: 0, x: ${SPOT.x - 6}, y: ${SPOT.y - 6}, z: ${SPOT.z}, orientation: 0, displayId: 0, scale: 4, wander: 0, path: null, equipment: [0,0,0], own: false, event: { id: 12, name: 'Fair' } }
+  ], objects: [], capped: { creatures: false, objects: false } }`);
+  await page.evaluate(`window.__open('azeroth', 0, ${JSON.stringify(SPOT)})`);
+  await page.waitForFunction('window.__state.ready', null, { timeout: 45000 });
+  await page.waitForTimeout(1000);
+  const canvas = page.locator('canvas.world3d__canvas');
+  const box = (await canvas.boundingBox())!;
+  const click = async (fx: number, fy: number) => {
+    await page.mouse.click(box.x + box.width * fx, box.y + box.height * fy);
+    return (await state(page)).selected;
+  };
+
+  expect(await click(0.5, 0.5)).toMatchObject({ kind: 'creature', guid: 5, event: null });
+  // Off to the side of everything: nothing selected
+  expect(await click(0.05, 0.9)).toBeNull();
+
+  // The event NPC stands between the camera and the first: hidden by default, so the click reaches the first
+  await page.evaluate('window.__setVisibility({ creatures: true, objects: true, paths: true, events: true })');
+  await page.waitForTimeout(500);
+  expect(await click(0.5, 0.5)).toMatchObject({ guid: 6, event: { id: 12 } });
+  await page.evaluate('window.__setVisibility({ creatures: true, objects: true, paths: true, events: false })');
+  await page.waitForTimeout(500);
+  expect(await click(0.5, 0.5)).toMatchObject({ guid: 5 });
+  expect((await state(page)).errors).toEqual([]);
 });
 
 test('draws a patrol route as a line over the ground', async ({ page }) => {

@@ -23,6 +23,7 @@ export function ownViewSpawns(entities: { npcs: readonly CustomNpc[]; objects: r
       path: spawn.patrol ? spawn.patrol.points.map((p) => ({ x: p.x, y: p.y, z: p.z })) : null,
       equipment: [npc.equipment.mainHand, npc.equipment.offHand, npc.equipment.ranged],
       own: true,
+      event: null,
     })),
   );
 
@@ -40,6 +41,7 @@ export function ownViewSpawns(entities: { npcs: readonly CustomNpc[]; objects: r
       displayId: object.displayId,
       scale: object.size,
       own: true,
+      event: null,
     })),
   );
 

@@ -3,13 +3,14 @@ import { assetUrl } from '@core/client/asset-url';
 import { worldMapDirectory } from '@core/map/world-maps';
 import { createWorld3D, type World3D } from './world3d';
 import { useApi } from '../state/names';
-import type { SpawnStatus, SpawnVisibility } from './scene/spawn/SpawnManager';
+import type { PickedSpawn, SpawnStatus, SpawnVisibility } from './scene/spawn/SpawnManager';
 import type { ViewSpawns } from '@core/db/view-spawns';
 import './world3d.css';
 
 /** The camera's controls, as the help in the corner lists them. */
 const CONTROLS: [string, string][] = [
   ['Right-drag', 'Look around'],
+  ['Left-click', 'Select an NPC or object'],
   ['Left-drag', 'Orbit round the point under the cursor'],
   ['Middle-drag', 'Pan'],
   ['Wheel', 'Move forward and back'],
@@ -22,19 +23,21 @@ const CONTROLS: [string, string][] = [
 
 /** Where the layer checkboxes are remembered, per viewer. */
 const LAYERS_KEY = 'acqc.world3d.layers';
-const ALL_LAYERS: SpawnVisibility = { creatures: true, objects: true, paths: true };
-const LAYER_LABELS: [keyof SpawnVisibility, string][] = [
+/** Event spawns (holidays, fairs) are off until asked for: they are only in the world while their event runs. */
+const DEFAULT_LAYERS: SpawnVisibility = { creatures: true, objects: true, paths: true, events: false };
+const LAYER_LABELS: [keyof SpawnVisibility, string, string?][] = [
   ['creatures', 'NPCs'],
   ['objects', 'Objects'],
   ['paths', 'Paths'],
+  ['events', 'Event spawns', 'NPCs and objects that appear only while a game event (a holiday, a fair) runs'],
 ];
 
 function readLayers(): SpawnVisibility {
   try {
     const saved = JSON.parse(localStorage.getItem(LAYERS_KEY) ?? 'null') as Partial<SpawnVisibility> | null;
-    return { ...ALL_LAYERS, ...(saved ?? {}) };
+    return { ...DEFAULT_LAYERS, ...(saved ?? {}) };
   } catch {
-    return { ...ALL_LAYERS };
+    return { ...DEFAULT_LAYERS };
   }
 }
 
@@ -55,6 +58,8 @@ interface ViewProps {
   hasClient: boolean;
   /** The open quest's own NPCs and objects, drawn with the world's. */
   own?: ViewSpawns;
+  /** Told which NPC or object was clicked in the view, or null when the selection was cleared. */
+  onSelect?(spawn: PickedSpawn | null): void;
 }
 
 /**
@@ -90,7 +95,7 @@ class Contained extends Component<{ children: ReactNode }, { failure: string | n
   }
 }
 
-function WorldStage({ map, start, hasClient, own }: ViewProps): React.JSX.Element {
+function WorldStage({ map, start, hasClient, own, onSelect }: ViewProps): React.JSX.Element {
   const container = useRef<HTMLDivElement>(null);
   const world = useRef<World3D | null>(null);
   const startRef = useRef(start);
@@ -102,6 +107,9 @@ function WorldStage({ map, start, hasClient, own }: ViewProps): React.JSX.Elemen
   const [help, setHelp] = useState(false);
   const [layers, setLayers] = useState<SpawnVisibility>(readLayers);
   const [spawns, setSpawns] = useState<SpawnStatus | null>(null);
+  const [selected, setSelected] = useState<PickedSpawn | null>(null);
+  const onSelectRef = useRef(onSelect);
+  onSelectRef.current = onSelect;
   const api = useApi();
   const apiRef = useRef(api);
   apiRef.current = api;
@@ -120,6 +128,7 @@ function WorldStage({ map, start, hasClient, own }: ViewProps): React.JSX.Elemen
     setArea(null);
     setMissing([]);
     setStatus('loading');
+    setSelected(null);
     let live = true;
     let created: World3D | null = null;
     const slow = setTimeout(() => live && setStatus((s) => (s === 'loading' ? 'slow' : s)), SLOW_MS);
@@ -144,6 +153,11 @@ function WorldStage({ map, start, hasClient, own }: ViewProps): React.JSX.Elemen
             onReady: () => live && setStatus('ready'),
             onProblems: (all) => live && setMissing(all),
             onError: setProblem,
+            onSelect: (spawn) => {
+              if (!live) return;
+              setSelected(spawn);
+              onSelectRef.current?.(spawn);
+            },
             spawns: async (spawnMap, box) => {
               const current = apiRef.current;
               if (!current) return { error: 'the app is not connected' };
@@ -182,6 +196,12 @@ function WorldStage({ map, start, hasClient, own }: ViewProps): React.JSX.Elemen
     }
   }, [layers]);
 
+  function clearSelection(): void {
+    world.current?.select(null);
+    setSelected(null);
+    onSelectRef.current?.(null);
+  }
+
   // What the spawn source said last: capped kinds, or why there are none.
   useEffect(() => {
     const timer = setInterval(() => {
@@ -218,14 +238,15 @@ function WorldStage({ map, start, hasClient, own }: ViewProps): React.JSX.Elemen
       )}
       {!unavailable && (
         <fieldset className="world3d__layers" aria-label="Layers">
-          {LAYER_LABELS.map(([key, label]) => (
-            <label key={key}>
+          {LAYER_LABELS.map(([key, label, title]) => (
+            <label key={key} title={title}>
               <input type="checkbox" checked={layers[key]} onChange={(e) => setLayers((l) => ({ ...l, [key]: e.target.checked }))} />
               {label}
             </label>
           ))}
         </fieldset>
       )}
+      {!unavailable && selected && <SelectedSpawn spawn={selected} onClose={clearSelection} />}
       {!unavailable && spawnNote(spawns) && <p className="world3d__spawn-note">{spawnNote(spawns)}</p>}
       {!unavailable && (
         <div className="world3d__help">
@@ -251,5 +272,28 @@ function WorldStage({ map, start, hasClient, own }: ViewProps): React.JSX.Elemen
         </p>
       )}
     </div>
+  );
+}
+
+/** The NPC or object picked in the view: what it is and where it stands. */
+function SelectedSpawn({ spawn, onClose }: { spawn: PickedSpawn; onClose(): void }): React.JSX.Element {
+  const kind = spawn.kind === 'creature' ? 'NPC' : 'Object';
+  return (
+    <section className="world3d__selected" aria-label="Selected spawn">
+      <header>
+        <h3>{spawn.name || `${kind} ${spawn.entry}`}</h3>
+        <button type="button" className="world3d__selected-close" aria-label="Clear selection" onClick={onClose}>
+          ×
+        </button>
+      </header>
+      <p>
+        {kind} {spawn.entry} · spawn {spawn.guid}
+        {spawn.own && ' · this quest’s'}
+      </p>
+      <p className="world3d__selected-place">
+        X {spawn.position.x.toFixed(2)} · Y {spawn.position.y.toFixed(2)} · Z {spawn.position.z.toFixed(2)}
+      </p>
+      {spawn.event && <p>Only during event {spawn.event.id}{spawn.event.name ? `: ${spawn.event.name}` : ''}</p>}
+    </section>
   );
 }

@@ -168,3 +168,46 @@
   font-size: 12px;
   background: rgba(21, 17, 13, 0.85);
 }
+
+.world3d__selected {
+  position: absolute;
+  top: 48px;
+  left: 14px;
+  max-width: min(320px, calc(100% - 28px));
+  padding: 8px 12px;
+  border: 1px solid rgba(255, 211, 77, 0.6);
+  border-radius: 4px;
+  font-size: 12px;
+  background: rgba(21, 17, 13, 0.9);
+}
+
+.world3d__selected header {
+  display: flex;
+  gap: 8px;
+  align-items: flex-start;
+  justify-content: space-between;
+}
+
+.world3d__selected h3 {
+  margin: 0 0 4px;
+  font-size: 14px;
+}
+
+.world3d__selected p {
+  margin: 2px 0 0;
+}
+
+.world3d__selected-place {
+  opacity: 0.75;
+  font-variant-numeric: tabular-nums;
+}
+
+.world3d__selected-close {
+  padding: 0 4px;
+  border: 0;
+  background: none;
+  color: inherit;
+  font-size: 16px;
+  line-height: 1;
+  cursor: pointer;
+}

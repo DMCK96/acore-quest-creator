@@ -10,6 +10,12 @@ export interface ViewPoint {
   z: number;
 }
 
+/** The game event a spawn belongs to: it is in the world only while the event runs (a holiday, a fishing contest) */
+export interface ViewEvent {
+  id: number;
+  name: string;
+}
+
 export interface ViewCreature {
   guid: number;
   entry: number;
@@ -31,6 +37,7 @@ export interface ViewCreature {
   equipment: [number, number, number];
   /** One of the open project's own (not yet exported) */
   own: boolean;
+  event: ViewEvent | null;
 }
 
 export interface ViewObject {
@@ -46,6 +53,7 @@ export interface ViewObject {
   displayId: number;
   scale: number;
   own: boolean;
+  event: ViewEvent | null;
 }
 
 export interface ViewSpawns {
@@ -62,6 +70,12 @@ export const SPAWN_VIEW_CAP = 2000;
 const RANDOM_MOVEMENT = '1';
 
 type Row = Readonly<Record<string, string | null>>;
+
+/** A spawn's event from its `event_entry` and `event_name` columns; none when it has no event */
+const eventOf = (row: Row): ViewEvent | null => {
+  const id = num(row.event_entry);
+  return id > 0 ? { id, name: row.event_name ?? '' } : null;
+};
 
 const num = (value: string | null | undefined, fallback = 0): number => {
   if (value === null || value === undefined || value === '') return fallback;
@@ -85,6 +99,7 @@ export function toViewCreature(row: Row, path: ViewPoint[] | null, equipment: [n
     path,
     equipment,
     own: false,
+    event: eventOf(row),
   };
 }
 
@@ -101,6 +116,7 @@ export function toViewObject(row: Row): ViewObject {
     displayId: num(row.display_id),
     scale: num(row.size, 1),
     own: false,
+    event: eventOf(row),
   };
 }
 

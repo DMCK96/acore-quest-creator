@@ -16,7 +16,19 @@ type Box = { minX: number; maxX: number; minY: number; maxY: number };
 
 type SpawnSource = (map: number, box: Box) => Promise<ViewSpawns | { error: string }>;
 
-type SpawnVisibility = { creatures: boolean; objects: boolean; paths: boolean };
+/** Which spawns are drawn; `events` takes in those that appear only while a game event runs */
+type SpawnVisibility = { creatures: boolean; objects: boolean; paths: boolean; events: boolean };
+
+/** What a spawn is, as picking one says */
+type PickedSpawn = {
+  kind: 'creature' | 'object';
+  guid: number;
+  entry: number;
+  name: string;
+  own: boolean;
+  event: { id: number; name: string } | null;
+  position: { x: number; y: number; z: number };
+};
 
 type SpawnManagerOptions = {
   resolver: DisplayResolver;
@@ -53,7 +65,34 @@ const SHIELD_POINT = 0;
 /** How long to wait before asking again for an area whose answer failed */
 const RETRY_MS = 30000;
 
-const ALL_VISIBLE: SpawnVisibility = { creatures: true, objects: true, paths: true };
+/**
+ * Each geometry's bounds from its own vertices, kept once worked out. A model's stored bounds take in
+ * the reach of every animation it has, which for a guard is a box thirty yards wide.
+ */
+const vertexBounds = new WeakMap<THREE.BufferGeometry, THREE.Box3>();
+const boundsOf = (geometry: THREE.BufferGeometry): THREE.Box3 => {
+  let bounds = vertexBounds.get(geometry);
+  if (!bounds) {
+    const position = geometry.getAttribute('position');
+    bounds = position ? new THREE.Box3().setFromBufferAttribute(position) : new THREE.Box3();
+    vertexBounds.set(geometry, bounds);
+  }
+  return bounds;
+};
+
+/** A drawn spawn's bounds in the world, as it stands (with what it holds), into `target` */
+function spawnBounds(spawn: THREE.Object3D, target: THREE.Box3): THREE.Box3 {
+  const part = new THREE.Box3();
+  target.makeEmpty();
+  spawn.traverseVisible((object) => {
+    const geometry = (object as THREE.Mesh).geometry;
+    if (geometry) target.union(part.copy(boundsOf(geometry)).applyMatrix4(object.matrixWorld));
+  });
+  return target;
+}
+
+/** Event spawns are left out until asked for: a town would otherwise show every holiday at once */
+const DEFAULT_VISIBILITY: SpawnVisibility = { creatures: true, objects: true, paths: true, events: false };
 
 class SpawnManager {
   #resolver: DisplayResolver;
@@ -67,7 +106,7 @@ class SpawnManager {
   /** Areas asked for and not removed since; a removal while asking drops the answer */
   #wanted = new globalThis.Map<number, number>();
   #requests = 0;
-  #visibility: SpawnVisibility = { ...ALL_VISIBLE };
+  #visibility: SpawnVisibility = { ...DEFAULT_VISIBILITY };
   #own: ViewSpawns = { creatures: [], objects: [], capped: { creatures: false, objects: false } };
   #warned = new Set<string>();
   #now: () => number;
@@ -160,6 +199,39 @@ class SpawnManager {
    */
   async setOwnSpawns(spawns: ViewSpawns) {
     this.#own = spawns;
+    await this.#redraw();
+  }
+
+  /**
+   * An area's database spawns, less any the open quest has its own of, plus its own in the box on its
+   * map; without event spawns unless they are asked for
+   */
+  #withOwn(spawns: ViewSpawns, box: Box, map: number): ViewSpawns {
+    const inBox = (s: { map: number; x: number; y: number }) => s.map === map && s.x >= box.minX && s.x <= box.maxX && s.y >= box.minY && s.y <= box.maxY;
+    const shown = (s: { event?: unknown }) => this.#visibility.events || !s.event;
+    const ownCreatures = new Set(this.#own.creatures.map((c) => c.guid));
+    const ownObjects = new Set(this.#own.objects.map((o) => o.guid));
+    return {
+      creatures: [...spawns.creatures.filter((c) => !ownCreatures.has(c.guid) && shown(c)), ...this.#own.creatures.filter(inBox)],
+      objects: [...spawns.objects.filter((o) => !ownObjects.has(o.guid) && shown(o)), ...this.#own.objects.filter(inBox)],
+      capped: spawns.capped,
+    };
+  }
+
+  /** Hides or shows kinds without unloading them; taking event spawns in or out redraws the areas */
+  async setVisibility(visibility: SpawnVisibility) {
+    const redraw = visibility.events !== this.#visibility.events;
+    this.#visibility = { ...DEFAULT_VISIBILITY, ...visibility };
+    for (const group of this.#areas.values()) {
+      this.#applyVisibility(group);
+    }
+    if (redraw) {
+      await this.#redraw();
+    }
+  }
+
+  /** Redraws every loaded area from its last answer, without asking again */
+  async #redraw() {
     await Promise.all(
       [...this.#areas.entries()].map(([areaId, group]) => {
         const response = this.#responses.get(areaId);
@@ -168,23 +240,40 @@ class SpawnManager {
     );
   }
 
-  /** An area's database spawns, less any the open quest has its own of, plus its own in the box on its map */
-  #withOwn(spawns: ViewSpawns, box: Box, map: number): ViewSpawns {
-    const inBox = (s: { map: number; x: number; y: number }) => s.map === map && s.x >= box.minX && s.x <= box.maxX && s.y >= box.minY && s.y <= box.maxY;
-    const ownCreatures = new Set(this.#own.creatures.map((c) => c.guid));
-    const ownObjects = new Set(this.#own.objects.map((o) => o.guid));
-    return {
-      creatures: [...spawns.creatures.filter((c) => !ownCreatures.has(c.guid)), ...this.#own.creatures.filter(inBox)],
-      objects: [...spawns.objects.filter((o) => !ownObjects.has(o.guid)), ...this.#own.objects.filter(inBox)],
-      capped: spawns.capped,
-    };
+  /**
+   * The nearest drawn spawn a ray passes through (by its bounds), or null. A spawn whose bounds hold
+   * the ray's start (a building the camera is inside) is passed over, and so is one beyond `maxDistance`
+   * (something solid, the ground or a wall, is in front of it).
+   */
+  pick(ray: THREE.Ray, maxDistance = Infinity): PickedSpawn | null {
+    const bounds = new THREE.Box3();
+    const hit = new THREE.Vector3();
+    let best: { spawn: THREE.Object3D; distance: number } | null = null;
+    for (const group of this.#areas.values()) {
+      for (const name of ['creatures', 'objects']) {
+        const kind = group.getObjectByName(name);
+        if (!kind?.visible) continue;
+        for (const spawn of kind.children) {
+          if (!spawn.visible || !spawn.userData.spawn) continue;
+          spawnBounds(spawn, bounds);
+          if (bounds.isEmpty() || bounds.containsPoint(ray.origin) || !ray.intersectBox(bounds, hit)) continue;
+          const distance = hit.distanceTo(ray.origin);
+          if (distance <= maxDistance && (!best || distance < best.distance)) best = { spawn, distance };
+        }
+      }
+    }
+    return best ? { ...best.spawn.userData.spawn, position: { ...best.spawn.userData.spawn.position } } : null;
   }
 
-  setVisibility(visibility: SpawnVisibility) {
-    this.#visibility = { ...visibility };
+  /** The drawn object of a spawn, or null when it is not drawn (its area unloaded, or it is hidden) */
+  find(kind: 'creature' | 'object', guid: number): THREE.Object3D | null {
     for (const group of this.#areas.values()) {
-      this.#applyVisibility(group);
+      const shown = group.getObjectByName(kind === 'creature' ? 'creatures' : 'objects');
+      if (!shown?.visible) continue;
+      const spawn = shown.children.find((child) => child.userData.spawn?.guid === guid);
+      if (spawn) return spawn.visible ? spawn : null;
     }
+    return null;
   }
 
   /** Draws only the spawns within the draw distance of the camera; a hidden model stops animating */
@@ -327,7 +416,15 @@ class SpawnManager {
     object.position.set(...transform.position);
     object.quaternion.set(...transform.quaternion);
     object.scale.setScalar(transform.scale * (drawn ? lookScale : 1));
-    object.userData.spawn = { kind, guid: spawn.guid, own: spawn.own };
+    object.userData.spawn = {
+      kind,
+      guid: spawn.guid,
+      entry: spawn.entry,
+      name: spawn.name,
+      own: spawn.own,
+      event: spawn.event ?? null,
+      position: { x: spawn.x, y: spawn.y, z: spawn.z },
+    };
     return object;
   }
 
@@ -366,5 +463,5 @@ class SpawnManager {
 }
 
 export default SpawnManager;
-export { SpawnManager };
-export type { SpawnSource, SpawnStatus, SpawnVisibility };
+export { SpawnManager, spawnBounds };
+export type { PickedSpawn, SpawnSource, SpawnStatus, SpawnVisibility };

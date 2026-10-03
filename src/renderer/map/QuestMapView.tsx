@@ -464,7 +464,13 @@ export function QuestMapView({
       </header>
       <div className="quest-map__body">
         {show3d ? (
-          <World3DView map={currentMap} hasClient={hasClient} start={{ x: shownView.x, y: shownView.y, z: start?.z ?? 0 }} own={ownViewSpawns({ npcs, objects })} />
+          <World3DView map={currentMap} hasClient={hasClient} start={{ x: shownView.x, y: shownView.y, z: start?.z ?? 0 }} own={ownViewSpawns({ npcs, objects })}
+            onSelect={(spawn) => {
+              // A spawn the quest has a marker for is selected in the panel too
+              const id = spawn && `spawn:${spawn.kind === 'creature' ? 'npc' : 'obj'}:${spawn.entry}:${spawn.guid}`;
+              if (id && markers.some((m) => m.id === id)) setSelectedId(id);
+            }}
+          />
         ) : (
         <LeafletMap
           map={currentMap}

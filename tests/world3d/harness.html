@@ -6,7 +6,7 @@
       import { createWorld3D } from '/src/renderer/world3d/world3d.ts';
 
       // Each world the page makes is kept so a test can leave it; what a test reads is in `__state`.
-      const state = (window.__state = { ready: false, problems: [], errors: [] });
+      const state = (window.__state = { ready: false, problems: [], errors: [], selected: null });
       window.addEventListener('error', (e) => state.errors.push(String(e.message)));
       window.addEventListener('unhandledrejection', (e) => state.errors.push(`rejected: ${e.reason}`));
       let world = null;
@@ -14,6 +14,7 @@
         world?.dispose();
         state.ready = false;
         state.problems = [];
+        state.selected = null;
         world = createWorld3D({
           container: document.getElementById('stage'),
           directory,
@@ -22,6 +23,7 @@
           onReady: () => (state.ready = true),
           onProblems: (all) => (state.problems = all),
           onError: (message) => state.errors.push(`failed: ${message}`),
+          onSelect: (spawn) => (state.selected = spawn),
           // Spawns the test sets in window.__spawns (none by default)
           spawns: () => Promise.resolve(window.__spawns ?? { creatures: [], objects: [], capped: { creatures: false, objects: false } }),
         });
