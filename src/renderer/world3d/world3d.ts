@@ -134,6 +134,8 @@ export function createWorld3D(options: World3DOptions): World3D {
     selected = spawn ? { kind: spawn.kind, guid: spawn.guid } : null;
     manager.setSelectedSpawn(selected);
     editor.select(selected);
+    // Tells a screen round the view that Esc is the view's while something is selected
+    renderer.domElement.dataset.selection = selected ? 'on' : '';
   };
   const click = (x: number, y: number, shift: boolean): void => {
     if (editor.click(x, y, shift)) return;
@@ -164,18 +166,20 @@ export function createWorld3D(options: World3DOptions): World3D {
     },
     options,
   );
-  // The editing keys, only while the view has focus (typing in a field edits nothing here)
+  // The editing keys, on the view itself so they only act while it has focus; a key used here goes
+  // no further (Esc that clears a selection must not also close the screen or the quest editor)
   const onKeyDown = (event: KeyboardEvent): void => {
-    if (document.activeElement !== renderer.domElement) return;
+    const used = event.code === 'Escape' ? selected !== null : editor.keyDown(event);
     if (event.code === 'Escape' && selected) {
       choose(null);
       options.onSelect?.(null);
-      event.preventDefault();
-      return;
     }
-    if (editor.keyDown(event)) event.preventDefault();
+    if (used) {
+      event.preventDefault();
+      event.stopPropagation();
+    }
   };
-  window.addEventListener('keydown', onKeyDown);
+  renderer.domElement.addEventListener('keydown', onKeyDown);
 
   // The selected spawn's outline: its bounds, followed every frame (it may be redrawn, or leave)
   const outline = new THREE.Box3Helper(new THREE.Box3(), SELECTED_COLOUR);
@@ -272,7 +276,7 @@ export function createWorld3D(options: World3DOptions): World3D {
       cancelAnimationFrame(frame);
       observer.disconnect();
       // Nothing here may throw: this runs while React unmounts the view, and a throw would take the whole screen with it.
-      for (const step of [() => controls.dispose?.(), () => window.removeEventListener('keydown', onKeyDown), () => editor.dispose(), stopProblems, () => manager.dispose(), () => release(manager.root), () => release(outline), () => renderer.dispose()]) {
+      for (const step of [() => controls.dispose?.(), () => renderer.domElement.removeEventListener('keydown', onKeyDown), () => editor.dispose(), stopProblems, () => manager.dispose(), () => release(manager.root), () => release(outline), () => renderer.dispose()]) {
         try {
           step();
         } catch (error) {

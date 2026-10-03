@@ -87,4 +87,21 @@ describe('3D view screen', () => {
     await userEvent.click(screen.getByRole('button', { name: 'Close' }));
     expect(onClose).toHaveBeenCalled();
   });
+
+  it('leaves Esc to the view while something is selected in it, and closes on Esc otherwise', async () => {
+    clientHasEverything();
+    const onClose = vi.fn();
+    render(<World3DScreen hasClient onClose={onClose} />);
+    await waitFor(() => expect(created).toHaveLength(1));
+    // What the real world does with its canvas while a spawn is selected
+    const canvas = document.createElement('canvas');
+    canvas.dataset.selection = 'on';
+    document.body.appendChild(canvas);
+    canvas.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+    expect(onClose).not.toHaveBeenCalled();
+    canvas.dataset.selection = '';
+    canvas.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+    expect(onClose).toHaveBeenCalledTimes(1);
+    canvas.remove();
+  });
 });

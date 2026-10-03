@@ -16,6 +16,11 @@ import './world3d.css';
 const CONTROLS: [string, string][] = [
   ['Right-drag', 'Look around'],
   ['Left-click', 'Select an NPC or object'],
+  ['G / R', 'Move or rotate the selected spawn'],
+  ['Shift-click', 'Add a point to the selected NPC’s route'],
+  ['Delete', 'Remove the selected route point'],
+  ['Ctrl+Z / Ctrl+Y', 'Undo and redo'],
+  ['Esc', 'Clear the selection'],
   ['Left-drag', 'Orbit round the point under the cursor'],
   ['Middle-drag', 'Pan'],
   ['Wheel', 'Move forward and back'],

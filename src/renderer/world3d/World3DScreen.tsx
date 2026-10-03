@@ -28,6 +28,8 @@ export function World3DScreen({ hasClient, onClose }: { hasClient: boolean; onCl
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent): void => {
       if (e.key !== 'Escape') return;
+      // While something is selected in the view, Esc clears that first
+      if (e.target instanceof HTMLElement && e.target.dataset.selection === 'on') return;
       e.stopPropagation();
       onClose();
     };

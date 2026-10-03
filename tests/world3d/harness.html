@@ -8,6 +8,9 @@
       // Each world the page makes is kept so a test can leave it; what a test reads is in `__state`.
       const state = (window.__state = { ready: false, problems: [], errors: [], selected: null, edits: [], notices: [] });
       window.addEventListener('error', (e) => state.errors.push(String(e.message)));
+      // Esc that reaches the document: what a screen or editor round the view would see
+      state.escapes = 0;
+      document.addEventListener('keydown', (e) => e.key === 'Escape' && (state.escapes += 1));
       window.addEventListener('unhandledrejection', (e) => state.errors.push(`rejected: ${e.reason}`));
       let world = null;
       window.__open = (directory, map, start) => {

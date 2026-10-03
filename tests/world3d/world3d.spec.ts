@@ -52,6 +52,7 @@ interface PageState {
   selected: { kind: string; guid: number; event: { id: number } | null } | null;
   edits: any[];
   notices: string[];
+  escapes: number;
 }
 const state = async (page: Page): Promise<PageState> => (await page.evaluate('window.__state')) as PageState;
 const open = (page: Page, directory: string, map: number): Promise<unknown> =>
@@ -292,6 +293,25 @@ test('a route never goes below two points', async ({ page }) => {
   await page.keyboard.press('Delete');
   await expect.poll(async () => (await state(page)).notices).toContain('A route keeps at least two points.');
   expect((await state(page)).edits).toEqual([]);
+});
+
+test('Esc clears the selection and goes no further; with nothing selected it is left to what is round the view', async ({ page }) => {
+  await openPage(page);
+  const SPOT = { x: START.x + 60, y: START.y - 60, z: START.z };
+  await page.evaluate(`window.__spawns = { creatures: [
+    { guid: 5, entry: 1, name: 'Here', map: 0, x: ${SPOT.x}, y: ${SPOT.y}, z: ${SPOT.z}, orientation: 0, displayId: 0, scale: 4, wander: 0, path: null, pathId: 0, equipment: [0,0,0], own: false, event: null }
+  ], objects: [], capped: { creatures: false, objects: false } }`);
+  await page.evaluate(`window.__open('azeroth', 0, ${JSON.stringify(SPOT)})`);
+  await page.waitForFunction('window.__state.ready', null, { timeout: 45000 });
+  await page.waitForTimeout(1000);
+  const box = (await page.locator('canvas.world3d__canvas').boundingBox())!;
+  await page.mouse.click(box.x + box.width / 2, box.y + box.height / 2);
+  expect((await state(page)).selected).toMatchObject({ guid: 5 });
+  await page.keyboard.press('Escape');
+  expect((await state(page)).selected).toBeNull();
+  expect((await state(page)).escapes).toBe(0);
+  await page.keyboard.press('Escape');
+  expect((await state(page)).escapes).toBe(1);
 });
 
 test('draws the patrol route of the selected NPC as a line over the ground', async ({ page }) => {
