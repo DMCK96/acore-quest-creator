@@ -36,9 +36,11 @@ compiler setting than this project's.
 
 ## What is added
 
-- `wmo/`: buildings (WMO), which upstream does not draw. `wmo/format` is the building reader from
-  `@wowserhq/format` 0.28.0 (MIT), copied because the 0.25.0 this code is written against lacks it,
-  plus the material blend mode, which the published reader drops. `wmo/loader` parses a building and
+- `wmo/`: buildings (WMO), which upstream does not draw. `wmo/format` holds the building's root-file reader
+  from `@wowserhq/format` 0.28.0 (MIT), copied because the 0.25.0 this code is written against lacks
+  it, plus the material blend mode, which the published reader drops. Group files are read by
+  `wmo/format/group.ts`, written here: the published reader throws on chunk sizes that are not
+  whole numbers of floats and on a group whose batches are all see-through, and real files have both. `wmo/loader` parses a building and
   its group files in a worker; `wmo/WmoManager.ts` draws one mesh per group. Groups with baked
   lighting (vertex colours) are drawn unlit with it; the others are lit by the scene's lights. The
   area loader now passes on the buildings an area places (`objDefs`), which it used to drop.

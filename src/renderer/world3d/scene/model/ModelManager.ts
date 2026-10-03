@@ -13,6 +13,7 @@ import SceneLight from '../light/SceneLight.js';
 import ModelAnimator from './ModelAnimator.js';
 
 type ModelResources = {
+  path: string;
   name: string;
   geometry: THREE.BufferGeometry;
   materials: MaterialSpec[];
@@ -83,6 +84,7 @@ class ModelManager {
     const geometry = this.#createGeometry(spec);
 
     const resources: ModelResources = {
+      path,
       name: spec.name,
       geometry,
       materials: spec.materials,
@@ -159,16 +161,16 @@ class ModelManager {
   #createMaterials(resources: ModelResources) {
     return Promise.all(
       resources.materials.map((materialSpec) =>
-        this.#createMaterial(materialSpec, resources.skinned),
+        this.#createMaterial(materialSpec, resources.skinned, resources.path),
       ),
     );
   }
 
-  async #createMaterial(spec: MaterialSpec, skinned: boolean) {
+  async #createMaterial(spec: MaterialSpec, skinned: boolean, modelName: string) {
     const vertexShader = getVertexShader(spec.vertexShader);
     const fragmentShader = getFragmentShader(spec.fragmentShader);
     const textures = await Promise.all(
-      spec.textures.map((textureSpec) => this.#createTexture(textureSpec)),
+      spec.textures.map((textureSpec) => this.#createTexture(textureSpec, modelName)),
     );
     const textureWeightIndex = spec.textureWeightIndex;
     const textureTransformIndices = spec.textureTransformIndices;
@@ -191,14 +193,14 @@ class ModelManager {
     );
   }
 
-  async #createTexture(spec: TextureSpec) {
+  async #createTexture(spec: TextureSpec, modelName: string) {
     const wrapS =
       spec.flags & M2_TEXTURE_FLAG.FLAG_WRAP_S ? THREE.RepeatWrapping : THREE.ClampToEdgeWrapping;
     const wrapT =
       spec.flags & M2_TEXTURE_FLAG.FLAG_WRAP_T ? THREE.RepeatWrapping : THREE.ClampToEdgeWrapping;
 
     if (spec.component === M2_TEXTURE_COMPONENT.COMPONENT_NONE) {
-      return this.#textureManager.get(spec.path, wrapS, wrapT);
+      return this.#textureManager.get(spec.path, wrapS, wrapT, undefined, undefined, `model ${modelName}`);
     }
 
     // TODO handle other component types

@@ -18,6 +18,7 @@ const MATERIAL_FLAG_CLAMP_S = 0x40;
 const MATERIAL_FLAG_CLAMP_T = 0x80;
 
 type WmoResources = {
+  path: string;
   spec: WmoSpec;
   geometries: THREE.BufferGeometry[];
   /** Materials for groups with baked lighting, and for those without; made on first use */
@@ -139,6 +140,7 @@ class WmoManager {
     }
 
     const resources: WmoResources = {
+      path,
       spec,
       geometries: spec.groups.map((group) => this.#createGeometry(group)),
       materials: { lit: null, baked: null },
@@ -186,14 +188,14 @@ class WmoManager {
     const key = baked ? 'baked' : 'lit';
     if (!resources.materials[key]) {
       resources.materials[key] = Promise.all(
-        resources.spec.materials.map((spec) => this.#createMaterial(spec, baked)),
+        resources.spec.materials.map((spec) => this.#createMaterial(spec, baked, resources.path)),
       );
     }
 
     return resources.materials[key];
   }
 
-  async #createMaterial(spec: WmoMaterialSpec, baked: boolean) {
+  async #createMaterial(spec: WmoMaterialSpec, baked: boolean, building: string) {
     const unlit = (spec.flags & MATERIAL_FLAG_UNLIT) !== 0;
 
     const params: THREE.MaterialParameters = {
@@ -208,6 +210,9 @@ class WmoManager {
         texturePath,
         spec.flags & MATERIAL_FLAG_CLAMP_S ? THREE.ClampToEdgeWrapping : THREE.RepeatWrapping,
         spec.flags & MATERIAL_FLAG_CLAMP_T ? THREE.ClampToEdgeWrapping : THREE.RepeatWrapping,
+        undefined,
+        undefined,
+        `building ${building}`,
       );
     } else {
       params.color = 0x808080;

@@ -136,23 +136,34 @@ const uint16s = (values: number[]): Buffer => {
   return b;
 };
 
-/** The building's root file: one material (the brick texture) and two groups. */
+/** The building's root file: two materials (the brick texture, and one the client does not have) and four groups. */
 function houseRoot(): Buffer {
   const mohd = Buffer.alloc(64);
-  mohd.writeUInt32LE(1, 0); // textures
-  mohd.writeUInt32LE(2, 4); // groups
-  const textures = Buffer.from('tileset\\brick.blp\0\0');
-  const momt = Buffer.alloc(64);
-  momt.writeUInt32LE(0, 12); // first texture's offset
-  momt.writeUInt32LE(textures.length - 1, 24); // second: the empty string at the end
+  mohd.writeUInt32LE(2, 0); // textures
+  mohd.writeUInt32LE(4, 4); // groups
+  const brick = 'tileset\\brick.blp\0';
+  const textures = Buffer.from(`${brick}tileset\\missing.blp\0\0`);
+  const empty = textures.length - 1;
+  const material = (textureOffset: number): Buffer => {
+    const momt = Buffer.alloc(64);
+    momt.writeUInt32LE(textureOffset, 12); // first texture's offset
+    momt.writeUInt32LE(empty, 24); // second: the empty string at the end
+    return momt;
+  };
   const group = Buffer.alloc(32);
   const names = Buffer.from('house\0');
-  const mogi = Buffer.concat([group, group]);
-  return Buffer.concat([chunk('MVER', u32(17)), chunk('MOHD', mohd), chunk('MOTX', textures), chunk('MOMT', momt), chunk('MOGN', names), chunk('MOGI', mogi)]);
+  return Buffer.concat([
+    chunk('MVER', u32(17)),
+    chunk('MOHD', mohd),
+    chunk('MOTX', textures),
+    chunk('MOMT', Buffer.concat([material(0), material(brick.length)])),
+    chunk('MOGN', names),
+    chunk('MOGI', Buffer.concat([group, group, group, group])),
+  ]);
 }
 
 /** One group: a box, with baked lighting when `colour` is given. */
-function houseGroup(x: number, y: number, colour: number | null): Buffer {
+function houseGroup(x: number, y: number, colour: number | null, options: { allSeeThrough?: boolean; oddSizes?: boolean; material?: number } = {}): Buffer {
   const { positions, indices } = box(x, y, 24, 14);
   const vertexCount = positions.length / 3;
   const batch = Buffer.alloc(24);
@@ -160,13 +171,18 @@ function houseGroup(x: number, y: number, colour: number | null): Buffer {
   batch.writeUInt16LE(indices.length, 16);
   batch.writeUInt16LE(0, 18);
   batch.writeUInt16LE(vertexCount - 1, 20);
+  batch[23] = options.material ?? 0;
   const normals = floats(Array.from({ length: vertexCount }, () => [0, 0, 1]).flat());
   const uvs = floats(Array.from({ length: vertexCount }, (_, i) => [i % 2, Math.floor(i / 2) % 2]).flat());
   const colours = Buffer.alloc(vertexCount * 4, colour ?? 0);
-  const parts = [chunk('MOVI', uint16s(indices)), chunk('MOVT', floats(positions)), chunk('MONR', normals), chunk('MOTV', uvs), chunk('MOBA', batch)];
+  // Real files state chunk sizes that are not whole numbers of floats
+  const stray = options.oddSizes ? Buffer.alloc(2) : Buffer.alloc(0);
+  const parts = [chunk('MOVI', uint16s(indices)), chunk('MOVT', Buffer.concat([floats(positions), stray])), chunk('MONR', Buffer.concat([normals, stray])), chunk('MOTV', uvs), chunk('MOBA', batch)];
   if (colour !== null) parts.push(chunk('MOCV', colours));
   const header = Buffer.alloc(68);
   header.writeUInt32LE(colour === null ? 0 : 4, 8);
+  // Every batch see-through: the lit vertices would begin after the last of them, and there are none
+  if (options.allSeeThrough) header.writeUInt16LE(1, 40);
   return Buffer.concat([chunk('MVER', u32(17)), chunk('MOGP', Buffer.concat([header, ...parts]))]);
 }
 
@@ -222,6 +238,8 @@ export async function startFakeClient(port = 0): Promise<FakeClient> {
     ['world/wmo/test/house.wmo', houseRoot()],
     ['world/wmo/test/house_000.wmo', houseGroup(0, 0, null)],
     ['world/wmo/test/house_001.wmo', houseGroup(0, -40, 0x80)],
+    ['world/wmo/test/house_002.wmo', houseGroup(0, -80, 0x80, { allSeeThrough: true })],
+    ['world/wmo/test/house_003.wmo', houseGroup(0, -120, null, { oddSizes: true, material: 1 })],
     ['tileset/garbage.blp', Buffer.alloc(200, 0x67)],
     ['tileset/raw.blp', rawTexture()],
     ['world/bad/bad.m2', Buffer.concat([Buffer.from('MD20'), Buffer.alloc(40, 0xff)])],

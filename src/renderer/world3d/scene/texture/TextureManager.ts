@@ -42,6 +42,8 @@ class TextureManager {
     wrapT: THREE.Wrapping = THREE.RepeatWrapping,
     minFilter: THREE.MinificationTextureFilter = THREE.LinearMipmapLinearFilter,
     magFilter: THREE.MagnificationTextureFilter = THREE.LinearFilter,
+    // What asked for it (a building or model), so a report can say where a missing texture is used
+    usedBy?: string,
   ) {
     const refId = [normalizePath(path), wrapS, wrapT, minFilter, magFilter].join(':');
     this.#ref(refId);
@@ -64,7 +66,8 @@ class TextureManager {
     const loading = this.#load(refId, path, wrapS, wrapT, minFilter, magFilter).catch((error) => {
       this.#failed.add(refId);
       this.#loading.delete(refId);
-      reportProblem(`texture:${refId}`, `texture ${path} could not be loaded: ${describeError(error)}`);
+      const where = usedBy ? ` (used by ${usedBy})` : '';
+      reportProblem(`texture:${refId}`, `texture ${path}${where} could not be loaded: ${describeError(error)}`);
       return this.#getPlaceholder();
     });
     this.#loading.set(refId, loading);

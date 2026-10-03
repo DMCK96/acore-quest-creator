@@ -65,7 +65,7 @@ test('draws the terrain, and a model or texture that cannot be read costs the ar
   await page.waitForFunction('window.__state.ready', null, { timeout: 45000 });
 
   // Both broken props are reported by name, with where they failed...
-  await expect.poll(async () => (await state(page)).problems.length).toBe(3);
+  await expect.poll(async () => (await state(page)).problems.length).toBe(4);
   const { problems } = await state(page);
   expect(problems.find((p) => p.includes(BAD_MODEL))).toMatch(/could not be loaded: Invalid typed array length/);
   expect(problems.find((p) => p.includes(MISSING_MODEL))).toMatch(/404/);
@@ -73,6 +73,11 @@ test('draws the terrain, and a model or texture that cannot be read costs the ar
   // uncompressed one is not a problem at all.
   expect(problems.find((p) => /tileset.garbage\.blp/.test(p))).toMatch(/begins 67 67 67/);
   expect(problems.some((p) => /tileset.raw\.blp/.test(p))).toBe(false);
+  // A texture the client lacks says which building asked for it, and the building still draws.
+  expect(problems.find((p) => /tileset.missing\.blp/.test(p))).toMatch(/\(used by building World.wmo.test.house\.wmo\) could not be loaded/);
+  // All four of the building's groups load, however their files are written: not one is reported.
+  expect(problems.some((p) => /house_00\d/.test(p))).toBe(false);
+  for (const part of ['house_000', 'house_001', 'house_002', 'house_003']) expect(client.requested).toContain(`200 world/wmo/test/${part}.wmo`);
   // ... and the ground is on screen: the middle of the picture is the green terrain, not the sky.
   const picture = await page.locator('canvas.world3d__canvas').screenshot();
   await test.info().attach('terrain', { body: picture, contentType: 'image/png' });
@@ -84,8 +89,6 @@ test('draws the terrain, and a model or texture that cannot be read costs the ar
   // The building stands at the middle of the picture: its roof is the brick colour, not terrain or sky.
   const [roofR, , roofB] = (await page.evaluate(`window.__pixel(${JSON.stringify(picture.toString('base64'))}, 0.5, 0.5)`)) as number[];
   expect(roofR!).toBeGreaterThan(roofB! + 60);
-  expect(client.requested).toContain('200 world/wmo/test/house_000.wmo');
-  expect(client.requested).toContain('200 world/wmo/test/house_001.wmo');
   expect(client.requested).toContain('200 tileset/grass.blp');
 });
 

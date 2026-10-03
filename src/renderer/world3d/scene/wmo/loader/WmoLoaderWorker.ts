@@ -1,6 +1,6 @@
 // @ts-nocheck
 import { MapObj } from '../format/MapObj.js';
-import { MapObjGroup } from '../format/MapObjGroup.js';
+import { parseGroup, WmoGroupData } from '../format/group.js';
 import { WmoGroupSpec, WmoSpec } from './types.js';
 import SceneWorker from '../../worker/SceneWorker.js';
 import { AssetHost, loadAsset } from '../../asset.js';
@@ -30,7 +30,7 @@ class WmoLoaderWorker extends SceneWorker {
         const groupPath = `${basePath}_${index.toString().padStart(3, '0')}.wmo`;
         try {
           const data = await loadAsset(this.#host, groupPath);
-          return this.#createGroupSpec(new MapObjGroup(root.flags).load(data));
+          return this.#createGroupSpec(parseGroup(data, root.flags));
         } catch (error) {
           problems.push(`${groupPath}: ${error.message}`);
           return null;
@@ -60,7 +60,7 @@ class WmoLoaderWorker extends SceneWorker {
     return [spec, [...transfer]];
   }
 
-  #createGroupSpec(group: MapObjGroup): WmoGroupSpec {
+  #createGroupSpec(group: WmoGroupData): WmoGroupSpec {
     const vertices = group.vertices;
     if (!vertices || !group.indices) {
       return null;
