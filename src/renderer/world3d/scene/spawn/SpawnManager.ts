@@ -42,6 +42,9 @@ const markerMaterials = {
   object: new THREE.MeshBasicMaterial({ color: OBJECT_MARKER_COLOUR }),
 };
 
+/** Spawns further than this from the camera are not drawn, as in the game (about 100 yards) */
+const SPAWN_DRAW_DISTANCE = 100;
+
 const ALL_VISIBLE: SpawnVisibility = { creatures: true, objects: true, paths: true };
 
 class SpawnManager {
@@ -121,6 +124,26 @@ class SpawnManager {
     }
   }
 
+  /** Draws only the spawns within the draw distance of the camera; a hidden model stops animating */
+  cull(cameraPosition: THREE.Vector3) {
+    for (const group of this.#areas.values()) {
+      for (const name of ['creatures', 'objects']) {
+        for (const spawn of group.getObjectByName(name)?.children ?? []) {
+          const near = spawn.position.distanceTo(cameraPosition) <= SPAWN_DRAW_DISTANCE;
+          if (typeof spawn.show === 'function') {
+            if (near) spawn.show();
+            else spawn.hide();
+          } else {
+            spawn.visible = near;
+          }
+        }
+      }
+      for (const shown of group.getObjectByName('paths')?.children ?? []) {
+        shown.visible = shown.userData.anchor.distanceTo(cameraPosition) <= SPAWN_DRAW_DISTANCE;
+      }
+    }
+  }
+
   /** Models animate through the shared model manager; nothing of the spawns' own moves yet */
   update(_deltaTime: number, _camera: THREE.Camera) {}
 
@@ -146,10 +169,14 @@ class SpawnManager {
 
     // How they move: patrol routes and wander circles, in world coordinates
     for (const creature of spawns.creatures) {
-      const route = routeObject(creature);
-      if (route) paths.add(route);
-      const ring = wanderObject(creature);
-      if (ring) paths.add(ring);
+      // Each remembers whose it is, so it is drawn only while its NPC is near enough to be
+      const anchor = new THREE.Vector3(creature.x, creature.y, creature.z);
+      for (const shown of [routeObject(creature), wanderObject(creature)]) {
+        if (shown) {
+          shown.userData.anchor = anchor;
+          paths.add(shown);
+        }
+      }
     }
 
     const drawnObjects = await Promise.all(
@@ -173,6 +200,11 @@ class SpawnManager {
       if (look) {
         lookScale = look.scale;
         drawn = look.kind === 'building' ? await this.#createBuilding(look.path) : await this.#createModel(look);
+      } else if (spawn.displayId > 0) {
+        this.#warnOnce(
+          `${kind}:${spawn.displayId}`,
+          `3D view: ${kind} ${spawn.guid} (display ${spawn.displayId}) has no model the client knows; drawn as a marker`,
+        );
       }
     } catch (error) {
       this.#warnOnce(

@@ -33,3 +33,17 @@ describe('where a spawn stands', () => {
     expect(box.maxX - box.minX).toBeCloseTo(533.3333, 3);
   });
 });
+
+describe('which areas get spawns', () => {
+  it('is the camera\'s area and the eight around it', async () => {
+    const { nearbyAreas } = await import('../../src/renderer/world3d/scene/spawn/placement');
+    expect([...nearbyAreas(48, 32)].sort()).toEqual(
+      [[47, 31], [47, 32], [47, 33], [48, 31], [48, 32], [48, 33], [49, 31], [49, 32], [49, 33]].map(([x, y]) => `${x}:${y}`).sort(),
+    );
+  });
+
+  it('stays inside the map at its edge', async () => {
+    const { nearbyAreas } = await import('../../src/renderer/world3d/scene/spawn/placement');
+    expect([...nearbyAreas(0, 0)].sort()).toEqual(['0:0', '0:1', '1:0', '1:1']);
+  });
+});

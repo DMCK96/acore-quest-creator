@@ -16,7 +16,7 @@ import WmoManager from '../wmo/WmoManager.js';
 import LiquidManager from './liquid/LiquidManager.js';
 import SpawnManager, { SpawnSource, SpawnVisibility } from '../spawn/SpawnManager.js';
 import DisplayResolver from '../spawn/DisplayResolver.js';
-import { areaBox } from '../spawn/placement.js';
+import { areaBox, nearbyAreas } from '../spawn/placement.js';
 import { DISPLAY_RECORDS } from '../db/records.js';
 import { AssetHost } from '../asset.js';
 import MapLoader from './loader/MapLoader.js';
@@ -52,6 +52,8 @@ class MapManager extends EventTarget {
   #wmoGroups = new globalThis.Map<number, THREE.Group>();
   #liquidGroups = new globalThis.Map<number, THREE.Group>();
   #spawnGroups = new globalThis.Map<number, THREE.Group>();
+  /** Areas whose spawns are on their way */
+  #spawnLoading = new Set<number>();
   #mapId: number;
 
   #textureManager: TextureManager;
@@ -253,6 +255,53 @@ class MapManager extends EventTarget {
     this.#doodadManager.update(deltaTime, camera);
 
     this.#liquidManager.update(deltaTime);
+
+    this.#syncSpawns();
+    this.#spawnManager.cull(camera.position);
+  }
+
+  /**
+   * Spawns only for the areas round the camera's target (the terrain streams much further): loaded for
+   * areas that came near, dropped for those left behind. Each comes on its own and never holds up the
+   * area it is in.
+   */
+  #syncSpawns() {
+    const wanted = nearbyAreas(this.#targetAreaX, this.#targetAreaY);
+    const keyOf = (areaId: number) => {
+      const { areaX, areaY } = this.#getAreaIndex(areaId);
+      return `${areaX}:${areaY}`;
+    };
+
+    for (const areaId of [...this.#spawnGroups.keys(), ...this.#spawnLoading]) {
+      if (!wanted.has(keyOf(areaId)) || !this.#terrainGroups.has(areaId)) {
+        const group = this.#spawnGroups.get(areaId);
+        if (group) this.#root.remove(group);
+        this.#spawnGroups.delete(areaId);
+        this.#spawnLoading.delete(areaId);
+        this.#spawnManager.removeArea(areaId);
+      }
+    }
+
+    for (const areaId of this.#terrainGroups.keys()) {
+      if (!wanted.has(keyOf(areaId)) || this.#spawnGroups.has(areaId) || this.#spawnLoading.has(areaId)) {
+        continue;
+      }
+      const { areaX, areaY } = this.#getAreaIndex(areaId);
+      this.#spawnLoading.add(areaId);
+      this.#spawnManager
+        .loadArea(areaId, this.#mapId, areaBox(areaX, areaY))
+        .then((group) => {
+          if (!this.#spawnLoading.delete(areaId)) return;
+          if (group && this.#terrainGroups.has(areaId)) {
+            this.#spawnGroups.set(areaId, group);
+            this.#root.add(group);
+          }
+        })
+        .catch((error) => {
+          this.#spawnLoading.delete(areaId);
+          console.warn(`3D view: the NPCs and objects of area ${areaId} could not be drawn: ${describeError(error)}`);
+        });
+    }
   }
 
   dispose() {
@@ -362,6 +411,7 @@ class MapManager extends EventTarget {
         this.#spawnGroups.delete(areaId);
       }
       this.#spawnManager.removeArea(areaId);
+      this.#spawnLoading.delete(areaId);
 
       const liquidGroup = this.#liquidGroups.get(areaId);
       if (liquidGroup) {
@@ -445,18 +495,6 @@ class MapManager extends EventTarget {
 
       this.#liquidGroups.set(areaId, liquidGroup);
       this.#root.add(liquidGroup);
-
-      // Spawns on their own: they come from the database, may be slow, and must never hold up the area
-      const { areaX, areaY } = this.#getAreaIndex(areaId);
-      this.#spawnManager
-        .loadArea(areaId, this.#mapId, areaBox(areaX, areaY))
-        .then((spawnGroup) => {
-          if (spawnGroup && this.#loadedAreas.has(areaId)) {
-            this.#spawnGroups.set(areaId, spawnGroup);
-            this.#root.add(spawnGroup);
-          }
-        })
-        .catch((error) => console.warn(`3D view: the NPCs and objects of area ${areaId} could not be drawn: ${describeError(error)}`));
     }
   }
 

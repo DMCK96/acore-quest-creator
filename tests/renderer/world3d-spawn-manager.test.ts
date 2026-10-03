@@ -75,3 +75,43 @@ describe('the spawn layer', () => {
     expect(group.getObjectByName('creatures')!.children).toHaveLength(1);
   });
 });
+
+describe('how far spawns are drawn', () => {
+  it('hides spawns beyond the draw distance from the camera, and shows them again within it', async () => {
+    const m = manager({ creatures: [creature(1, 1, { x: 50 }), creature(2, 1, { x: 400 })], objects: [object(3, 2)], capped: { creatures: false, objects: false } });
+    const group = (await m.loadArea(1, 0, box))!;
+    const [near, far] = group.getObjectByName('creatures')!.children;
+    m.cull(new THREE.Vector3(0, 0, 0));
+    expect([near!.visible, far!.visible]).toEqual([true, false]);
+    m.cull(new THREE.Vector3(390, 0, 0));
+    expect([near!.visible, far!.visible]).toEqual([false, true]);
+  });
+});
+
+describe('how far routes are drawn', () => {
+  it('hides an NPC\'s route and wander circle with the NPC, beyond the draw distance', async () => {
+    const m = manager({
+      creatures: [creature(1, 1, { x: 400, wander: 5 }), creature(2, 1, { x: 400, path: [{ x: 410, y: 0, z: 0 }] }), creature(3, 1, { x: 20, wander: 5 })],
+      objects: [], capped: { creatures: false, objects: false },
+    });
+    const group = (await m.loadArea(1, 0, box))!;
+    m.cull(new THREE.Vector3(0, 0, 0));
+    const shown = group.getObjectByName('paths')!.children.map((p) => p.visible);
+    expect(shown).toEqual([false, false, true]);
+  });
+});
+
+describe('what the console is told', () => {
+  it('names a spawn whose display the client does not know, once per display', async () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const m = manager({ creatures: [creature(1, 77), creature(2, 77), creature(3, 0)], objects: [object(4, 88)], capped: { creatures: false, objects: false } });
+    await m.loadArea(1, 0, box);
+    const lines = warn.mock.calls.map((c) => String(c[0]));
+    expect(lines.filter((l) => /creature 1 \(display 77\)/.test(l))).toHaveLength(1);
+    expect(lines.some((l) => /creature 2 \(display 77\)/.test(l))).toBe(false);
+    expect(lines.some((l) => /object 4 \(display 88\)/.test(l))).toBe(true);
+    // No display at all (0) is a marker by design, not news
+    expect(lines.some((l) => /creature 3/.test(l))).toBe(false);
+    warn.mockRestore();
+  });
+});

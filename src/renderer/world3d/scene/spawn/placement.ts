@@ -38,5 +38,22 @@ const areaBox = (areaX: number, areaY: number) => {
   return { minX: maxX - TILE_SIZE, maxX, minY: maxY - TILE_SIZE, maxY };
 };
 
-export { areaBox, creatureTransform, objectTransform };
+/** Areas per side of a map */
+const AREAS_PER_SIDE = 64;
+
+/**
+ * The areas that get spawns: the camera's and those round it, as `areaX:areaY` keys. Terrain streams
+ * much further; drawing every NPC and object that far choked the view.
+ */
+const nearbyAreas = (areaX: number, areaY: number, radius = 1): Set<string> => {
+  const keys = new Set<string>();
+  for (let x = areaX - radius; x <= areaX + radius; x++) {
+    for (let y = areaY - radius; y <= areaY + radius; y++) {
+      if (x >= 0 && y >= 0 && x < AREAS_PER_SIDE && y < AREAS_PER_SIDE) keys.add(`${x}:${y}`);
+    }
+  }
+  return keys;
+};
+
+export { areaBox, creatureTransform, nearbyAreas, objectTransform };
 export type { Transform };
