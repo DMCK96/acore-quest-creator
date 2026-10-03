@@ -12,6 +12,7 @@ import {
 import TerrainManager from './terrain/TerrainManager.js';
 import TextureManager from '../texture/TextureManager.js';
 import DoodadManager from './DoodadManager.js';
+import WmoManager from '../wmo/WmoManager.js';
 import { AssetHost } from '../asset.js';
 import MapLoader from './loader/MapLoader.js';
 import { MapAreaSpec, MapSpec } from './loader/types.js';
@@ -43,10 +44,12 @@ class MapManager extends EventTarget {
   #root: THREE.Group;
   #terrainGroups = new globalThis.Map<number, THREE.Group>();
   #doodadGroups = new globalThis.Map<number, THREE.Group>();
+  #wmoGroups = new globalThis.Map<number, THREE.Group>();
 
   #textureManager: TextureManager;
   #terrainManager: TerrainManager;
   #doodadManager: DoodadManager;
+  #wmoManager: WmoManager;
   #dbManager: DbManager;
   #soundManager: SoundManager;
 
@@ -106,6 +109,10 @@ class MapManager extends EventTarget {
       host: options.host,
       textureManager: this.#textureManager,
       mapLight: this.#mapLight,
+    });
+    this.#wmoManager = new WmoManager({
+      host: options.host,
+      textureManager: this.#textureManager,
     });
 
     this.#root = new THREE.Group();
@@ -288,6 +295,13 @@ class MapManager extends EventTarget {
         this.#terrainManager.removeArea(areaId);
       }
 
+      const wmoGroup = this.#wmoGroups.get(areaId);
+      if (wmoGroup) {
+        this.#root.remove(wmoGroup);
+        this.#wmoGroups.delete(areaId);
+        this.#wmoManager.removeArea(areaId);
+      }
+
       const doodadGroup = this.#doodadGroups.get(areaId);
       if (doodadGroup) {
         this.#root.remove(doodadGroup);
@@ -336,10 +350,12 @@ class MapManager extends EventTarget {
 
       let terrainGroup: THREE.Group;
       let doodadGroup: THREE.Group;
+      let wmoGroup: THREE.Group;
       try {
-        [terrainGroup, doodadGroup] = await Promise.all([
+        [terrainGroup, doodadGroup, wmoGroup] = await Promise.all([
           this.#terrainManager.getArea(areaId, newArea),
           this.#doodadManager.getArea(areaId, newArea),
+          this.#wmoManager.getArea(areaId, newArea),
         ]);
       } catch (error) {
         this.#failArea(areaId, error);
@@ -356,6 +372,9 @@ class MapManager extends EventTarget {
 
       this.#doodadGroups.set(areaId, doodadGroup);
       this.#root.add(doodadGroup);
+
+      this.#wmoGroups.set(areaId, wmoGroup);
+      this.#root.add(wmoGroup);
     }
   }
 

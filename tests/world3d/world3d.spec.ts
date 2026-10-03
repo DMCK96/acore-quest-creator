@@ -1,4 +1,5 @@
 import { test, expect, type Page } from '@playwright/test';
+import { writeFileSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createServer, type ViteDevServer } from 'vite';
@@ -31,7 +32,8 @@ test.beforeAll(async () => {
       ],
     },
     // Only the harness is scanned for dependencies, not the whole app.
-    optimizeDeps: { entries: ['tests/world3d/harness.html'] },
+    // Listed up front: a dependency Vite finds late (the workers import some) reloads the page mid-test.
+    optimizeDeps: { entries: ['tests/world3d/harness.html'], include: ['three', '@tweenjs/tween.js', '@wowserhq/format', '@wowserhq/io'] },
     server: { port: 5199, strictPort: true, host: '127.0.0.1' },
   });
   await vite.listen();
@@ -74,9 +76,16 @@ test('draws the terrain, and a model or texture that cannot be read costs the ar
   // ... and the ground is on screen: the middle of the picture is the green terrain, not the sky.
   const picture = await page.locator('canvas.world3d__canvas').screenshot();
   await test.info().attach('terrain', { body: picture, contentType: 'image/png' });
+  // WORLD3D_SHOT=<file.png> keeps the picture, to look at
+  if (process.env['WORLD3D_SHOT']) writeFileSync(process.env['WORLD3D_SHOT'], picture);
   const [r, g, b] = (await page.evaluate(`window.__pixel(${JSON.stringify(picture.toString('base64'))}, 0.5, 0.8)`)) as number[];
   expect(g!).toBeGreaterThan(r!);
   expect(g!).toBeGreaterThan(b!);
+  // The building stands at the middle of the picture: its roof is the brick colour, not terrain or sky.
+  const [roofR, , roofB] = (await page.evaluate(`window.__pixel(${JSON.stringify(picture.toString('base64'))}, 0.5, 0.5)`)) as number[];
+  expect(roofR!).toBeGreaterThan(roofB! + 60);
+  expect(client.requested).toContain('200 world/wmo/test/house_000.wmo');
+  expect(client.requested).toContain('200 world/wmo/test/house_001.wmo');
   expect(client.requested).toContain('200 tileset/grass.blp');
 });
 

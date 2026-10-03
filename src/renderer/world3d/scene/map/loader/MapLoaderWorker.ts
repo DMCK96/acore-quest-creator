@@ -86,6 +86,12 @@ class MapLoaderWorker extends SceneWorker {
         rotation: def.rotation,
         scale: def.scale,
       })),
+      objDefs: area.objDefs.map((def) => ({
+        id: def.id,
+        name: def.name,
+        position: def.position,
+        rotation: def.rotation,
+      })),
     };
 
     const transfer = [...buffers];

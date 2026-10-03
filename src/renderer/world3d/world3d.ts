@@ -69,7 +69,15 @@ export function createWorld3D(options: World3DOptions): World3D {
   renderer.domElement.className = 'world3d__canvas';
   container.appendChild(renderer.domElement);
 
+  // The game's colours are already what it shows; no conversion on the way out
+  renderer.outputColorSpace = THREE.LinearSRGBColorSpace;
+
   const scene = new THREE.Scene();
+  // For buildings without baked lighting; terrain and models do their own
+  scene.add(new THREE.HemisphereLight(0xffffff, 0x8a7f70, 1.2));
+  const sun = new THREE.DirectionalLight(0xfff2d6, 1.3);
+  sun.position.set(-0.4, -0.5, 1);
+  scene.add(sun);
   const camera = new THREE.PerspectiveCamera(FOV, 1, NEAR, 1000);
   // Z is up in the game's world, and the orbit controls turn about the camera's up axis.
   camera.up.set(0, 0, 1);

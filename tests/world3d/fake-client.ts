@@ -61,6 +61,17 @@ function terrainChunk(row: number, col: number): Buffer {
   return chunk('MCNK', Buffer.concat([header, body]));
 }
 
+/** One placement of the house, at the camera's target. */
+function building(): Buffer {
+  const out = Buffer.alloc(64);
+  out.writeUInt32LE(0, 0);
+  out.writeUInt32LE(7, 4);
+  out.writeFloatLE(CORNER - START.y, 8);
+  out.writeFloatLE(START.z - 3.5, 12);
+  out.writeFloatLE(CORNER - START.x, 16);
+  return out;
+}
+
 function adt(): Buffer {
   const names = Buffer.from(`${BAD_MODEL}\0${MISSING_MODEL}\0`);
   const offsets = Buffer.concat([u32(0), u32(BAD_MODEL.length + 1)]);
@@ -76,6 +87,9 @@ function adt(): Buffer {
     chunk('MMDX', names),
     chunk('MMID', offsets),
     chunk('MDDF', Buffer.concat([doodad(0, 1), doodad(1, 2)])),
+    chunk('MWMO', Buffer.from(`${HOUSE}\0`)),
+    chunk('MWID', u32(0)),
+    chunk('MODF', building()),
     ...chunks,
   ]);
 }
@@ -86,6 +100,79 @@ function grassTexture(): Buffer {
   const blocks = (size / 4) ** 2;
   const data = Buffer.alloc(blocks * 8);
   for (let i = 0; i < blocks; i++) data.set([0xa7, 0x2c, 0xa7, 0x2c, 0, 0, 0, 0], i * 8);
+  const out = Buffer.alloc(1172 + data.length);
+  out.write('BLP2');
+  out.writeUInt32LE(1, 4);
+  out[8] = 2;
+  out.writeUInt32LE(size, 12);
+  out.writeUInt32LE(size, 16);
+  out.writeUInt32LE(1172, 20);
+  out.writeUInt32LE(data.length, 84);
+  data.copy(out, 1172);
+  return out;
+}
+
+export const HOUSE = 'World\\wmo\\test\\house.wmo';
+
+/** A box of 8 vertices, `size` across and `height` tall, its floor at z = 0 and its centre at (x, y). */
+function box(x: number, y: number, size: number, height: number): { positions: number[]; indices: number[] } {
+  const positions: number[] = [];
+  for (const dz of [0, height]) for (const [dx, dy] of [[-1, -1], [1, -1], [1, 1], [-1, 1]] as const) positions.push(x + (dx * size) / 2, y + (dy * size) / 2, dz);
+  const indices = [0, 2, 1, 0, 3, 2, 4, 5, 6, 4, 6, 7];
+  for (let i = 0; i < 4; i++) {
+    const a = i, b = (i + 1) % 4;
+    indices.push(a, b, b + 4, a, b + 4, a + 4);
+  }
+  return { positions, indices };
+}
+
+const floats = (values: number[]): Buffer => Buffer.concat(values.map(f32));
+const uint16s = (values: number[]): Buffer => {
+  const b = Buffer.alloc(values.length * 2);
+  values.forEach((v, i) => b.writeUInt16LE(v, i * 2));
+  return b;
+};
+
+/** The building's root file: one material (the brick texture) and two groups. */
+function houseRoot(): Buffer {
+  const mohd = Buffer.alloc(64);
+  mohd.writeUInt32LE(1, 0); // textures
+  mohd.writeUInt32LE(2, 4); // groups
+  const textures = Buffer.from('tileset\\brick.blp\0\0');
+  const momt = Buffer.alloc(64);
+  momt.writeUInt32LE(0, 12); // first texture's offset
+  momt.writeUInt32LE(textures.length - 1, 24); // second: the empty string at the end
+  const group = Buffer.alloc(32);
+  const names = Buffer.from('house\0');
+  const mogi = Buffer.concat([group, group]);
+  return Buffer.concat([chunk('MVER', u32(17)), chunk('MOHD', mohd), chunk('MOTX', textures), chunk('MOMT', momt), chunk('MOGN', names), chunk('MOGI', mogi)]);
+}
+
+/** One group: a box, with baked lighting when `colour` is given. */
+function houseGroup(x: number, y: number, colour: number | null): Buffer {
+  const { positions, indices } = box(x, y, 24, 14);
+  const vertexCount = positions.length / 3;
+  const batch = Buffer.alloc(24);
+  batch.writeUInt32LE(0, 12); // first index
+  batch.writeUInt16LE(indices.length, 16);
+  batch.writeUInt16LE(0, 18);
+  batch.writeUInt16LE(vertexCount - 1, 20);
+  const normals = floats(Array.from({ length: vertexCount }, () => [0, 0, 1]).flat());
+  const uvs = floats(Array.from({ length: vertexCount }, (_, i) => [i % 2, Math.floor(i / 2) % 2]).flat());
+  const colours = Buffer.alloc(vertexCount * 4, colour ?? 0);
+  const parts = [chunk('MOVI', uint16s(indices)), chunk('MOVT', floats(positions)), chunk('MONR', normals), chunk('MOTV', uvs), chunk('MOBA', batch)];
+  if (colour !== null) parts.push(chunk('MOCV', colours));
+  const header = Buffer.alloc(68);
+  header.writeUInt32LE(colour === null ? 0 : 4, 8);
+  return Buffer.concat([chunk('MVER', u32(17)), chunk('MOGP', Buffer.concat([header, ...parts]))]);
+}
+
+/** A BLP2 of one orange, DXT1. */
+function brickTexture(): Buffer {
+  const size = 64;
+  const blocks = (size / 4) ** 2;
+  const data = Buffer.alloc(blocks * 8);
+  for (let i = 0; i < blocks; i++) data.set([0xc3, 0xca, 0xc3, 0xca, 0, 0, 0, 0], i * 8);
   const out = Buffer.alloc(1172 + data.length);
   out.write('BLP2');
   out.writeUInt32LE(1, 4);
@@ -128,6 +215,10 @@ export async function startFakeClient(port = 0): Promise<FakeClient> {
     ['world/maps/azeroth/azeroth.wdt', wdt()],
     [TILE.file, adt()],
     ['tileset/grass.blp', grassTexture()],
+    ['tileset/brick.blp', brickTexture()],
+    ['world/wmo/test/house.wmo', houseRoot()],
+    ['world/wmo/test/house_000.wmo', houseGroup(0, 0, null)],
+    ['world/wmo/test/house_001.wmo', houseGroup(0, -40, 0x80)],
     ['tileset/garbage.blp', Buffer.alloc(200, 0x67)],
     ['tileset/raw.blp', rawTexture()],
     ['world/bad/bad.m2', Buffer.concat([Buffer.from('MD20'), Buffer.alloc(40, 0xff)])],

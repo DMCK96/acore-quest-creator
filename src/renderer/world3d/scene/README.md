@@ -28,5 +28,16 @@ compiler setting than this project's.
   - `texture/loader/TextureLoaderWorker.ts`: a texture that cannot be read is reported with its size
     and first bytes; uncompressed (ARGB) textures are converted to RGBA, which upstream rejects.
 
+## What is added
+
+- `wmo/`: buildings (WMO), which upstream does not draw. `wmo/format` is the building reader from
+  `@wowserhq/format` 0.28.0 (MIT), copied because the 0.25.0 this code is written against lacks it,
+  plus the material blend mode, which the published reader drops. `wmo/loader` parses a building and
+  its group files in a worker; `wmo/WmoManager.ts` draws one mesh per group. Groups with baked
+  lighting (vertex colours) are drawn unlit with it; the others are lit by the scene's lights. The
+  area loader now passes on the buildings an area places (`objDefs`), which it used to drop.
+  Not drawn yet: the props inside buildings (doodad sets), water, fog on buildings, and per-batch
+  render states beyond blend mode.
+
 `npm run test:world3d` runs the 3D code in a browser against a fake game client, including a model
 that cannot be read.
