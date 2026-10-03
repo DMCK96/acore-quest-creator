@@ -65,13 +65,20 @@ Looked at and **not** used: `wowserhq/client` (it is the game's UI layer), `vjeu
   - Spawns that appear only during a game event (a positive `eventEntry` in `game_event_creature` or `game_event_gameobject`) are left out until the "Event spawns" checkbox is ticked. Spawns an event removes (a negative `eventEntry`) are there the rest of the time, so they are drawn.
   - Held weapons follow the hand's bone in the model's own space. Wowser's bone matrices are in the camera's space; used as they were, weapons were drawn tens of yards from their NPC, under the ground.
 - Clicking an NPC or object selects it: an outline round it, and a card with its name, entry, spawn id, position and any event. In the quest map's 3D view, selecting one of the quest's own spawns selects its marker in the side panel too. Picking uses each spawn's bounds from its vertices; a model's stored bounds take in every animation's reach and are far too big.
+- Editing in 3D (sub-project C, `src/renderer/world3d/editing.ts`, `scene/edit/`):
+  - **G** moves the selected spawn and **R** rotates it, with Three's own transform gizmo. NPCs turn about Z only; objects turn every way. A move along the ground keeps the spawn on the drawn ground while dragging, and on release drops it on the server's floor nearest where it was (the same floor heights the quest map uses). Only the Z arrow lifts it freely.
+  - The selected NPC's route can be edited: click a point and drag it, **Shift-click** on a leg to insert a point there (or on the ground to add one after the selected point), **Delete** to remove one. A route keeps at least two points. Each point keeps its other data: an existing point's `waypoint_data` columns (delay, action), or an own NPC's wait, facing and actions.
+  - **Ctrl+Z** and **Ctrl+Y** (or Ctrl+Shift+Z) undo and redo, for as long as the view is open. Each step is a whole placement or route, so an undo still works after a revert.
+  - The open quest's own spawns are edited through the quest, as the 2D map does, so its Changes panel and export pick them up. A tilted own object is exported with its full rotation.
+  - Everything else goes into the project's **world layer** (saved in the project file, version 2). It keeps what the database had at the first edit. **World changes** lists each edit with before and after, flags any the database has moved off since, reverts them one by one, and exports `<date>_<nn>_world.sql` (UPDATE by guid; routes deleted and written again by path id) with a matching `_world_revert.sql`.
+  - The first change to a route other spawns walk (a shared `path_id`, or a `creature_template_addon` route) asks first, saying how many walk it.
 - A browser test that runs the real 3D code against a fake game client (`npm run test:world3d`).
 
 ### Known gaps
 
 Things that are missing or approximate. Roughly in order of how much they matter.
 
-1. **No editing yet.** Spawns can be selected, but there are no gizmos and no patrol point editing.
+1. **Editing is partial.** No scale yet (a template change, so step E). A route cannot be given to, or taken from, an existing NPC (step E). Waits and actions on existing routes are kept but cannot be edited in 3D; the 2D map edits them for the quest's own NPCs.
 2. **NPCs and objects are approximate:** only the idle animation; no armour pieces as separate models, capes, mounts or spell effects; no names over them. Spawns are drawn whatever their phase; members of a spawn pool are all drawn, though the server shows only some at a time. A custom item held as a weapon, not in the client's `Item.dbc`, is not drawn.
 3. **Props inside buildings** (furniture in the Abbey) are not drawn. Buildings carry them as "doodad sets".
 4. **Textures the client does not ship.** The user's client places custom modern-expansion buildings (Kul Tiras, Draenor, Dragonflight) whose textures are not in its archives; those parts draw grey. Not loose in the `Data` folder either. Where the references come from is not established; reports now name the building or model that asked, so the next run will show it.
@@ -92,13 +99,12 @@ Things that are missing or approximate. Roughly in order of how much they matter
 
 In order. Each is meant to be a step the user can try before the next begins.
 
-The maintainer's eight asked-for features are split into sub-projects A to E. A (camera) and B (the spawn layer) are done. Edits not part of a quest go to a project-level world layer, exported as its own patch.
+The maintainer's eight asked-for features are split into sub-projects A to E. A (camera), B (the spawn layer) and C (select and transform, and the world layer) are done. Edits not part of a quest go to a project-level world layer, exported as its own patch.
 
-1. **C: select and transform.** Selecting a spawn is done; next, selecting a patrol point; gizmos to move, rotate and scale objects and to move and rotate NPCs; patrol points draggable; drop on the ground (the server's own floor heights). Every edit through the same change path the quest map uses, so undo, export and "changes" keep working. C's spec defines the world layer.
-2. **D: create from 3D.** Place new objects (chests that can be looted, with a loot table) and new NPCs (loot, faction, level), opening the existing editors.
-3. **E: edit existing.** Place copies of existing NPCs; change existing spawns and templates (loot, faction, level).
-4. **Reshape the quest grid** into a chain builder beside the 3D view. Needs a design conversation first: what "managing a chain" should mean day to day.
-5. **Fill the gaps** above as they get in the way: props inside buildings first, then the remaining building shaders.
+1. **D: create from 3D.** Place new objects (chests that can be looted, with a loot table) and new NPCs (loot, faction, level), opening the existing editors.
+2. **E: edit existing.** Place copies of existing NPCs; change existing spawns and templates (loot, faction, level).
+3. **Reshape the quest grid** into a chain builder beside the 3D view. Needs a design conversation first: what "managing a chain" should mean day to day.
+4. **Fill the gaps** above as they get in the way: props inside buildings first, then the remaining building shaders.
 
 Open questions for the user:
 
