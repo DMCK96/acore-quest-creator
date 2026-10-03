@@ -1,5 +1,6 @@
 import * as THREE from 'three';
-import { DbManager, MapControls, MapManager, TextureManager, type SoundManager } from '@wowserhq/scene';
+import { DbManager, MapControls, MapManager, TextureManager, type SoundManager } from './scene';
+import { clearProblems, onProblems } from './scene/diagnostics';
 import { ASSET_BASE_URL } from '@core/client/asset-url';
 
 /**
@@ -19,6 +20,8 @@ export interface World3DOptions {
   onArea?(name: string): void;
   /** Told once, when the first piece of the world has loaded and drawn. */
   onReady?(): void;
+  /** Told what could not be loaded (a model, a terrain tile) while the rest still draws; the whole list each time. */
+  onProblems?(problems: readonly string[]): void;
   onError?(message: string): void;
 }
 
@@ -79,6 +82,8 @@ export function createWorld3D(options: World3DOptions): World3D {
     if (name) options.onArea?.(name);
   });
   scene.add(manager.root);
+  clearProblems();
+  const stopProblems = onProblems((all) => options.onProblems?.([...all]));
 
   let disposed = false;
   const lookAt = (x: number, y: number, z: number): void => {
@@ -139,7 +144,7 @@ export function createWorld3D(options: World3DOptions): World3D {
       cancelAnimationFrame(frame);
       observer.disconnect();
       // Nothing here may throw: this runs while React unmounts the view, and a throw would take the whole screen with it.
-      for (const step of [() => controls.dispose?.(), () => manager.dispose(), () => release(manager.root), () => renderer.dispose()]) {
+      for (const step of [() => controls.dispose?.(), stopProblems, () => manager.dispose(), () => release(manager.root), () => renderer.dispose()]) {
         try {
           step();
         } catch (error) {

@@ -1,0 +1,42 @@
+<!doctype html>
+<html>
+  <body style="margin: 0; background: #000">
+    <div id="stage" style="width: 960px; height: 600px; position: relative"></div>
+    <script type="module">
+      import { createWorld3D } from '/src/renderer/world3d/world3d.ts';
+
+      // Each world the page makes is kept so a test can leave it; what a test reads is in `__state`.
+      const state = (window.__state = { ready: false, problems: [], errors: [] });
+      window.addEventListener('error', (e) => state.errors.push(String(e.message)));
+      window.addEventListener('unhandledrejection', (e) => state.errors.push(`rejected: ${e.reason}`));
+      let world = null;
+      window.__open = (directory, map, start) => {
+        world?.dispose();
+        state.ready = false;
+        state.problems = [];
+        world = createWorld3D({
+          container: document.getElementById('stage'),
+          directory,
+          map,
+          start,
+          onReady: () => (state.ready = true),
+          onProblems: (all) => (state.problems = all),
+          onError: (message) => state.errors.push(`failed: ${message}`),
+        });
+      };
+      window.__close = () => {
+        world?.dispose();
+        world = null;
+      };
+      // The colour of a point (as fractions of the width and height) in a PNG of the picture.
+      window.__pixel = async (base64, fx, fy) => {
+        const bitmap = await createImageBitmap(new Blob([Uint8Array.from(atob(base64), (c) => c.charCodeAt(0))], { type: 'image/png' }));
+        const canvas = new OffscreenCanvas(bitmap.width, bitmap.height);
+        const context = canvas.getContext('2d');
+        context.drawImage(bitmap, 0, 0);
+        return Array.from(context.getImageData(Math.floor(bitmap.width * fx), Math.floor(bitmap.height * fy), 1, 1).data);
+      };
+      window.__loaded = true;
+    </script>
+  </body>
+</html>

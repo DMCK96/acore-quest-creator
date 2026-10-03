@@ -53,6 +53,7 @@ function WorldStage({ map, start, hasClient }: ViewProps): React.JSX.Element {
   startRef.current = start;
   const [area, setArea] = useState<string | null>(null);
   const [problem, setProblem] = useState<string | null>(null);
+  const [missing, setMissing] = useState<readonly string[]>([]);
   const [status, setStatus] = useState<'loading' | 'slow' | 'ready'>('loading');
   const directory = worldMapDirectory(map);
 
@@ -61,6 +62,7 @@ function WorldStage({ map, start, hasClient }: ViewProps): React.JSX.Element {
     if (!element || !directory || !hasClient) return;
     setProblem(null);
     setArea(null);
+    setMissing([]);
     setStatus('loading');
     let live = true;
     let created: World3D | null = null;
@@ -84,6 +86,7 @@ function WorldStage({ map, start, hasClient }: ViewProps): React.JSX.Element {
             start: startRef.current,
             onArea: setArea,
             onReady: () => live && setStatus('ready'),
+            onProblems: (all) => live && setMissing(all),
             onError: setProblem,
           });
           world.current = created;
@@ -118,6 +121,13 @@ function WorldStage({ map, start, hasClient }: ViewProps): React.JSX.Element {
     <div className="world3d" aria-label="3D view">
       <div ref={container} className="world3d__stage" />
       {area && <p className="world3d__area">{area}</p>}
+      {missing.length > 0 && (
+        <p className="world3d__missing" title={missing.join('\n')}>
+          {missing.length === 1 ? '1 thing' : `${missing.length} things`} could not be loaded and {missing.length === 1 ? 'is' : 'are'} left out:{' '}
+          {missing.slice(0, 2).join('; ')}
+          {missing.length > 2 ? '; …' : ''} (all of them are in the console)
+        </p>
+      )}
       {(unavailable ?? problem ?? progress) && (
         <p role="status" className="world3d__note">
           {unavailable ?? problem ?? progress}
