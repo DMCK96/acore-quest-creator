@@ -4,6 +4,7 @@ import { worldMapDirectory } from '@core/map/world-maps';
 import { createWorld3D, type World3D } from './world3d';
 import { useApi } from '../state/names';
 import type { SpawnStatus, SpawnVisibility } from './scene/spawn/SpawnManager';
+import type { ViewSpawns } from '@core/db/view-spawns';
 import './world3d.css';
 
 /** The camera's controls, as the help in the corner lists them. */
@@ -52,6 +53,8 @@ interface ViewProps {
   map: number;
   start: { x: number; y: number; z: number };
   hasClient: boolean;
+  /** The open quest's own NPCs and objects, drawn with the world's. */
+  own?: ViewSpawns;
 }
 
 /**
@@ -87,7 +90,7 @@ class Contained extends Component<{ children: ReactNode }, { failure: string | n
   }
 }
 
-function WorldStage({ map, start, hasClient }: ViewProps): React.JSX.Element {
+function WorldStage({ map, start, hasClient, own }: ViewProps): React.JSX.Element {
   const container = useRef<HTMLDivElement>(null);
   const world = useRef<World3D | null>(null);
   const startRef = useRef(start);
@@ -104,6 +107,10 @@ function WorldStage({ map, start, hasClient }: ViewProps): React.JSX.Element {
   apiRef.current = api;
   const layersRef = useRef(layers);
   layersRef.current = layers;
+  const ownRef = useRef(own);
+  ownRef.current = own;
+  // A stable key, so the world is told only when the quest's spawns really change
+  const ownKey = JSON.stringify(own ?? null);
   const directory = worldMapDirectory(map);
 
   useEffect(() => {
@@ -145,6 +152,7 @@ function WorldStage({ map, start, hasClient }: ViewProps): React.JSX.Element {
             },
           });
           created.setSpawnVisibility(layersRef.current);
+          if (ownRef.current) created.setOwnSpawns(ownRef.current);
           world.current = created;
         } catch (error) {
           // Inside a promise, so an error boundary would not see it (no WebGL, say).
@@ -158,6 +166,11 @@ function WorldStage({ map, start, hasClient }: ViewProps): React.JSX.Element {
       world.current = null;
     };
   }, [directory, map, hasClient]);
+
+  // The open quest's own spawns, redrawn as they change.
+  useEffect(() => {
+    if (ownRef.current) world.current?.setOwnSpawns(ownRef.current);
+  }, [ownKey]);
 
   // The layer checkboxes: applied to the world and remembered.
   useEffect(() => {

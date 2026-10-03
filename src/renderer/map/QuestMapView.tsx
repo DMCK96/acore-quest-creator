@@ -13,6 +13,7 @@ import { PatrolPanel } from './PatrolPanel';
 import { PointMenu, type PointMenuItem } from './PointMenu';
 import { usePatrolMode } from './usePatrolMode';
 import { World3DView } from '../world3d/World3DView';
+import { ownViewSpawns } from '@core/entities/view-spawns';
 import { LeafletMap, type MapMarkerView, type MapView } from './LeafletMap';
 import './map.css';
 
@@ -463,7 +464,7 @@ export function QuestMapView({
       </header>
       <div className="quest-map__body">
         {show3d ? (
-          <World3DView map={currentMap} hasClient={hasClient} start={{ x: shownView.x, y: shownView.y, z: start?.z ?? 0 }} />
+          <World3DView map={currentMap} hasClient={hasClient} start={{ x: shownView.x, y: shownView.y, z: start?.z ?? 0 }} own={ownViewSpawns({ npcs, objects })} />
         ) : (
         <LeafletMap
           map={currentMap}

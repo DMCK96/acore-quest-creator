@@ -18,6 +18,7 @@ import SpawnManager, { SpawnSource, SpawnVisibility } from '../spawn/SpawnManage
 import DisplayResolver from '../spawn/DisplayResolver.js';
 import { areaBox, nearbyAreas } from '../spawn/placement.js';
 import { DISPLAY_RECORDS } from '../db/records.js';
+import { ViewSpawns } from '../../../../core/db/view-spawns.js';
 import { AssetHost } from '../asset.js';
 import MapLoader from './loader/MapLoader.js';
 import { MapAreaSpec, MapSpec } from './loader/types.js';
@@ -165,6 +166,11 @@ class MapManager extends EventTarget {
   /** Where the NPCs and objects come from; null draws none */
   setSpawnSource(source: SpawnSource | null) {
     this.#spawnManager.setSource(source);
+  }
+
+  /** The open quest's own NPCs and objects, drawn with the world's */
+  setOwnSpawns(spawns: ViewSpawns) {
+    this.#spawnManager.setOwnSpawns(spawns).catch((error) => console.warn(`3D view: the quest's own NPCs and objects could not be drawn: ${describeError(error)}`));
   }
 
   setSpawnVisibility(visibility: SpawnVisibility) {

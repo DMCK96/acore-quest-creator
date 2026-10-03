@@ -115,3 +115,12 @@ describe('what the console is told', () => {
     warn.mockRestore();
   });
 });
+
+it('draws the open quest\'s own spawns in their area, in place of the database row with the same guid', async () => {
+  const m = manager({ creatures: [creature(5, 1), creature(6, 1)], objects: [], capped: { creatures: false, objects: false } });
+  m.setOwnSpawns({ creatures: [creature(6, 1, { own: true, x: 0.5, y: 0.5 }), creature(7, 1, { own: true, x: 50, y: 50 })], objects: [], capped: { creatures: false, objects: false } });
+  const group = (await m.loadArea(1, 0, box))!;
+  const drawn = group.getObjectByName('creatures')!.children.map((c) => [c.userData.spawn.guid, c.userData.spawn.own]);
+  // 7 is outside this area's box (0..1); 6 is drawn once, as the project's
+  expect(drawn).toEqual([[5, false], [6, true]]);
+});

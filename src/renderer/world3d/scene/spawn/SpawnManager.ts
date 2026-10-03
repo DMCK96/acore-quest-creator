@@ -63,6 +63,7 @@ class SpawnManager {
   #wanted = new globalThis.Map<number, number>();
   #requests = 0;
   #visibility: SpawnVisibility = { ...ALL_VISIBLE };
+  #own: ViewSpawns = { creatures: [], objects: [], capped: { creatures: false, objects: false } };
   #warned = new Set<string>();
 
   status: SpawnStatus = { capped: { creatures: false, objects: false }, error: null };
@@ -105,7 +106,7 @@ class SpawnManager {
     this.status = { capped: { ...answer.capped }, error: null };
     this.#responses.set(areaId, { map, box, spawns: answer });
 
-    const group = await this.#draw(answer);
+    const group = await this.#draw(this.#withOwn(answer, box));
     if (this.#wanted.get(areaId) !== request) {
       return null;
     }
@@ -118,6 +119,32 @@ class SpawnManager {
     this.#wanted.delete(areaId);
     this.#responses.delete(areaId);
     this.#areas.delete(areaId);
+  }
+
+  /**
+   * The open quest's own spawns, drawn in whichever loaded area holds them, in place of a database
+   * spawn with the same guid. Loaded areas are redrawn from their last answer, without asking again.
+   */
+  async setOwnSpawns(spawns: ViewSpawns) {
+    this.#own = spawns;
+    await Promise.all(
+      [...this.#areas.entries()].map(([areaId, group]) => {
+        const response = this.#responses.get(areaId);
+        return response ? this.#fill(group, this.#withOwn(response.spawns, response.box)) : null;
+      }),
+    );
+  }
+
+  /** An area's database spawns, less any the open quest has its own of, plus its own inside the box */
+  #withOwn(spawns: ViewSpawns, box: Box): ViewSpawns {
+    const inBox = (s: { x: number; y: number }) => s.x >= box.minX && s.x <= box.maxX && s.y >= box.minY && s.y <= box.maxY;
+    const ownCreatures = new Set(this.#own.creatures.map((c) => c.guid));
+    const ownObjects = new Set(this.#own.objects.map((o) => o.guid));
+    return {
+      creatures: [...spawns.creatures.filter((c) => !ownCreatures.has(c.guid)), ...this.#own.creatures.filter(inBox)],
+      objects: [...spawns.objects.filter((o) => !ownObjects.has(o.guid)), ...this.#own.objects.filter(inBox)],
+      capped: spawns.capped,
+    };
   }
 
   setVisibility(visibility: SpawnVisibility) {
@@ -154,7 +181,13 @@ class SpawnManager {
     const group = new THREE.Group();
     group.name = 'spawns';
     group.matrixAutoUpdate = false;
+    await this.#fill(group, spawns);
+    return group;
+  }
 
+  /** Fills an area's group with its spawns, replacing what it held */
+  async #fill(group: THREE.Group, spawns: ViewSpawns) {
+    group.clear();
     const creatures = new THREE.Group();
     creatures.name = 'creatures';
     const objects = new THREE.Group();
@@ -191,7 +224,6 @@ class SpawnManager {
 
     this.#applyVisibility(group);
     group.updateMatrixWorld(true);
-    return group;
   }
 
   /** One spawn's model or building, placed; a marker when it cannot be drawn */

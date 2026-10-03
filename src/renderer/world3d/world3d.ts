@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import { DbManager, MapManager, TextureManager, type SoundManager } from './scene';
 import { WorldControls } from './controls';
 import type { SpawnSource, SpawnStatus, SpawnVisibility } from './scene/spawn/SpawnManager';
+import type { ViewSpawns } from '@core/db/view-spawns';
 import { clearProblems, onProblems } from './scene/diagnostics';
 import { ASSET_BASE_URL } from '@core/client/asset-url';
 
@@ -38,6 +39,8 @@ export interface World3D {
   setSpawnVisibility(visibility: SpawnVisibility): void;
   /** Whether a kind of spawn was capped, or why none could be read. */
   spawnStatus(): SpawnStatus;
+  /** The open quest's own NPCs and objects, drawn with the world's in place of their database rows. */
+  setOwnSpawns(spawns: ViewSpawns): void;
   dispose(): void;
 }
 
@@ -170,6 +173,7 @@ export function createWorld3D(options: World3DOptions): World3D {
     lookAt,
     setSpawnVisibility: (visibility) => manager.setSpawnVisibility(visibility),
     spawnStatus: () => manager.spawnStatus,
+    setOwnSpawns: (spawns) => manager.setOwnSpawns(spawns),
     camera() {
       const direction = camera.getWorldDirection(new THREE.Vector3());
       return { position: { ...camera.position }, direction: { x: direction.x, y: direction.y, z: direction.z } };
