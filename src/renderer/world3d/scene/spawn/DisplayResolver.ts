@@ -123,15 +123,10 @@ class DisplayResolver {
     const display = displayId > 0 ? (await this.#table('CreatureDisplayInfo'))?.getRecord(displayId) : null;
     const scale = display && Number.isFinite(display.creatureModelScale) && display.creatureModelScale > 0 ? display.creatureModelScale : 1;
     if (preset) {
+      // A preset names item displays, not items: the server sends them to the game as they are
       const displays: Partial<Record<OutfitSlot, number>> = {};
-      for (const [slot, itemId] of Object.entries(preset.items ?? {})) {
-        if (!(itemId > 0) || !PRESET_OUTFIT[slot]) continue;
-        const item = (await this.#table('Item'))?.getRecord(itemId);
-        if (!item) {
-          this.#warnOnce(`item:${itemId}`, `3D view: item ${itemId} is not in the client's Item.dbc; its NPC is drawn without it`);
-          continue;
-        }
-        displays[PRESET_OUTFIT[slot]] = item.displayInfoId;
+      for (const [slot, displayId] of Object.entries(preset.items ?? {})) {
+        if (displayId > 0 && PRESET_OUTFIT[slot]) displays[PRESET_OUTFIT[slot]] = displayId;
       }
       const { race, sex, skin, face, hairStyle, hairColour, facialHair } = preset;
       return this.#character({ race, sex, skin, face, hairStyle, hairColour, facialHair, bakeName: '', displays }, scale);

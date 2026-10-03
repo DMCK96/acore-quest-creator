@@ -37,7 +37,10 @@ export interface ViewPreset {
   hairStyle: number;
   hairColour: number;
   facialHair: number;
-  /** Item ids by slot; 0 for none */
+  /**
+   * Item display ids (ItemDisplayInfo) by slot, not item ids: the server sends them to the game as
+   * they are, in the mirror image data; 0 for none
+   */
   items: Record<PresetSlot, number>;
 }
 

@@ -52,6 +52,7 @@ const items = (o: Partial<Record<string, number>>) => ({ head: 0, shoulders: 0, 
 const preset = (o: Partial<Record<string, number>> = {}) => ({ race: 1, sex: 1, skin: 1, face: 3, hairStyle: 0, hairColour: 0, facialHair: 0, items: items(o) as any });
 const U = (folder: string, name: string) => [`Item\\TextureComponents\\${folder}\\${name}_F.blp`, `Item\\TextureComponents\\${folder}\\${name}_U.blp`];
 
+// A preset's items are item display ids: the server sends them to the game as they are (SMSG_MIRRORIMAGE_DATA)
 describe('a preset NPC dressed in its items', () => {
   it('a preset with no items is its skin, face and underwear', async () => {
     const look = (await resolver().creature(50, preset())) as any;
@@ -68,7 +69,7 @@ describe('a preset NPC dressed in its items', () => {
   });
 
   it('paints its items over its underwear, shirt under chest under boots', async () => {
-    const look = (await resolver().creature(50, preset({ body: 10037, chest: 13122, feet: 1246 }))) as any;
+    const look = (await resolver().creature(50, preset({ body: 1, chest: 2, feet: 3 }))) as any;
     expect(look.body.layers.slice(4)).toEqual([
       { files: U('ArmUpperTexture', 'ShirtAU'), region: 'armUpper' },
       { files: U('TorsoUpperTexture', 'RobeTU'), region: 'torsoUpper' },
@@ -79,7 +80,7 @@ describe('a preset NPC dressed in its items', () => {
   });
 
   it('takes the shapes its items give: sleeves, robe, boots, gloves, cape', async () => {
-    const look = (await resolver().creature(50, preset({ body: 10037, chest: 13122, feet: 1246, hands: 903, back: 902 }))) as any;
+    const look = (await resolver().creature(50, preset({ body: 1, chest: 2, feet: 3, hands: 7, back: 6 }))) as any;
     expect(look.geosets).toEqual(expect.arrayContaining([403, 503, 1302, 1502]));
     expect(look.geosets).not.toContain(401);
     expect(look.geosets).not.toContain(501);
@@ -88,7 +89,7 @@ describe('a preset NPC dressed in its items', () => {
   });
 
   it('wears its helmet in its race and sex, and a pad on each shoulder', async () => {
-    const look = (await resolver().creature(50, preset({ head: 900, shoulders: 901 }))) as any;
+    const look = (await resolver().creature(50, preset({ head: 4, shoulders: 5 }))) as any;
     expect(look.attachments).toEqual([
       { point: 11, look: expect.objectContaining({ path: 'Item\\ObjectComponents\\Head\\Helm_A_01_HuF.m2', textures: { 2: 'Item\\ObjectComponents\\Head\\Helm_A_01Skin.blp' } }) },
       { point: 6, look: expect.objectContaining({ path: 'Item\\ObjectComponents\\Shoulder\\LShoulder_A.m2', textures: { 2: 'Item\\ObjectComponents\\Shoulder\\Shoulder_ASkin.blp' } }) },
@@ -96,8 +97,8 @@ describe('a preset NPC dressed in its items', () => {
     ]);
   });
 
-  it('leaves out an item the client does not know, and draws the rest', async () => {
-    const look = (await resolver().creature(50, preset({ chest: 4242, feet: 1246 }))) as any;
+  it('leaves out an item display the client does not know, and draws the rest', async () => {
+    const look = (await resolver().creature(50, preset({ chest: 4242, feet: 3 }))) as any;
     expect(look.body.layers.map((l: any) => l.region)).toEqual(['faceLower', 'faceUpper', 'legUpper', 'torsoUpper', 'legLower', 'foot']);
   });
 });
