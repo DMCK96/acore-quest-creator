@@ -34,6 +34,8 @@ import { diffSchema, hasBlockingDrift } from '../core/schema/diff';
 import { loadSchema } from '../core/schema/load';
 import { refCheckerFor, validateQuest, type Issue, type RefChecker } from '../core/validate/validate';
 import { TOOL_VERSION } from '../core/version';
+import { moveSpawn, revertRoute, revertSpawn, setRoute, worldStatements, type RoutePoint, type WorldLayer } from '../core/world/layer';
+import { countWalkers, readPlacement, readRoute, routeDrifted, spawnDrifted, worldSchema } from './world/world-api';
 import type {
   Api,
   ApiError,
@@ -465,6 +467,14 @@ export function createApi(deps: ApiDeps): Api {
   }
 
   /** The schema exports render with: the registry's tables, plus the ones quest scripting writes. */
+  /** A route as the database has it, with how many spawns walk it; refused when it is gone */
+  const routeFromDatabase = async (pathId: number): Promise<{ original: RoutePoint[]; walkers: number }> => {
+    const db = connected().db;
+    const original = await readRoute(db, pathId);
+    if (original.length === 0) throw fail('BAD_REQUEST', `Route ${pathId} is no longer in the database.`);
+    return { original, walkers: await countWalkers(db, pathId) };
+  };
+
   const exportSchema = (live: Session): SchemaInfo => ({
     ...live.schema,
     tables: { ...live.scriptSchema.tables, ...live.schema.tables },
@@ -1550,6 +1560,80 @@ export function createApi(deps: ApiDeps): Api {
           objects: objects.slice(0, SPAWN_VIEW_CAP),
           capped: { creatures: creatures.length > SPAWN_VIEW_CAP, objects: objects.length > SPAWN_VIEW_CAP },
         };
+      }),
+
+    worldLayer: () => run(async () => deps.session.world.get()),
+
+    worldMoveSpawn: (kind, guid, to) =>
+      run(async () => {
+        const db = connected().db;
+        const layer = deps.session.world.get();
+        const known = layer.spawns.find((s) => s.kind === kind && s.guid === guid);
+        const read = known ? null : await readPlacement(db, kind, guid);
+        if (!known && !read) throw fail('BAD_REQUEST', `Spawn ${guid} is no longer in the database.`);
+        const spawn = known ?? { kind, guid, entry: read!.entry, name: read!.name, map: read!.map, original: read!.placement };
+        const next = moveSpawn(layer, spawn, to);
+        deps.session.world.put(next);
+        return next;
+      }),
+
+    worldRoute: (pathId) =>
+      run(async () => {
+        const known = deps.session.world.get().routes.find((r) => r.pathId === pathId);
+        if (known) return { points: known.current, walkers: known.walkers };
+        const { original, walkers } = await routeFromDatabase(pathId);
+        return { points: original, walkers };
+      }),
+
+    worldSetRoute: (pathId, points) =>
+      run(async () => {
+        const layer = deps.session.world.get();
+        const known = layer.routes.find((r) => r.pathId === pathId);
+        const route = known ?? { pathId, ...(await routeFromDatabase(pathId)) };
+        const next = setRoute(layer, route, points);
+        deps.session.world.put(next);
+        return next;
+      }),
+
+    worldRevert: (target) =>
+      run(async () => {
+        const layer = deps.session.world.get();
+        const next = target.kind === 'spawn' ? revertSpawn(layer, target.spawnKind, target.guid) : revertRoute(layer, target.pathId);
+        if (next.spawns.length !== layer.spawns.length || next.routes.length !== layer.routes.length) deps.session.world.put(next);
+        return next;
+      }),
+
+    worldChanges: () =>
+      run(async () => {
+        const db = connected().db;
+        const layer = deps.session.world.get();
+        return [
+          ...(await Promise.all(layer.spawns.map(async (s) => ({ ...s, type: 'spawn' as const, drifted: await spawnDrifted(db, s) })))),
+          ...(await Promise.all(layer.routes.map(async (r) => ({ ...r, type: 'route' as const, drifted: await routeDrifted(db, r) })))),
+        ];
+      }),
+
+    exportWorld: () =>
+      run(async () => {
+        const live = connected();
+        const layer: WorldLayer = deps.session.world.get();
+        if (layer.spawns.length === 0 && layer.routes.length === 0) throw fail('BAD_REQUEST', 'There are no world changes to export.');
+        const { apply, revert } = worldStatements(layer);
+        const schema = await worldSchema(live.db, live.schema.hash);
+        const date = patchDate(deps.now());
+        const sql = renderPatch(apply, schema, { toolVersion: TOOL_VERSION, date, label: 'World changes' });
+        const revertSql = renderPatch(revert, schema, { toolVersion: TOOL_VERSION, date, label: 'World changes: revert' });
+
+        // The same folder a quest's patch goes to, numbered per day like quest exports
+        const outputDir = deps.exportDirOverride || live.exportDir || deps.defaultExportDir || deps.session.meta().outputDir;
+        await deps.fs.ensureDir(outputDir);
+        const existing = await deps.fs.listDir(outputDir);
+        const sequence = String(existing.filter((name) => name.startsWith(`${date}_`) && name.endsWith('_world.sql')).length).padStart(2, '0');
+        const applyPath = join(outputDir, `${date}_${sequence}_world.sql`);
+        const revertPath = join(outputDir, `${date}_${sequence}_world_revert.sql`);
+        await deps.fs.writeFile(applyPath, sql);
+        await deps.fs.writeFile(revertPath, revertSql);
+        return { applyPath, revertPath, sql };
       }),
 
     entitySpawns: (kind, entry) =>

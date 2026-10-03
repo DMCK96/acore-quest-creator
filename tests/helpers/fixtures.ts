@@ -20,7 +20,7 @@ const LOOKUP_TABLES = [
   // Where new NPCs and objects are written (slice D).
   'creature_template_model', 'creature', 'gameobject', 'page_text',
   // Patrol routes of new NPCs (slice L).
-  'creature_addon', 'waypoint_data',
+  'creature_addon', 'waypoint_data', 'creature_template_addon',
   // Weapons of new NPCs (slice M).
   'creature_equip_template',
 ] as const;

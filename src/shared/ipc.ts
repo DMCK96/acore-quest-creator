@@ -4,6 +4,15 @@ import type { EntityHit, QuestSummary, SearchKind } from '@core/db/world-db';
 import type { SpellFacts } from '@core/game/spells';
 import type { MapBox, SpawnDot } from '@core/db/spawns';
 import type { ViewSpawns } from '@core/db/view-spawns';
+import type { Placement, RoutePoint, WorldLayer, WorldRouteEdit, WorldSpawnEdit, WorldSpawnKind } from '@core/world/layer';
+
+export type { Placement, RoutePoint, WorldLayer, WorldRouteEdit, WorldSpawnEdit, WorldSpawnKind };
+
+/** One world layer entry as the World changes list shows it, and whether the database has moved off its original since. */
+export type WorldChange = (WorldSpawnEdit & { type: 'spawn'; drifted: boolean }) | (WorldRouteEdit & { type: 'route'; drifted: boolean });
+
+/** What a world revert takes back: one spawn, or one route. */
+export type WorldRevertTarget = { kind: 'spawn'; spawnKind: WorldSpawnKind; guid: number } | { kind: 'route'; pathId: number };
 import type { PatchWarning } from '@core/export/build-patch';
 import type { UnmodelledColumn } from '@core/import/unmodelled';
 import type { UnavailableComponent } from '@core/links/availability';
@@ -369,6 +378,20 @@ export interface Api {
   mapSpawns(map: number, box: MapBox): Promise<Result<{ dots: SpawnDot[]; capped: boolean }>>;
   /** NPCs and objects in an area of a map as the 3D view draws them; each kind capped at 2000. */
   viewSpawns(map: number, box: MapBox): Promise<Result<ViewSpawns>>;
+  /** The project's edits to spawns and routes outside any quest. */
+  worldLayer(): Promise<Result<WorldLayer>>;
+  /** Moves or turns an existing spawn in the world layer; its original is read from the database at the first edit. */
+  worldMoveSpawn(kind: WorldSpawnKind, guid: number, to: Placement): Promise<Result<WorldLayer>>;
+  /** A route's points as the layer has them (else the database), and how many spawns walk it. */
+  worldRoute(pathId: number): Promise<Result<{ points: RoutePoint[]; walkers: number }>>;
+  /** Sets an existing route's points in the world layer. */
+  worldSetRoute(pathId: number, points: RoutePoint[]): Promise<Result<WorldLayer>>;
+  /** Takes one spawn or route out of the world layer. */
+  worldRevert(target: WorldRevertTarget): Promise<Result<WorldLayer>>;
+  /** Every world layer entry, with whether the database has moved off its original. */
+  worldChanges(): Promise<Result<WorldChange[]>>;
+  /** Writes the world patch and its revert to the export folder. */
+  exportWorld(): Promise<Result<{ applyPath: string; revertPath: string; sql: string }>>;
   /** Where an NPC or object stands in the world, for jumping to it on the map. */
   entitySpawns(kind: 'creature' | 'gameobject', entry: number): Promise<Result<SpawnDot[]>>;
   /** The existing spawns of the quest's givers, enders and objectives. */
@@ -448,6 +471,10 @@ const MAX_RECOVERY_ID = 100;
 
 const positionSchema = z.object({ x: z.number(), y: z.number() });
 const viewportSchema = z.object({ x: z.number(), y: z.number(), zoom: z.number().positive() });
+const finite = z.number().finite();
+const worldKindArg = z.enum(['creature', 'gameobject']);
+const placementArg = z.object({ x: finite, y: finite, z: finite, orientation: finite, rotation: z.tuple([finite, finite, finite, finite]).nullable() });
+const routePointArg = z.object({ x: finite, y: finite, z: finite, rest: z.record(z.string(), z.string().nullable()) });
 
 const profileFields = {
   name: z.string(),
@@ -518,6 +545,16 @@ const REQUEST_SCHEMAS: Record<keyof Api, z.ZodType<unknown[]>> = {
   mapFloors: z.tuple([z.number().int(), z.number().finite(), z.number().finite()]),
   mapSpawns: z.tuple([z.number().int(), z.object({ minX: z.number().finite(), maxX: z.number().finite(), minY: z.number().finite(), maxY: z.number().finite() })]),
   viewSpawns: z.tuple([z.number().int(), z.object({ minX: z.number().finite(), maxX: z.number().finite(), minY: z.number().finite(), maxY: z.number().finite() })]),
+  worldLayer: z.tuple([]),
+  worldMoveSpawn: z.tuple([worldKindArg, z.number().int(), placementArg]),
+  worldRoute: z.tuple([z.number().int().min(1)]),
+  worldSetRoute: z.tuple([z.number().int().min(1), z.array(routePointArg)]),
+  worldRevert: z.tuple([z.discriminatedUnion('kind', [
+    z.object({ kind: z.literal('spawn'), spawnKind: worldKindArg, guid: z.number().int() }),
+    z.object({ kind: z.literal('route'), pathId: z.number().int() }),
+  ])]),
+  worldChanges: z.tuple([]),
+  exportWorld: z.tuple([]),
   entitySpawns: z.tuple([z.enum(['creature', 'gameobject']), z.number().int()]),
   questMapRefs: z.tuple([z.number()]),
   allocateIds: z.tuple([z.enum(['creature', 'gameobject', 'creatureSpawn', 'gameobjectSpawn', 'page', 'item']), z.number().int().min(1).max(50)]),

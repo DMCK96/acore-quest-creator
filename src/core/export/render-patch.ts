@@ -4,8 +4,10 @@ import type { PatchStatement } from './build-patch';
 
 export interface PatchMeta {
   toolVersion: string;
-  questId: number;
   date: string;
+  /** The quest a patch is for; a patch that is not a quest's names its `label` instead. */
+  questId?: number;
+  label?: string;
 }
 
 const UNSIGNED_INT_TEXT = /^\d+$/;
@@ -87,7 +89,7 @@ export function renderPatch(
 ): string {
   const header = [
     `-- ACORE Quest Creator ${meta.toolVersion}`,
-    `-- Quest: ${meta.questId}`,
+    typeof meta.questId === 'number' ? `-- Quest: ${meta.questId}` : `-- ${meta.label ?? 'Patch'}`,
     `-- Schema: ${schema.hash}`,
     `-- Generated: ${meta.date}`,
   ];
