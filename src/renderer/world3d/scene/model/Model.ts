@@ -5,6 +5,8 @@ import ModelAnimator from './ModelAnimator.js';
 import ModelAnimation from './ModelAnimation.js';
 import { getSizeCategory } from '../world.js';
 
+const _viewToModel = new THREE.Matrix4();
+
 class Model extends THREE.Mesh {
   animation: ModelAnimation;
 
@@ -129,13 +131,21 @@ class Model extends THREE.Mesh {
     return object;
   }
 
-  /** Moves each attachment object with its bone, and what it holds with it */
+  /**
+   * Moves each attachment object with its bone, and what it holds with it. Bone matrices are in the
+   * camera's space (the skeleton starts from the model-view matrix), so the camera is taken back out
+   * to put the point in the model's own space; without that, a weapon was drawn yards from its hand
+   */
   #updateAttachments() {
+    if (this.#attachmentObjects.size === 0) {
+      return;
+    }
     const bones = this.animation.skeleton?.bones ?? [];
+    const viewToModel = _viewToModel.copy(this.modelViewMatrix).invert();
     for (const { object, bone, offset } of this.#attachmentObjects.values()) {
       const boneMatrix = bones[bone]?.matrix;
       object.matrix.copy(offset);
-      if (boneMatrix) object.matrix.premultiply(boneMatrix);
+      if (boneMatrix) object.matrix.premultiply(boneMatrix).premultiply(viewToModel);
       object.updateMatrixWorld(true);
     }
   }
