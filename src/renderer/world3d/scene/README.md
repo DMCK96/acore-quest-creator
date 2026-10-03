@@ -23,6 +23,10 @@ compiler setting than this project's.
     doodad whose model never loaded.
   - `map/MapManager.ts`: areas load one by one; a failed one is remembered and not asked for again;
     a failure in one pass cannot end the passes after it.
+  - `texture/TextureManager.ts`: a texture that cannot be loaded is reported and replaced by a plain
+    grey one, so its model or terrain still draws (upstream drops the whole model).
+  - `texture/loader/TextureLoaderWorker.ts`: a texture that cannot be read is reported with its size
+    and first bytes; uncompressed (ARGB) textures are converted to RGBA, which upstream rejects.
 
 `npm run test:world3d` runs the 3D code in a browser against a fake game client, including a model
 that cannot be read.

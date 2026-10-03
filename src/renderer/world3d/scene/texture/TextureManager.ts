@@ -6,6 +6,7 @@ import ManagedDataTexture from './ManagedDataTexture.js';
 import TextureLoader from './loader/TextureLoader.js';
 import { AssetHost, normalizePath } from '../asset.js';
 import { TextureSpec } from './loader/types.js';
+import { describeError, reportProblem } from '../diagnostics.js';
 
 const THREE_TEXTURE_FORMAT: Record<number, THREE.PixelFormat | THREE.CompressedPixelFormat> = {
   [BLP_IMAGE_FORMAT.IMAGE_DXT1]: THREE.RGBA_S3TC_DXT1_Format,
@@ -26,6 +27,10 @@ class TextureManager {
   #loading = new Map<string, Promise<THREE.Texture>>();
   #refs = new Map<string, number>();
 
+  // Textures that could not be loaded; asked for again, they are not fetched again
+  #failed = new Set<string>();
+  #placeholder: THREE.DataTexture;
+
   constructor(options: TextureManagerOptions) {
     this.#host = options.host;
     this.#loader = new TextureLoader({ host: options.host });
@@ -41,6 +46,10 @@ class TextureManager {
     const refId = [normalizePath(path), wrapS, wrapT, minFilter, magFilter].join(':');
     this.#ref(refId);
 
+    if (this.#failed.has(refId)) {
+      return Promise.resolve(this.#getPlaceholder());
+    }
+
     const loaded = this.#loaded.get(refId);
     if (loaded) {
       return Promise.resolve(loaded);
@@ -51,10 +60,27 @@ class TextureManager {
       return alreadyLoading;
     }
 
-    const loading = this.#load(refId, path, wrapS, wrapT, minFilter, magFilter);
+    // A texture that cannot be loaded must not cost its model or terrain: a plain grey stands in
+    const loading = this.#load(refId, path, wrapS, wrapT, minFilter, magFilter).catch((error) => {
+      this.#failed.add(refId);
+      this.#loading.delete(refId);
+      reportProblem(`texture:${refId}`, `texture ${path} could not be loaded: ${describeError(error)}`);
+      return this.#getPlaceholder();
+    });
     this.#loading.set(refId, loading);
 
     return loading;
+  }
+
+  #getPlaceholder() {
+    if (!this.#placeholder) {
+      const data = new Uint8Array(2 * 2 * 4).fill(128);
+      this.#placeholder = new THREE.DataTexture(data, 2, 2, THREE.RGBAFormat);
+      this.#placeholder.wrapS = this.#placeholder.wrapT = THREE.RepeatWrapping;
+      this.#placeholder.needsUpdate = true;
+    }
+
+    return this.#placeholder;
   }
 
   deref(refId: string) {

@@ -36,6 +36,9 @@ function wdt(): Buffer {
   return Buffer.concat([chunk('MVER', u32(18)), chunk('MPHD', Buffer.alloc(32)), chunk('MAIN', main)]);
 }
 
+/** Which texture a chunk's one layer uses: most grass, the corner two a file that is garbage and an uncompressed one. */
+const textureOf = (row: number, col: number): number => (row === 0 && col === 0 ? 1 : row === 0 && col === 1 ? 2 : 0);
+
 function terrainChunk(row: number, col: number): Buffer {
   const heights = Buffer.alloc(145 * 4);
   for (let i = 0; i < 145; i++) {
@@ -46,7 +49,7 @@ function terrainChunk(row: number, col: number): Buffer {
   }
   const normals = Buffer.alloc(435);
   for (let i = 0; i < 145; i++) normals.writeInt8(127, i * 3 + 2);
-  const layers = Buffer.concat([u32(0), u32(0), u32(0), u32(0)]);
+  const layers = Buffer.concat([u32(textureOf(row, col)), u32(0), u32(0), u32(0)]);
   const body = Buffer.concat([chunk('MCVT', heights), chunk('MCNR', normals), Buffer.alloc(13), chunk('MCLY', layers)]);
   const header = Buffer.alloc(128);
   header.writeUInt32LE(col, 4);
@@ -69,7 +72,7 @@ function adt(): Buffer {
     chunk('MVER', u32(18)),
     chunk('MHDR', Buffer.alloc(64)),
     chunk('MCIN', Buffer.alloc(4096)),
-    chunk('MTEX', Buffer.from('tileset\\grass.blp\0')),
+    chunk('MTEX', Buffer.from('tileset\\grass.blp\0tileset\\garbage.blp\0tileset\\raw.blp\0')),
     chunk('MMDX', names),
     chunk('MMID', offsets),
     chunk('MDDF', Buffer.concat([doodad(0, 1), doodad(1, 2)])),
@@ -95,6 +98,24 @@ function grassTexture(): Buffer {
   return out;
 }
 
+/** A BLP2 of one colour, uncompressed (blue-green-red-alpha), 8 x 8. */
+function rawTexture(): Buffer {
+  const size = 8;
+  const data = Buffer.alloc(size * size * 4);
+  for (let i = 0; i < size * size; i++) data.set([200, 90, 30, 255], i * 4);
+  const out = Buffer.alloc(1172 + data.length);
+  out.write('BLP2');
+  out.writeUInt32LE(1, 4);
+  out[8] = 3;
+  out[9] = 8;
+  out.writeUInt32LE(size, 12);
+  out.writeUInt32LE(size, 16);
+  out.writeUInt32LE(1172, 20);
+  out.writeUInt32LE(data.length, 84);
+  data.copy(out, 1172);
+  return out;
+}
+
 export interface FakeClient {
   url: string;
   /** Each request so far, as `200 path` or `404 path`. */
@@ -107,6 +128,8 @@ export async function startFakeClient(port = 0): Promise<FakeClient> {
     ['world/maps/azeroth/azeroth.wdt', wdt()],
     [TILE.file, adt()],
     ['tileset/grass.blp', grassTexture()],
+    ['tileset/garbage.blp', Buffer.alloc(200, 0x67)],
+    ['tileset/raw.blp', rawTexture()],
     ['world/bad/bad.m2', Buffer.concat([Buffer.from('MD20'), Buffer.alloc(40, 0xff)])],
   ]);
   const requested: string[] = [];

@@ -57,16 +57,20 @@ async function openPage(page: Page): Promise<void> {
   await page.waitForFunction('window.__loaded === true');
 }
 
-test('draws the terrain, and a model that cannot be read costs the area neither its terrain nor its other props', async ({ page }) => {
+test('draws the terrain, and a model or texture that cannot be read costs the area neither its terrain nor its other props', async ({ page }) => {
   await openPage(page);
   await open(page, 'azeroth', 0);
   await page.waitForFunction('window.__state.ready', null, { timeout: 45000 });
 
   // Both broken props are reported by name, with where they failed...
-  await expect.poll(async () => (await state(page)).problems.length).toBe(2);
+  await expect.poll(async () => (await state(page)).problems.length).toBe(3);
   const { problems } = await state(page);
   expect(problems.find((p) => p.includes(BAD_MODEL))).toMatch(/could not be loaded: Invalid typed array length/);
   expect(problems.find((p) => p.includes(MISSING_MODEL))).toMatch(/404/);
+  // ... as is a texture that is garbage (with what it starts with, to tell it from a format not read); the
+  // uncompressed one is not a problem at all.
+  expect(problems.find((p) => /tileset.garbage\.blp/.test(p))).toMatch(/begins 67 67 67/);
+  expect(problems.some((p) => /tileset.raw\.blp/.test(p))).toBe(false);
   // ... and the ground is on screen: the middle of the picture is the green terrain, not the sky.
   const picture = await page.locator('canvas.world3d__canvas').screenshot();
   await test.info().attach('terrain', { body: picture, contentType: 'image/png' });
