@@ -1,4 +1,5 @@
 import { describe, it, expect } from 'vitest';
+import { EMPTY_WORLD } from '../../src/core/world/layer';
 import { join } from 'node:path';
 import { createRecovery } from '../../src/main/project/recovery';
 import { createProjectSession } from '../../src/main/project/session';
@@ -38,7 +39,7 @@ describe('recovery', () => {
 
   it('lists what it wrote and reads it back', async () => {
     const { rec, session } = setup();
-    session.load({ ...defaultProjectMeta('Northshire', 'C:\\out'), quests: [q(60000)] }, 'C:\\w\\north.aqc', { dirty: true });
+    session.load({ ...defaultProjectMeta('Northshire', 'C:\\out'), quests: [q(60000)], world: EMPTY_WORLD }, 'C:\\w\\north.aqc', { dirty: true });
     await rec.tick(session);
     expect(await rec.list()).toEqual([
       { id: 's2', name: 'Northshire', recoveredFrom: 'C:\\w\\north.aqc', writtenAt: '2026-09-23T14:02:00.000Z', questCount: 1, damaged: false },

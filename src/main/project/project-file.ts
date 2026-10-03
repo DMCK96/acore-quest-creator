@@ -2,6 +2,7 @@ import { z } from 'zod';
 import type { QuestAggregate, Snapshot } from '../../core/model/aggregate';
 import type { FidelityReport } from '../../core/roundtrip/verify';
 import { TOOL_VERSION } from '../../core/version';
+import { EMPTY_WORLD, type Placement, type RoutePoint, type WorldLayer } from '../../core/world/layer';
 import type { Viewport } from '../../shared/ipc';
 
 /**
@@ -10,7 +11,8 @@ import type { Viewport } from '../../shared/ipc';
  */
 
 export const PROJECT_FORMAT = 'acore-quest-creator/project';
-export const PROJECT_VERSION = 1;
+/** 2 added the world layer; a version 1 file opens with an empty one. */
+export const PROJECT_VERSION = 2;
 export const PROJECT_EXTENSION = 'aqc';
 export const DEFAULT_PROJECT_NAME = 'Untitled Project';
 export const DEFAULT_ID_RANGE = { start: 60000, end: 99999 } as const;
@@ -37,6 +39,8 @@ export interface ProjectMeta {
 
 export interface ProjectDocument extends ProjectMeta {
   quests: ProjectQuest[];
+  /** Edits to spawns and routes that are not part of any quest. */
+  world: WorldLayer;
 }
 
 /** The file system as the project code needs it, injected so tests run without a disk. */
@@ -88,6 +92,9 @@ export function defaultProjectMeta(name: string, outputDir: string): ProjectMeta
   };
 }
 
+const placement = (p: Placement) => ({ x: p.x, y: p.y, z: p.z, orientation: p.orientation, rotation: p.rotation });
+const point = (p: RoutePoint) => ({ x: p.x, y: p.y, z: p.z, rest: p.rest });
+
 /**
  * Keys are written in a fixed order and quests by id, so saving the same project twice gives the
  * same bytes and a project kept in git diffs by what actually changed.
@@ -114,6 +121,12 @@ export function serializeProject(doc: ProjectDocument): string {
     outputDir: doc.outputDir,
     viewport: { x: doc.viewport.x, y: doc.viewport.y, zoom: doc.viewport.zoom },
     quests,
+    world: {
+      spawns: doc.world.spawns.map((s) => ({
+        kind: s.kind, guid: s.guid, entry: s.entry, name: s.name, map: s.map, original: placement(s.original), current: placement(s.current),
+      })),
+      routes: doc.world.routes.map((r) => ({ pathId: r.pathId, walkers: r.walkers, original: r.original.map(point), current: r.current.map(point) })),
+    },
   };
   return `${JSON.stringify(file, null, 2)}\n`;
 }
@@ -133,6 +146,29 @@ const snapshotSchema = z.looseObject({
   columnsRead: z.record(z.string(), z.unknown()),
   linkedContext: z.record(z.string(), z.unknown()),
   schemaHash: z.string(),
+});
+
+const placementSchema = z.object({
+  x: z.number(),
+  y: z.number(),
+  z: z.number(),
+  orientation: z.number(),
+  rotation: z.tuple([z.number(), z.number(), z.number(), z.number()]).nullable(),
+});
+const pointSchema = z.object({ x: z.number(), y: z.number(), z: z.number(), rest: z.record(z.string(), z.string().nullable()) });
+const worldSchema = z.object({
+  spawns: z.array(
+    z.object({
+      kind: z.enum(['creature', 'gameobject']),
+      guid: z.number().int(),
+      entry: z.number().int(),
+      name: z.string(),
+      map: z.number().int(),
+      original: placementSchema,
+      current: placementSchema,
+    }),
+  ),
+  routes: z.array(z.object({ pathId: z.number().int(), walkers: z.number().int(), original: z.array(pointSchema), current: z.array(pointSchema) })),
 });
 
 const fileSchema = z.object({
@@ -155,6 +191,7 @@ const fileSchema = z.object({
       aggregate: aggregateSchema,
     }),
   ),
+  world: worldSchema.optional(),
 });
 
 const NOT_A_PROJECT = 'This file is not an ACORE Quest Creator project.';
@@ -199,6 +236,7 @@ export function parseProject(text: string): ProjectDocument {
       y: q.y,
       lastExportPath: q.lastExportPath,
     })),
+    world: f.world ?? structuredClone(EMPTY_WORLD),
   };
 }
 

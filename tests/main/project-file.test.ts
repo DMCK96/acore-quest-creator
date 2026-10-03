@@ -4,6 +4,7 @@ import {
   PROJECT_FORMAT, PROJECT_VERSION, type ProjectDocument,
 } from '../../src/main/project/project-file';
 import { memFs } from '../helpers/mem-fs';
+import { EMPTY_WORLD } from '../../src/core/world/layer';
 
 const aggregate = { questId: 60001, isNew: false, values: { 'quest_template.LogTitle': "It's \\ ok\r\n🙂 \0 \u2028", creature_queststarter: [{ id: 1 }] }, readOnly: [], sharedItems: { '2000': [60002] } };
 const snapshot = { questId: 60001, tables: { quest_template: [{ ID: '60001', LogTitle: null }] }, columnsRead: { quest_template: ['ID', 'LogTitle'] }, linkedContext: {}, schemaHash: 'abc' };
@@ -14,6 +15,7 @@ const doc = (over: Partial<ProjectDocument> = {}): ProjectDocument => ({
     { questId: 60001, isNew: false, aggregate, snapshot, fidelity: { ok: true }, x: 320, y: -50.5, lastExportPath: 'C:\\out\\a.sql' },
     { questId: 60000, isNew: true, aggregate: { ...aggregate, questId: 60000, isNew: true }, snapshot: null, fidelity: null, x: 0, y: 0, lastExportPath: null },
   ] as ProjectDocument['quests'],
+  world: EMPTY_WORLD,
   ...over,
 });
 const reasonOf = (fn: () => unknown): string => {
@@ -76,5 +78,33 @@ describe('project file', () => {
     await expect(writeFileAtomic(fs, 'C:\\p\\a.aqc', 'new')).rejects.toThrow(/EBUSY/);
     expect(fs.files.get('C:\\p\\a.aqc')).toBe('old');
     expect(fs.files.has('C:\\p\\a.aqc.tmp')).toBe(false);
+  });
+});
+
+describe('project file: the world layer', () => {
+  const world = {
+    spawns: [{ kind: 'creature' as const, guid: 80330, entry: 1423, name: 'Stormwind Guard', map: 0,
+      original: { x: 1, y: 2, z: 3, orientation: 0, rotation: null }, current: { x: 4, y: 2, z: 3, orientation: 1, rotation: null } }],
+    routes: [{ pathId: 801, walkers: 2, original: [{ x: 1, y: 0, z: 0, rest: { delay: '0' } }], current: [{ x: 2, y: 0, z: 0, rest: {} }] }],
+  };
+
+  it('is version 2 and round-trips the world layer after the quests', () => {
+    expect(PROJECT_VERSION).toBe(2);
+    const text = serializeProject(doc({ world }));
+    expect(parseProject(text).world).toEqual(world);
+    expect(text.indexOf('"quests"')).toBeLessThan(text.indexOf('"world"'));
+  });
+
+  it('opens a version 1 project with an empty world layer', () => {
+    const raw = JSON.parse(serializeProject(doc()));
+    raw.version = 1;
+    delete raw.world;
+    expect(parseProject(JSON.stringify(raw)).world).toEqual(EMPTY_WORLD);
+  });
+
+  it('names a corrupt world entry', () => {
+    const raw = JSON.parse(serializeProject(doc({ world })));
+    raw.world.spawns[0].current.x = 'north';
+    expect(() => parseProject(JSON.stringify(raw))).toThrow(/world\.spawns\.0\.current\.x/);
   });
 });
