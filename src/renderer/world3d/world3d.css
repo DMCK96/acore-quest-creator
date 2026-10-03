@@ -250,3 +250,36 @@
   gap: 8px;
   margin-top: 1em;
 }
+
+.world-changes {
+  width: min(52em, 100%);
+}
+
+.world-changes__table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.9em;
+}
+
+.world-changes__table th,
+.world-changes__table td {
+  padding: 0.35em 0.5em;
+  border-bottom: 1px solid var(--border);
+  text-align: left;
+  font-variant-numeric: tabular-nums;
+}
+
+.world-changes__drift {
+  display: block;
+  color: var(--accent);
+  font-size: 0.9em;
+}
+
+.world-changes__error {
+  color: var(--accent);
+}
+
+.world-changes__exported p {
+  margin: 0.2em 0;
+  word-break: break-all;
+}

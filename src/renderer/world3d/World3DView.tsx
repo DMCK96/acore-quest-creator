@@ -8,6 +8,7 @@ import type { ViewSpawns } from '@core/db/view-spawns';
 import { chooseZ, floorCandidates } from '@core/map/floors';
 import { EMPTY_WORLD, type WorldLayer } from '@core/world/layer';
 import type { SpawnEdit, SpawnRef } from './edits';
+import { WorldChanges } from './WorldChanges';
 import '../views/ProjectDialog.css';
 import './world3d.css';
 
@@ -129,6 +130,12 @@ function WorldStage({ map, start, hasClient, own, onSelect, onOwnEdit }: ViewPro
   const [shared, setShared] = useState<SharedRoute | null>(null);
   const [changesOpen, setChangesOpen] = useState(false);
   const changes = layer.spawns.length + layer.routes.length;
+  /** A layer from the World changes list (after a revert): kept and drawn */
+  const takeLayer = (next: WorldLayer): void => {
+    layerRef.current = next;
+    setLayer(next);
+    world.current?.setWorldLayer(next);
+  };
   const api = useApi();
   const apiRef = useRef(api);
   apiRef.current = api;
@@ -331,6 +338,7 @@ function WorldStage({ map, start, hasClient, own, onSelect, onOwnEdit }: ViewPro
           {note}
         </p>
       )}
+      {changesOpen && api && <WorldChanges api={api} onLayer={takeLayer} onClose={() => setChangesOpen(false)} />}
       {shared && (
         <SharedRouteDialog
           shared={shared}

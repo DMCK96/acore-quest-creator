@@ -71,6 +71,16 @@ describe('editing in the quest map\'s 3D view', () => {
     expect(screen.getByRole('button', { name: 'World changes (1)' })).toBeTruthy();
   });
 
+  it('opens the World changes list from its button, and draws the layer a revert leaves', async () => {
+    const worldChanges = vi.fn(async () => okv([{ ...moved.spawns[0], type: 'spawn', drifted: false }]));
+    const worldRevert = vi.fn(async () => okv(EMPTY));
+    const { world } = await questMap(makeMockApi({ worldLayer: vi.fn(async () => okv(moved)), worldChanges, worldRevert }));
+    await userEvent.click(await screen.findByRole('button', { name: 'World changes (1)' }));
+    await userEvent.click(await screen.findByRole('button', { name: 'Revert Guard' }));
+    await waitFor(() => expect(world.setWorldLayer).toHaveBeenLastCalledWith(EMPTY));
+    expect(screen.getByRole('button', { name: 'World changes (0)' })).toBeDisabled();
+  });
+
   it('puts the spawn back and says why when the world edit fails', async () => {
     const { world } = await questMap(makeMockApi({ worldLayer: vi.fn(async () => okv(EMPTY)), worldMoveSpawn: vi.fn(async () => errv('NOT_CONNECTED', 'Connect to a world database first.')) }));
     world.options.onSelect({ kind: 'creature', guid: 80330, entry: 1423, name: 'Guard', own: false, event: null, position: { x: 0, y: 0, z: 0 }, pathId: 0 });
