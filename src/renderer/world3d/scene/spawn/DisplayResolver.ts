@@ -36,7 +36,8 @@ const DEFAULT_CHARACTER_GEOSETS = [0, 101, 201, 301, 401, 501, 702, 1301];
 /** Replaceable slots a humanoid fills: its baked body texture, and its hair */
 const BODY_SLOT = 1;
 const HAIR_SLOT = 6;
-/** CharSections' base section for hair */
+/** CharSections' base sections: a race's skin (by colour), and its hair */
+const SKIN_SECTION = 0;
 const HAIR_SECTION = 3;
 
 /** Where weapon models live, and the replaceable slot (object skin) their texture fills */
@@ -63,6 +64,7 @@ class DisplayResolver {
   #loading = new globalThis.Map<string, Promise<ClientDb<any> | null>>();
   #warned = new Set<string>();
   #indexes = new globalThis.Map<string, Promise<globalThis.Map<string, any>>>();
+  #bodies: Promise<globalThis.Map<number, { race: number; sex: number }>> | null = null;
 
   constructor(tables: DisplayTables) {
     this.#tables = tables;
@@ -97,8 +99,38 @@ class DisplayResolver {
       }
     });
 
+    // A race's own body with nothing to dress it (as `.morph 49` shows): the bare body in its default
+    // skin. Left empty, the body's skin slot draws black
+    const body = (await this.#raceBodies()).get(display.modelId);
+    if (body && !textures[BODY_SLOT]) {
+      const skin = await this.#skin(body.race, body.sex, 0);
+      if (skin) textures[BODY_SLOT] = skin;
+    }
+
     const scale = Number.isFinite(display.creatureModelScale) && display.creatureModelScale > 0 ? display.creatureModelScale : 1;
     return { kind: 'model', path, textures, geosets: null, scale };
+  }
+
+  /** Which race and sex each race body model is, by model id, from the races' body displays */
+  #raceBodies() {
+    this.#bodies ??= (async () => {
+      const bodies = new globalThis.Map<number, { race: number; sex: number }>();
+      const displays = await this.#table('CreatureDisplayInfo');
+      for (const race of (await this.#table('ChrRaces'))?.records ?? []) {
+        [race.maleDisplayId, race.femaleDisplayId].forEach((displayId, sex) => {
+          const modelId = displayId > 0 ? displays?.getRecord(displayId)?.modelId : undefined;
+          if (modelId && !bodies.has(modelId)) bodies.set(modelId, { race: race.id, sex });
+        });
+      }
+      return bodies;
+    })();
+    return this.#bodies;
+  }
+
+  /** A race's body skin in one of its colours, from CharSections; null when the client has none */
+  async #skin(race: number, sex: number, colour: number): Promise<string | null> {
+    const skins = await this.#index('CharSections', (r) => (r.baseSection === SKIN_SECTION ? `${r.race}:${r.sex}:${r.variation}:${r.colour}` : null), 'CharSections:skin');
+    return skins.get(`${race}:${sex}:0:${colour}`)?.textures[0] || null;
   }
 
   /**
@@ -118,8 +150,12 @@ class DisplayResolver {
     const textures: Record<number, string> = {};
     if (extra.bakeName) {
       textures[BODY_SLOT] = `Textures\\BakedNpcTextures\\${extra.bakeName}`;
+    } else {
+      // No baked texture: its skin colour at least, rather than a body drawn black
+      const skin = await this.#skin(extra.race, extra.sex, extra.skin);
+      if (skin) textures[BODY_SLOT] = skin;
     }
-    const hairSection = (await this.#index('CharSections', (r) => r.baseSection === HAIR_SECTION ? `${r.race}:${r.sex}:${r.variation}:${r.colour}` : null))
+    const hairSection = (await this.#index('CharSections', (r) => r.baseSection === HAIR_SECTION ? `${r.race}:${r.sex}:${r.variation}:${r.colour}` : null, 'CharSections:hair'))
       .get(`${extra.race}:${extra.sex}:${extra.hairStyle}:${extra.hairColour}`);
     if (hairSection?.textures[0]) {
       textures[HAIR_SLOT] = hairSection.textures[0];
@@ -187,9 +223,12 @@ class DisplayResolver {
     return { kind: 'model', path: modelPath(display.modelName), textures: {}, geosets: null, scale: 1 };
   }
 
-  /** A table's records by a key, built once; a table that cannot be read gives an empty index */
-  #index(name: string, keyOf: (record: any) => string | null) {
-    let index = this.#indexes.get(name);
+  /**
+   * A table's records by a key, built once per `cacheKey` (one table can be indexed more than one
+   * way: CharSections by skin and by hair); a table that cannot be read gives an empty index
+   */
+  #index(name: string, keyOf: (record: any) => string | null, cacheKey = name) {
+    let index = this.#indexes.get(cacheKey);
     if (!index) {
       index = this.#table(name).then((db) => {
         const byKey = new globalThis.Map<string, any>();
@@ -199,7 +238,7 @@ class DisplayResolver {
         }
         return byKey;
       });
-      this.#indexes.set(name, index);
+      this.#indexes.set(cacheKey, index);
     }
     return index;
   }

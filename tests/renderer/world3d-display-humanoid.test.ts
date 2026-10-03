@@ -52,6 +52,34 @@ describe('a humanoid NPC\'s look', () => {
     expect(await resolver({ ...tables, ChrRaces: () => db(ChrRacesRecord, [], 69) }).creature(3167)).toBeNull();
   });
 
+  it('is the bare body in its race\'s default skin when the display is the body itself, with no extra (as .morph 49 shows)', async () => {
+    const skins = () => db(CharSectionsRecord, [
+      [7, 1, 0, 3, 'Character\\Human\\Hair04_02.blp', '', '', 0, 4, 2],
+      [8, 1, 0, 0, 'Character\\Human\\Male\\HumanMaleSkin00_00.blp', '', '', 0, 0, 0],
+      [9, 1, 0, 0, 'Character\\Human\\Male\\HumanMaleSkin00_03.blp', '', '', 0, 0, 3],
+    ], 10);
+    const look = (await resolver({ ...tables, CharSections: skins }).creature(49)) as any;
+    expect(look).toMatchObject({ path: 'Character\\Human\\Male\\HumanMale.m2', textures: { 1: 'Character\\Human\\Male\\HumanMaleSkin00_00.blp' } });
+  });
+
+  it('wears its own skin colour, not nothing, when it has no baked texture', async () => {
+    const skins = () => db(CharSectionsRecord, [
+      [8, 1, 0, 0, 'Character\\Human\\Male\\HumanMaleSkin00_00.blp', '', '', 0, 0, 0],
+      [9, 1, 0, 0, 'Character\\Human\\Male\\HumanMaleSkin00_03.blp', '', '', 0, 0, 3],
+    ], 10);
+    // skin colour 3, no bake name
+    const extra = () => db(CreatureDisplayInfoExtraRecord, [[500, 1, 0, 3, 0, 4, 2, 3, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, '']], 21);
+    const look = (await resolver({ ...tables, CharSections: skins, CreatureDisplayInfoExtra: extra }).creature(3167)) as any;
+    expect(look.textures[1]).toBe('Character\\Human\\Male\\HumanMaleSkin00_03.blp');
+  });
+
+  it('leaves a creature\'s own model as it is, with no body skin', async () => {
+    const creatures = () => db(CreatureDisplayInfoRecord, [[3167, 0, 0, 500, f32(1), 255], [49, 49, 0, 0, f32(1), 255], [21774, 1611, 0, 0, f32(1), 255]], 16);
+    const models = () => db(CreatureModelDataRecord, [[49, 0, 'Character\\Human\\Male\\HumanMale.mdx'], [1611, 0, 'Creature\\Turkey\\Turkey.mdx']], 28);
+    const look = (await resolver({ ...tables, CreatureDisplayInfo: creatures, CreatureModelData: models }).creature(21774)) as any;
+    expect(look).toMatchObject({ path: 'Creature\\Turkey\\Turkey.m2', textures: {} });
+  });
+
   it('has no hair texture, but still draws, when the client has no hair section for it', async () => {
     const look = (await resolver({ ...tables, CharSections: () => db(CharSectionsRecord, [], 10) }).creature(3167)) as any;
     expect(look.textures).toEqual({ 1: 'Textures\\BakedNpcTextures\\CreatureDisplayExtra-00500.blp' });
