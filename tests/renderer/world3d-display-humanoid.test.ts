@@ -93,6 +93,8 @@ describe('a humanoid NPC\'s look', () => {
       textures: { 1: 'Character\\Human\\Male\\HumanMaleSkin00_03.blp', 6: 'Character\\Human\\Hair04_02.blp' },
       geosets: [0, 5, 102, 201, 303, 401, 501, 702, 1301],
       scale: 1,
+      // Built over the skin; this fixture has no face or underwear sections, and the preset wears nothing
+      body: { base: 'Character\\Human\\Male\\HumanMaleSkin00_03.blp', layers: [] },
     });
   });
 

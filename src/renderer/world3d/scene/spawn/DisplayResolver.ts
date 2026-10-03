@@ -8,9 +8,29 @@
 import { ClientDb } from '@wowserhq/format';
 import { CreatureDisplayInfoRecord, CreatureModelDataRecord, GameObjectDisplayInfoRecord } from '../db/records.js';
 import { ViewPreset } from '../../../../core/db/view-spawns.js';
+import { ITEM_REGIONS, Region, itemTextureFiles } from '../character/composite.js';
+import { OUTFIT_SLOTS, OutfitSlot, PAINT_ORDER, SHAPE_ORDER, applyItemGeosets } from '../character/outfit.js';
 
-/** How a humanoid looks: a CreatureDisplayInfoExtra row, or a display preset (with no baked texture) */
-type Appearance = { race: number; sex: number; skin: number; hairStyle: number; hairColour: number; facialHair: number; bakeName: string };
+/**
+ * How a humanoid looks: a CreatureDisplayInfoExtra row, or a display preset (with no baked texture);
+ * what it wears, by slot, as item displays
+ */
+type Appearance = {
+  race: number;
+  sex: number;
+  skin: number;
+  face: number;
+  hairStyle: number;
+  hairColour: number;
+  facialHair: number;
+  bakeName: string;
+  displays: Partial<Record<OutfitSlot, number>>;
+};
+
+/** One layer of a body texture: the first of its files that loads, painted in its region (or over all) */
+type BodyLayer = { files: string[]; region: Region | null };
+/** A body texture to build: the skin, then each layer over it */
+type BodyTexture = { base: string; layers: BodyLayer[] };
 
 /** The client's tables by name (without `.dbc`); a table the client cannot give resolves to null */
 type DisplayTables = { get(name: string): Promise<ClientDb<any> | null> };
@@ -25,6 +45,10 @@ type ModelLook = {
   scale: number;
   /** A held item that goes on the arm (attachment 0), not in the hand */
   shield?: boolean;
+  /** A body texture to build for replaceable slot 1 (a dressed NPC with no baked texture) */
+  body?: BodyTexture;
+  /** Models worn at attachment points: a helmet, shoulder pads */
+  attachments?: { point: number; look: ModelLook }[];
 };
 
 type BuildingLook = { kind: 'building'; path: string; scale: number };
@@ -40,9 +64,26 @@ const DEFAULT_CHARACTER_GEOSETS = [0, 101, 201, 301, 401, 501, 702, 1301];
 /** Replaceable slots a humanoid fills: its baked body texture, and its hair */
 const BODY_SLOT = 1;
 const HAIR_SLOT = 6;
-/** CharSections' base sections: a race's skin (by colour), and its hair */
+/** CharSections' base sections: a race's skin (by colour), face, facial hair, hair and underwear */
 const SKIN_SECTION = 0;
+const FACE_SECTION = 1;
+const FACIAL_HAIR_SECTION = 2;
 const HAIR_SECTION = 3;
+const UNDERWEAR_SECTION = 4;
+
+/** Where worn models hang: the helmet, then the left and right shoulder */
+const HELM_POINT = 11;
+const LEFT_SHOULDER_POINT = 6;
+const RIGHT_SHOULDER_POINT = 5;
+/** The replaceable slot a cape's texture fills on a character, and a worn model's own skin */
+const CAPE_SLOT = 2;
+const ITEM_SKIN_SLOT = 2;
+
+/** A preset's slot names as an outfit's */
+const PRESET_OUTFIT: Record<string, OutfitSlot> = {
+  head: 'head', shoulders: 'shoulders', body: 'shirt', chest: 'chest', waist: 'waist', legs: 'legs', feet: 'feet',
+  wrists: 'wrists', hands: 'hands', back: 'back', tabard: 'tabard',
+};
 
 /** Where weapon models live, and the replaceable slot (object skin) their texture fills */
 const WEAPON_FOLDER = 'Item\\ObjectComponents\\Weapon';
@@ -82,14 +123,27 @@ class DisplayResolver {
     const display = displayId > 0 ? (await this.#table('CreatureDisplayInfo'))?.getRecord(displayId) : null;
     const scale = display && Number.isFinite(display.creatureModelScale) && display.creatureModelScale > 0 ? display.creatureModelScale : 1;
     if (preset) {
-      return this.#character({ race: preset.race, sex: preset.sex, skin: preset.skin, hairStyle: preset.hairStyle, hairColour: preset.hairColour, facialHair: preset.facialHair, bakeName: '' }, scale);
+      const displays: Partial<Record<OutfitSlot, number>> = {};
+      for (const [slot, itemId] of Object.entries(preset.items ?? {})) {
+        if (!(itemId > 0) || !PRESET_OUTFIT[slot]) continue;
+        const item = (await this.#table('Item'))?.getRecord(itemId);
+        if (!item) {
+          this.#warnOnce(`item:${itemId}`, `3D view: item ${itemId} is not in the client's Item.dbc; its NPC is drawn without it`);
+          continue;
+        }
+        displays[PRESET_OUTFIT[slot]] = item.displayInfoId;
+      }
+      const { race, sex, skin, face, hairStyle, hairColour, facialHair } = preset;
+      return this.#character({ race, sex, skin, face, hairStyle, hairColour, facialHair, bakeName: '', displays }, scale);
     }
     if (!display) {
       return null;
     }
     if (display.extendedDisplayInfoId > 0) {
       const extra = (await this.#table('CreatureDisplayInfoExtra'))?.getRecord(display.extendedDisplayInfoId);
-      return extra ? this.#character(extra, scale) : null;
+      if (!extra) return null;
+      const displays = Object.fromEntries(OUTFIT_SLOTS.map((slot, i) => [slot, extra.itemDisplays?.[i] ?? 0]));
+      return this.#character({ ...extra, displays }, scale);
     }
     return this.#plain(display);
   }
@@ -158,13 +212,26 @@ class DisplayResolver {
       return null;
     }
 
+    // What it wears, by slot; an item display the client does not know is left off
+    const worn: Partial<Record<OutfitSlot, any>> = {};
+    for (const [slot, displayId] of Object.entries(look.displays ?? {})) {
+      if (!(displayId > 0)) continue;
+      const record = (await this.#table('ItemDisplayInfo'))?.getRecord(displayId);
+      if (record) worn[slot as OutfitSlot] = record;
+      else this.#warnOnce(`itemdisplay:${displayId}`, `3D view: item display ${displayId} is not in the client's ItemDisplayInfo.dbc; its NPC is drawn without it`);
+    }
+
     const textures: Record<number, string> = {};
+    let bodyTexture: BodyTexture | undefined;
     if (look.bakeName) {
       textures[BODY_SLOT] = `Textures\\BakedNpcTextures\\${look.bakeName}`;
     } else {
-      // No baked texture: its skin colour at least, rather than a body drawn black
+      // No baked texture: its skin, face and underwear, and each item's pieces painted over them
       const skin = await this.#skin(look.race, look.sex, look.skin);
-      if (skin) textures[BODY_SLOT] = skin;
+      if (skin) {
+        textures[BODY_SLOT] = skin;
+        bodyTexture = { base: skin, layers: [...(await this.#bodyLayers(look)), ...this.#itemLayers(worn, look.sex)] };
+      }
     }
     const hairSection = (await this.#index('CharSections', (r) => r.baseSection === HAIR_SECTION ? `${r.race}:${r.sex}:${r.variation}:${r.colour}` : null, 'CharSections:hair'))
       .get(`${look.race}:${look.sex}:${look.hairStyle}:${look.hairColour}`);
@@ -186,8 +253,67 @@ class DisplayResolver {
         }
       });
     }
+    for (const slot of SHAPE_ORDER) {
+      if (worn[slot]) applyItemGeosets(geosets, slot, worn[slot].geosetGroups ?? []);
+    }
+    if (worn.back?.modelTextures?.[0]) {
+      textures[CAPE_SLOT] = `Item\\ObjectComponents\\Cape\\${worn.back.modelTextures[0]}.blp`;
+    }
 
-    return { kind: 'model', path: body.path, textures, geosets: [...geosets].sort((a, b) => a - b), scale };
+    const result: ModelLook = { kind: 'model', path: body.path, textures, geosets: [...geosets].sort((a, b) => a - b), scale };
+    if (bodyTexture) result.body = bodyTexture;
+    const attachments = this.#attachments(worn, race?.clientPrefix ?? '', look.sex);
+    if (attachments.length > 0) result.attachments = attachments;
+    return result;
+  }
+
+  /** The face, facial hair and underwear painted on a bare skin, from CharSections */
+  async #bodyLayers(look: Appearance): Promise<BodyLayer[]> {
+    const section = async (base: number, variation: number, colour: number) =>
+      (await this.#index('CharSections', (r) => (r.baseSection === base ? `${r.race}:${r.sex}:${r.variation}:${r.colour}` : null), `CharSections:${base}`))
+        .get(`${look.race}:${look.sex}:${variation}:${colour}`);
+    const layers: BodyLayer[] = [];
+    const add = (record: any, regions: Region[]) => {
+      regions.forEach((region, i) => {
+        if (record?.textures[i]) layers.push({ files: [record.textures[i]], region });
+      });
+    };
+    add(await section(FACE_SECTION, look.face, look.skin), ['faceLower', 'faceUpper']);
+    add(await section(FACIAL_HAIR_SECTION, look.facialHair, look.hairColour), ['faceLower', 'faceUpper']);
+    add(await section(UNDERWEAR_SECTION, 0, look.skin), ['legUpper', 'torsoUpper']);
+    return layers;
+  }
+
+  /** Each worn item's pieces, painted in the game's order, in the body's sex */
+  #itemLayers(worn: Partial<Record<OutfitSlot, any>>, sex: number): BodyLayer[] {
+    return PAINT_ORDER.flatMap((slot) =>
+      (worn[slot]?.regionTextures ?? []).flatMap((name: string, i: number) =>
+        name ? [{ files: itemTextureFiles(name, ITEM_REGIONS[i]!, sex), region: ITEM_REGIONS[i]! }] : [],
+      ),
+    );
+  }
+
+  /** The helmet, in the race and sex's own model, and a pad on each shoulder */
+  #attachments(worn: Partial<Record<OutfitSlot, any>>, prefix: string, sex: number): { point: number; look: ModelLook }[] {
+    const worn3d = (folder: string, model: string, skin: string): ModelLook => {
+      const textures: Record<number, string> = {};
+      if (skin) textures[ITEM_SKIN_SLOT] = `Item\\ObjectComponents\\${folder}\\${skin}.blp`;
+      return { kind: 'model', path: `Item\\ObjectComponents\\${folder}\\${model}`, textures, geosets: null, scale: 1 };
+    };
+    const attachments: { point: number; look: ModelLook }[] = [];
+    const helm = worn.head;
+    if (helm?.modelNames?.[0] && prefix) {
+      const model = helm.modelNames[0].replace(/\.(mdx|mdl|m2)$/i, '') + `_${prefix}${sex === 1 ? 'F' : 'M'}.m2`;
+      attachments.push({ point: HELM_POINT, look: worn3d('Head', model, helm.modelTextures?.[0] ?? '') });
+    }
+    const shoulders = worn.shoulders;
+    if (shoulders?.modelNames?.[0]) {
+      attachments.push({ point: LEFT_SHOULDER_POINT, look: worn3d('Shoulder', modelPath(shoulders.modelNames[0]), shoulders.modelTextures?.[0] ?? '') });
+    }
+    if (shoulders?.modelNames?.[1]) {
+      attachments.push({ point: RIGHT_SHOULDER_POINT, look: worn3d('Shoulder', modelPath(shoulders.modelNames[1]), shoulders.modelTextures?.[1] ?? '') });
+    }
+    return attachments;
   }
 
   /** A weapon an NPC holds, by item id: its model and texture from the weapon folder */
@@ -276,4 +402,4 @@ class DisplayResolver {
 
 export default DisplayResolver;
 export { DEFAULT_CHARACTER_GEOSETS, DisplayResolver, modelPath };
-export type { BuildingLook, DisplayTables, Look, ModelLook };
+export type { BodyLayer, BodyTexture, BuildingLook, DisplayTables, Look, ModelLook };
