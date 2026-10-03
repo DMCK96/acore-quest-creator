@@ -57,11 +57,15 @@ compiler setting than this project's.
   it, plus the material blend mode, which the published reader drops. Group files are read by
   `wmo/format/group.ts`, written here: the published reader throws on chunk sizes that are not
   whole numbers of floats and on a group whose batches are all see-through, and real files have both. `wmo/loader` parses a building and
-  its group files in a worker; `wmo/WmoManager.ts` draws one mesh per group. Groups with baked
-  lighting (vertex colours) are drawn unlit with it; the others are lit by the scene's lights. The
+  its group files in a worker; `wmo/WmoManager.ts` draws one mesh per group, with `wmo/WmoMaterial.ts`:
+  lit by the map's light and fogged like the terrain, with a group's baked lighting (vertex colours)
+  added to the ambient. Ascension's later buildings (its Stormwind, the Kul Tiras docks) carry dark or
+  black baked colours that only make sense on top of the sun; drawn as the only light, they were
+  black. The lighting law follows Kruithne/wow.export (MIT, see `map/liquid/LICENSE`). The
   area loader now passes on the buildings an area places (`objDefs`), which it used to drop.
-  Not drawn yet: the props inside buildings (doodad sets), water inside buildings (`MLIQ`), fog on
-  buildings, and per-batch render states beyond blend mode.
+  Not drawn yet: the props inside buildings (doodad sets), water inside buildings (`MLIQ`), the
+  building shaders beyond a plain diffuse texture (two-layer, environment, emissive), and interior
+  lighting (interior groups are lit by the sun like the rest).
 - `map/liquid/` and `map/loader/liquid.ts`: water, ocean, magma and slime on the terrain, which
   upstream does not draw. The area loader reads the ADT's `MH2O` chunk (which `@wowserhq/format` finds
   but does not read) into one mesh per liquid type per area. Types come from `LiquidType.dbc`

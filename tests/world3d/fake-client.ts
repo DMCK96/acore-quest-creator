@@ -316,7 +316,8 @@ export async function startFakeClient(port = 0): Promise<FakeClient> {
     ['tileset/grass.blp', grassTexture()],
     ['tileset/brick.blp', brickTexture()],
     ['world/wmo/test/house.wmo', houseRoot()],
-    ['world/wmo/test/house_000.wmo', houseGroup(0, 0, null)],
+    // Baked colours all black, as Ascension's Kul Tiras docks have: baked light adds to the sun, so it still shows
+    ['world/wmo/test/house_000.wmo', houseGroup(0, 0, 0x00)],
     ['world/wmo/test/house_001.wmo', houseGroup(0, -40, 0x80)],
     ['world/wmo/test/house_002.wmo', houseGroup(0, -80, 0x80, { allSeeThrough: true })],
     ['world/wmo/test/house_003.wmo', houseGroup(0, -120, null, { oddSizes: true, material: 1 })],

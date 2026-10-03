@@ -6,12 +6,22 @@ import WmoLoader from './loader/WmoLoader.js';
 import { WmoGroupSpec, WmoMaterialSpec, WmoSpec } from './loader/types.js';
 import { MapAreaSpec } from '../map/loader/types.js';
 import { describeError, reportProblem } from '../diagnostics.js';
+import MapLight from '../map/light/MapLight.js';
+import WmoMaterial from './WmoMaterial.js';
 
 /**
  * Buildings: the large placed models (a house, the Abbey, a city wall). Each is a root file of
  * materials and several group files of geometry, loaded in a worker and drawn as one mesh per group.
- * Baked lighting (vertex colours) is used where the group has it; the rest is lit by the scene's lights.
+ * Lit by the map's light like the terrain, with a group's baked lighting (vertex colours) added to it
+ * where the group has some (see WmoMaterial).
  */
+
+/** What a batch without a texture shows: a plain grey */
+const UNTEXTURED = (() => {
+  const texture = new THREE.DataTexture(new Uint8Array([128, 128, 128, 255]), 1, 1, THREE.RGBAFormat);
+  texture.needsUpdate = true;
+  return texture;
+})();
 
 const MATERIAL_FLAG_UNLIT = 0x1;
 const MATERIAL_FLAG_CLAMP_S = 0x40;
@@ -28,10 +38,12 @@ type WmoResources = {
 type WmoManagerOptions = {
   host: AssetHost;
   textureManager: TextureManager;
+  mapLight: MapLight;
 };
 
 class WmoManager {
   #textureManager: TextureManager;
+  #mapLight: MapLight;
   #loader: WmoLoader;
 
   #loaded = new globalThis.Map<string, WmoResources>();
@@ -40,6 +52,7 @@ class WmoManager {
 
   constructor(options: WmoManagerOptions) {
     this.#textureManager = options.textureManager;
+    this.#mapLight = options.mapLight;
     this.#loader = new WmoLoader({ host: options.host });
   }
 
@@ -196,44 +209,25 @@ class WmoManager {
   }
 
   async #createMaterial(spec: WmoMaterialSpec, baked: boolean, building: string) {
-    const unlit = (spec.flags & MATERIAL_FLAG_UNLIT) !== 0;
-
-    const params: THREE.MaterialParameters = {
-      // Which way a building's faces wind has to be right for culling; two-sided is right for any
-      side: THREE.DoubleSide,
-      vertexColors: baked,
-    };
-
     const texturePath = spec.textures[0];
-    if (texturePath) {
-      params.map = await this.#textureManager.get(
-        texturePath,
-        spec.flags & MATERIAL_FLAG_CLAMP_S ? THREE.ClampToEdgeWrapping : THREE.RepeatWrapping,
-        spec.flags & MATERIAL_FLAG_CLAMP_T ? THREE.ClampToEdgeWrapping : THREE.RepeatWrapping,
-        undefined,
-        undefined,
-        `building ${building}`,
-      );
-    } else {
-      params.color = 0x808080;
-    }
+    const map = texturePath
+      ? await this.#textureManager.get(
+          texturePath,
+          spec.flags & MATERIAL_FLAG_CLAMP_S ? THREE.ClampToEdgeWrapping : THREE.RepeatWrapping,
+          spec.flags & MATERIAL_FLAG_CLAMP_T ? THREE.ClampToEdgeWrapping : THREE.RepeatWrapping,
+          undefined,
+          undefined,
+          `building ${building}`,
+        )
+      : UNTEXTURED;
 
-    switch (spec.blend) {
-      case 1:
-        params.alphaTest = 0.5;
-        break;
-      case 2:
-        params.transparent = true;
-        break;
-      case 3:
-        params.transparent = true;
-        params.blending = THREE.AdditiveBlending;
-        params.depthWrite = false;
-        break;
-    }
-
-    // Baked lighting is the whole of the shading; without it the scene's lights do it
-    return baked || unlit ? new THREE.MeshBasicMaterial(params) : new THREE.MeshLambertMaterial(params);
+    return new WmoMaterial({
+      map,
+      baked,
+      unlit: (spec.flags & MATERIAL_FLAG_UNLIT) !== 0,
+      blend: spec.blend,
+      uniforms: this.#mapLight.uniforms,
+    });
   }
 }
 

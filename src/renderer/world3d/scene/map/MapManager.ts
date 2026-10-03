@@ -116,6 +116,7 @@ class MapManager extends EventTarget {
     this.#wmoManager = new WmoManager({
       host: options.host,
       textureManager: this.#textureManager,
+      mapLight: this.#mapLight,
     });
     this.#liquidManager = new LiquidManager({
       textureManager: this.#textureManager,
