@@ -1,5 +1,7 @@
 # Wowser scene (vendored)
 
+For what the 3D editor is for, what works and what is next, see [docs/3d-editor.md](../../../../docs/3d-editor.md).
+
 Three.js rendering classes for World of Warcraft terrain and models, copied from
 [wowserhq/scene](https://github.com/wowserhq/scene) 0.32.0 (`src/lib`, commit `cbe1211`), which is
 MIT licensed: see `LICENSE` and `AUTHORS` here. Parsing comes from `@wowserhq/format` (pinned to
