@@ -11,11 +11,15 @@ import ModelLoader from './loader/ModelLoader.js';
 import { MaterialSpec, ModelSpec, TextureSpec } from './loader/types.js';
 import SceneLight from '../light/SceneLight.js';
 import ModelAnimator from './ModelAnimator.js';
+import { groupVisible, lookKey, ModelLookInput, texturePathFor } from './look.js';
 
 type ModelResources = {
   path: string;
   name: string;
   geometry: THREE.BufferGeometry;
+  /** The geometry with only some geosets drawn, one per choice of geosets */
+  lookGeometries: globalThis.Map<string, THREE.BufferGeometry>;
+  groups: { start: number; count: number; materialIndex: number; geosetId: number }[];
   materials: MaterialSpec[];
   animator: ModelAnimator;
   skinned: boolean;
@@ -45,9 +49,10 @@ class ModelManager {
     this.#sceneLight = options.sceneLight ?? new SceneLight();
   }
 
-  async get(path: string) {
+  /** A model, drawn in a look (its replaceable skins and the geosets that show) when one is given */
+  async get(path: string, look?: ModelLookInput) {
     const resources = await this.#getResources(path);
-    return this.#createModel(resources);
+    return this.#createModel(resources, look);
   }
 
   update(deltaTime: number, camera: THREE.Camera) {
@@ -87,6 +92,8 @@ class ModelManager {
       path,
       name: spec.name,
       geometry,
+      lookGeometries: new globalThis.Map(),
+      groups: spec.geometry.groups,
       materials: spec.materials,
       animator,
       skinned: spec.skinned,
@@ -158,19 +165,19 @@ class ModelManager {
     return geometry;
   }
 
-  #createMaterials(resources: ModelResources) {
+  #createMaterials(resources: ModelResources, look: ModelLookInput | undefined) {
     return Promise.all(
       resources.materials.map((materialSpec) =>
-        this.#createMaterial(materialSpec, resources.skinned, resources.path),
+        this.#createMaterial(materialSpec, resources.skinned, resources.path, look),
       ),
     );
   }
 
-  async #createMaterial(spec: MaterialSpec, skinned: boolean, modelName: string) {
+  async #createMaterial(spec: MaterialSpec, skinned: boolean, modelName: string, look: ModelLookInput | undefined) {
     const vertexShader = getVertexShader(spec.vertexShader);
     const fragmentShader = getFragmentShader(spec.fragmentShader);
     const textures = await Promise.all(
-      spec.textures.map((textureSpec) => this.#createTexture(textureSpec, modelName)),
+      spec.textures.map((textureSpec) => this.#createTexture(textureSpec, modelName, look)),
     );
     const textureWeightIndex = spec.textureWeightIndex;
     const textureTransformIndices = spec.textureTransformIndices;
@@ -193,29 +200,60 @@ class ModelManager {
     );
   }
 
-  async #createTexture(spec: TextureSpec, modelName: string) {
+  async #createTexture(spec: TextureSpec, modelName: string, look: ModelLookInput | undefined) {
     const wrapS =
       spec.flags & M2_TEXTURE_FLAG.FLAG_WRAP_S ? THREE.RepeatWrapping : THREE.ClampToEdgeWrapping;
     const wrapT =
       spec.flags & M2_TEXTURE_FLAG.FLAG_WRAP_T ? THREE.RepeatWrapping : THREE.ClampToEdgeWrapping;
 
-    if (spec.component === M2_TEXTURE_COMPONENT.COMPONENT_NONE) {
-      return this.#textureManager.get(spec.path, wrapS, wrapT, undefined, undefined, `model ${modelName}`);
+    // A fixed texture as the model names it; a replaceable one (a skin) from the look, else blank
+    const path = texturePathFor(spec, look);
+    if (path) {
+      return this.#textureManager.get(path, wrapS, wrapT, undefined, undefined, `model ${modelName}`);
     }
-
-    // TODO handle other component types
 
     return new THREE.Texture();
   }
 
-  async #createModel(resources: ModelResources) {
-    const { name, geometry, animator, skinned } = resources;
-    const materials = await this.#createMaterials(resources);
+  async #createModel(resources: ModelResources, look: ModelLookInput | undefined) {
+    const { name, animator, skinned } = resources;
+    const geometry = this.#geometryFor(resources, look);
+    const materials = await this.#createMaterials(resources, look);
 
     const model = new Model(geometry, materials, animator, skinned);
     model.name = name;
 
     return model;
+  }
+
+  /**
+   * The model's geometry with only the look's geosets drawn: the same buffers, fewer draw groups. Made
+   * once per choice of geosets; a look that names none draws the shared geometry as it is.
+   */
+  #geometryFor(resources: ModelResources, look: ModelLookInput | undefined) {
+    if (!look?.geosets) {
+      return resources.geometry;
+    }
+
+    const key = lookKey({ geosets: look.geosets });
+    let geometry = resources.lookGeometries.get(key);
+    if (!geometry) {
+      const shared = resources.geometry;
+      geometry = new THREE.BufferGeometry();
+      for (const [name, attribute] of Object.entries(shared.attributes)) {
+        geometry.setAttribute(name, attribute);
+      }
+      geometry.setIndex(shared.index);
+      for (const group of resources.groups) {
+        if (groupVisible(group.geosetId, look)) {
+          geometry.addGroup(group.start, group.count, group.materialIndex);
+        }
+      }
+      geometry.boundingBox = shared.boundingBox;
+      geometry.boundingSphere = shared.boundingSphere;
+      resources.lookGeometries.set(key, geometry);
+    }
+    return geometry;
   }
 
   #createAnimator(spec: ModelSpec) {

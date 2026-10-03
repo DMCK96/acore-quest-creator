@@ -94,6 +94,8 @@ class ModelLoaderWorker extends SceneWorker {
         start: batch.skinSection.indexStart,
         count: batch.skinSection.indexCount,
         materialIndex: i,
+        // Which part of the model this is (a hairstyle, a beard, bare hands): looks show only some
+        geosetId: batch.skinSection.id,
       });
     }
 

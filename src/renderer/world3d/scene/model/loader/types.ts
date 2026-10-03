@@ -38,6 +38,7 @@ type GroupSpec = {
   start: number;
   count: number;
   materialIndex: number;
+  geosetId: number;
 };
 
 type GeometrySpec = {

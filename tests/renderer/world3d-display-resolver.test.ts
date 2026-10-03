@@ -5,9 +5,9 @@ import { buildDbcWithStrings, f32 } from '../helpers/dbc';
 import { CreatureDisplayInfoRecord, CreatureModelDataRecord, GameObjectDisplayInfoRecord } from '../../src/renderer/world3d/scene/db/records';
 import { DisplayResolver, modelPath } from '../../src/renderer/world3d/scene/spawn/DisplayResolver';
 
-const db = (Record: any, records: (number | string)[][], fields: number) => {
+const db = (Record: any, records: (number | string)[][], fields: number): ClientDb<any> => {
   const bytes = buildDbcWithStrings(records, fields);
-  return new ClientDb(Record).load(bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength));
+  return new ClientDb(Record).load(bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength) as ArrayBuffer);
 };
 
 // CreatureDisplayInfo: id, model, sound, extra, scale, alpha, skin1..3, portrait, ... (16)

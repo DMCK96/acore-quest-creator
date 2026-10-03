@@ -41,6 +41,10 @@ compiler setting than this project's.
     are cleared, because some files leave garbage there and the reader trusts every slot.
   - The grey stand-in for a texture that cannot be loaded is opaque: leaves and fences are
     alpha-tested, and a see-through stand-in removed them.
+  - `model/ModelManager.ts`, `model/look.ts`: a model can be drawn in a look: files for its replaceable
+    texture slots (a creature's skin, an NPC's baked clothes and hair) and the geosets to show (one
+    hairstyle, not all). Upstream left replaceable slots blank. Looks share the model's buffers and
+    animation; each choice of geosets gets its own draw groups.
   - `model/ModelAnimation.ts`: a model whose stand animation has no first variation (some have only
     variations 1 and 2) plays the first it has; upstream threw and the model was left out.
   - `model/ModelMaterial.ts`: a texture transform with no animation state leaves the texture where it
