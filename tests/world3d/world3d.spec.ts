@@ -3,7 +3,7 @@ import { writeFileSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createServer, type ViteDevServer } from 'vite';
-import { BAD_MODEL, MISSING_MODEL, START, startFakeClient, type FakeClient } from './fake-client';
+import { BAD_MODEL, LAVA_MAP, MISSING_MODEL, START, startFakeClient, type FakeClient } from './fake-client';
 
 /**
  * The real 3D code (Three.js, the vendored Wowser scene, its workers) in a real browser, reading a
@@ -60,21 +60,26 @@ async function openPage(page: Page): Promise<void> {
 }
 
 test('draws the terrain, and a model or texture that cannot be read costs the area neither its terrain nor its other props', async ({ page }) => {
+  const warnings: string[] = [];
+  page.on('console', (message) => {
+    if (message.type() === 'warning') warnings.push(message.text());
+  });
   await openPage(page);
   await open(page, 'azeroth', 0);
   await page.waitForFunction('window.__state.ready', null, { timeout: 45000 });
 
   // Both broken props are reported by name, with where they failed...
-  await expect.poll(async () => (await state(page)).problems.length).toBe(4);
+  await expect.poll(async () => (await state(page)).problems.length).toBe(2);
   const { problems } = await state(page);
   expect(problems.find((p) => p.includes(BAD_MODEL))).toMatch(/could not be loaded: Invalid typed array length/);
   expect(problems.find((p) => p.includes(MISSING_MODEL))).toMatch(/404/);
-  // ... as is a texture that is garbage (with what it starts with, to tell it from a format not read); the
-  // uncompressed one is not a problem at all.
-  expect(problems.find((p) => /tileset.garbage\.blp/.test(p))).toMatch(/begins 67 67 67/);
-  expect(problems.some((p) => /tileset.raw\.blp/.test(p))).toBe(false);
-  // A texture the client lacks says which building asked for it, and the building still draws.
-  expect(problems.find((p) => /tileset.missing\.blp/.test(p))).toMatch(/\(used by building World.wmo.test.house\.wmo\) could not be loaded/);
+  // ... but textures are not: a grey stand-in leaves nothing out, and modded clients lack many by design.
+  // They go to the console only: a garbage one with what it starts with (to tell it from a format not
+  // read), a missing one with the building that asked for it. The uncompressed one is not a problem at all.
+  expect(problems.some((p) => /\.blp/.test(p))).toBe(false);
+  await expect.poll(() => warnings.find((w) => /tileset.garbage\.blp/.test(w))).toMatch(/begins 67 67 67/);
+  await expect.poll(() => warnings.find((w) => /tileset.missing\.blp/.test(w))).toMatch(/\(used by building World.wmo.test.house\.wmo\) could not be loaded/);
+  expect(warnings.some((w) => /tileset.raw\.blp/.test(w))).toBe(false);
   // All four of the building's groups load, however their files are written: not one is reported.
   expect(problems.some((p) => /house_00\d/.test(p))).toBe(false);
   for (const part of ['house_000', 'house_001', 'house_002', 'house_003']) expect(client.requested).toContain(`200 world/wmo/test/${part}.wmo`);
@@ -90,6 +95,33 @@ test('draws the terrain, and a model or texture that cannot be read costs the ar
   const [roofR, , roofB] = (await page.evaluate(`window.__pixel(${JSON.stringify(picture.toString('base64'))}, 0.5, 0.5)`)) as number[];
   expect(roofR!).toBeGreaterThan(roofB! + 60);
   expect(client.requested).toContain('200 tileset/grass.blp');
+});
+
+test('draws liquid: magma covering a tile, its look read from LiquidType.dbc and its flipbook only as long as it is', async ({ page }) => {
+  const shaderErrors: string[] = [];
+  page.on('console', (message) => {
+    if (message.type() === 'error' && /shader|program/i.test(message.text())) shaderErrors.push(message.text());
+  });
+  await openPage(page);
+  await open(page, LAVA_MAP.directory, 1);
+  await page.waitForFunction('window.__state.ready', null, { timeout: 45000 });
+  await expect.poll(() => client.requested.includes('200 xtextures/lava/lava.2.blp'), { timeout: 20000 }).toBe(true);
+  await page.waitForTimeout(1500);
+
+  // The surface is above the terrain everywhere: the middle of the picture is the lava's red, unlit
+  const picture = await page.locator('canvas.world3d__canvas').screenshot();
+  await test.info().attach('lava', { body: picture, contentType: 'image/png' });
+  if (process.env['WORLD3D_SHOT']) writeFileSync(process.env['WORLD3D_SHOT'].replace(/\.png$/, '-lava.png'), picture);
+  const [r, g, b] = (await page.evaluate(`window.__pixel(${JSON.stringify(picture.toString('base64'))}, 0.5, 0.7)`)) as number[];
+  expect(r!).toBeGreaterThan(g! + 60);
+  expect(r!).toBeGreaterThan(b! + 60);
+
+  // Its type came from the client's LiquidType.dbc, and frames were asked for up to the first missing one
+  expect(client.requested).toContain('200 dbfilesclient/liquidtype.dbc');
+  expect(client.requested).toContain('404 xtextures/lava/lava.3.blp');
+  expect(client.requested.some((r) => r.includes('lava.4.blp'))).toBe(false);
+  expect(shaderErrors).toEqual([]);
+  expect((await state(page)).errors).toEqual([]);
 });
 
 test('a world can be left and another opened, again and again, without an error', async ({ page }) => {

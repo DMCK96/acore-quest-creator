@@ -26,18 +26,28 @@ describe('a texture that cannot be loaded', () => {
     expect(alphas).toEqual([255, 255, 255, 255]);
   });
 
-  it('is reported once, with the reason, and not fetched again each time something asks for it', async () => {
+  it('is logged once, with the reason, and not fetched again each time something asks for it', async () => {
     loadSpec.mockRejectedValue(new Error('Invalid typed array length: 4294791348'));
-    const seen: string[][] = [];
-    const stop = onProblems((all) => seen.push([...all]));
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
     const textures = manager();
     await textures.get('Tree\\Canopy.blp');
     await textures.get('Tree\\Canopy.blp');
     await textures.get('Tree\\Canopy.blp');
-    stop();
     expect(loadSpec).toHaveBeenCalledTimes(1);
-    const last = seen.at(-1)!;
-    expect(last).toHaveLength(1);
-    expect(last[0]).toMatch(/texture Tree\\Canopy\.blp could not be loaded: Invalid typed array length: 4294791348/);
+    expect(warn).toHaveBeenCalledTimes(1);
+    expect(warn.mock.calls[0]![0]).toMatch(/texture Tree\\Canopy\.blp could not be loaded: Invalid typed array length: 4294791348/);
+    warn.mockRestore();
+  });
+
+  it('stays out of the view\'s list of what is missing, because the grey stand-in leaves nothing out', async () => {
+    // A modded client (Ascension) lacks many textures by design; a warning that never goes away helps no one
+    loadSpec.mockRejectedValue(new Error('Error loading asset: 404 Not Found'));
+    vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const seen: string[][] = [];
+    const stop = onProblems((all) => seen.push([...all]));
+    await manager().get('World\\Wmo\\Missing.blp');
+    stop();
+    expect(seen.at(-1)).toEqual([]);
+    vi.mocked(console.warn).mockRestore();
   });
 });

@@ -94,6 +94,86 @@ function adt(): Buffer {
   ]);
 }
 
+/** A map whose one tile is covered by magma, above the terrain everywhere. */
+export const LAVA_MAP = { directory: 'lavatest', file: 'world/maps/lavatest/lavatest_32_48.adt' };
+const LAVA_LEVEL = 95;
+const MAGMA = 3;
+
+/**
+ * MH2O: one instance per chunk, all 8 x 8 tiles (no bitmap), heights then depths. The chunk comes
+ * straight after MHDR, so MHDR's offset to it is MHDR's own size.
+ */
+function lavaLiquid(): Buffer {
+  const vertices = 81;
+  const headers = Buffer.alloc(256 * 12);
+  const bodies: Buffer[] = [];
+  let at = headers.length;
+  for (let i = 0; i < 256; i++) {
+    headers.writeUInt32LE(at, i * 12);
+    headers.writeUInt32LE(1, i * 12 + 4);
+    const instance = Buffer.alloc(24);
+    instance.writeUInt16LE(MAGMA, 0);
+    instance.writeUInt16LE(0, 2);
+    instance.writeFloatLE(LAVA_LEVEL, 4);
+    instance.writeFloatLE(LAVA_LEVEL, 8);
+    instance.writeUInt8(8, 14);
+    instance.writeUInt8(8, 15);
+    instance.writeUInt32LE(at + 24, 20);
+    const data = Buffer.concat([floats(Array(vertices).fill(LAVA_LEVEL)), Buffer.alloc(vertices, 255)]);
+    bodies.push(instance, data);
+    at += 24 + data.length;
+  }
+  return chunk('MH2O', Buffer.concat([headers, ...bodies]));
+}
+
+function lavaAdt(): Buffer {
+  const header = Buffer.alloc(64);
+  header.writeUInt32LE(64, 40);
+  const chunks: Buffer[] = [];
+  for (let row = 0; row < 16; row++) for (let col = 0; col < 16; col++) chunks.push(terrainChunk(row, col));
+  return Buffer.concat([
+    chunk('MVER', u32(18)),
+    chunk('MHDR', header),
+    lavaLiquid(),
+    chunk('MCIN', Buffer.alloc(4096)),
+    // The same textures as the first map's tile: its terrain chunks use all three
+    chunk('MTEX', Buffer.from('tileset\\grass.blp\0tileset\\garbage.blp\0tileset\\raw.blp\0')),
+    ...chunks,
+  ]);
+}
+
+/** LiquidType.dbc with one record, magma: drawn unlit, from a flipbook of two frames. */
+function liquidTypeDbc(): Buffer {
+  const strings = Buffer.from('\0Magma\0XTextures\\lava\\lava.%d.blp\0', 'latin1');
+  const record = Buffer.alloc(45 * 4);
+  record.writeUInt32LE(MAGMA, 0);
+  record.writeUInt32LE(1, 1 * 4); // name
+  record.writeUInt32LE(2, 3 * 4); // sound bank: magma
+  record.writeUInt32LE(2, 14 * 4); // material: flowing
+  record.writeUInt32LE(7, 15 * 4); // first texture: the flipbook
+  record.writeFloatLE(0.025, 23 * 4); // first float: how fast it flows
+  const header = Buffer.concat([Buffer.from('WDBC'), u32(1), u32(45), u32(record.length), u32(strings.length)]);
+  return Buffer.concat([header, record, strings]);
+}
+
+/** A BLP2 of one red, DXT1: the lava's frames. */
+function lavaTexture(): Buffer {
+  const size = 64;
+  const blocks = (size / 4) ** 2;
+  const data = Buffer.alloc(blocks * 8);
+  for (let i = 0; i < blocks; i++) data.set([0x00, 0xf8, 0x00, 0xf8, 0, 0, 0, 0], i * 8);
+  const out = Buffer.alloc(1172 + data.length);
+  out.write('BLP2');
+  out.writeUInt32LE(1, 4);
+  out[8] = 2;
+  out.writeUInt32LE(size, 12);
+  out.writeUInt32LE(size, 16);
+  out.writeUInt32LE(1172, 20);
+  out.writeUInt32LE(data.length, 84);
+  data.copy(out, 1172);
+  return out;
+}
+
 /** A BLP2 of one green, in the compressed form terrain uses (DXT1): every 4 x 4 block one colour. */
 function grassTexture(): Buffer {
   const size = 64;
@@ -243,6 +323,11 @@ export async function startFakeClient(port = 0): Promise<FakeClient> {
     ['tileset/garbage.blp', Buffer.alloc(200, 0x67)],
     ['tileset/raw.blp', rawTexture()],
     ['world/bad/bad.m2', Buffer.concat([Buffer.from('MD20'), Buffer.alloc(40, 0xff)])],
+    ['world/maps/lavatest/lavatest.wdt', wdt()],
+    [LAVA_MAP.file, lavaAdt()],
+    ['dbfilesclient/liquidtype.dbc', liquidTypeDbc()],
+    ['xtextures/lava/lava.1.blp', lavaTexture()],
+    ['xtextures/lava/lava.2.blp', lavaTexture()],
   ]);
   const requested: string[] = [];
   const server: Server = createServer((req, res) => {

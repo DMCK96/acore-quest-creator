@@ -13,6 +13,7 @@ import TerrainManager from './terrain/TerrainManager.js';
 import TextureManager from '../texture/TextureManager.js';
 import DoodadManager from './DoodadManager.js';
 import WmoManager from '../wmo/WmoManager.js';
+import LiquidManager from './liquid/LiquidManager.js';
 import { AssetHost } from '../asset.js';
 import MapLoader from './loader/MapLoader.js';
 import { MapAreaSpec, MapSpec } from './loader/types.js';
@@ -45,11 +46,13 @@ class MapManager extends EventTarget {
   #terrainGroups = new globalThis.Map<number, THREE.Group>();
   #doodadGroups = new globalThis.Map<number, THREE.Group>();
   #wmoGroups = new globalThis.Map<number, THREE.Group>();
+  #liquidGroups = new globalThis.Map<number, THREE.Group>();
 
   #textureManager: TextureManager;
   #terrainManager: TerrainManager;
   #doodadManager: DoodadManager;
   #wmoManager: WmoManager;
+  #liquidManager: LiquidManager;
   #dbManager: DbManager;
   #soundManager: SoundManager;
 
@@ -113,6 +116,11 @@ class MapManager extends EventTarget {
     this.#wmoManager = new WmoManager({
       host: options.host,
       textureManager: this.#textureManager,
+    });
+    this.#liquidManager = new LiquidManager({
+      textureManager: this.#textureManager,
+      dbManager: this.#dbManager,
+      mapLight: this.#mapLight,
     });
 
     this.#root = new THREE.Group();
@@ -208,12 +216,16 @@ class MapManager extends EventTarget {
 
     this.#doodadManager.cull(this.#cullingFrustum, camera.position);
     this.#doodadManager.update(deltaTime, camera);
+
+    this.#liquidManager.update(deltaTime);
   }
 
   dispose() {
     for (const manager of this.#ownedManagers.values()) {
       manager.dispose();
     }
+
+    this.#liquidManager.dispose();
   }
 
   #cullGroups() {
@@ -309,6 +321,13 @@ class MapManager extends EventTarget {
         this.#doodadManager.removeArea(areaId);
       }
 
+      const liquidGroup = this.#liquidGroups.get(areaId);
+      if (liquidGroup) {
+        this.#root.remove(liquidGroup);
+        this.#liquidGroups.delete(areaId);
+        this.#liquidManager.removeArea(areaId);
+      }
+
       this.#loadedAreas.delete(areaId);
     }
 
@@ -351,11 +370,17 @@ class MapManager extends EventTarget {
       let terrainGroup: THREE.Group;
       let doodadGroup: THREE.Group;
       let wmoGroup: THREE.Group;
+      let liquidGroup: THREE.Group;
       try {
-        [terrainGroup, doodadGroup, wmoGroup] = await Promise.all([
+        [terrainGroup, doodadGroup, wmoGroup, liquidGroup] = await Promise.all([
           this.#terrainManager.getArea(areaId, newArea),
           this.#doodadManager.getArea(areaId, newArea),
           this.#wmoManager.getArea(areaId, newArea),
+          // Liquid that cannot be drawn must not cost the area its terrain
+          this.#liquidManager.getArea(areaId, newArea).catch((error) => {
+            console.warn(`3D view: the liquid of area ${areaId} could not be drawn: ${describeError(error)}`);
+            return new THREE.Group();
+          }),
         ]);
       } catch (error) {
         this.#failArea(areaId, error);
@@ -375,6 +400,9 @@ class MapManager extends EventTarget {
 
       this.#wmoGroups.set(areaId, wmoGroup);
       this.#root.add(wmoGroup);
+
+      this.#liquidGroups.set(areaId, liquidGroup);
+      this.#root.add(liquidGroup);
     }
   }
 

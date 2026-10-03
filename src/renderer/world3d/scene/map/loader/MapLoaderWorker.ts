@@ -13,6 +13,7 @@ import {
   mergeTerrainLayerSplats,
 } from './util.js';
 import { MapAreaSpec, TerrainSpec } from './types.js';
+import { createLiquidSpecs, readLiquidInstances } from './liquid.js';
 import { AssetHost, loadAsset, normalizePath } from '../../asset.js';
 import SceneWorker from '../../worker/SceneWorker.js';
 
@@ -76,8 +77,22 @@ class MapLoaderWorker extends SceneWorker {
       }
     }
 
+    // Water, magma and slime; an area whose liquid cannot be read still draws without it
+    let liquidSpecs = [];
+    try {
+      const chunkPositions = area.chunks.map((chunk) => chunk.position);
+      liquidSpecs = createLiquidSpecs(readLiquidInstances(areaData), chunkPositions);
+    } catch (error) {
+      console.warn(`3D view: the liquid of ${areaPath} could not be read: ${error}`);
+    }
+    for (const liquidSpec of liquidSpecs) {
+      buffers.add(liquidSpec.vertexBuffer);
+      buffers.add(liquidSpec.indexBuffer);
+    }
+
     const spec: MapAreaSpec = {
       terrain: terrainSpecs,
+      liquids: liquidSpecs,
       areaTableIds,
       doodadDefs: area.doodadDefs.map((def) => ({
         id: def.id,

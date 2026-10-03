@@ -40,6 +40,14 @@ class MapLight extends SceneLight {
   // Used to filter area lights into the set appropriate for the given map
   #mapId: number;
 
+  // For liquids: the tints and see-through-ness the light database gives water near the camera.
+  // Starting values only, until the area lights are loaded
+  #waterUniforms = {
+    riverColor: { value: new THREE.Color(0.25, 0.45, 0.55) },
+    oceanColor: { value: new THREE.Color(0.15, 0.3, 0.45) },
+    waterAlphas: { value: new THREE.Vector4(0.5, 1.0, 0.75, 1.0) },
+  };
+
   constructor(options: MapLightOptions) {
     super();
 
@@ -54,6 +62,10 @@ class MapLight extends SceneLight {
 
   set mapId(mapId: number) {
     this.#mapId = mapId;
+  }
+
+  get waterUniforms() {
+    return this.#waterUniforms;
   }
 
   get time() {
@@ -114,7 +126,7 @@ class MapLight extends SceneLight {
       return;
     }
 
-    const { sunDiffuseColor, sunAmbientColor, fogColor, fogParams } = blendLights(
+    const { sunDiffuseColor, sunAmbientColor, fogColor, fogParams, riverColor, oceanColor, waterAlphas } = blendLights(
       this.#selectedLights,
       LIGHT_PARAM.PARAM_STANDARD,
       this.#timeProgression,
@@ -124,6 +136,10 @@ class MapLight extends SceneLight {
     this.sunAmbientColor.copy(sunAmbientColor);
     this.fogColor.copy(fogColor);
     this.fogParams.copy(fogParams);
+
+    this.#waterUniforms.riverColor.value.copy(riverColor);
+    this.#waterUniforms.oceanColor.value.copy(oceanColor);
+    this.#waterUniforms.waterAlphas.value.copy(waterAlphas);
   }
 
   #selectLights(position: THREE.Vector3) {

@@ -9,6 +9,11 @@ const table = {
   sunAmbientColor: new THREE.Color(),
   fogColor: new THREE.Color(),
   fogParams: new THREE.Vector4(),
+  // Liquid tints, and how see-through water is where shallow and where deep: river shallow, river
+  // deep, ocean shallow, ocean deep (LightParams.dbc)
+  riverColor: new THREE.Color(),
+  oceanColor: new THREE.Color(),
+  waterAlphas: new THREE.Vector4(),
 };
 
 const blend = {
@@ -16,6 +21,11 @@ const blend = {
   sunAmbientColor: new THREE.Color(),
   fogColor: new THREE.Color(),
   fogParams: new THREE.Vector4(),
+  // Liquid tints, and how see-through water is where shallow and where deep: river shallow, river
+  // deep, ocean shallow, ocean deep (LightParams.dbc)
+  riverColor: new THREE.Color(),
+  oceanColor: new THREE.Color(),
+  waterAlphas: new THREE.Vector4(),
 };
 
 const tempColor = new THREE.Color();
@@ -38,10 +48,14 @@ const blendLights = (
   blend.sunAmbientColor.setScalar(0);
   blend.fogColor.setScalar(0);
   blend.fogParams.setScalar(0);
+  blend.riverColor.setScalar(0);
+  blend.oceanColor.setScalar(0);
+  blend.waterAlphas.setScalar(0);
 
   for (const weightedLight of weightedLights) {
     const { light, weight } = weightedLight;
-    const { intBands, floatBands } = light.params[param];
+    const params = light.params[param];
+    const { intBands, floatBands } = params;
 
     // Sun
 
@@ -87,6 +101,33 @@ const blendLights = (
     table.fogParams.set(fogStep, fogEnd, 1.0, 1.0);
 
     addWeightedVector(blend.fogParams, table.fogParams, weight);
+
+    // Liquids
+
+    interpolateColorTable(
+      intBands[LIGHT_INT_BAND.BAND_RIVER_CLOSE_COLOR],
+      timeProgression,
+      table.riverColor,
+    );
+
+    addWeightedColor(blend.riverColor, table.riverColor, weight);
+
+    interpolateColorTable(
+      intBands[LIGHT_INT_BAND.BAND_OCEAN_CLOSE_COLOR],
+      timeProgression,
+      table.oceanColor,
+    );
+
+    addWeightedColor(blend.oceanColor, table.oceanColor, weight);
+
+    table.waterAlphas.set(
+      params.waterShallowAlpha ?? 0.5,
+      params.waterDeepAlpha ?? 1.0,
+      params.oceanShallowAlpha ?? 0.75,
+      params.oceanDeepAlpha ?? 1.0,
+    );
+
+    addWeightedVector(blend.waterAlphas, table.waterAlphas, weight);
   }
 
   return blend;

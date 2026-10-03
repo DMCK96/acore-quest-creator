@@ -6,7 +6,7 @@ import ManagedDataTexture from './ManagedDataTexture.js';
 import TextureLoader from './loader/TextureLoader.js';
 import { AssetHost, normalizePath } from '../asset.js';
 import { TextureSpec } from './loader/types.js';
-import { describeError, reportProblem } from '../diagnostics.js';
+import { describeError } from '../diagnostics.js';
 
 const THREE_TEXTURE_FORMAT: Record<number, THREE.PixelFormat | THREE.CompressedPixelFormat> = {
   [BLP_IMAGE_FORMAT.IMAGE_DXT1]: THREE.RGBA_S3TC_DXT1_Format,
@@ -62,17 +62,54 @@ class TextureManager {
       return alreadyLoading;
     }
 
-    // A texture that cannot be loaded must not cost its model or terrain: a plain grey stands in
+    // A texture that cannot be loaded must not cost its model or terrain: a plain grey stands in.
+    // Only logged, not listed in the view: nothing is left out, and modded clients lack many by design
     const loading = this.#load(refId, path, wrapS, wrapT, minFilter, magFilter).catch((error) => {
       this.#failed.add(refId);
       this.#loading.delete(refId);
       const where = usedBy ? ` (used by ${usedBy})` : '';
-      reportProblem(`texture:${refId}`, `texture ${path}${where} could not be loaded: ${describeError(error)}`);
+      console.warn(`3D view: texture ${path}${where} could not be loaded: ${describeError(error)}`);
       return this.#getPlaceholder();
     });
     this.#loading.set(refId, loading);
 
     return loading;
+  }
+
+  /**
+   * A texture that may not exist, such as a liquid flipbook's frames past its last: null when it
+   * cannot be loaded, and nothing logged. Asked for again, a missing one is not fetched again.
+   */
+  async getOptional(
+    path: string,
+    wrapS: THREE.Wrapping = THREE.RepeatWrapping,
+    wrapT: THREE.Wrapping = THREE.RepeatWrapping,
+  ): Promise<THREE.Texture | null> {
+    const minFilter = THREE.LinearMipmapLinearFilter;
+    const magFilter = THREE.LinearFilter;
+    const refId = [normalizePath(path), wrapS, wrapT, minFilter, magFilter].join(':');
+
+    if (this.#failed.has(refId)) {
+      return null;
+    }
+
+    let loading = this.#loaded.has(refId) ? Promise.resolve(this.#loaded.get(refId)) : this.#loading.get(refId);
+    if (!loading) {
+      loading = this.#load(refId, path, wrapS, wrapT, minFilter, magFilter).catch(() => {
+        this.#failed.add(refId);
+        this.#loading.delete(refId);
+        return this.#getPlaceholder();
+      });
+      this.#loading.set(refId, loading);
+    }
+
+    const texture = await loading;
+    if (this.#failed.has(refId)) {
+      return null;
+    }
+
+    this.#ref(refId);
+    return texture;
   }
 
   #getPlaceholder() {

@@ -35,8 +35,11 @@ Other people have built similar editors but not shared the code. We are not copy
 | Building root-file reader | `@wowserhq/format` 0.28.0 | MIT | A few files copied into `scene/wmo/format/` (0.25.0 lacks them) |
 | Building group reader | Written here | n/a | `scene/wmo/format/group.ts` (the published one throws on real files) |
 | Building renderer | Written here, reading the format of buildings (WMO) | n/a | `scene/wmo/` |
+| Water, ocean, magma, slime | Adapted from [Adrinalin4ik/world-of-warcraft](https://github.com/Adrinalin4ik/world-of-warcraft) and [Kruithne/wow.export](https://github.com/Kruithne/wow.export) | MIT (both) | `scene/map/liquid/`, `scene/map/loader/liquid.ts`; both notices in `scene/map/liquid/LICENSE` |
 
-Looked at and **not** used: `wowserhq/client` (it is the game's UI layer), `vjeux/jsWoWModelViewer` (no licence file, so not copied), `Coldensjo/Ironforge` (the closest in purpose, but WoW Classic and no licence file: design reference only), `Adrinalin4ik/world-of-warcraft` (MIT, a full game client; a possible reference for later work).
+Every outside project, with what came from it and where its notice is kept, is listed in [CREDITS.md](../CREDITS.md). Add to it in the same change whenever code is ported or adapted.
+
+Looked at and **not** used: `wowserhq/client` (it is the game's UI layer), `vjeux/jsWoWModelViewer` (no licence file, so not copied), `Coldensjo/Ironforge` (the closest in purpose, but WoW Classic and no licence file: design reference only), `Deamon87/WebWowViewerCpp` (the most complete liquid renderer, but no licence: read only).
 
 ## Status
 
@@ -45,10 +48,14 @@ Looked at and **not** used: `wowserhq/client` (it is the game's UI layer), `vjeu
 - 3D view of a continent's terrain, props (trees, fences, carts) and buildings, from the user's client. Verified on the user's client for terrain, props and buildings; later fixes below are verified against a fake client only (see Testing).
 - A **3D view** button in the top bar, working with no quest open: four continents, each opening on solid ground, plus go-to X/Y/Z. Also a toggle in the quest map.
 - Robustness, because real clients are messier than the format specs:
-  - One bad model, texture or terrain tile is skipped and reported; the rest still draws. The view lists what was left out, the console has the full list, and the terminal running the app logs each client file that was asked for and missing.
-  - A texture that cannot be read becomes an opaque grey stand-in, so its model or terrain still draws.
+  - One bad model, building or terrain tile is skipped and reported; the rest still draws. The view lists what was left out, the console has the full list, and the terminal running the app logs each client file that was asked for and missing.
+  - A texture that cannot be read or is missing becomes an opaque grey stand-in, so its model or terrain still draws. Textures are logged to the console only, not listed in the view: nothing is left out, and modded clients such as Ascension's lack many by design.
+  - A model whose stand animation starts past its first variation (some ported Ascension models have only variations 1 and 2) plays the first one it has.
   - Leaving a world, or changing continent, cannot take the view down; a failure inside the view stays inside it.
   - Sound is switched off (the library would play zone music).
+  - A model whose texture transform has no animation leaves its texture still; it used to stop the whole view (seen at Stormwind Harbor).
+- Water, ocean, magma and slime on the terrain, read from the map's `MH2O` data, with their types from the client's `LiquidType.dbc` (so CoA's own types draw too). Animated flipbooks, water tinted by the light database's river and ocean colours, see-through at the edges and solid where deep, magma and slime glowing and solid.
+- Colours as the game has them: Three's colour management is off, as in wowserhq's own viewer. With it on, the whole world was drawn too dark and too red.
 - Format fixes: uncompressed textures, texture files with garbage in unused mip slots, four model material types the library lacked, building group files with unusual chunk sizes or all see-through batches.
 - A browser test that runs the real 3D code against a fake game client (`npm run test:world3d`).
 
@@ -62,7 +69,7 @@ Things that are missing or approximate. Roughly in order of how much they matter
 4. **Textures the client does not ship.** The user's client places custom modern-expansion buildings (Kul Tiras, Draenor, Dragonflight) whose textures are not in its archives; those parts draw grey. Not loose in the `Data` folder either. Where the references come from is not established; reports now name the building or model that asked, so the next run will show it.
 5. **Tree leaves are unconfirmed on real data.** Three causes were found and fixed (see the commit `e8972f1`), and each fix has a test, but it has not yet been confirmed on the user's client. The original `Invalid typed array length: 4294791348` texture error is believed to come from garbage in unused mip slots; if canopies are still grey, the report now includes the file's size and first bytes.
 6. **Buildings are approximate:** two-sided, no fog, simple blend modes only, and baked lighting where the file has it, otherwise two fixed scene lights. The same building placed in two neighbouring tiles is drawn twice (identical, so it does not flicker, but it costs).
-7. **No water.**
+7. **Water is terrain-only and approximate.** Water inside buildings (canals, fountains, Stormwind's inner harbour pools) is not drawn yet. There is no underwater look, no waves or reflections, and deep water is simply made solid instead of darkening what is under it as the client does.
 8. **Memory:** the library cannot stop its workers, so each continent switch leaves two idle workers behind; loaded buildings and models are cached for the life of the page.
 9. **Only the four continents.** Dungeons and battlegrounds need their own map-file handling.
 10. **Not run in the full app in this sandbox.** There is no game client or world database here, so the Electron app has not been driven end to end by us; the user runs it and reports. The 56 test files that need `ACQC_AC_SQL_DIR` (the AzerothCore SQL files) cannot run here, and failed identically before and after our changes.
@@ -81,7 +88,7 @@ In order. Each is meant to be a step the user can try before the next begins.
 3. **Patrol paths in 3D.** Draw a patrol as a line with points; move, add and delete points; keep the existing actions at points.
 4. **Rotate, and scale.** Facing first; then tilt for objects; scale with the template-wide warning.
 5. **Reshape the quest grid** into a chain builder beside the 3D view. Needs a design conversation first: what "managing a chain" should mean day to day.
-6. **Fill the gaps** above as they get in the way: props inside buildings first, then fog on buildings, then water.
+6. **Fill the gaps** above as they get in the way: props inside buildings first, then fog on buildings, then water inside buildings.
 
 Open questions for the user:
 
@@ -99,5 +106,5 @@ Open questions for the user:
 ## Working notes
 
 - In `npm run dev` the page reloads on source changes, but worker and config changes need a full restart.
-- A message in the 3D view reading "N things could not be loaded" is the first place to look; each entry says what failed and, for textures, which building or model wanted it.
+- A message in the 3D view reading "N things could not be loaded" is the first place to look; each entry says what failed. Missing textures are only in the console, each with the building or model that wanted it.
 - Do not commit generated files, the user's game files or anything from a game client; the fake client builds its own test data.

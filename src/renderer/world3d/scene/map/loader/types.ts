@@ -1,4 +1,6 @@
 // @ts-nocheck
+import { LiquidSpec } from './liquid.js';
+
 type MapSpec = {
   availableAreas: Uint8Array;
 };
@@ -49,9 +51,10 @@ type TerrainSpec = {
 
 type MapAreaSpec = {
   terrain: TerrainSpec[];
+  liquids: LiquidSpec[];
   areaTableIds: Uint32Array;
   doodadDefs: MapDoodadDefSpec[];
   objDefs: MapObjDefSpec[];
 };
 
-export { MapSpec, MapAreaSpec, MapDoodadDefSpec, MapObjDefSpec, TerrainSpec };
+export { LiquidSpec, MapSpec, MapAreaSpec, MapDoodadDefSpec, MapObjDefSpec, TerrainSpec };
