@@ -82,6 +82,16 @@ compiler setting than this project's.
   water, which is not done here. Buildings' water (canals, fountains, moonwells) uses the same
   materials. It has no depth, so it is drawn half way between shallow and solid. Not done yet: the
   underwater look, and waves or reflections.
+- `spawn/`: the world database's NPCs and objects near the camera, which upstream does not draw.
+  `DisplayResolver` turns a display id into a model, its replaceable skins and its geosets, from the
+  client's own tables (record classes in `db/records.ts`, each reading the field count the Ascension
+  client's file has); humanoids are their race's body in their baked texture with one hairstyle;
+  weapons come from `Item.dbc` and `ItemDisplayInfo`. `SpawnManager` draws one group per area (only
+  the camera's and the eight round it, within 100 yards), with markers for what cannot be drawn, and
+  patrol routes and wander circles (`paths.ts`). `MapManager` gives it the doodads' model manager and
+  the buildings' manager, so spawned models animate with the doodads.
+  - `model/attachments.ts` reads a model's attachment points from the raw M2 (the format package
+    drops them); `Model.attachmentObject` follows a point's bone, for held weapons.
 - `../world3d.ts` switches Three's colour management off, as wowserhq's own viewer (spelunker) does.
   With it on, every light colour was darkened to linear and never brightened back, and the world was
   drawn too dark and too red.
