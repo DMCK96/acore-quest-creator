@@ -86,6 +86,8 @@ Looked at and **not** used: `wowserhq/client` (it is the game's UI layer), `vjeu
 
 - A **Teleport** panel in the 3D screen: 1,300 named places from AzerothAdmin's teleport list (`src/core/map/teleports.json`, made by `scripts/teleports.ts`), searched by place or zone or browsed by region. Picking one switches the map and moves the camera there; places on maps the 3D view does not draw (dungeons, battlegrounds) are listed but cannot be picked.
 
+- A **Find…** panel in the 3D screen (`FindDialog.tsx`, the `findSpawns` call): search the database's NPCs or objects by name or id, pick one, and see every spawn it has (up to 300), nearest first on the map being looked at, then the other maps. Each row has its spawn id, map, position, how far it is, and tags: moved in the 3D view (listed where it stands now), placed in the 3D view (listed from the world layer), or only during a game event (`SpawnDot.event`, from `game_event_creature` / `game_event_gameobject`). **Go** switches map if needed, takes the camera close to the spawn (seven yards off and a little above; `lookAt(..., close)`), selects it, and switches on whatever would hide it (the NPC or object layer, and event spawns for an event spawn). Maps the view does not draw (dungeons) are listed, not clickable. Shares its search with the Place dialog (`useEntityHits`). Spawns an NPC gets only from scripts or summons are not in any table, so are not listed.
+
 ### Known gaps
 
 Things that are missing or approximate. Roughly in order of how much they matter.

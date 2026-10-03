@@ -51,8 +51,8 @@ export interface World3DOptions {
 }
 
 export interface World3D {
-  /** Moves the camera to look at a world point. */
-  lookAt(x: number, y: number, z: number): void;
+  /** Moves the camera to look at a world point; `close` stands near it (a few yards, to see one NPC or object) rather than far. */
+  lookAt(x: number, y: number, z: number, close?: boolean): void;
   /** Where the camera is and which way it looks (a unit vector). */
   camera(): { position: { x: number; y: number; z: number }; direction: { x: number; y: number; z: number } };
   /** Shows or hides NPCs, objects and their paths, without unloading them. */
@@ -82,6 +82,8 @@ THREE.ColorManagement.enabled = false;
 
 /** The camera's first distance from its target, in yards: behind, beside and above. */
 const START_OFFSET = new THREE.Vector3(-30, -30, 30);
+/** Where the camera stands to look at one NPC or object: a few yards away and a little above */
+const CLOSE_OFFSET = new THREE.Vector3(-7, -7, 4);
 /** A client's maps run ±17066 yards from the middle. */
 const WORLD_EDGE = 17066;
 const NEAR = 0.5;
@@ -266,8 +268,8 @@ export function createWorld3D(options: World3DOptions): World3D {
   const stopProblems = onProblems((all) => options.onProblems?.([...all]));
 
   let disposed = false;
-  const lookAt = (x: number, y: number, z: number): void => {
-    controls.setView(new THREE.Vector3(x, y, z), START_OFFSET);
+  const lookAt = (x: number, y: number, z: number, close = false): void => {
+    controls.setView(new THREE.Vector3(x, y, z), close ? CLOSE_OFFSET : START_OFFSET);
     manager.setTarget(clamp(x), clamp(y));
   };
   const clamp = (v: number): number => Math.max(-WORLD_EDGE, Math.min(WORLD_EDGE, v));

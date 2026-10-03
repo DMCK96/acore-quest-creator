@@ -170,6 +170,8 @@ const NAV_CACHE_SIZE = 64;
 /** Spawn dots sent to the map per kind; more means the author should zoom in. */
 const SPAWN_DOT_CAP = 2000;
 const REF_SPAWNS_PER_ENTRY = 20;
+/** Spawns of one NPC or object listed for jumping to in the 3D view; more is said, not given. */
+const FIND_SPAWNS_LIMIT = 300;
 
 const REGISTRY_TABLES = registry.tables.map((t) => t.table);
 const KEY_COLUMNS = keyColumnsByTable(registry);
@@ -1691,6 +1693,12 @@ export function createApi(deps: ApiDeps): Api {
 
     entitySpawns: (kind, entry) =>
       run(async () => (await connected().db.spawnsOfEntries?.(kind, [entry], REF_SPAWNS_PER_ENTRY)) ?? []),
+
+    findSpawns: (kind, entry) =>
+      run(async () => {
+        const found = (await connected().db.spawnsOfEntries?.(kind, [entry], FIND_SPAWNS_LIMIT + 1)) ?? [];
+        return { spawns: found.slice(0, FIND_SPAWNS_LIMIT), capped: found.length > FIND_SPAWNS_LIMIT };
+      }),
 
     questMapRefs: (questId) =>
       run(async () => {

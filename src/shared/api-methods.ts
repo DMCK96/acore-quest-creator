@@ -49,6 +49,7 @@ export const API_METHODS = [
   'worldChanges',
   'exportWorld',
   'entitySpawns',
+  'findSpawns',
   'questMapRefs',
   'allocateIds',
   'patrolPathId',

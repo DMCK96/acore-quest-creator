@@ -485,3 +485,19 @@
 .world3d__selected-actions {
   margin-top: 8px;
 }
+
+.find-dialog__title {
+  margin: 0 0 0.6em;
+}
+
+.find-dialog__row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 1em;
+  padding: 0.3em 0.5em;
+}
+
+.find-dialog__row:hover {
+  background: var(--bg-inset);
+}

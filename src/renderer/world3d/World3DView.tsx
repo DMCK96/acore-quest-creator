@@ -75,6 +75,25 @@ interface ViewProps {
   onSelect?(spawn: PickedSpawn | null): void;
   /** Takes edits to the open quest's own spawns; without it, every edit goes to the world layer. */
   onOwnEdit?(edit: SpawnEdit): void;
+  /** A spawn to bring into view: the camera goes close to it and it is selected. Its map is `map`. */
+  focus?: FocusTarget;
+}
+
+/** A spawn to bring into view: the camera goes to it, it is selected, and what hides it is switched on. */
+export interface FocusTarget {
+  kind: 'creature' | 'object';
+  guid: number;
+  entry: number;
+  name: string;
+  x: number;
+  y: number;
+  z: number;
+  /** The game event it appears only during, so event spawns are shown */
+  event: { id: number; name: string } | null;
+  /** One placed in the 3D view */
+  added: boolean;
+  /** Told apart from an earlier focus on the same spawn, which is to be done again */
+  nonce: number;
 }
 
 /** A route others walk too, waiting for the author to say whether to change it for all of them */
@@ -113,7 +132,7 @@ class Contained extends Component<{ children: ReactNode }, { failure: string | n
   }
 }
 
-function WorldStage({ map, start, hasClient, own, onSelect, onOwnEdit }: ViewProps): React.JSX.Element {
+function WorldStage({ map, start, hasClient, own, onSelect, onOwnEdit, focus }: ViewProps): React.JSX.Element {
   const container = useRef<HTMLDivElement>(null);
   const world = useRef<World3D | null>(null);
   const startRef = useRef(start);
@@ -130,6 +149,8 @@ function WorldStage({ map, start, hasClient, own, onSelect, onOwnEdit }: ViewPro
   onSelectRef.current = onSelect;
   const onOwnEditRef = useRef(onOwnEdit);
   onOwnEditRef.current = onOwnEdit;
+  // A spawn to bring into view; kept until the world that is to show it is there (a map switch builds a new one)
+  const pendingFocus = useRef<FocusTarget | null>(null);
   // The world layer as the main process last gave it, drawn over the database
   const [layer, setLayer] = useState<WorldLayer>(EMPTY_WORLD);
   const layerRef = useRef<WorldLayer>(EMPTY_WORLD);
@@ -147,6 +168,23 @@ function WorldStage({ map, start, hasClient, own, onSelect, onOwnEdit }: ViewPro
     setLayer(next);
     world.current?.setWorldLayer(next);
   };
+  /** Takes the camera close to the pending focus and selects it, with the layers that would hide it on */
+  const bringIntoView = (): void => {
+    const target = pendingFocus.current;
+    const current = world.current;
+    if (!target || !current) return;
+    pendingFocus.current = null;
+    setLayers((l) => ({ ...l, [target.kind === 'creature' ? 'creatures' : 'objects']: true, events: l.events || target.event !== null }));
+    current.lookAt(target.x, target.y, target.z + 1, true);
+    current.select({ kind: target.kind, guid: target.guid });
+    setSelected({
+      kind: target.kind, guid: target.guid, entry: target.entry, name: target.name, own: false, added: target.added, pathId: 0,
+      event: target.event, position: { x: target.x, y: target.y, z: target.z },
+    });
+    setNote(null);
+  };
+  const bringIntoViewRef = useRef(bringIntoView);
+  bringIntoViewRef.current = bringIntoView;
   const api = useApi();
   const apiRef = useRef(api);
   apiRef.current = api;
@@ -294,6 +332,7 @@ function WorldStage({ map, start, hasClient, own, onSelect, onOwnEdit }: ViewPro
           created.setSpawnVisibility(layersRef.current);
           if (ownRef.current) created.setOwnSpawns(ownRef.current);
           world.current = created;
+          bringIntoViewRef.current();
           void apiRef.current?.worldLayer().then((result) => live && result.ok && applyLayer(result.value));
         } catch (error) {
           // Inside a promise, so an error boundary would not see it (no WebGL, say).
@@ -359,6 +398,13 @@ function WorldStage({ map, start, hasClient, own, onSelect, onOwnEdit }: ViewPro
   useEffect(() => {
     world.current?.lookAt(start.x, start.y, start.z);
   }, [start.x, start.y, start.z]);
+
+  // Bring a spawn into view (after the effect above, so the close camera is the one that stays): now, or once the world for its map is there
+  useEffect(() => {
+    if (!focus) return;
+    pendingFocus.current = focus;
+    bringIntoViewRef.current();
+  }, [focus]);
 
   const unavailable = !hasClient
     ? 'Choose the game client folder in the connection settings to see the world in 3D.'

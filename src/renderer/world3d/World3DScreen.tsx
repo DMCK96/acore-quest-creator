@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { WORLD_MAPS, worldMapById } from '@core/map/world-maps';
-import { World3DView } from './World3DView';
+import { World3DView, type FocusTarget } from './World3DView';
+import { FindDialog, type FoundSpawn } from './FindDialog';
 import { TeleportDialog } from './TeleportDialog';
 import type { TeleportSpot } from '@core/map/teleports';
 import './world3d.css';
@@ -32,6 +33,20 @@ export function World3DScreen({ hasClient, onClose }: { hasClient: boolean; onCl
     if (spot.map !== mapId) setMapId(spot.map);
     goTo({ x: spot.x, y: spot.y, z: spot.z });
   };
+  // Finding an NPC or object, and the spawn the view is to bring into view (each pick is its own, even of the same spawn)
+  const [finding, setFinding] = useState(false);
+  const findingRef = useRef(finding);
+  findingRef.current = finding;
+  const [focus, setFocus] = useState<FocusTarget | undefined>();
+  const find = (spawn: FoundSpawn): void => {
+    setFinding(false);
+    if (spawn.map !== mapId) setMapId(spawn.map);
+    goTo({ x: spawn.x, y: spawn.y, z: spawn.z });
+    setFocus((previous) => ({
+      kind: spawn.kind, guid: spawn.guid, entry: spawn.entry, name: spawn.name, x: spawn.x, y: spawn.y, z: spawn.z,
+      event: spawn.event, added: spawn.note === 'placed', nonce: (previous?.nonce ?? 0) + 1,
+    }));
+  };
   const parsed = { x: Number(typed.x), y: Number(typed.y), z: Number(typed.z) };
   const valid = [typed.x, typed.y, typed.z].every((v) => v.trim() !== '') && Object.values(parsed).every(Number.isFinite);
 
@@ -39,6 +54,12 @@ export function World3DScreen({ hasClient, onClose }: { hasClient: boolean; onCl
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent): void => {
       if (e.key !== 'Escape') return;
+      // The find panel sits over the screen: Esc closes it first
+      if (findingRef.current) {
+        e.stopPropagation();
+        setFinding(false);
+        return;
+      }
       // The teleport panel sits over the screen: Esc closes it first
       if (teleportingRef.current) {
         e.stopPropagation();
@@ -92,13 +113,17 @@ export function World3DScreen({ hasClient, onClose }: { hasClient: boolean; onCl
         <button type="button" className="btn" onClick={() => setTeleporting(true)}>
           Teleport
         </button>
+        <button type="button" className="btn" onClick={() => setFinding(true)}>
+          Find…
+        </button>
         <button type="button" className="btn world3d-screen__close" onClick={onClose}>
           Close
         </button>
       </header>
       <div className="world3d-screen__body">
-        <World3DView map={mapId} start={at} hasClient={hasClient} />
+        <World3DView map={mapId} start={at} hasClient={hasClient} focus={focus} />
       </div>
+      {finding && <FindDialog from={{ map: mapId, ...at }} onGo={find} onClose={() => setFinding(false)} />}
       {teleporting && <TeleportDialog onPick={teleport} onClose={() => setTeleporting(false)} />}
     </div>
   );

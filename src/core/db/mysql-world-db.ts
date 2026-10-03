@@ -328,18 +328,7 @@ class MysqlWorldDb implements WorldDb {
     const query = (context: string, sql: string, params: unknown[]) =>
       this.run(context, async () => text((await this.pool.query(sql, params))[0] as Record<string, unknown>[]));
 
-    // The game event a spawn appears for (a positive eventEntry; a negative one is a spawn the event
-    // removes, which is there the rest of the time). A database without the event tables has none.
-    const hasEvents = (await this.columns('game_event')).length > 0;
-    const eventOf = async (table: string): Promise<{ columns: string; joins: string }> =>
-      hasEvents && (await this.columns(table)).length > 0
-        ? {
-            columns: ', ev.eventEntry AS event_entry, ge.description AS event_name',
-            joins:
-              ` LEFT JOIN (SELECT guid, MIN(eventEntry) AS eventEntry FROM ${table} WHERE eventEntry > 0 GROUP BY guid) ev ON ev.guid = s.guid` +
-              ` LEFT JOIN game_event ge ON ge.eventEntry = ev.eventEntry`,
-          }
-        : { columns: '', joins: '' };
+    const eventOf = (table: string) => this.eventJoin(table);
 
     // Creatures, each with its template's first model (the lowest Idx)
     const entry = ident(spawnEntryColumn('creature', (await this.knownColumns('creature')).map((c) => c.name)));
@@ -418,13 +407,31 @@ class MysqlWorldDb implements WorldDb {
     return this.spawns(kind, `s.{entry} IN (${entries.map(() => '?').join(', ')})`, [...entries], limit);
   }
 
+  /**
+   * The game event a spawn appears for (a positive eventEntry; a negative one is a spawn the event
+   * removes, which is there the rest of the time): the columns and joins that add `event_entry` and
+   * `event_name` to a query of `table`'s spawns (`s`). A database without the event tables has none.
+   */
+  private async eventJoin(table: string): Promise<{ columns: string; joins: string }> {
+    const has = (await this.columns('game_event')).length > 0 && (await this.columns(table)).length > 0;
+    return has
+      ? {
+          columns: ', ev.eventEntry AS event_entry, ge.description AS event_name',
+          joins:
+            ` LEFT JOIN (SELECT guid, MIN(eventEntry) AS eventEntry FROM ${table} WHERE eventEntry > 0 GROUP BY guid) ev ON ev.guid = s.guid` +
+            ` LEFT JOIN game_event ge ON ge.eventEntry = ev.eventEntry`,
+        }
+      : { columns: '', joins: '' };
+  }
+
   /** Spawns with their template's name, filtered by `where` (its `?` bound to `params`, `{entry}` the entry column). */
   private async spawns(kind: SpawnKind, where: string, params: number[], limit: number): Promise<SpawnDot[]> {
     const spec = SPAWN_TABLES[kind];
     const entry = `${ident(spawnEntryColumn(kind, (await this.knownColumns(spec.table)).map((c) => c.name)))}`;
+    const event = await this.eventJoin(kind === 'creature' ? 'game_event_creature' : 'game_event_gameobject');
     const sql =
-      `SELECT s.guid, s.${entry} AS entry, s.map, s.position_x, s.position_y, s.position_z, t.name ` +
-      `FROM ${ident(spec.table)} s LEFT JOIN ${ident(spec.template)} t ON t.entry = s.${entry} ` +
+      `SELECT s.guid, s.${entry} AS entry, s.map, s.position_x, s.position_y, s.position_z, t.name${event.columns} ` +
+      `FROM ${ident(spec.table)} s LEFT JOIN ${ident(spec.template)} t ON t.entry = s.${entry}${event.joins} ` +
       `WHERE ${where.replace('{entry}', entry)} ORDER BY s.guid LIMIT ?`;
     const rows = await this.run(`reading ${spec.table}`, async () => {
       const [result] = await this.pool.query(sql, [...params, Math.max(0, Math.trunc(limit))]);

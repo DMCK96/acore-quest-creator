@@ -101,6 +101,7 @@ export function makeMockApi(overrides: Partial<Record<keyof Api, (...args: any[]
     worldChanges: vi.fn(async () => okv([])),
     exportWorld: vi.fn(async () => okv({ applyPath: '', revertPath: '', sql: '' })),
     entitySpawns: vi.fn(async () => okv([])),
+    findSpawns: vi.fn(async () => okv({ spawns: [], capped: false })),
     questMapRefs: vi.fn(async () => okv([])),
     testCommands: vi.fn(async () => okv({ reload: [], restart: [], go: [], quest: [] })),
     questScripts: vi.fn(async () => okv({ foreign: [], unreadable: [], missingTables: [] })),

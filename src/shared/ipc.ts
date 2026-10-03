@@ -400,6 +400,8 @@ export interface Api {
   exportWorld(): Promise<Result<{ applyPath: string; revertPath: string; sql: string }>>;
   /** Where an NPC or object stands in the world, for jumping to it on the map. */
   entitySpawns(kind: 'creature' | 'gameobject', entry: number): Promise<Result<SpawnDot[]>>;
+  /** Every spawn of one NPC or object (up to a few hundred, `capped` when there are more), for jumping to them in the 3D view. */
+  findSpawns(kind: 'creature' | 'gameobject', entry: number): Promise<Result<{ spawns: SpawnDot[]; capped: boolean }>>;
   /** The existing spawns of the quest's givers, enders and objectives. */
   questMapRefs(questId: number): Promise<Result<QuestMapRef[]>>;
   /** The GM commands to try the quest in game after applying it: reloads, restarts, travel and quest commands. */
@@ -563,6 +565,7 @@ const REQUEST_SCHEMAS: Record<keyof Api, z.ZodType<unknown[]>> = {
   worldChanges: z.tuple([]),
   exportWorld: z.tuple([]),
   entitySpawns: z.tuple([z.enum(['creature', 'gameobject']), z.number().int()]),
+  findSpawns: z.tuple([z.enum(['creature', 'gameobject']), z.number().int()]),
   questMapRefs: z.tuple([z.number()]),
   allocateIds: z.tuple([z.enum(['creature', 'gameobject', 'creatureSpawn', 'gameobjectSpawn', 'page', 'item']), z.number().int().min(1).max(50)]),
   patrolPathId: z.tuple([z.number().int().min(1)]),

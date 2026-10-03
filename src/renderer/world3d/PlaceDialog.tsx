@@ -1,11 +1,8 @@
-import { useEffect, useId, useRef, useState } from 'react';
-import type { EntityHit } from '@core/db/world-db';
-import { useEntitySearch } from '../state/names';
+import { useId, useRef, useState } from 'react';
+import { useEntityHits } from './useEntityHits';
 import { trapTab } from '../components/trap-tab';
 import type { PlaceTarget } from './placing';
 import '../views/ProjectDialog.css';
-
-const SEARCH_DELAY_MS = 150;
 
 export type Chosen = PlaceTarget & { name: string };
 
@@ -15,38 +12,10 @@ export type Chosen = PlaceTarget & { name: string };
  */
 export function PlaceDialog({ onPick, onClose }: { onPick(chosen: Chosen): void; onClose(): void }): React.JSX.Element {
   const dialog = useRef<HTMLDivElement>(null);
-  const search = useEntitySearch();
   const name = useId();
   const [kind, setKind] = useState<PlaceTarget['kind']>('creature');
   const [text, setText] = useState('');
-  const [hits, setHits] = useState<EntityHit[]>([]);
-  const [error, setError] = useState<string | null>(null);
-  const [searched, setSearched] = useState(false);
-  const token = useRef(0);
-
-  // Each keystroke or change of kind asks again; a slower answer to an older ask never replaces a newer one
-  useEffect(() => {
-    const needle = text.trim();
-    const mine = ++token.current;
-    setError(null);
-    if (needle === '') {
-      setHits([]);
-      setSearched(false);
-      return;
-    }
-    const timer = setTimeout(() => {
-      void search(kind === 'creature' ? 'creature' : 'gameobject', needle).then((result) => {
-        if (mine !== token.current) return;
-        setSearched(true);
-        if (result.ok) setHits(result.value);
-        else {
-          setHits([]);
-          setError(result.error.message);
-        }
-      });
-    }, SEARCH_DELAY_MS);
-    return () => clearTimeout(timer);
-  }, [kind, text, search]);
+  const { hits, error, searched } = useEntityHits(kind === 'creature' ? 'creature' : 'gameobject', text);
 
   return (
     <div className="modal-backdrop" onMouseDown={(e) => e.target === e.currentTarget && onClose()}>
