@@ -4,6 +4,7 @@ import { ModelBounds, ModelSpec, SequenceSpec } from './types.js';
 import { expandExtent, getBoundsCenter, getBoundsRadius } from './util.js';
 import SceneWorker from '../../worker/SceneWorker.js';
 import { AssetHost, loadAsset } from '../../asset.js';
+import { readAttachments } from '../attachments.js';
 
 type ModelLoaderWorkerOptions = {
   host: AssetHost;
@@ -48,6 +49,8 @@ class ModelLoaderWorker extends SceneWorker {
 
     const spec: ModelSpec = {
       name: model.name,
+      // Where hands hold weapons: the format package parses these but does not keep them
+      attachments: readAttachments(modelData),
       geometry,
       materials,
       bones,

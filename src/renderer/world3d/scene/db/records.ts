@@ -208,6 +208,49 @@ class CharacterFacialHairStylesRecord extends ClientDbRecord {
   }
 }
 
+/** Item.dbc: 8 fields; the display an item is drawn with */
+const itemIo = io.struct({
+  id: io.int32le,
+  classId: io.int32le,
+  subclassId: io.int32le,
+  soundOverride: io.int32le,
+  material: io.int32le,
+  displayInfoId: io.int32le,
+  inventoryType: io.int32le,
+  sheatheType: io.int32le,
+});
+
+class ItemRecord extends ClientDbRecord {
+  classId: number;
+  subclassId: number;
+  soundOverride: number;
+  material: number;
+  displayInfoId: number;
+  inventoryType: number;
+  sheatheType: number;
+
+  constructor() {
+    super(itemIo);
+  }
+}
+
+/** ItemDisplayInfo.dbc: 25 fields; an item's model files and their textures (left and right) */
+const itemDisplayInfoIo = io.struct({
+  id: io.int32le,
+  modelNames: io.array(string, { size: 2 }),
+  modelTextures: io.array(string, { size: 2 }),
+  rest: rest(20),
+});
+
+class ItemDisplayInfoRecord extends ClientDbRecord {
+  modelNames: string[];
+  modelTextures: string[];
+
+  constructor() {
+    super(itemDisplayInfoIo);
+  }
+}
+
 /** The record class each display table is read with, by table name */
 const DISPLAY_RECORDS = {
   CreatureDisplayInfo: CreatureDisplayInfoRecord,
@@ -218,6 +261,8 @@ const DISPLAY_RECORDS = {
   CharHairGeosets: CharHairGeosetsRecord,
   CharSections: CharSectionsRecord,
   CharacterFacialHairStyles: CharacterFacialHairStylesRecord,
+  Item: ItemRecord,
+  ItemDisplayInfo: ItemDisplayInfoRecord,
 };
 
 export {
@@ -230,4 +275,6 @@ export {
   CreatureModelDataRecord,
   DISPLAY_RECORDS,
   GameObjectDisplayInfoRecord,
+  ItemDisplayInfoRecord,
+  ItemRecord,
 };

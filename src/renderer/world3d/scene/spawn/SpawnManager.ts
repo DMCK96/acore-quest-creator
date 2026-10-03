@@ -45,6 +45,9 @@ const markerMaterials = {
 /** Spawns further than this from the camera are not drawn, as in the game (about 100 yards) */
 const SPAWN_DRAW_DISTANCE = 100;
 
+/** M2 attachment points: a shield on the arm, weapons in the right (1) and left (2) hands */
+const SHIELD_POINT = 0;
+
 const ALL_VISIBLE: SpawnVisibility = { creatures: true, objects: true, paths: true };
 
 class SpawnManager {
@@ -214,12 +217,31 @@ class SpawnManager {
       drawn = null;
     }
 
+    // Weapons in hand: main hand at attachment 1, off hand at 2; a ranged weapon is sheathed, not drawn
+    if (drawn && kind === 'creature' && typeof drawn.attachmentObject === 'function') {
+      const [mainHand, offHand] = (spawn as ViewCreature).equipment ?? [0, 0, 0];
+      await Promise.all([[mainHand, 1], [offHand, 2]].map(([item, point]) => this.#hold(drawn, item, point)));
+    }
+
     const object = drawn ?? this.#marker(kind);
     object.position.set(...transform.position);
     object.quaternion.set(...transform.quaternion);
     object.scale.setScalar(transform.scale * (drawn ? lookScale : 1));
     object.userData.spawn = { kind, guid: spawn.guid, own: spawn.own };
     return object;
+  }
+
+  /** A weapon in one of a model's hands; one that cannot be drawn is left out (the resolver says why) */
+  async #hold(model, itemId: number, point: number) {
+    if (!(itemId > 0)) return;
+    try {
+      const look = await this.#resolver.weapon(itemId);
+      // A shield goes on the arm's shield point (0), whichever hand holds it
+      const hand = look ? model.attachmentObject(look.shield ? SHIELD_POINT : point) : null;
+      if (look && hand) hand.add(await this.#createModel(look));
+    } catch (error) {
+      this.#warnOnce(`item:${itemId}`, `3D view: item ${itemId} could not be drawn: ${error instanceof Error ? error.message : String(error)}`);
+    }
   }
 
   #marker(kind: 'creature' | 'object') {

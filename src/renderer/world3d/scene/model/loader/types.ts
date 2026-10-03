@@ -70,6 +70,7 @@ type BoneSpec = {
 };
 
 type ModelSpec = {
+  attachments: { id: number; bone: number; position: [number, number, number] }[];
   name: string;
   geometry: GeometrySpec;
   materials: MaterialSpec[];

@@ -19,6 +19,8 @@ type ModelLook = {
   /** Geoset ids to show; null shows them all */
   geosets: number[] | null;
   scale: number;
+  /** A held item that goes on the arm (attachment 0), not in the hand */
+  shield?: boolean;
 };
 
 type BuildingLook = { kind: 'building'; path: string; scale: number };
@@ -36,6 +38,13 @@ const BODY_SLOT = 1;
 const HAIR_SLOT = 6;
 /** CharSections' base section for hair */
 const HAIR_SECTION = 3;
+
+/** Where weapon models live, and the replaceable slot (object skin) their texture fills */
+const WEAPON_FOLDER = 'Item\\ObjectComponents\\Weapon';
+const SHIELD_FOLDER = 'Item\\ObjectComponents\\Shield';
+const WEAPON_SKIN_SLOT = 2;
+/** Item.dbc inventory type of a shield */
+const SHIELD_INVENTORY_TYPE = 14;
 
 /** The replaceable slot a display's first skin fills; the next two fill the slots after it */
 const FIRST_SKIN_SLOT = 11;
@@ -133,6 +142,37 @@ class DisplayResolver {
 
     const scale = Number.isFinite(display.creatureModelScale) && display.creatureModelScale > 0 ? display.creatureModelScale : 1;
     return { kind: 'model', path: body.path, textures, geosets: [...geosets].sort((a, b) => a - b), scale };
+  }
+
+  /** A weapon an NPC holds, by item id: its model and texture from the weapon folder */
+  async weapon(itemId: number): Promise<ModelLook | null> {
+    if (!(itemId > 0)) {
+      return null;
+    }
+
+    const item = (await this.#table('Item'))?.getRecord(itemId);
+    if (!item) {
+      this.#warnOnce(`item:${itemId}`, `3D view: item ${itemId} is not in the client's Item.dbc; its NPC is drawn without it`);
+      return null;
+    }
+
+    const display = (await this.#table('ItemDisplayInfo'))?.getRecord(item.displayInfoId);
+    if (!display || !display.modelNames[0]) {
+      return null;
+    }
+
+    // Shields have a folder of their own
+    const shield = item.inventoryType === SHIELD_INVENTORY_TYPE;
+    const folder = shield ? SHIELD_FOLDER : WEAPON_FOLDER;
+    const textures: Record<number, string> = {};
+    if (display.modelTextures[0]) {
+      textures[WEAPON_SKIN_SLOT] = `${folder}\\${display.modelTextures[0]}.blp`;
+    }
+    const look: ModelLook = { kind: 'model', path: `${folder}\\${modelPath(display.modelNames[0])}`, textures, geosets: null, scale: 1 };
+    if (shield) {
+      look.shield = true;
+    }
+    return look;
   }
 
   async object(displayId: number): Promise<Look | null> {

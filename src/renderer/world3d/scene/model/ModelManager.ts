@@ -23,6 +23,7 @@ type ModelResources = {
   materials: MaterialSpec[];
   animator: ModelAnimator;
   skinned: boolean;
+  attachments: { id: number; bone: number; position: [number, number, number] }[];
 };
 
 type ModelManagerOptions = {
@@ -97,6 +98,7 @@ class ModelManager {
       materials: spec.materials,
       animator,
       skinned: spec.skinned,
+      attachments: spec.attachments ?? [],
     };
 
     this.#loaded.set(refId, resources);
@@ -222,6 +224,7 @@ class ModelManager {
 
     const model = new Model(geometry, materials, animator, skinned);
     model.name = name;
+    model.attachments = resources.attachments;
 
     return model;
   }

@@ -100,6 +100,46 @@ class Model extends THREE.Mesh {
     this.#updateSize();
   }
 
+  /** Where things can be held (M2 attachments): set by the model manager */
+  attachments: { id: number; bone: number; position: [number, number, number] }[] = [];
+  #attachmentObjects = new globalThis.Map<number, { object: THREE.Object3D; bone: number; offset: THREE.Matrix4 }>();
+
+  /**
+   * An object at one of the model's attachment points (1 is the right hand, 2 the left), following its
+   * bone as the model animates: add a weapon to it. Null when the model has no such point.
+   */
+  attachmentObject(id: number): THREE.Object3D | null {
+    const known = this.#attachmentObjects.get(id);
+    if (known) {
+      return known.object;
+    }
+
+    const attachment = this.attachments.find((a) => a.id === id);
+    if (!attachment) {
+      return null;
+    }
+
+    const object = new THREE.Object3D();
+    object.name = `attachment:${id}`;
+    object.matrixAutoUpdate = false;
+    const offset = new THREE.Matrix4().makeTranslation(...attachment.position);
+    object.matrix.copy(offset);
+    this.add(object);
+    this.#attachmentObjects.set(id, { object, bone: attachment.bone, offset });
+    return object;
+  }
+
+  /** Moves each attachment object with its bone, and what it holds with it */
+  #updateAttachments() {
+    const bones = this.animation.skeleton?.bones ?? [];
+    for (const { object, bone, offset } of this.#attachmentObjects.values()) {
+      const boneMatrix = bones[bone]?.matrix;
+      object.matrix.copy(offset);
+      if (boneMatrix) object.matrix.premultiply(boneMatrix);
+      object.updateMatrixWorld(true);
+    }
+  }
+
   updateSkeleton(camera: THREE.Camera) {
     // Calculate current model view matrix. This calculation is also performed by the Three.js
     // renderer, but since model skeleton calculations need a current model view matrix and run
@@ -108,6 +148,8 @@ class Model extends THREE.Mesh {
 
     // Calculate bone matrices
     this.animation.skeleton.update();
+
+    this.#updateAttachments();
   }
 
   #updateBounds() {
