@@ -345,23 +345,37 @@ class SpawnManager {
    * (something solid, the ground or a wall, is in front of it).
    */
   pick(ray: THREE.Ray, maxDistance = Infinity): PickedSpawn | null {
-    const bounds = new THREE.Box3();
     const hit = new THREE.Vector3();
-    let best: { spawn: THREE.Object3D; distance: number } | null = null;
+    const hits: { spawn: THREE.Object3D; distance: number; bounds: THREE.Box3 }[] = [];
     for (const group of this.#areas.values()) {
       for (const name of ['creatures', 'objects']) {
         const kind = group.getObjectByName(name);
         if (!kind?.visible) continue;
         for (const spawn of kind.children) {
           if (!spawn.visible || !spawn.userData.spawn) continue;
-          spawnBounds(spawn, bounds);
+          const bounds = spawnBounds(spawn, new THREE.Box3());
           if (bounds.isEmpty() || bounds.containsPoint(ray.origin) || !ray.intersectBox(bounds, hit)) continue;
           const distance = hit.distanceTo(ray.origin);
-          if (distance <= maxDistance && (!best || distance < best.distance)) best = { spawn, distance };
+          if (distance <= maxDistance) hits.push({ spawn, distance, bounds });
         }
       }
     }
-    return best ? { ...best.spawn.userData.spawn, position: { ...best.spawn.userData.spawn.position } } : null;
+    if (hits.length === 0) return null;
+
+    // The nearest box is a tent's before it is the NPC's inside it, so a spawn that stands inside
+    // another's bounds (its centre does, and it is the smaller) wins over the one that holds it
+    const nearest = (list: typeof hits) => list.reduce((a, b) => (b.distance < a.distance ? b : a));
+    const volume = (box: THREE.Box3) => {
+      const size = box.getSize(new THREE.Vector3());
+      return size.x * size.y * size.z;
+    };
+    let best = nearest(hits);
+    for (;;) {
+      const held = hits.filter((h) => h !== best && best.bounds.containsPoint(h.bounds.getCenter(new THREE.Vector3())) && volume(h.bounds) < volume(best.bounds));
+      if (held.length === 0) break;
+      best = nearest(held);
+    }
+    return { ...best.spawn.userData.spawn, position: { ...best.spawn.userData.spawn.position } };
   }
 
   /** Marks a spawn as selected: an NPC's route and wander circle are drawn only while it is */

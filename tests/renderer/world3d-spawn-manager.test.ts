@@ -234,6 +234,34 @@ describe('picking a spawn', () => {
     expect(m.pick(ray(0))?.guid).toBe(2);
   });
 
+  describe('an NPC inside an object', () => {
+    // A tent: an object drawn as a building ten yards across, whose box the ray enters first
+    const tent = (extra: object = {}) => object(5, 2, { x: 10, ...extra });
+    const withTent = async (creatures: object[], objects = [tent()]) => {
+      const big = new THREE.BoxGeometry(10, 10, 6);
+      big.translate(0, 0, 3);
+      const m = manager({ creatures, objects, capped: { creatures: false, objects: false } }, { createBuilding: async () => new THREE.Mesh(big) });
+      await m.loadArea(1, 0, box);
+      return m;
+    };
+
+    it('picks the NPC, not the tent that holds it', async () => {
+      const m = await withTent([creature(1, 0, { x: 10, y: 0 })]);
+      expect(m.pick(ray())).toMatchObject({ kind: 'creature', guid: 1 });
+    });
+
+    it('still picks the tent where no NPC is inside it', async () => {
+      const m = await withTent([creature(1, 0, { x: 10, y: 20 })]);
+      expect(m.pick(ray())).toMatchObject({ kind: 'object', guid: 5 });
+    });
+
+    it('picks an NPC in front of a tent, and the tent when the ray misses the NPC', async () => {
+      const m = await withTent([creature(1, 0, { x: -5, y: 0 })]);
+      expect(m.pick(ray())).toMatchObject({ kind: 'creature', guid: 1 });
+      expect(m.pick(new THREE.Ray(new THREE.Vector3(-20, 3, 1), new THREE.Vector3(1, 0, 0)))).toMatchObject({ kind: 'object', guid: 5 });
+    });
+  });
+
   it('finds the drawn object of a spawn for its outline', async () => {
     const m = await marker([creature(1, 0, { x: 10 })]);
     expect(m.find('creature', 1)?.userData.spawn.guid).toBe(1);
