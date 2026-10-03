@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 import * as THREE from 'three';
 import { describe, expect, it, vi } from 'vitest';
+import type { WorldLayer } from '../../src/core/world/layer';
 import SpawnManager from '../../src/renderer/world3d/scene/spawn/SpawnManager';
 
 const creature = (guid: number, displayId: number, extra: object = {}) => ({
@@ -241,7 +242,7 @@ describe('picking a spawn', () => {
 });
 
 describe('the world layer in the view', () => {
-  const layer = {
+  const layer: WorldLayer = {
     spawns: [
       { kind: 'creature' as const, guid: 1, entry: 1, name: 'n', map: 0, original: { x: 0, y: 0, z: 0, orientation: 0, rotation: null }, current: { x: 30, y: 0, z: 0, orientation: 1, rotation: null } },
       { kind: 'gameobject' as const, guid: 3, entry: 2, name: 'o', map: 0, original: { x: 0, y: 0, z: 0, orientation: 0, rotation: [0, 0, 0, 1] as [number, number, number, number] }, current: { x: 40, y: 0, z: 0, orientation: 0, rotation: [0, 0, 1, 0] as [number, number, number, number] } },
