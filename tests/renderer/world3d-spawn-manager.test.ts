@@ -239,3 +239,34 @@ describe('picking a spawn', () => {
     expect(m.find('creature', 9)).toBeNull();
   });
 });
+
+describe('the world layer in the view', () => {
+  const layer = {
+    spawns: [
+      { kind: 'creature' as const, guid: 1, entry: 1, name: 'n', map: 0, original: { x: 0, y: 0, z: 0, orientation: 0, rotation: null }, current: { x: 30, y: 0, z: 0, orientation: 1, rotation: null } },
+      { kind: 'gameobject' as const, guid: 3, entry: 2, name: 'o', map: 0, original: { x: 0, y: 0, z: 0, orientation: 0, rotation: [0, 0, 0, 1] as [number, number, number, number] }, current: { x: 40, y: 0, z: 0, orientation: 0, rotation: [0, 0, 1, 0] as [number, number, number, number] } },
+    ],
+    routes: [{ pathId: 77, walkers: 1, original: [], current: [{ x: 5, y: 0, z: 0, rest: { delay: '0' } }, { x: 6, y: 0, z: 0, rest: {} }] }],
+  };
+
+  it('draws moved spawns where the layer has them, and edited routes as edited', async () => {
+    const m = manager({ creatures: [creature(1, 1), creature(2, 1, { pathId: 77, path: [{ x: 1, y: 0, z: 0 }] })], objects: [object(3, 2)], capped: { creatures: false, objects: false } });
+    const group = (await m.loadArea(1, 0, box))!;
+    await m.setWorldLayer(layer);
+    const byGuid = (name: string, guid: number) => group.getObjectByName(name)!.children.find((c) => c.userData.spawn.guid === guid)!;
+    expect(byGuid('creatures', 1).position.x).toBe(30);
+    expect(byGuid('objects', 3).quaternion.toArray()).toEqual([0, 0, 1, 0]);
+    expect(m.route(2)).toMatchObject({ pathId: 77, own: false, points: [{ x: 5, carry: { delay: '0' } }, { x: 6, carry: {} }] });
+  });
+
+  it('picks a route point of the selected NPC by its ball', async () => {
+    const m = manager({ creatures: [creature(2, 0, { pathId: 77, path: [{ x: 10, y: 0, z: 1 }, { x: 20, y: 0, z: 1 }] })], objects: [], capped: { creatures: false, objects: false } });
+    await m.loadArea(1, 0, box);
+    m.setSelected({ kind: 'creature', guid: 2 });
+    m.cull(new THREE.Vector3(0, 0, 0));
+    const down = (x: number) => new THREE.Ray(new THREE.Vector3(x, 0, 50), new THREE.Vector3(0, 0, -1));
+    expect(m.pickRoutePoint(down(20.3), 2)).toBe(1);
+    expect(m.pickRoutePoint(down(15), 2)).toBeNull();
+    expect(m.pickRoutePoint(down(10), 9)).toBeNull();
+  });
+});

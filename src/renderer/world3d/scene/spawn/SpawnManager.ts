@@ -7,7 +7,8 @@
  * leaves the world drawn without them.
  */
 import * as THREE from 'three';
-import { ViewCreature, ViewObject, ViewSpawns } from '../../../../core/db/view-spawns.js';
+import { ViewCreature, ViewObject, ViewPoint, ViewSpawns } from '../../../../core/db/view-spawns.js';
+import { WorldLayer } from '../../../../core/world/layer.js';
 import { DisplayResolver, Look, ModelLook } from './DisplayResolver.js';
 import { creatureTransform, objectTransform, Transform } from './placement.js';
 import { routeObject, wanderObject } from './paths.js';
@@ -113,6 +114,9 @@ class SpawnManager {
   /** Areas whose answer failed, and when they may be asked for again */
   #failed = new globalThis.Map<number, number>();
 
+  /** Edits to database spawns and routes, drawn over what the database has */
+  #layer: WorldLayer = { spawns: [], routes: [] };
+
   /** The selected spawn, whose paths are the ones drawn */
   #selected: { kind: 'creature' | 'object'; guid: number } | null = null;
 
@@ -174,7 +178,7 @@ class SpawnManager {
     this.status = { capped: { ...answer.capped }, error: null };
     this.#responses.set(areaId, { map, box, spawns: answer });
 
-    const group = await this.#draw(this.#withOwn(answer, box, map));
+    const group = await this.#draw(this.#overlay(answer, box, map));
     if (this.#wanted.get(areaId) !== request) {
       return null;
     }
@@ -206,19 +210,70 @@ class SpawnManager {
   }
 
   /**
-   * An area's database spawns, less any the open quest has its own of, plus its own in the box on its
-   * map; without event spawns unless they are asked for
+   * An area's database spawns as edited in the world layer (moved, turned, rerouted), less any the
+   * open quest has its own of, plus its own in the box on its map; without event spawns unless they
+   * are asked for
    */
-  #withOwn(spawns: ViewSpawns, box: Box, map: number): ViewSpawns {
+  #overlay(spawns: ViewSpawns, box: Box, map: number): ViewSpawns {
     const inBox = (s: { map: number; x: number; y: number }) => s.map === map && s.x >= box.minX && s.x <= box.maxX && s.y >= box.minY && s.y <= box.maxY;
     const shown = (s: { event?: unknown }) => this.#visibility.events || !s.event;
     const ownCreatures = new Set(this.#own.creatures.map((c) => c.guid));
     const ownObjects = new Set(this.#own.objects.map((o) => o.guid));
+    const placed = (kind: 'creature' | 'gameobject', guid: number) => this.#layer.spawns.find((s) => s.kind === kind && s.guid === guid)?.current;
+    const routes = new globalThis.Map(this.#layer.routes.map((r) => [r.pathId, r.current]));
+    const creature = (c: ViewCreature): ViewCreature => {
+      const at = placed('creature', c.guid);
+      const route = c.pathId > 0 ? routes.get(c.pathId) : undefined;
+      return {
+        ...c,
+        ...(at ? { x: at.x, y: at.y, z: at.z, orientation: at.orientation } : {}),
+        ...(route ? { path: route.map((p): ViewPoint => ({ x: p.x, y: p.y, z: p.z, carry: p.rest })) } : {}),
+      };
+    };
+    const object = (o: ViewObject): ViewObject => {
+      const at = placed('gameobject', o.guid);
+      return at ? { ...o, x: at.x, y: at.y, z: at.z, ...(at.rotation ? { rotation: at.rotation } : {}) } : o;
+    };
     return {
-      creatures: [...spawns.creatures.filter((c) => !ownCreatures.has(c.guid) && shown(c)), ...this.#own.creatures.filter(inBox)],
-      objects: [...spawns.objects.filter((o) => !ownObjects.has(o.guid) && shown(o)), ...this.#own.objects.filter(inBox)],
+      creatures: [...spawns.creatures.filter((c) => !ownCreatures.has(c.guid) && shown(c)).map(creature), ...this.#own.creatures.filter(inBox)],
+      objects: [...spawns.objects.filter((o) => !ownObjects.has(o.guid) && shown(o)).map(object), ...this.#own.objects.filter(inBox)],
       capped: spawns.capped,
     };
+  }
+
+  /** Draws the world layer's edits over the database's spawns and routes */
+  async setWorldLayer(layer: WorldLayer) {
+    this.#layer = layer;
+    await this.#redraw();
+  }
+
+  /** A drawn NPC's route as the view has it (with the layer's edits), or null when it has none */
+  route(guid: number): { pathId: number; own: boolean; entry: number; points: ViewPoint[]; home: { x: number; y: number; z: number } } | null {
+    for (const group of this.#areas.values()) {
+      const creature: ViewCreature | undefined = group.userData.creatures?.get(guid);
+      if (creature) {
+        return creature.path && creature.path.length > 0
+          ? { pathId: creature.pathId, own: creature.own, entry: creature.entry, points: creature.path, home: { x: creature.x, y: creature.y, z: creature.z } }
+          : null;
+      }
+    }
+    return null;
+  }
+
+  /** Which of an NPC's route points a ray passes within a yard of (the nearest along it), or null */
+  pickRoutePoint(ray: THREE.Ray, guid: number): number | null {
+    let best: { point: number; distance: number } | null = null;
+    for (const group of this.#areas.values()) {
+      for (const shown of group.getObjectByName('paths')?.children ?? []) {
+        if (shown.userData.guid !== guid) continue;
+        for (const ball of shown.children) {
+          if (typeof ball.userData.point !== 'number' || ray.distanceSqToPoint(ball.position) > 1) continue;
+          const distance = ray.origin.distanceTo(ball.position);
+          if (!best || distance < best.distance) best = { point: ball.userData.point, distance };
+        }
+      }
+    }
+    return best ? best.point : null;
   }
 
   /** Hides or shows kinds without unloading them; taking event spawns in or out redraws the areas */
@@ -238,7 +293,7 @@ class SpawnManager {
     await Promise.all(
       [...this.#areas.entries()].map(([areaId, group]) => {
         const response = this.#responses.get(areaId);
-        return response ? this.#fill(group, this.#withOwn(response.spawns, response.box, response.map)) : null;
+        return response ? this.#fill(group, this.#overlay(response.spawns, response.box, response.map)) : null;
       }),
     );
   }
@@ -367,6 +422,8 @@ class SpawnManager {
     this.#release(group);
     group.clear();
     group.add(...made);
+    // The creatures as drawn, so a route can be read back as the view has it
+    group.userData.creatures = new globalThis.Map(spawns.creatures.map((c) => [c.guid, c]));
     this.#applyVisibility(group);
     group.updateMatrixWorld(true);
   }

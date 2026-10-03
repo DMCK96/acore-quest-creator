@@ -55,12 +55,14 @@ const routeObject = (creature: { x: number; y: number; z: number; path: Point[] 
   route.renderOrder = RENDER_ORDER;
   group.add(route);
 
-  for (const p of path) {
+  path.forEach((p, index) => {
     const ball = new THREE.Mesh(pointGeometry, mesh);
     ball.position.set(p.x, p.y, p.z);
+    // Which point it is, so a click on it can pick the point
+    ball.userData.point = index;
     ball.renderOrder = RENDER_ORDER;
     group.add(ball);
-  }
+  });
 
   for (let i = 0; i + 1 < stops.length; i++) {
     const direction = stops[i + 1].clone().sub(stops[i]);

@@ -19,6 +19,7 @@ import DisplayResolver from '../spawn/DisplayResolver.js';
 import { areaBox, nearbyAreas } from '../spawn/placement.js';
 import { DISPLAY_RECORDS } from '../db/records.js';
 import { ViewSpawns } from '../../../../core/db/view-spawns.js';
+import { WorldLayer } from '../../../../core/world/layer.js';
 import { AssetHost } from '../asset.js';
 import MapLoader from './loader/MapLoader.js';
 import { MapAreaSpec, MapSpec } from './loader/types.js';
@@ -180,6 +181,21 @@ class MapManager extends EventTarget {
   /** The nearest drawn NPC or object along a ray, no further than `maxDistance` */
   pickSpawn(ray: THREE.Ray, maxDistance?: number) {
     return this.#spawnManager.pick(ray, maxDistance);
+  }
+
+  /** Draws the world layer's edits over the database's spawns and routes */
+  setWorldLayer(layer: WorldLayer) {
+    this.#spawnManager.setWorldLayer(layer).catch((error) => console.warn(`3D view: the world changes could not be drawn: ${describeError(error)}`));
+  }
+
+  /** Which of an NPC's route points a ray passes close to, or null */
+  pickRoutePoint(ray: THREE.Ray, guid: number) {
+    return this.#spawnManager.pickRoutePoint(ray, guid);
+  }
+
+  /** A drawn NPC's route as the view has it, or null */
+  spawnRoute(guid: number) {
+    return this.#spawnManager.route(guid);
   }
 
   /** Marks the selected spawn: only its paths are drawn */
