@@ -124,3 +124,62 @@ it('draws the open quest\'s own spawns in their area, in place of the database r
   // 7 is outside this area's box (0..1); 6 is drawn once, as the project's
   expect(drawn).toEqual([[5, false], [6, true]]);
 });
+
+describe('the final review\'s findings', () => {
+  const disposable = () => {
+    const model = new THREE.Object3D() as THREE.Object3D & { dispose: ReturnType<typeof vi.fn> };
+    model.dispose = vi.fn();
+    return model;
+  };
+
+  it('frees the models of an area it drops, and of an area it redraws', async () => {
+    const made: ReturnType<typeof disposable>[] = [];
+    const m = manager({ creatures: [creature(1, 1), creature(2, 1)], objects: [], capped: { creatures: false, objects: false } }, {
+      createModel: async () => { const d = disposable(); made.push(d); return d; },
+    });
+    await m.loadArea(1, 0, box);
+    await m.setOwnSpawns({ creatures: [], objects: [], capped: { creatures: false, objects: false } });
+    // The redraw freed the first two models and made two more
+    expect(made).toHaveLength(4);
+    expect(made.slice(0, 2).every((d) => d.dispose.mock.calls.length === 1)).toBe(true);
+    m.removeArea(1);
+    expect(made.slice(2).every((d) => d.dispose.mock.calls.length === 1)).toBe(true);
+  });
+
+  it('keeps an area loading while its newer request is out, whatever the stale one does', async () => {
+    const releases: ((v: unknown) => void)[] = [];
+    const m = manager(null, { source: () => new Promise((r) => releases.push(r)) as any });
+    const first = m.loadArea(1, 0, box);
+    m.removeArea(1);
+    const second = m.loadArea(1, 0, box);
+    releases[0]!({ creatures: [creature(1, 1)], objects: [], capped: { creatures: false, objects: false } });
+    expect(await first).toBeNull();
+    expect(m.canLoad(1)).toBe(false);
+    releases[1]!({ creatures: [creature(1, 1)], objects: [], capped: { creatures: false, objects: false } });
+    expect(await second).not.toBeNull();
+    expect(m.canLoad(1)).toBe(false);
+  });
+
+  it('waits before asking again for an area whose answer failed, and asks again once the source changes', async () => {
+    let now = 1000;
+    const source = vi.fn(async () => ({ error: 'not connected' }));
+    const m = manager(null, { source: source as any, now: () => now });
+    expect(m.canLoad(1)).toBe(true);
+    await m.loadArea(1, 0, box);
+    expect(m.canLoad(1)).toBe(false);
+    now += 29000;
+    expect(m.canLoad(1)).toBe(false);
+    now += 2000;
+    expect(m.canLoad(1)).toBe(true);
+    await m.loadArea(1, 0, box);
+    m.setSource(source as any);
+    expect(m.canLoad(1)).toBe(true);
+  });
+
+  it('draws the quest\'s own spawns only on their own map', async () => {
+    const m = manager({ creatures: [], objects: [], capped: { creatures: false, objects: false } });
+    m.setOwnSpawns({ creatures: [creature(8, 1, { own: true, map: 1, x: 0.5, y: 0.5 }), creature(9, 1, { own: true, map: 0, x: 0.5, y: 0.5 })], objects: [], capped: { creatures: false, objects: false } });
+    const group = (await m.loadArea(1, 0, box))!;
+    expect(group.getObjectByName('creatures')!.children.map((c) => c.userData.spawn.guid)).toEqual([9]);
+  });
+});

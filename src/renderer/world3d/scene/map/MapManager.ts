@@ -53,8 +53,8 @@ class MapManager extends EventTarget {
   #wmoGroups = new globalThis.Map<number, THREE.Group>();
   #liquidGroups = new globalThis.Map<number, THREE.Group>();
   #spawnGroups = new globalThis.Map<number, THREE.Group>();
-  /** Areas whose spawns are on their way */
-  #spawnLoading = new Set<number>();
+  /** Areas whose spawns were asked for and not dropped since (drawn, on their way, or failed) */
+  #spawnAsked = new Set<number>();
   #mapId: number;
 
   #textureManager: TextureManager;
@@ -278,35 +278,34 @@ class MapManager extends EventTarget {
       return `${areaX}:${areaY}`;
     };
 
-    for (const areaId of [...this.#spawnGroups.keys(), ...this.#spawnLoading]) {
+    // Left behind: dropped and freed, and any answer still on its way for it ignored
+    for (const areaId of this.#spawnAsked) {
       if (!wanted.has(keyOf(areaId)) || !this.#terrainGroups.has(areaId)) {
         const group = this.#spawnGroups.get(areaId);
         if (group) this.#root.remove(group);
         this.#spawnGroups.delete(areaId);
-        this.#spawnLoading.delete(areaId);
+        this.#spawnAsked.delete(areaId);
         this.#spawnManager.removeArea(areaId);
       }
     }
 
+    // Came near: asked for, unless already drawn, on its way, or recently failed (the spawn manager knows)
     for (const areaId of this.#terrainGroups.keys()) {
-      if (!wanted.has(keyOf(areaId)) || this.#spawnGroups.has(areaId) || this.#spawnLoading.has(areaId)) {
+      if (!wanted.has(keyOf(areaId)) || !this.#spawnManager.canLoad(areaId)) {
         continue;
       }
       const { areaX, areaY } = this.#getAreaIndex(areaId);
-      this.#spawnLoading.add(areaId);
+      this.#spawnAsked.add(areaId);
       this.#spawnManager
         .loadArea(areaId, this.#mapId, areaBox(areaX, areaY))
         .then((group) => {
-          if (!this.#spawnLoading.delete(areaId)) return;
-          if (group && this.#terrainGroups.has(areaId)) {
+          // Null when it failed or was dropped meanwhile; a stale answer never replaces a newer one
+          if (group && this.#spawnAsked.has(areaId) && this.#terrainGroups.has(areaId)) {
             this.#spawnGroups.set(areaId, group);
             this.#root.add(group);
           }
         })
-        .catch((error) => {
-          this.#spawnLoading.delete(areaId);
-          console.warn(`3D view: the NPCs and objects of area ${areaId} could not be drawn: ${describeError(error)}`);
-        });
+        .catch((error) => console.warn(`3D view: the NPCs and objects of area ${areaId} could not be drawn: ${describeError(error)}`));
     }
   }
 
@@ -417,7 +416,7 @@ class MapManager extends EventTarget {
         this.#spawnGroups.delete(areaId);
       }
       this.#spawnManager.removeArea(areaId);
-      this.#spawnLoading.delete(areaId);
+      this.#spawnAsked.delete(areaId);
 
       const liquidGroup = this.#liquidGroups.get(areaId);
       if (liquidGroup) {

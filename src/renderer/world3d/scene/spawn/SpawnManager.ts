@@ -23,6 +23,8 @@ type SpawnManagerOptions = {
   createModel(look: ModelLook): Promise<THREE.Object3D>;
   createBuilding(path: string): Promise<THREE.Object3D>;
   source: SpawnSource | null;
+  /** The time in milliseconds (for when to ask again after a failure); Date.now by default */
+  now?: () => number;
 };
 
 type SpawnStatus = { capped: { creatures: boolean; objects: boolean }; error: string | null };
@@ -48,6 +50,9 @@ const SPAWN_DRAW_DISTANCE = 100;
 /** M2 attachment points: a shield on the arm, weapons in the right (1) and left (2) hands */
 const SHIELD_POINT = 0;
 
+/** How long to wait before asking again for an area whose answer failed */
+const RETRY_MS = 30000;
+
 const ALL_VISIBLE: SpawnVisibility = { creatures: true, objects: true, paths: true };
 
 class SpawnManager {
@@ -65,6 +70,9 @@ class SpawnManager {
   #visibility: SpawnVisibility = { ...ALL_VISIBLE };
   #own: ViewSpawns = { creatures: [], objects: [], capped: { creatures: false, objects: false } };
   #warned = new Set<string>();
+  #now: () => number;
+  /** Areas whose answer failed, and when they may be asked for again */
+  #failed = new globalThis.Map<number, number>();
 
   status: SpawnStatus = { capped: { creatures: false, objects: false }, error: null };
 
@@ -73,10 +81,25 @@ class SpawnManager {
     this.#createModel = options.createModel;
     this.#createBuilding = options.createBuilding;
     this.#source = options.source;
+    this.#now = options.now ?? Date.now;
   }
 
+  /** A new source: areas that failed may be asked for again at once */
   setSource(source: SpawnSource | null) {
     this.#source = source;
+    this.#failed.clear();
+  }
+
+  /**
+   * Whether an area may be asked for now: not drawn, not on its way (whatever an older, stale request
+   * for it does), and not failed within the last RETRY_MS
+   */
+  canLoad(areaId: number): boolean {
+    if (this.#areas.has(areaId) || this.#wanted.has(areaId)) {
+      return false;
+    }
+    const retryAt = this.#failed.get(areaId);
+    return retryAt === undefined || this.#now() >= retryAt;
   }
 
   /** The area's spawns as a group, or null when there are none to draw or it was removed meanwhile */
@@ -100,13 +123,16 @@ class SpawnManager {
     }
     if ('error' in answer) {
       this.status = { ...this.status, error: answer.error };
+      this.#wanted.delete(areaId);
+      this.#failed.set(areaId, this.#now() + RETRY_MS);
       return null;
     }
+    this.#failed.delete(areaId);
 
     this.status = { capped: { ...answer.capped }, error: null };
     this.#responses.set(areaId, { map, box, spawns: answer });
 
-    const group = await this.#draw(this.#withOwn(answer, box));
+    const group = await this.#draw(this.#withOwn(answer, box, map));
     if (this.#wanted.get(areaId) !== request) {
       return null;
     }
@@ -115,7 +141,14 @@ class SpawnManager {
     return group;
   }
 
+  /** Drops an area's spawns and frees them; an answer still on its way for it is dropped too */
   removeArea(areaId: number) {
+    const group = this.#areas.get(areaId);
+    if (group) {
+      group.userData.fill = (group.userData.fill ?? 0) + 1;
+      this.#release(group);
+      group.clear();
+    }
     this.#wanted.delete(areaId);
     this.#responses.delete(areaId);
     this.#areas.delete(areaId);
@@ -130,14 +163,14 @@ class SpawnManager {
     await Promise.all(
       [...this.#areas.entries()].map(([areaId, group]) => {
         const response = this.#responses.get(areaId);
-        return response ? this.#fill(group, this.#withOwn(response.spawns, response.box)) : null;
+        return response ? this.#fill(group, this.#withOwn(response.spawns, response.box, response.map)) : null;
       }),
     );
   }
 
-  /** An area's database spawns, less any the open quest has its own of, plus its own inside the box */
-  #withOwn(spawns: ViewSpawns, box: Box): ViewSpawns {
-    const inBox = (s: { x: number; y: number }) => s.x >= box.minX && s.x <= box.maxX && s.y >= box.minY && s.y <= box.maxY;
+  /** An area's database spawns, less any the open quest has its own of, plus its own in the box on its map */
+  #withOwn(spawns: ViewSpawns, box: Box, map: number): ViewSpawns {
+    const inBox = (s: { map: number; x: number; y: number }) => s.map === map && s.x >= box.minX && s.x <= box.maxX && s.y >= box.minY && s.y <= box.maxY;
     const ownCreatures = new Set(this.#own.creatures.map((c) => c.guid));
     const ownObjects = new Set(this.#own.objects.map((o) => o.guid));
     return {
@@ -185,16 +218,21 @@ class SpawnManager {
     return group;
   }
 
-  /** Fills an area's group with its spawns, replacing what it held */
+  /**
+   * Fills an area's group with its spawns, freeing what it held. The new spawns are made aside and
+   * swapped in at the end; a fill overtaken by a later one frees what it made instead.
+   */
   async #fill(group: THREE.Group, spawns: ViewSpawns) {
-    group.clear();
+    const fill = (group.userData.fill ?? 0) + 1;
+    group.userData.fill = fill;
+
     const creatures = new THREE.Group();
     creatures.name = 'creatures';
     const objects = new THREE.Group();
     objects.name = 'objects';
     const paths = new THREE.Group();
     paths.name = 'paths';
-    group.add(creatures, objects, paths);
+    const made = [creatures, objects, paths];
 
     const drawnCreatures = await Promise.all(
       spawns.creatures.map((creature) =>
@@ -222,8 +260,38 @@ class SpawnManager {
     );
     for (const drawn of drawnObjects) objects.add(drawn);
 
+    if (group.userData.fill !== fill) {
+      for (const part of made) this.#release(part);
+      return;
+    }
+
+    this.#release(group);
+    group.clear();
+    group.add(...made);
     this.#applyVisibility(group);
     group.updateMatrixWorld(true);
+  }
+
+  /**
+   * Frees what spawns hold of their own: each model's animation (so it stops being animated) and
+   * material, weapons with them, and route and wander lines. Shared marker, point and arrow geometry
+   * and materials, and the models' shared geometry and textures, are kept.
+   */
+  #release(root: THREE.Object3D) {
+    const owned: THREE.Object3D[] = [];
+    root.traverse((object) => {
+      if (object !== root) owned.push(object);
+    });
+    for (const object of owned) {
+      if (typeof object.dispose === 'function') {
+        object.dispose();
+        for (const material of Array.isArray(object.material) ? object.material : object.material ? [object.material] : []) {
+          material.dispose();
+        }
+      } else if (object instanceof THREE.Line) {
+        object.geometry.dispose();
+      }
+    }
   }
 
   /** One spawn's model or building, placed; a marker when it cannot be drawn */
