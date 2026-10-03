@@ -5,6 +5,10 @@ import { createWorld3D, type World3D } from './world3d';
 import { useApi } from '../state/names';
 import type { PickedSpawn, SpawnStatus, SpawnVisibility } from './scene/spawn/SpawnManager';
 import type { ViewSpawns } from '@core/db/view-spawns';
+import { chooseZ, floorCandidates } from '@core/map/floors';
+import { EMPTY_WORLD, type WorldLayer } from '@core/world/layer';
+import type { SpawnEdit, SpawnRef } from './edits';
+import '../views/ProjectDialog.css';
 import './world3d.css';
 
 /** The camera's controls, as the help in the corner lists them. */
@@ -60,7 +64,12 @@ interface ViewProps {
   own?: ViewSpawns;
   /** Told which NPC or object was clicked in the view, or null when the selection was cleared. */
   onSelect?(spawn: PickedSpawn | null): void;
+  /** Takes edits to the open quest's own spawns; without it, every edit goes to the world layer. */
+  onOwnEdit?(edit: SpawnEdit): void;
 }
+
+/** A route others walk too, waiting for the author to say whether to change it for all of them */
+type SharedRoute = { pathId: number; walkers: number; answer(yes: boolean): void };
 
 /**
  * The 3D view of one map, looking at a point. It needs the game client's folder (the terrain and
@@ -95,7 +104,7 @@ class Contained extends Component<{ children: ReactNode }, { failure: string | n
   }
 }
 
-function WorldStage({ map, start, hasClient, own, onSelect }: ViewProps): React.JSX.Element {
+function WorldStage({ map, start, hasClient, own, onSelect, onOwnEdit }: ViewProps): React.JSX.Element {
   const container = useRef<HTMLDivElement>(null);
   const world = useRef<World3D | null>(null);
   const startRef = useRef(start);
@@ -110,6 +119,16 @@ function WorldStage({ map, start, hasClient, own, onSelect }: ViewProps): React.
   const [selected, setSelected] = useState<PickedSpawn | null>(null);
   const onSelectRef = useRef(onSelect);
   onSelectRef.current = onSelect;
+  const onOwnEditRef = useRef(onOwnEdit);
+  onOwnEditRef.current = onOwnEdit;
+  // The world layer as the main process last gave it, drawn over the database
+  const [layer, setLayer] = useState<WorldLayer>(EMPTY_WORLD);
+  const layerRef = useRef<WorldLayer>(EMPTY_WORLD);
+  // What the last edit said (an error, a height not from the server), shown with the selection
+  const [note, setNote] = useState<string | null>(null);
+  const [shared, setShared] = useState<SharedRoute | null>(null);
+  const [changesOpen, setChangesOpen] = useState(false);
+  const changes = layer.spawns.length + layer.routes.length;
   const api = useApi();
   const apiRef = useRef(api);
   apiRef.current = api;
@@ -129,8 +148,59 @@ function WorldStage({ map, start, hasClient, own, onSelect }: ViewProps): React.
     setMissing([]);
     setStatus('loading');
     setSelected(null);
+    setNote(null);
     let live = true;
     let created: World3D | null = null;
+    // Each route's answer to "change it for everyone who walks it?", for as long as this world lives
+    const answers = new Map<number, Promise<boolean>>();
+    const applyLayer = (next: WorldLayer): void => {
+      layerRef.current = next;
+      setLayer(next);
+      created?.setWorldLayer(next);
+    };
+    // Own spawns go to the quest; the rest to the world layer, and a refused edit is drawn back
+    const edit = async (change: SpawnEdit): Promise<void> => {
+      if (change.spawn.own && onOwnEditRef.current) {
+        onOwnEditRef.current(change);
+        return;
+      }
+      const current = apiRef.current;
+      if (!current) return;
+      const result =
+        change.kind === 'place'
+          ? await current.worldMoveSpawn(change.spawn.kind === 'object' ? 'gameobject' : 'creature', change.spawn.guid, change.to)
+          : await current.worldSetRoute(
+              change.pathId,
+              change.points.map((p) => ({ x: p.x, y: p.y, z: p.z, rest: (p.carry as Record<string, string | null> | undefined) ?? {} })),
+            );
+      if (!live) return;
+      if (result.ok) {
+        applyLayer(result.value);
+        setNote(null);
+      } else {
+        setNote(result.error.message);
+        created?.setWorldLayer(layerRef.current);
+      }
+    };
+    const floorZ = async (x: number, y: number, nearZ: number): Promise<number | null> => {
+      const answer = await apiRef.current?.mapFloors(map, x, y);
+      if (!answer?.ok || 'reason' in answer.value) return null;
+      return chooseZ(floorCandidates(answer.value), nearZ);
+    };
+    const beforeRouteEdit = (spawn: SpawnRef, pathId: number): Promise<boolean> => {
+      if (spawn.own) return Promise.resolve(true);
+      let answer = answers.get(pathId);
+      if (!answer) {
+        answer = (async () => {
+          const route = await apiRef.current?.worldRoute(pathId);
+          if (!route?.ok || route.value.walkers <= 1) return true;
+          const walkers = route.value.walkers;
+          return new Promise<boolean>((resolve) => setShared({ pathId, walkers, answer: resolve }));
+        })();
+        answers.set(pathId, answer);
+      }
+      return answer;
+    };
     const slow = setTimeout(() => live && setStatus((s) => (s === 'loading' ? 'slow' : s)), SLOW_MS);
     // The client may not have this map's terrain (a server-only map, a folder that is not a client):
     // say so, instead of drawing an empty world.
@@ -156,8 +226,13 @@ function WorldStage({ map, start, hasClient, own, onSelect }: ViewProps): React.
             onSelect: (spawn) => {
               if (!live) return;
               setSelected(spawn);
+              setNote(null);
               onSelectRef.current?.(spawn);
             },
+            onEdit: (change) => void edit(change),
+            floorZ,
+            beforeRouteEdit,
+            onNotice: (message) => live && setNote(message),
             spawns: async (spawnMap, box) => {
               const current = apiRef.current;
               if (!current) return { error: 'the app is not connected' };
@@ -168,6 +243,7 @@ function WorldStage({ map, start, hasClient, own, onSelect }: ViewProps): React.
           created.setSpawnVisibility(layersRef.current);
           if (ownRef.current) created.setOwnSpawns(ownRef.current);
           world.current = created;
+          void apiRef.current?.worldLayer().then((result) => live && result.ok && applyLayer(result.value));
         } catch (error) {
           // Inside a promise, so an error boundary would not see it (no WebGL, say).
           setProblem(`The 3D view could not start: ${error instanceof Error ? error.message : String(error)}`);
@@ -244,9 +320,26 @@ function WorldStage({ map, start, hasClient, own, onSelect }: ViewProps): React.
               {label}
             </label>
           ))}
+          <button type="button" className="world3d__changes" disabled={changes === 0} onClick={() => setChangesOpen(true)}>
+            World changes ({changes})
+          </button>
         </fieldset>
       )}
-      {!unavailable && selected && <SelectedSpawn spawn={selected} onClose={clearSelection} />}
+      {!unavailable && selected && <SelectedSpawn spawn={selected} note={note} onClose={clearSelection} />}
+      {!unavailable && !selected && note && (
+        <p role="status" className="world3d__edit-note">
+          {note}
+        </p>
+      )}
+      {shared && (
+        <SharedRouteDialog
+          shared={shared}
+          onAnswer={(yes) => {
+            shared.answer(yes);
+            setShared(null);
+          }}
+        />
+      )}
       {!unavailable && spawnNote(spawns) && <p className="world3d__spawn-note">{spawnNote(spawns)}</p>}
       {!unavailable && (
         <div className="world3d__help">
@@ -275,8 +368,32 @@ function WorldStage({ map, start, hasClient, own, onSelect }: ViewProps): React.
   );
 }
 
-/** The NPC or object picked in the view: what it is and where it stands. */
-function SelectedSpawn({ spawn, onClose }: { spawn: PickedSpawn; onClose(): void }): React.JSX.Element {
+/** Asks before a route other spawns walk is changed for all of them. */
+function SharedRouteDialog({ shared, onAnswer }: { shared: SharedRoute; onAnswer(yes: boolean): void }): React.JSX.Element {
+  return (
+    <div className="modal-backdrop" onMouseDown={(e) => e.target === e.currentTarget && onAnswer(false)}>
+      <div className="modal" role="dialog" aria-modal="true" aria-label="Shared route" onKeyDown={(e) => e.key === 'Escape' && onAnswer(false)}>
+        <header className="modal__header">
+          <h2>Shared route</h2>
+        </header>
+        <p>
+          This route is walked by {shared.walkers} spawns (path {shared.pathId}). Changing it changes it for all of them.
+        </p>
+        <div className="world3d__dialog-actions">
+          <button type="button" className="btn" onClick={() => onAnswer(false)}>
+            Cancel
+          </button>
+          <button type="button" className="btn btn--primary" autoFocus onClick={() => onAnswer(true)}>
+            Continue
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/** The NPC or object picked in the view: what it is and where it stands, and what its last edit said. */
+function SelectedSpawn({ spawn, note, onClose }: { spawn: PickedSpawn; note: string | null; onClose(): void }): React.JSX.Element {
   const kind = spawn.kind === 'creature' ? 'NPC' : 'Object';
   return (
     <section className="world3d__selected" aria-label="Selected spawn">
@@ -294,6 +411,8 @@ function SelectedSpawn({ spawn, onClose }: { spawn: PickedSpawn; onClose(): void
         X {spawn.position.x.toFixed(2)} · Y {spawn.position.y.toFixed(2)} · Z {spawn.position.z.toFixed(2)}
       </p>
       {spawn.event && <p>Only during event {spawn.event.id}{spawn.event.name ? `: ${spawn.event.name}` : ''}</p>}
+      {spawn.pathId > 0 && <p>Route {spawn.pathId}</p>}
+      {note && <p className="world3d__selected-note">{note}</p>}
     </section>
   );
 }

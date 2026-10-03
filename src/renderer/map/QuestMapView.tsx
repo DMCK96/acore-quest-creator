@@ -13,6 +13,7 @@ import { PatrolPanel } from './PatrolPanel';
 import { PointMenu, type PointMenuItem } from './PointMenu';
 import { usePatrolMode } from './usePatrolMode';
 import { World3DView } from '../world3d/World3DView';
+import { ownEdit } from './own-3d-edit';
 import { ownViewSpawns } from '@core/entities/view-spawns';
 import { LeafletMap, type MapMarkerView, type MapView } from './LeafletMap';
 import './map.css';
@@ -465,6 +466,10 @@ export function QuestMapView({
       <div className="quest-map__body">
         {show3d ? (
           <World3DView map={currentMap} hasClient={hasClient} start={{ x: shownView.x, y: shownView.y, z: start?.z ?? 0 }} own={ownViewSpawns({ npcs, objects })}
+            onOwnEdit={(edit) => {
+              const change = ownEdit(valuesRef.current, edit);
+              if (change) onChange(change.field, change.value);
+            }}
             onSelect={(spawn) => {
               // A spawn the quest has a marker for is selected in the panel too
               const id = spawn && `spawn:${spawn.kind === 'creature' ? 'npc' : 'obj'}:${spawn.entry}:${spawn.guid}`;

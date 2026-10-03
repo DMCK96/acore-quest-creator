@@ -211,3 +211,42 @@
   line-height: 1;
   cursor: pointer;
 }
+
+.world3d__changes {
+  margin-left: 6px;
+  padding: 0 8px;
+  border: 1px solid rgba(255, 255, 255, 0.25);
+  border-radius: 4px;
+  background: none;
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+}
+
+.world3d__changes:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.world3d__selected-note,
+.world3d__edit-note {
+  color: var(--accent, #cf9f3f);
+}
+
+.world3d__edit-note {
+  position: absolute;
+  top: 48px;
+  left: 14px;
+  margin: 0;
+  padding: 5px 10px;
+  border-radius: 4px;
+  font-size: 12px;
+  background: rgba(21, 17, 13, 0.85);
+}
+
+.world3d__dialog-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 1em;
+}
