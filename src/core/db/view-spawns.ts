@@ -8,6 +8,11 @@ export interface ViewPoint {
   x: number;
   y: number;
   z: number;
+  /**
+   * What the point keeps that the 3D view does not edit, carried through edits untouched: a database
+   * point's other `waypoint_data` columns, or an own NPC's patrol point (its wait, facing, actions)
+   */
+  carry?: unknown;
 }
 
 /** The game event a spawn belongs to: it is in the world only while the event runs (a holiday, a fishing contest) */
@@ -33,6 +38,8 @@ export interface ViewCreature {
   wander: number;
   /** Its patrol route in order, or null when it has none */
   path: ViewPoint[] | null;
+  /** The route's `waypoint_data` id (its own addon's, else its template's); 0 when it has none */
+  pathId: number;
   /** Item ids held: main hand, off hand, ranged; 0 for none */
   equipment: [number, number, number];
   /** One of the open project's own (not yet exported) */
@@ -97,6 +104,7 @@ export function toViewCreature(row: Row, path: ViewPoint[] | null, equipment: [n
     scale: num(row.display_scale, 1),
     wander: row.MovementType === RANDOM_MOVEMENT ? num(row.wander_distance) : 0,
     path,
+    pathId: num(row.path_id),
     equipment,
     own: false,
     event: eventOf(row),
@@ -120,9 +128,17 @@ export function toViewObject(row: Row): ViewObject {
   };
 }
 
+/** The columns of a route row that say which route, which point and where; the rest is carried */
+const ROUTE_COLUMNS = new Set(['id', 'guid', 'point', 'position_x', 'position_y', 'position_z']);
+
 /** A patrol's `waypoint_data` rows as points, in `point` order whatever order they came in */
 export function orderPath(rows: readonly Row[]): ViewPoint[] {
   return [...rows]
     .sort((a, b) => num(a.point) - num(b.point))
-    .map((row) => ({ x: num(row.position_x), y: num(row.position_y), z: num(row.position_z) }));
+    .map((row) => ({
+      x: num(row.position_x),
+      y: num(row.position_y),
+      z: num(row.position_z),
+      carry: Object.fromEntries(Object.entries(row).filter(([column]) => !ROUTE_COLUMNS.has(column))),
+    }));
 }

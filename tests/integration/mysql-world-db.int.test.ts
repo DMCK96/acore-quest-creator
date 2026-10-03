@@ -80,6 +80,15 @@ describe('MysqlWorldDb', () => {
     for (const s of evented) expect(s.event!.id).toBeGreaterThan(0);
     expect([...creatures, ...objects].some((s) => s.event === null)).toBe(true);
   });
+  it('gives each patrolling Goldshire creature its route id and point data', async () => {
+    const { creatures } = await db.spawnsForView!(0, { minX: -9600, maxX: -9300, minY: -100, maxY: 200 }, 2000);
+    const walkers = creatures.filter((c) => c.path);
+    expect(walkers.length).toBeGreaterThan(0);
+    for (const c of walkers) {
+      expect(c.pathId).toBeGreaterThan(0);
+      expect(c.path![0]!.carry).toHaveProperty('delay');
+    }
+  });
   it('reports a named error when the server is unreachable', async () => {
     await expect(openMysqlWorldDb({ ...opts(), port: 1 })).rejects.toBeInstanceOf(WorldDbConnectionError);
   });

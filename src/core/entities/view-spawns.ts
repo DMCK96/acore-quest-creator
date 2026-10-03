@@ -20,7 +20,9 @@ export function ownViewSpawns(entities: { npcs: readonly CustomNpc[]; objects: r
       scale: npc.scale,
       // A patrolling spawn walks its route; it does not also wander
       wander: spawn.patrol ? 0 : spawn.wander,
-      path: spawn.patrol ? spawn.patrol.points.map((p) => ({ x: p.x, y: p.y, z: p.z })) : null,
+      // Each point carries its whole patrol point, so a route edited in 3D keeps its waits and actions
+      path: spawn.patrol ? spawn.patrol.points.map((p) => ({ x: p.x, y: p.y, z: p.z, carry: p })) : null,
+      pathId: spawn.patrol ? spawn.patrol.pathId : 0,
       equipment: [npc.equipment.mainHand, npc.equipment.offHand, npc.equipment.ranged],
       own: true,
       event: null,

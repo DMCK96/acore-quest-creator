@@ -4,7 +4,7 @@ import { describe, expect, it, vi } from 'vitest';
 import SpawnManager from '../../src/renderer/world3d/scene/spawn/SpawnManager';
 
 const creature = (guid: number, displayId: number, extra: object = {}) => ({
-  guid, entry: 1, name: 'n', map: 0, x: 0, y: 0, z: 0, orientation: 0, displayId, scale: 1, wander: 0, path: null, equipment: [0, 0, 0] as [number, number, number], own: false, event: null, ...extra,
+  guid, entry: 1, name: 'n', map: 0, x: 0, y: 0, z: 0, orientation: 0, displayId, scale: 1, wander: 0, path: null, equipment: [0, 0, 0] as [number, number, number], own: false, event: null, pathId: 0, ...extra,
 });
 const object = (guid: number, displayId: number, extra: object = {}) => ({
   guid, entry: 2, name: 'o', map: 0, x: 0, y: 0, z: 0, rotation: [0, 0, 0, 1] as [number, number, number, number], displayId, scale: 1, own: false, event: null, ...extra,

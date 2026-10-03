@@ -35,13 +35,25 @@ describe('spawns for the 3D view', () => {
   it('gives a creature its first model, scale, path in point order and weapons', async () => {
     const api = await setup(guard);
     const out: any = await api.viewSpawns(0, AREA);
-    expect(out.value.creatures).toEqual([{
+    expect(out.value.creatures).toHaveLength(1);
+    expect(out.value.creatures[0]).toMatchObject({
       guid: 1, entry: 68, name: 'Stormwind City Guard', map: 0, x: -8900, y: -150, z: 82, orientation: 3.14,
-      displayId: 3167, scale: 1.1, wander: 0,
-      path: [{ x: -8895, y: -150, z: 82 }, { x: -8890, y: -150, z: 82 }],
+      displayId: 3167, scale: 1.1, wander: 0, pathId: 10,
+      path: [expect.objectContaining({ x: -8895, y: -150, z: 82 }), expect.objectContaining({ x: -8890, y: -150, z: 82 })],
       equipment: [1899, 143, 0], own: false, event: null,
-    }]);
+    });
     expect(out.value.capped).toEqual({ creatures: false, objects: false });
+  });
+
+  it('falls back to the template\'s route when the spawn has no addon of its own', async () => {
+    const api = await setup((db) => {
+      db.insert('creature_template', { entry: '1423', name: 'Stormwind Guard' });
+      db.insert('creature', { guid: '3', id1: '1423', map: '0', position_x: '-8900', position_y: '-150', position_z: '82', orientation: '0', wander_distance: '0', MovementType: '2', equipment_id: '0' });
+      db.insert('creature_template_addon', { entry: '1423', path_id: '802' });
+      db.insert('waypoint_data', { id: '802', point: '1', position_x: '-8899', position_y: '-150', position_z: '82', delay: '1000' });
+    });
+    const out: any = await api.viewSpawns(0, AREA);
+    expect(out.value.creatures[0]).toMatchObject({ guid: 3, pathId: 802, path: [{ x: -8899, carry: expect.objectContaining({ delay: '1000' }) }] });
   });
 
   it('gives a wanderer its radius, and a creature with no model row display 0', async () => {

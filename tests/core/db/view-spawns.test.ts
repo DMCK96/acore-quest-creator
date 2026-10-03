@@ -13,7 +13,7 @@ describe('a creature spawn for the 3D view', () => {
     expect(c).toEqual({
       guid: 79970, entry: 197, name: 'Marshal McBride', map: 0,
       x: -8902.59, y: -162.606, z: 82.0223, orientation: 1.5,
-      displayId: 1953, scale: 1.25, wander: 5, path: null, equipment: [0, 0, 0], own: false, event: null,
+      displayId: 1953, scale: 1.25, wander: 5, path: null, equipment: [0, 0, 0], own: false, event: null, pathId: 0,
     });
   });
 
@@ -80,4 +80,16 @@ describe('an object spawn for the 3D view', () => {
 
 it('caps at 2000 per kind', () => {
   expect(SPAWN_VIEW_CAP).toBe(2000);
+});
+
+describe('route data for editing in the 3D view', () => {
+  it('carries the route id', () => {
+    expect(toViewCreature({ ...creatureRow, path_id: '801' }, null, [0, 0, 0]).pathId).toBe(801);
+    expect(toViewCreature(creatureRow, null, [0, 0, 0]).pathId).toBe(0);
+  });
+
+  it('carries each point\'s other columns, not its id, point or position', () => {
+    const [p] = orderPath([{ id: '801', guid: '5', point: '1', position_x: '1', position_y: '2', position_z: '3', delay: '3000', action: null }]);
+    expect(p).toEqual({ x: 1, y: 2, z: 3, carry: { delay: '3000', action: null } });
+  });
 });

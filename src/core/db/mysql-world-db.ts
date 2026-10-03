@@ -345,32 +345,34 @@ class MysqlWorldDb implements WorldDb {
     const entry = ident(spawnEntryColumn('creature', (await this.knownColumns('creature')).map((c) => c.name)));
     await this.knownColumns('creature_template_model');
     const creatureEvents = await eventOf('game_event_creature');
+    // A spawn walks its own addon's route, else its template's (a whole kind of NPC walking one route)
+    const templateRoutes = (await this.columns('creature_template_addon')).length > 0;
+    const pathColumn = templateRoutes ? 'COALESCE(NULLIF(ad.path_id, 0), ta.path_id)' : 'ad.path_id';
+    const routeJoins =
+      ' LEFT JOIN creature_addon ad ON ad.guid = s.guid' + (templateRoutes ? ` LEFT JOIN creature_template_addon ta ON ta.entry = s.${entry}` : '');
     const creatureRows = await query(
       'reading creature',
       `SELECT s.guid, s.${entry} AS entry, s.map, s.position_x, s.position_y, s.position_z, s.orientation, s.wander_distance, s.MovementType, s.equipment_id, ` +
-        `t.name, m.CreatureDisplayID AS display_id, m.DisplayScale AS display_scale${creatureEvents.columns} ` +
-        `FROM creature s LEFT JOIN creature_template t ON t.entry = s.${entry} ` +
+        `t.name, m.CreatureDisplayID AS display_id, m.DisplayScale AS display_scale, ${pathColumn} AS path_id${creatureEvents.columns} ` +
+        `FROM creature s LEFT JOIN creature_template t ON t.entry = s.${entry}${routeJoins} ` +
         `LEFT JOIN (SELECT CreatureID, MIN(Idx) AS Idx FROM creature_template_model GROUP BY CreatureID) f ON f.CreatureID = s.${entry} ` +
         `LEFT JOIN creature_template_model m ON m.CreatureID = f.CreatureID AND m.Idx = f.Idx${creatureEvents.joins} ` +
         `WHERE ${boxed} ORDER BY s.guid LIMIT ?`,
       [...boxParams, take],
     );
 
-    // Their patrol routes and held items, in one query each for the guids found
+    // Their patrol routes (each route once, however many walk it) and held items, in one query each
     const paths = new Map<string, Record<string, string | null>[]>();
     const equipment = new Map<string, [number, number, number]>();
-    const guids = creatureRows.map((r) => r.guid);
-    if (guids.length > 0) {
-      const marks = guids.map(() => '?').join(', ');
-      for (const row of await query(
-        'reading waypoint_data',
-        `SELECT a.guid, w.point, w.position_x, w.position_y, w.position_z FROM creature_addon a JOIN waypoint_data w ON w.id = a.path_id WHERE a.path_id <> 0 AND a.guid IN (${marks})`,
-        guids,
-      )) {
-        const list = paths.get(row.guid ?? '') ?? [];
+    const pathIds = [...new Set(creatureRows.map((r) => r.path_id).filter((id): id is string => id !== null && id !== '0'))];
+    if (pathIds.length > 0) {
+      for (const row of await query('reading waypoint_data', `SELECT w.* FROM waypoint_data w WHERE w.id IN (${pathIds.map(() => '?').join(', ')})`, pathIds)) {
+        const list = paths.get(row.id ?? '') ?? [];
         list.push(row);
-        paths.set(row.guid ?? '', list);
+        paths.set(row.id ?? '', list);
       }
+    }
+    if (creatureRows.length > 0) {
       const armed = creatureRows.filter((r) => r.equipment_id !== null && r.equipment_id !== '0');
       if (armed.length > 0) {
         const pairs = armed.map(() => '(CreatureID = ? AND ID = ?)').join(' OR ');
@@ -384,7 +386,7 @@ class MysqlWorldDb implements WorldDb {
       }
     }
     const creatures = creatureRows.map((r) => {
-      const route = paths.get(r.guid ?? '');
+      const route = paths.get(r.path_id ?? '');
       return toViewCreature(r, route && route.length > 0 ? orderPath(route) : null, equipment.get(`${r.entry}:${r.equipment_id}`) ?? [0, 0, 0]);
     });
 

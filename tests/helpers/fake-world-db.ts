@@ -180,16 +180,21 @@ export class FakeWorldDb implements WorldDb {
       if (!known || Number(m.Idx) < Number(known.Idx)) models.set(m.CreatureID ?? '', m);
     }
     const addons = new Map((await this.selectRows('creature_addon', {})).map((a) => [a.guid, a.path_id]));
+    // A spawn without a route of its own walks its template's, when the database has template addons
+    const templateAddons = this.tables.has('creature_template_addon')
+      ? new Map((await this.selectRows('creature_template_addon', {})).map((a) => [a.entry, a.path_id]))
+      : new Map<string | null, string | null>();
     const waypoints = await this.selectRows('waypoint_data', {});
     const equips = await this.selectRows('creature_equip_template', {});
     const creatures = (await this.selectRows('creature', {})).filter(inBox).sort(byGuid).slice(0, limit).map((r) => {
       const entry = r[entryColumn] ?? null;
       const model = models.get(entry ?? '');
-      const pathId = addons.get(r.guid);
+      const own = addons.get(r.guid);
+      const pathId = own && own !== '0' ? own : templateAddons.get(entry);
       const points = pathId && pathId !== '0' ? waypoints.filter((w) => w.id === pathId) : [];
       const equip = r.equipment_id && r.equipment_id !== '0' ? equips.find((e) => e.CreatureID === entry && e.ID === r.equipment_id) : undefined;
       return toViewCreature(
-        { ...r, entry, name: names.get(entry) ?? null, display_id: model?.CreatureDisplayID ?? null, display_scale: model?.DisplayScale ?? null },
+        { ...r, entry, name: names.get(entry) ?? null, display_id: model?.CreatureDisplayID ?? null, display_scale: model?.DisplayScale ?? null, path_id: pathId ?? null },
         points.length > 0 ? orderPath(points) : null,
         equip ? [Number(equip.ItemID1 ?? 0), Number(equip.ItemID2 ?? 0), Number(equip.ItemID3 ?? 0)] : [0, 0, 0],
       );
