@@ -3,6 +3,7 @@ import type { RefKind } from '@core/db/types';
 import type { EntityHit, QuestSummary, SearchKind } from '@core/db/world-db';
 import type { SpellFacts } from '@core/game/spells';
 import type { MapBox, SpawnDot } from '@core/db/spawns';
+import type { ViewSpawns } from '@core/db/view-spawns';
 import type { PatchWarning } from '@core/export/build-patch';
 import type { UnmodelledColumn } from '@core/import/unmodelled';
 import type { UnavailableComponent } from '@core/links/availability';
@@ -366,6 +367,8 @@ export interface Api {
   mapFloors(map: number, x: number, y: number): Promise<Result<MapFloors>>;
   /** Existing NPC and object spawns in an area of a map; `capped` when there were more than the page is sent. */
   mapSpawns(map: number, box: MapBox): Promise<Result<{ dots: SpawnDot[]; capped: boolean }>>;
+  /** NPCs and objects in an area of a map as the 3D view draws them; each kind capped at 2000. */
+  viewSpawns(map: number, box: MapBox): Promise<Result<ViewSpawns>>;
   /** Where an NPC or object stands in the world, for jumping to it on the map. */
   entitySpawns(kind: 'creature' | 'gameobject', entry: number): Promise<Result<SpawnDot[]>>;
   /** The existing spawns of the quest's givers, enders and objectives. */
@@ -514,6 +517,7 @@ const REQUEST_SCHEMAS: Record<keyof Api, z.ZodType<unknown[]>> = {
   mapList: z.tuple([]),
   mapFloors: z.tuple([z.number().int(), z.number().finite(), z.number().finite()]),
   mapSpawns: z.tuple([z.number().int(), z.object({ minX: z.number().finite(), maxX: z.number().finite(), minY: z.number().finite(), maxY: z.number().finite() })]),
+  viewSpawns: z.tuple([z.number().int(), z.object({ minX: z.number().finite(), maxX: z.number().finite(), minY: z.number().finite(), maxY: z.number().finite() })]),
   entitySpawns: z.tuple([z.enum(['creature', 'gameobject']), z.number().int()]),
   questMapRefs: z.tuple([z.number()]),
   allocateIds: z.tuple([z.enum(['creature', 'gameobject', 'creatureSpawn', 'gameobjectSpawn', 'page', 'item']), z.number().int().min(1).max(50)]),

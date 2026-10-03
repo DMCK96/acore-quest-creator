@@ -39,6 +39,7 @@ export const API_METHODS = [
   'mapList',
   'mapFloors',
   'mapSpawns',
+  'viewSpawns',
   'entitySpawns',
   'questMapRefs',
   'allocateIds',

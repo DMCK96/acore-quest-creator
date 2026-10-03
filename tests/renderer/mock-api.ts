@@ -91,6 +91,7 @@ export function makeMockApi(overrides: Partial<Record<keyof Api, (...args: any[]
     ])),
     mapFloors: vi.fn(async () => okv({ reason: 'x' })),
     mapSpawns: vi.fn(async () => okv({ dots: [], capped: false })),
+    viewSpawns: vi.fn(async () => okv({ creatures: [], objects: [], capped: { creatures: false, objects: false } })),
     entitySpawns: vi.fn(async () => okv([])),
     questMapRefs: vi.fn(async () => okv([])),
     testCommands: vi.fn(async () => okv({ reload: [], restart: [], go: [], quest: [] })),

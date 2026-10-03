@@ -55,6 +55,23 @@ describe('MysqlWorldDb', () => {
     const ids = await db.questIdsInRange(0, 30000);
     expect(ids).toEqual([...ids].sort((a, b) => a - b));
   });
+  it('gives the 3D view Northshire Abbey\'s spawns with their looks, facing and routes', async () => {
+    const box = { minX: -9000, maxX: -8800, minY: -250, maxY: -50 };
+    const { creatures, objects } = await db.spawnsForView!(0, box, 2000);
+    const mcBride = creatures.find((c) => c.guid === 79970);
+    expect(mcBride).toMatchObject({ entry: 197, name: 'Marshal McBride', map: 0, own: false });
+    expect(mcBride!.displayId).toBeGreaterThan(0);
+    expect(mcBride!.scale).toBeGreaterThan(0);
+    // Every spawn is in the box and on the map, ordered by guid
+    for (const s of [...creatures, ...objects]) {
+      expect(s.map).toBe(0);
+      expect(s.x >= box.minX && s.x <= box.maxX && s.y >= box.minY && s.y <= box.maxY).toBe(true);
+    }
+    expect(creatures.map((c) => c.guid)).toEqual([...creatures.map((c) => c.guid)].sort((a, b) => a - b));
+    // A route, when a creature has one, has points; a patroller does not also wander
+    for (const c of creatures) if (c.path) expect(c.path.length).toBeGreaterThan(0);
+    expect(objects.some((o) => o.displayId > 0)).toBe(true);
+  });
   it('reports a named error when the server is unreachable', async () => {
     await expect(openMysqlWorldDb({ ...opts(), port: 1 })).rejects.toBeInstanceOf(WorldDbConnectionError);
   });

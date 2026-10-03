@@ -1,4 +1,5 @@
 import { join } from 'node:path';
+import { SPAWN_VIEW_CAP } from '@core/db/view-spawns';
 import { isDeepStrictEqual } from 'node:util';
 import { layoutChain, NODE_GRID, nextNodePosition } from '../core/canvas/layout';
 import type { DevDb } from '../core/db/dev-db';
@@ -1537,6 +1538,18 @@ export function createApi(deps: ApiDeps): Api {
         ]);
         const capped = creatures.length > SPAWN_DOT_CAP || objects.length > SPAWN_DOT_CAP;
         return { dots: [...creatures.slice(0, SPAWN_DOT_CAP), ...objects.slice(0, SPAWN_DOT_CAP)], capped };
+      }),
+
+    viewSpawns: (map, area) =>
+      run(async () => {
+        const db = connected().db;
+        if (!db.spawnsForView) return { creatures: [], objects: [], capped: { creatures: false, objects: false } };
+        const { creatures, objects } = await db.spawnsForView(map, area, SPAWN_VIEW_CAP + 1);
+        return {
+          creatures: creatures.slice(0, SPAWN_VIEW_CAP),
+          objects: objects.slice(0, SPAWN_VIEW_CAP),
+          capped: { creatures: creatures.length > SPAWN_VIEW_CAP, objects: objects.length > SPAWN_VIEW_CAP },
+        };
       }),
 
     entitySpawns: (kind, entry) =>
