@@ -145,6 +145,31 @@ export function questRoutes(values: Values): QuestRoute[] {
 }
 
 type To = { x: number; y: number; z: number };
+
+/**
+ * Places one of the quest's own spawns as the 3D view left it: where it stands, its facing, and for
+ * an object its whole rotation (an NPC only turns). Null for a spawn that is not the quest's.
+ */
+export function placeSpawn(
+  values: Values,
+  id: string,
+  to: { x: number; y: number; z: number; orientation: number; rotation: [number, number, number, number] | null },
+): Edit {
+  const [prefix, kind, entryText, guidText] = id.split(':');
+  if (prefix !== 'spawn' || (kind !== 'npc' && kind !== 'obj')) return null;
+  const entry = Number(entryText);
+  const guid = Number(guidText);
+  const entities = readEntities(values);
+  const owners: { entry: number; spawns: { guid: number }[] }[] = kind === 'npc' ? entities.npcs : entities.objects;
+  if (!owners.some((e) => e.entry === entry && e.spawns.some((s) => s.guid === guid))) return null;
+  const rotation = kind === 'obj' ? to.rotation : null;
+  const place = <T extends { entry: number; spawns: { guid: number }[] }>(list: T[]): T[] =>
+    list.map((e) =>
+      e.entry !== entry ? e : { ...e, spawns: e.spawns.map((s) => (s.guid === guid ? { ...s, x: to.x, y: to.y, z: to.z, o: to.orientation, rotation } : s)) },
+    );
+  const next = kind === 'npc' ? { ...entities, npcs: place(entities.npcs) } : { ...entities, objects: place(entities.objects) };
+  return { field: ENTITIES_FIELD, value: writeEntities(next) };
+}
 const moved = (p: Position, to: To): Position => ({ ...p, x: to.x, y: to.y, z: to.z });
 
 export function moveMarker(values: Values, id: string, to: To): Edit {

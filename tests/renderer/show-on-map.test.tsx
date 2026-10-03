@@ -20,7 +20,7 @@ describe('Show on map', () => {
   });
   it('opens the map on a spawn', async () => {
     const open = vi.fn();
-    wrap(open, <SpawnList idPrefix="npc-1" ownerKey={{ kind: 'npc', entry: 12000001 }} spawns={[{ guid: 900, map: 0, x: 1, y: 2, z: 3, o: 0, respawnSecs: 300, wander: 0, patrol: null }]} wanders onChange={() => {}} allocate={async () => null} />);
+    wrap(open, <SpawnList idPrefix="npc-1" ownerKey={{ kind: 'npc', entry: 12000001 }} spawns={[{ guid: 900, map: 0, x: 1, y: 2, z: 3, o: 0, respawnSecs: 300, wander: 0, patrol: null, rotation: null }]} wanders onChange={() => {}} allocate={async () => null} />);
     await userEvent.click(within(screen.getByText(/Spawn 1/).closest('li')!).getByRole('button', { name: 'Show on map' }));
     expect(open).toHaveBeenCalledWith('spawn:npc:12000001:900');
   });
@@ -30,7 +30,7 @@ describe('Show on map', () => {
   });
   it('offers a patrol for an NPC spawn and hides wander while it patrols', async () => {
     const open = vi.fn();
-    const spawn = { guid: 900, map: 0, x: 1, y: 2, z: 3, o: 0, respawnSecs: 300, wander: 5, patrol: null };
+    const spawn = { guid: 900, map: 0, x: 1, y: 2, z: 3, o: 0, respawnSecs: 300, wander: 5, patrol: null, rotation: null };
     const patrol = { pathId: 9000, startPace: 'walk' as const, points: [
       { x: 1, y: 1, z: 1, waitSecs: 0, facing: null, paceFromHere: null, actions: [] },
       { x: 2, y: 2, z: 2, waitSecs: 0, facing: null, paceFromHere: null, actions: [] }] };
@@ -44,7 +44,7 @@ describe('Show on map', () => {
     expect(screen.getByRole('button', { name: 'Edit patrol' })).toBeTruthy();
   });
   it('offers no patrol for an object spawn', () => {
-    wrap(vi.fn(), <SpawnList idPrefix="obj-1" ownerKey={{ kind: 'obj', entry: 9100001 }} spawns={[{ guid: 700, map: 0, x: 1, y: 2, z: 3, o: 0, respawnSecs: 300, wander: 0, patrol: null }]} wanders={false} onChange={() => {}} allocate={async () => null} />);
+    wrap(vi.fn(), <SpawnList idPrefix="obj-1" ownerKey={{ kind: 'obj', entry: 9100001 }} spawns={[{ guid: 700, map: 0, x: 1, y: 2, z: 3, o: 0, respawnSecs: 300, wander: 0, patrol: null, rotation: null }]} wanders={false} onChange={() => {}} allocate={async () => null} />);
     expect(screen.queryByRole('button', { name: 'Draw patrol' })).toBeNull();
   });
 });

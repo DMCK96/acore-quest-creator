@@ -39,7 +39,7 @@ export function ownViewSpawns(entities: { npcs: readonly CustomNpc[]; objects: r
       x: spawn.x,
       y: spawn.y,
       z: spawn.z,
-      rotation: [0, 0, Math.sin(spawn.o / 2), Math.cos(spawn.o / 2)],
+      rotation: spawn.rotation ?? [0, 0, Math.sin(spawn.o / 2), Math.cos(spawn.o / 2)],
       displayId: object.displayId,
       scale: object.size,
       own: true,

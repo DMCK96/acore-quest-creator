@@ -15,7 +15,7 @@ describe('entity model', () => {
   it('starts new entities with sensible defaults', () => {
     expect(newNpc(5)).toMatchObject({ entry: 5, name: '', minLevel: 1, maxLevel: 1, faction: 35, scale: 1, rank: 'normal', type: 'humanoid', questGiver: false, gossip: false, healthModifier: 1, damageModifier: 1, spawns: [] });
     expect(newObject(6)).toMatchObject({ entry: 6, type: 'goober', size: 1, spawns: [] });
-    expect(newSpawn(7)).toEqual({ guid: 7, map: 0, x: 0, y: 0, z: 0, o: 0, respawnSecs: 300, wander: 0, patrol: null });
+    expect(newSpawn(7)).toEqual({ guid: 7, map: 0, x: 0, y: 0, z: 0, o: 0, respawnSecs: 300, wander: 0, patrol: null, rotation: null });
   });
   it('reads spawns saved before patrols as not patrolling, and keeps a saved patrol', () => {
     const old = { guid: 1, map: 0, x: 0, y: 0, z: 0, o: 0, respawnSecs: 300, wander: 0 };

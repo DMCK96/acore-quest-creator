@@ -180,7 +180,10 @@ export function compileEntities(input: {
       insert('gameobject', {
         guid: text(spawn.guid), id: text(object.entry), map: text(spawn.map), spawnMask: '1', phaseMask: '1',
         position_x: text(spawn.x), position_y: text(spawn.y), position_z: text(spawn.z), orientation: text(spawn.o),
-        rotation0: '0', rotation1: '0', rotation2: text(round6(Math.sin(spawn.o / 2))), rotation3: text(round6(Math.cos(spawn.o / 2))),
+        // Tilted in the 3D view: its whole rotation; otherwise turned about Z by its facing alone
+        ...(spawn.rotation
+          ? { rotation0: text(round6(spawn.rotation[0])), rotation1: text(round6(spawn.rotation[1])), rotation2: text(round6(spawn.rotation[2])), rotation3: text(round6(spawn.rotation[3])) }
+          : { rotation0: '0', rotation1: '0', rotation2: text(round6(Math.sin(spawn.o / 2))), rotation3: text(round6(Math.cos(spawn.o / 2))) }),
         spawntimesecs: text(spawn.respawnSecs), animprogress: text(ANIM_FULL), state: text(GO_READY),
         Comment: `${questTagPrefix(questId)}obj${object.entry}`,
       });
