@@ -158,6 +158,33 @@ test('the camera looks around in place on a right-drag and flies forward on W', 
   expect((step.x * looked.direction.x + step.y * looked.direction.y + step.z * looked.direction.z) / length).toBeGreaterThan(0.99);
 });
 
+test('draws spawns: a marker where a display cannot be drawn, and asks the client for a creature display\'s model', async ({ page }) => {
+  await openPage(page);
+  // Away from the house, which stands at START and whose roof would hide what is under it
+  const SPOT = { x: START.x + 60, y: START.y - 60, z: START.z };
+  // One NPC at the camera's target with display 1 (Test.m2, which the fake client lacks) and one with display 0
+  await page.evaluate(`window.__spawns = { creatures: [
+    { guid: 1, entry: 1, name: 'A', map: 0, x: ${SPOT.x}, y: ${SPOT.y}, z: ${SPOT.z}, orientation: 0, displayId: 1, scale: 4, wander: 0, path: null, equipment: [0,0,0], own: false },
+    { guid: 2, entry: 1, name: 'B', map: 0, x: ${SPOT.x + 3}, y: ${SPOT.y}, z: ${SPOT.z}, orientation: 0, displayId: 0, scale: 4, wander: 0, path: null, equipment: [0,0,0], own: false }
+  ], objects: [], capped: { creatures: false, objects: false } }`);
+  await page.evaluate(`window.__open('azeroth', 0, ${JSON.stringify(SPOT)})`);
+  await page.waitForFunction('window.__state.ready', null, { timeout: 45000 });
+  await expect.poll(() => client.requested.includes('200 dbfilesclient/creaturedisplayinfo.dbc'), { timeout: 15000 }).toBe(true);
+  await expect.poll(() => client.requested.includes('404 creature/test/test.m2'), { timeout: 15000 }).toBe(true);
+  await page.waitForTimeout(1000);
+  const picture = await page.locator('canvas.world3d__canvas').screenshot();
+  const [r, g, b] = (await page.evaluate(`window.__pixel(${JSON.stringify(picture.toString('base64'))}, 0.5, 0.5)`)) as number[];
+  // The creature marker's orange (0xe0a040) stands at the middle of the picture
+  expect(r!).toBeGreaterThan(b! + 80);
+  expect(g!).toBeGreaterThan(b!);
+  // Hidden, the middle is terrain again, not the marker
+  await page.evaluate('window.__setVisibility({ creatures: false, objects: true, paths: true })');
+  await page.waitForTimeout(300);
+  const hidden = await page.locator('canvas.world3d__canvas').screenshot();
+  const after = (await page.evaluate(`window.__pixel(${JSON.stringify(hidden.toString('base64'))}, 0.5, 0.5)`)) as number[];
+  expect(after).not.toEqual([r, g, b, 255]);
+});
+
 test('a world can be left and another opened, again and again, without an error', async ({ page }) => {
   await openPage(page);
   for (const [directory, map] of [['azeroth', 0], ['kalimdor', 1], ['azeroth', 0], ['northrend', 571]] as const) {

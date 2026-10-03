@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { DbManager, MapManager, TextureManager, type SoundManager } from './scene';
 import { WorldControls } from './controls';
+import type { SpawnSource, SpawnStatus, SpawnVisibility } from './scene/spawn/SpawnManager';
 import { clearProblems, onProblems } from './scene/diagnostics';
 import { ASSET_BASE_URL } from '@core/client/asset-url';
 
@@ -24,6 +25,8 @@ export interface World3DOptions {
   /** Told what could not be loaded (a model, a terrain tile) while the rest still draws; the whole list each time. */
   onProblems?(problems: readonly string[]): void;
   onError?(message: string): void;
+  /** Where the world's NPCs and objects come from; none draws none. */
+  spawns?: SpawnSource;
 }
 
 export interface World3D {
@@ -31,6 +34,10 @@ export interface World3D {
   lookAt(x: number, y: number, z: number): void;
   /** Where the camera is and which way it looks (a unit vector). */
   camera(): { position: { x: number; y: number; z: number }; direction: { x: number; y: number; z: number } };
+  /** Shows or hides NPCs, objects and their paths, without unloading them. */
+  setSpawnVisibility(visibility: SpawnVisibility): void;
+  /** Whether a kind of spawn was capped, or why none could be read. */
+  spawnStatus(): SpawnStatus;
   dispose(): void;
 }
 
@@ -114,6 +121,7 @@ export function createWorld3D(options: World3DOptions): World3D {
   const clamp = (v: number): number => Math.max(-WORLD_EDGE, Math.min(WORLD_EDGE, v));
 
   try {
+    manager.setSpawnSource(options.spawns ?? null);
     manager.load(options.directory, options.map);
     lookAt(options.start.x, options.start.y, options.start.z);
   } catch (error) {
@@ -160,6 +168,8 @@ export function createWorld3D(options: World3DOptions): World3D {
 
   return {
     lookAt,
+    setSpawnVisibility: (visibility) => manager.setSpawnVisibility(visibility),
+    spawnStatus: () => manager.spawnStatus,
     camera() {
       const direction = camera.getWorldDirection(new THREE.Vector3());
       return { position: { ...camera.position }, direction: { x: direction.x, y: direction.y, z: direction.z } };

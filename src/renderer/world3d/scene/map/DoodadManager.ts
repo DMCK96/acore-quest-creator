@@ -106,6 +106,11 @@ class DoodadManager {
     this.#doodadDefs.delete(areaId);
   }
 
+  /** The model manager the doodads use, shared with the spawns so they animate together */
+  get modelManager() {
+    return this.#modelManager;
+  }
+
   update(deltaTime: number, camera: THREE.Camera) {
     this.#modelManager.update(deltaTime, camera);
   }

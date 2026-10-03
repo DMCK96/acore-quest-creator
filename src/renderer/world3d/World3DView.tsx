@@ -2,6 +2,8 @@ import { Component, useEffect, useRef, useState, type ReactNode } from 'react';
 import { assetUrl } from '@core/client/asset-url';
 import { worldMapDirectory } from '@core/map/world-maps';
 import { createWorld3D, type World3D } from './world3d';
+import { useApi } from '../state/names';
+import type { SpawnStatus, SpawnVisibility } from './scene/spawn/SpawnManager';
 import './world3d.css';
 
 /** The camera's controls, as the help in the corner lists them. */
@@ -16,6 +18,32 @@ const CONTROLS: [string, string][] = [
   ['Space / X', 'Rise and sink'],
   ['Shift', 'Faster'],
 ];
+
+/** Where the layer checkboxes are remembered, per viewer. */
+const LAYERS_KEY = 'acqc.world3d.layers';
+const ALL_LAYERS: SpawnVisibility = { creatures: true, objects: true, paths: true };
+const LAYER_LABELS: [keyof SpawnVisibility, string][] = [
+  ['creatures', 'NPCs'],
+  ['objects', 'Objects'],
+  ['paths', 'Paths'],
+];
+
+function readLayers(): SpawnVisibility {
+  try {
+    const saved = JSON.parse(localStorage.getItem(LAYERS_KEY) ?? 'null') as Partial<SpawnVisibility> | null;
+    return { ...ALL_LAYERS, ...(saved ?? {}) };
+  } catch {
+    return { ...ALL_LAYERS };
+  }
+}
+
+/** What the view says about the spawns: capped kinds, or why there are none. */
+function spawnNote(status: SpawnStatus | null): string | null {
+  if (!status) return null;
+  if (status.error) return `NPCs and objects need the world database: ${status.error}`;
+  const capped = [status.capped.creatures && 'Showing the first 2000 NPCs here', status.capped.objects && 'Showing the first 2000 objects here'].filter(Boolean);
+  return capped.length > 0 ? capped.join('. ') : null;
+}
 
 /** How long the world may load before the view says it is taking too long. */
 const SLOW_MS = 25000;
@@ -69,6 +97,13 @@ function WorldStage({ map, start, hasClient }: ViewProps): React.JSX.Element {
   const [missing, setMissing] = useState<readonly string[]>([]);
   const [status, setStatus] = useState<'loading' | 'slow' | 'ready'>('loading');
   const [help, setHelp] = useState(false);
+  const [layers, setLayers] = useState<SpawnVisibility>(readLayers);
+  const [spawns, setSpawns] = useState<SpawnStatus | null>(null);
+  const api = useApi();
+  const apiRef = useRef(api);
+  apiRef.current = api;
+  const layersRef = useRef(layers);
+  layersRef.current = layers;
   const directory = worldMapDirectory(map);
 
   useEffect(() => {
@@ -102,7 +137,14 @@ function WorldStage({ map, start, hasClient }: ViewProps): React.JSX.Element {
             onReady: () => live && setStatus('ready'),
             onProblems: (all) => live && setMissing(all),
             onError: setProblem,
+            spawns: async (spawnMap, box) => {
+              const current = apiRef.current;
+              if (!current) return { error: 'the app is not connected' };
+              const result = await current.viewSpawns(spawnMap, box);
+              return result.ok ? result.value : { error: result.error.message };
+            },
           });
+          created.setSpawnVisibility(layersRef.current);
           world.current = created;
         } catch (error) {
           // Inside a promise, so an error boundary would not see it (no WebGL, say).
@@ -116,6 +158,25 @@ function WorldStage({ map, start, hasClient }: ViewProps): React.JSX.Element {
       world.current = null;
     };
   }, [directory, map, hasClient]);
+
+  // The layer checkboxes: applied to the world and remembered.
+  useEffect(() => {
+    world.current?.setSpawnVisibility(layers);
+    try {
+      localStorage.setItem(LAYERS_KEY, JSON.stringify(layers));
+    } catch {
+      // Storage unavailable: the choice lasts for this view only.
+    }
+  }, [layers]);
+
+  // What the spawn source said last: capped kinds, or why there are none.
+  useEffect(() => {
+    const timer = setInterval(() => {
+      const status = world.current?.spawnStatus() ?? null;
+      setSpawns((previous) => (JSON.stringify(previous) === JSON.stringify(status) ? previous : status));
+    }, 1000);
+    return () => clearInterval(timer);
+  }, []);
 
   // A different point to look at (another marker chosen) moves the camera without rebuilding the world.
   useEffect(() => {
@@ -142,6 +203,17 @@ function WorldStage({ map, start, hasClient }: ViewProps): React.JSX.Element {
           {missing.length > 2 ? '; …' : ''} (all of them are in the console)
         </p>
       )}
+      {!unavailable && (
+        <fieldset className="world3d__layers" aria-label="Layers">
+          {LAYER_LABELS.map(([key, label]) => (
+            <label key={key}>
+              <input type="checkbox" checked={layers[key]} onChange={(e) => setLayers((l) => ({ ...l, [key]: e.target.checked }))} />
+              {label}
+            </label>
+          ))}
+        </fieldset>
+      )}
+      {!unavailable && spawnNote(spawns) && <p className="world3d__spawn-note">{spawnNote(spawns)}</p>}
       {!unavailable && (
         <div className="world3d__help">
           {help && (

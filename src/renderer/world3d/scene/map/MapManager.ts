@@ -14,6 +14,10 @@ import TextureManager from '../texture/TextureManager.js';
 import DoodadManager from './DoodadManager.js';
 import WmoManager from '../wmo/WmoManager.js';
 import LiquidManager from './liquid/LiquidManager.js';
+import SpawnManager, { SpawnSource, SpawnVisibility } from '../spawn/SpawnManager.js';
+import DisplayResolver from '../spawn/DisplayResolver.js';
+import { areaBox } from '../spawn/placement.js';
+import { DISPLAY_RECORDS } from '../db/records.js';
 import { AssetHost } from '../asset.js';
 import MapLoader from './loader/MapLoader.js';
 import { MapAreaSpec, MapSpec } from './loader/types.js';
@@ -47,12 +51,15 @@ class MapManager extends EventTarget {
   #doodadGroups = new globalThis.Map<number, THREE.Group>();
   #wmoGroups = new globalThis.Map<number, THREE.Group>();
   #liquidGroups = new globalThis.Map<number, THREE.Group>();
+  #spawnGroups = new globalThis.Map<number, THREE.Group>();
+  #mapId: number;
 
   #textureManager: TextureManager;
   #terrainManager: TerrainManager;
   #doodadManager: DoodadManager;
   #wmoManager: WmoManager;
   #liquidManager: LiquidManager;
+  #spawnManager: SpawnManager;
   #dbManager: DbManager;
   #soundManager: SoundManager;
 
@@ -124,6 +131,17 @@ class MapManager extends EventTarget {
       mapLight: this.#mapLight,
       liquidManager: this.#liquidManager,
     });
+    // The world's NPCs and objects, drawn with the doodads' models and the buildings' manager; their
+    // looks come from the client's display tables. Spawns arrive once the app gives a source
+    const resolver = new DisplayResolver({
+      get: (name) => this.#dbManager.get(`${name}.dbc`, DISPLAY_RECORDS[name]),
+    });
+    this.#spawnManager = new SpawnManager({
+      resolver,
+      createModel: (look) => this.#doodadManager.modelManager.get(look.path, look),
+      createBuilding: (path) => this.#wmoManager.createInstance(path),
+      source: null,
+    });
 
     this.#root = new THREE.Group();
     this.#root.matrixAutoUpdate = false;
@@ -142,6 +160,20 @@ class MapManager extends EventTarget {
     return this.#mapName;
   }
 
+  /** Where the NPCs and objects come from; null draws none */
+  setSpawnSource(source: SpawnSource | null) {
+    this.#spawnManager.setSource(source);
+  }
+
+  setSpawnVisibility(visibility: SpawnVisibility) {
+    this.#spawnManager.setVisibility(visibility);
+  }
+
+  /** Whether the spawn source capped a kind, or why it could give none */
+  get spawnStatus() {
+    return this.#spawnManager.status;
+  }
+
   get root() {
     return this.#root;
   }
@@ -151,6 +183,7 @@ class MapManager extends EventTarget {
     this.#mapDir = `world/maps/${mapName}`;
 
     this.#mapLight.mapId = mapId;
+    this.#mapId = mapId ?? 0;
 
     this.#root.name = `map:${mapName}`;
 
@@ -323,6 +356,13 @@ class MapManager extends EventTarget {
         this.#doodadManager.removeArea(areaId);
       }
 
+      const spawnGroup = this.#spawnGroups.get(areaId);
+      if (spawnGroup) {
+        this.#root.remove(spawnGroup);
+        this.#spawnGroups.delete(areaId);
+      }
+      this.#spawnManager.removeArea(areaId);
+
       const liquidGroup = this.#liquidGroups.get(areaId);
       if (liquidGroup) {
         this.#root.remove(liquidGroup);
@@ -405,6 +445,18 @@ class MapManager extends EventTarget {
 
       this.#liquidGroups.set(areaId, liquidGroup);
       this.#root.add(liquidGroup);
+
+      // Spawns on their own: they come from the database, may be slow, and must never hold up the area
+      const { areaX, areaY } = this.#getAreaIndex(areaId);
+      this.#spawnManager
+        .loadArea(areaId, this.#mapId, areaBox(areaX, areaY))
+        .then((spawnGroup) => {
+          if (spawnGroup && this.#loadedAreas.has(areaId)) {
+            this.#spawnGroups.set(areaId, spawnGroup);
+            this.#root.add(spawnGroup);
+          }
+        })
+        .catch((error) => console.warn(`3D view: the NPCs and objects of area ${areaId} could not be drawn: ${describeError(error)}`));
     }
   }
 

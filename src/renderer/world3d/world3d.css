@@ -136,3 +136,35 @@
   margin: 6px 0 0;
   opacity: 0.75;
 }
+
+.world3d__layers {
+  position: absolute;
+  top: 48px;
+  right: 14px;
+  display: flex;
+  gap: 10px;
+  margin: 0;
+  padding: 5px 10px;
+  border: 0;
+  border-radius: 4px;
+  font-size: 12px;
+  background: rgba(21, 17, 13, 0.85);
+}
+
+.world3d__layers label {
+  display: flex;
+  gap: 4px;
+  align-items: center;
+  cursor: pointer;
+}
+
+.world3d__spawn-note {
+  position: absolute;
+  top: 82px;
+  right: 14px;
+  margin: 0;
+  padding: 5px 10px;
+  border-radius: 4px;
+  font-size: 12px;
+  background: rgba(21, 17, 13, 0.85);
+}

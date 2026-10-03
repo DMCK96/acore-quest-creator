@@ -104,6 +104,11 @@ class WmoManager {
     this.#areas.delete(areaId);
   }
 
+  /** One placement of a building, outside any area (an object whose display is a building) */
+  createInstance(path: string) {
+    return this.#getInstance(path);
+  }
+
   async #getInstance(path: string) {
     const resources = await this.#getResources(path);
 

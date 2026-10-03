@@ -84,4 +84,11 @@ class GameObjectDisplayInfoRecord extends ClientDbRecord {
   }
 }
 
-export { CreatureDisplayInfoRecord, CreatureModelDataRecord, GameObjectDisplayInfoRecord };
+/** The record class each display table is read with, by table name */
+const DISPLAY_RECORDS = {
+  CreatureDisplayInfo: CreatureDisplayInfoRecord,
+  CreatureModelData: CreatureModelDataRecord,
+  GameObjectDisplayInfo: GameObjectDisplayInfoRecord,
+};
+
+export { CreatureDisplayInfoRecord, CreatureModelDataRecord, DISPLAY_RECORDS, GameObjectDisplayInfoRecord };

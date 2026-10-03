@@ -156,6 +156,35 @@ function liquidTypeDbc(): Buffer {
   return Buffer.concat([header, record, strings]);
 }
 
+/** A WDBC of `fields` 4-byte fields per record; a string cell is written to the string block. */
+function stringDbc(fields: number, records: (number | string)[][]): Buffer {
+  const strings: Buffer[] = [Buffer.from([0])];
+  let size = 1;
+  const body = Buffer.alloc(records.length * fields * 4);
+  records.forEach((record, r) =>
+    record.forEach((cell, f) => {
+      if (typeof cell === 'string') {
+        body.writeUInt32LE(size, (r * fields + f) * 4);
+        const text = Buffer.from(`${cell}\0`, 'latin1');
+        strings.push(text);
+        size += text.length;
+      } else {
+        body.writeUInt32LE(cell, (r * fields + f) * 4);
+      }
+    }),
+  );
+  return Buffer.concat([Buffer.from('WDBC'), u32(records.length), u32(fields), u32(fields * 4), u32(size), body, ...strings]);
+}
+
+/** Creature display 1: the model Creature\\Test\\Test.mdx (which the fake client does not have), in skin TestSkin. */
+function creatureDisplayInfoDbc(): Buffer {
+  return stringDbc(16, [[1, 1, 0, 0, 0x3f800000, 255, 'TestSkin', '', '', '']]);
+}
+
+function creatureModelDataDbc(): Buffer {
+  return stringDbc(28, [[1, 0, 'Creature\\Test\\Test.mdx']]);
+}
+
 /** A BLP2 of one red, DXT1: the lava's frames. */
 function lavaTexture(): Buffer {
   const size = 64;
@@ -333,6 +362,8 @@ export async function startFakeClient(port = 0): Promise<FakeClient> {
     ['world/maps/lavatest/lavatest.wdt', wdt()],
     [LAVA_MAP.file, lavaAdt()],
     ['dbfilesclient/liquidtype.dbc', liquidTypeDbc()],
+    ['dbfilesclient/creaturedisplayinfo.dbc', creatureDisplayInfoDbc()],
+    ['dbfilesclient/creaturemodeldata.dbc', creatureModelDataDbc()],
     ['xtextures/lava/lava.1.blp', lavaTexture()],
     ['xtextures/lava/lava.2.blp', lavaTexture()],
     // The building pool's water: no such type in the fake LiquidType.dbc, so it is drawn as plain water

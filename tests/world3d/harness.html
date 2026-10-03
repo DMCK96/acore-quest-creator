@@ -22,10 +22,13 @@
           onReady: () => (state.ready = true),
           onProblems: (all) => (state.problems = all),
           onError: (message) => state.errors.push(`failed: ${message}`),
+          // Spawns the test sets in window.__spawns (none by default)
+          spawns: () => Promise.resolve(window.__spawns ?? { creatures: [], objects: [], capped: { creatures: false, objects: false } }),
         });
       };
       // Where the camera is and which way it looks
       window.__camera = () => world?.camera();
+      window.__setVisibility = (visibility) => world?.setSpawnVisibility(visibility);
       window.__close = () => {
         world?.dispose();
         world = null;
