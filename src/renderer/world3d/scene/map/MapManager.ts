@@ -182,6 +182,11 @@ class MapManager extends EventTarget {
     return this.#spawnManager.pick(ray, maxDistance);
   }
 
+  /** Marks the selected spawn: only its paths are drawn */
+  setSelectedSpawn(spawn: { kind: 'creature' | 'object'; guid: number } | null) {
+    this.#spawnManager.setSelected(spawn);
+  }
+
   /** A spawn's drawn object, while it is drawn */
   findSpawn(kind: 'creature' | 'object', guid: number) {
     return this.#spawnManager.find(kind, guid);

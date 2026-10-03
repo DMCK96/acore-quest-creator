@@ -218,7 +218,7 @@ test('a click selects the NPC under it, and event spawns only once they are show
   expect((await state(page)).errors).toEqual([]);
 });
 
-test('draws a patrol route as a line over the ground', async ({ page }) => {
+test('draws the patrol route of the selected NPC as a line over the ground', async ({ page }) => {
   await openPage(page);
   // Away from the house at START. The route runs through the camera's target (it draws over the terrain)
   const SPOT = { x: START.x + 60, y: START.y - 60, z: START.z };
@@ -230,6 +230,8 @@ test('draws a patrol route as a line over the ground', async ({ page }) => {
   ], objects: [], capped: { creatures: false, objects: false } }`);
   await page.evaluate(`window.__open('azeroth', 0, ${JSON.stringify(SPOT)})`);
   await page.waitForFunction('window.__state.ready', null, { timeout: 45000 });
+  // Routes are drawn only for the selected NPC
+  await page.evaluate(`window.__select({ kind: 'creature', guid: 9 })`);
   await page.waitForTimeout(1500);
   const picture = await page.locator('canvas.world3d__canvas').screenshot();
   if (process.env['WORLD3D_SHOT']) writeFileSync(process.env['WORLD3D_SHOT'].replace(/.png$/, '-route.png'), picture);

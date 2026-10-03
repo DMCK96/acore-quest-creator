@@ -90,16 +90,22 @@ describe('how far spawns are drawn', () => {
   });
 });
 
-describe('how far routes are drawn', () => {
-  it('hides an NPC\'s route and wander circle with the NPC, beyond the draw distance', async () => {
+describe('which routes are drawn', () => {
+  it('draws only the route and wander circle of the selected NPC, however far away it is', async () => {
     const m = manager({
       creatures: [creature(1, 1, { x: 400, wander: 5 }), creature(2, 1, { x: 400, path: [{ x: 410, y: 0, z: 0 }] }), creature(3, 1, { x: 20, wander: 5 })],
       objects: [], capped: { creatures: false, objects: false },
     });
     const group = (await m.loadArea(1, 0, box))!;
+    const shown = () => group.getObjectByName('paths')!.children.map((p) => p.visible);
     m.cull(new THREE.Vector3(0, 0, 0));
-    const shown = group.getObjectByName('paths')!.children.map((p) => p.visible);
-    expect(shown).toEqual([false, false, true]);
+    expect(shown()).toEqual([false, false, false]);
+    m.setSelected({ kind: 'creature', guid: 2 });
+    m.cull(new THREE.Vector3(0, 0, 0));
+    expect(shown()).toEqual([false, true, false]);
+    m.setSelected({ kind: 'object', guid: 2 });
+    m.cull(new THREE.Vector3(0, 0, 0));
+    expect(shown()).toEqual([false, false, false]);
   });
 });
 

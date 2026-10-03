@@ -113,6 +113,9 @@ class SpawnManager {
   /** Areas whose answer failed, and when they may be asked for again */
   #failed = new globalThis.Map<number, number>();
 
+  /** The selected spawn, whose paths are the ones drawn */
+  #selected: { kind: 'creature' | 'object'; guid: number } | null = null;
+
   status: SpawnStatus = { capped: { creatures: false, objects: false }, error: null };
 
   constructor(options: SpawnManagerOptions) {
@@ -265,6 +268,11 @@ class SpawnManager {
     return best ? { ...best.spawn.userData.spawn, position: { ...best.spawn.userData.spawn.position } } : null;
   }
 
+  /** Marks a spawn as selected: an NPC's route and wander circle are drawn only while it is */
+  setSelected(spawn: { kind: 'creature' | 'object'; guid: number } | null) {
+    this.#selected = spawn ? { kind: spawn.kind, guid: spawn.guid } : null;
+  }
+
   /** The drawn object of a spawn, or null when it is not drawn (its area unloaded, or it is hidden) */
   find(kind: 'creature' | 'object', guid: number): THREE.Object3D | null {
     for (const group of this.#areas.values()) {
@@ -290,8 +298,10 @@ class SpawnManager {
           }
         }
       }
+      // Only the selected NPC's route and wander circle, however far it has been left behind
+      const selected = this.#selected?.kind === 'creature' ? this.#selected.guid : null;
       for (const shown of group.getObjectByName('paths')?.children ?? []) {
-        shown.visible = shown.userData.anchor.distanceTo(cameraPosition) <= SPAWN_DRAW_DISTANCE;
+        shown.visible = shown.userData.guid === selected;
       }
     }
   }
@@ -332,11 +342,11 @@ class SpawnManager {
 
     // How they move: patrol routes and wander circles, in world coordinates
     for (const creature of spawns.creatures) {
-      // Each remembers whose it is, so it is drawn only while its NPC is near enough to be
-      const anchor = new THREE.Vector3(creature.x, creature.y, creature.z);
+      // Each remembers whose it is, so it is drawn only while its NPC is selected
       for (const shown of [routeObject(creature), wanderObject(creature)]) {
         if (shown) {
-          shown.userData.anchor = anchor;
+          shown.userData.guid = creature.guid;
+          shown.visible = false;
           paths.add(shown);
         }
       }

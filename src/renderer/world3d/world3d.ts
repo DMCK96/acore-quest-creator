@@ -117,6 +117,7 @@ export function createWorld3D(options: World3DOptions): World3D {
     const ground = pick(x, y);
     const spawn = manager.pickSpawn(raycaster.ray, ground ? ground.distanceTo(camera.position) : Infinity);
     selected = spawn ? { kind: spawn.kind, guid: spawn.guid } : null;
+    manager.setSelectedSpawn(selected);
     options.onSelect?.(spawn);
   };
   const controls = new WorldControls(camera, renderer.domElement, { pick, onClick: click });
@@ -203,6 +204,7 @@ export function createWorld3D(options: World3DOptions): World3D {
     setOwnSpawns: (spawns) => manager.setOwnSpawns(spawns),
     select: (spawn) => {
       selected = spawn;
+      manager.setSelectedSpawn(spawn);
     },
     camera() {
       const direction = camera.getWorldDirection(new THREE.Vector3());
