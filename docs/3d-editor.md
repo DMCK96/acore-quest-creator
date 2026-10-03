@@ -73,7 +73,8 @@ Things that are missing or approximate. Roughly in order of how much they matter
 7. **Water is approximate.** There is no underwater look, no waves or reflections, and deep water is simply made solid instead of darkening what is under it as the client does. Buildings' water has no depth, so it is drawn half way between shallow and solid. (Ascension's Stormwind canals are terrain water; the city's only building water is the Park District moonwell.)
 8. **Memory:** the library cannot stop its workers, so each continent switch leaves two idle workers behind; loaded buildings and models are cached for the life of the page.
 9. **Only the four continents.** Dungeons and battlegrounds need their own map-file handling.
-10. **Not run in the full app in this sandbox.** There is no game client or world database here, so the Electron app has not been driven end to end by us; the user runs it and reports. The 56 test files that need `ACQC_AC_SQL_DIR` (the AzerothCore SQL files) cannot run here, and failed identically before and after our changes.
+10. **Small rendering faults seen on the Ascension client, left for later:** rotating texture animations never play (upstream registers the track as `'rotation '` with a trailing space in `scene/model/ModelManager.ts`, which also logs `PropertyBinding ... undefined.rotation` errors); the building `WORLDWMODRAENORIRONHORDEIH_IRONHORDE_DAM.WMO` fails with "Unknown source type" in its materials and is left out.
+11. **Not run in the full app in this sandbox.** There is no game client or world database here, so the Electron app has not been driven end to end by us; the user runs it and reports. The 56 test files that need `ACQC_AC_SQL_DIR` (the AzerothCore SQL files) cannot run here, and failed identically before and after our changes.
 
 ### Things the data model limits (affects the editing plan)
 
