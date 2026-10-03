@@ -8,8 +8,9 @@ import type { ViewSpawns } from '@core/db/view-spawns';
 import { clearProblems, onProblems } from './scene/diagnostics';
 import { ASSET_BASE_URL } from '@core/client/asset-url';
 import type { WorldLayer } from '@core/world/layer';
-import { Editor } from './editing';
+import { Editor, NOT_SNAPPED } from './editing';
 import type { SpawnEdit, SpawnRef } from './edits';
+import { placementAt, type PlaceRequest, type PlaceTarget } from './placing';
 
 /**
  * The 3D world: the game's own terrain, props and models for one map, read from the client's
@@ -43,6 +44,10 @@ export interface World3DOptions {
   beforeRouteEdit?(spawn: SpawnRef, pathId: number): Promise<boolean>;
   /** Told something about the last edit worth saying (a height not from the server), or null. */
   onNotice?(message: string | null): void;
+  /** Told each click that placed the NPC or object being placed (see `setPlacing`). */
+  onPlace?(request: PlaceRequest): void;
+  /** Told when Esc ended placing. */
+  onPlaceEnd?(): void;
 }
 
 export interface World3D {
@@ -62,6 +67,8 @@ export interface World3D {
   setWorldLayer(layer: WorldLayer): void;
   /** Whether the gizmo moves or rotates. */
   setMode(mode: 'move' | 'rotate'): void;
+  /** Starts placing an existing NPC or object (each click on the ground places one), or stops with null. */
+  setPlacing(target: PlaceTarget | null): void;
   undo(): void;
   redo(): void;
   dispose(): void;
@@ -155,9 +162,33 @@ export function createWorld3D(options: World3DOptions): World3D {
     manager.setSelectedSpawn(selected);
     editor.select(selected);
     // Tells a screen round the view that Esc is the view's while something is selected
-    renderer.domElement.dataset.selection = selected ? 'on' : '';
+    refreshEscape();
+  };
+  // While placing, a click puts the chosen NPC or object on the ground instead of selecting anything
+  let placing: PlaceTarget | null = null;
+  const refreshEscape = (): void => {
+    renderer.domElement.dataset.selection = selected || placing ? 'on' : '';
+    renderer.domElement.style.cursor = placing ? 'crosshair' : '';
+  };
+  const place = async (x: number, y: number): Promise<void> => {
+    const target = placing;
+    const ground = target ? pick(x, y) : null;
+    if (!target) return;
+    if (!ground) {
+      options.onNotice?.('Click the ground or a building to place it.');
+      return;
+    }
+    const at = placementAt(ground, camera.position, target.kind);
+    // Onto the server's floor nearest where it was clicked, as a moved spawn is
+    const floor = options.floorZ ? await options.floorZ(at.x, at.y, at.z) : at.z;
+    options.onNotice?.(floor === null ? NOT_SNAPPED : null);
+    if (placing === target) options.onPlace?.({ target, at: { ...at, z: floor ?? at.z } });
   };
   const click = (x: number, y: number, shift: boolean): void => {
+    if (placing) {
+      void place(x, y);
+      return;
+    }
     if (editor.click(x, y, shift)) return;
     raycaster.setFromCamera(new THREE.Vector2(x, y), camera);
     const ground = pick(x, y);
@@ -189,8 +220,13 @@ export function createWorld3D(options: World3DOptions): World3D {
   // The editing keys, on the view itself so they only act while it has focus; a key used here goes
   // no further (Esc that clears a selection must not also close the screen or the quest editor)
   const onKeyDown = (event: KeyboardEvent): void => {
-    const used = event.code === 'Escape' ? selected !== null : editor.keyDown(event);
-    if (event.code === 'Escape' && selected) {
+    const used = event.code === 'Escape' ? selected !== null || placing !== null : editor.keyDown(event);
+    if (event.code === 'Escape' && placing) {
+      // Esc stops placing first; a second one clears the selection
+      placing = null;
+      refreshEscape();
+      options.onPlaceEnd?.();
+    } else if (event.code === 'Escape' && selected) {
       choose(null);
       options.onSelect?.(null);
     }
@@ -285,6 +321,15 @@ export function createWorld3D(options: World3DOptions): World3D {
     select: (spawn) => choose(spawn),
     setWorldLayer: (layer) => manager.setWorldLayer(layer),
     setMode: (mode) => editor.setMode(mode),
+    setPlacing: (target) => {
+      placing = target;
+      // Placing starts from nothing selected, so a click never means anything else
+      if (target && selected) {
+        choose(null);
+        options.onSelect?.(null);
+      }
+      refreshEscape();
+    },
     undo: () => editor.undo(),
     redo: () => editor.redo(),
     camera() {

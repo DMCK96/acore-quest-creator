@@ -9,6 +9,8 @@ import { chooseZ, floorCandidates } from '@core/map/floors';
 import { EMPTY_WORLD, type WorldLayer } from '@core/world/layer';
 import type { SpawnEdit, SpawnRef } from './edits';
 import { WorldChanges } from './WorldChanges';
+import { PlaceDialog, type Chosen } from './PlaceDialog';
+import type { PlaceRequest } from './placing';
 import '../views/ProjectDialog.css';
 import './world3d.css';
 
@@ -17,10 +19,11 @@ const CONTROLS: [string, string][] = [
   ['Right-drag', 'Look around'],
   ['Left-click', 'Select an NPC or object'],
   ['G / R', 'Move or rotate the selected spawn'],
+  ['Place…', 'Choose an existing NPC or object, then click the ground'],
   ['Shift-click', 'Add a point to the selected NPC’s route'],
   ['Delete', 'Remove the selected route point'],
   ['Ctrl+Z / Ctrl+Y', 'Undo and redo'],
-  ['Esc', 'Clear the selection'],
+  ['Esc', 'Stop placing, or clear the selection'],
   ['Left-drag', 'Orbit round the point under the cursor'],
   ['Middle-drag', 'Pan'],
   ['Wheel', 'Move forward and back'],
@@ -134,7 +137,12 @@ function WorldStage({ map, start, hasClient, own, onSelect, onOwnEdit }: ViewPro
   const [note, setNote] = useState<string | null>(null);
   const [shared, setShared] = useState<SharedRoute | null>(null);
   const [changesOpen, setChangesOpen] = useState(false);
-  const changes = layer.spawns.length + layer.routes.length;
+  const changes = layer.spawns.length + layer.routes.length + layer.added.length;
+  // Choosing an existing NPC or object to place, and the one being placed (each click on the ground puts one down)
+  const [choosing, setChoosing] = useState(false);
+  const [placing, setPlacing] = useState<Chosen | null>(null);
+  const placingRef = useRef(placing);
+  placingRef.current = placing;
   /** A layer from the World changes list (after a revert): kept and drawn */
   const takeLayer = (next: WorldLayer): void => {
     layerRef.current = next;
@@ -161,6 +169,7 @@ function WorldStage({ map, start, hasClient, own, onSelect, onOwnEdit }: ViewPro
     setStatus('loading');
     setSelected(null);
     setNote(null);
+    setPlacing(null);
     let live = true;
     let created: World3D | null = null;
     // Each route's answer to "change it for everyone who walks it?", for as long as this world lives
@@ -202,6 +211,27 @@ function WorldStage({ map, start, hasClient, own, onSelect, onOwnEdit }: ViewPro
         setNote(result.error.message);
         created?.setWorldLayer(layerRef.current);
       }
+    };
+    // A click while placing: the spawn goes into the world layer, and is selected so it can be turned or moved at once
+    const place = async ({ target, at }: PlaceRequest): Promise<void> => {
+      const current = apiRef.current;
+      if (!current) return;
+      const kind = target.kind === 'object' ? 'gameobject' : 'creature';
+      const result = await current.worldAddSpawn(kind, target.entry, map, at);
+      if (!live) return;
+      if (!result.ok) {
+        setNote(result.error.message);
+        return;
+      }
+      applyLayer(result.value.layer);
+      const { guid } = result.value;
+      const added = result.value.layer.added.find((a) => a.kind === kind && a.guid === guid);
+      created?.select({ kind: target.kind, guid });
+      setSelected({
+        kind: target.kind, guid, entry: target.entry, name: added?.name ?? '', own: false, added: true, pathId: 0, event: null,
+        position: { x: at.x, y: at.y, z: at.z },
+      });
+      setNote(null);
     };
     const floorZ = async (x: number, y: number, nearZ: number): Promise<number | null> => {
       const answer = await apiRef.current?.mapFloors(map, x, y);
@@ -254,6 +284,8 @@ function WorldStage({ map, start, hasClient, own, onSelect, onOwnEdit }: ViewPro
             floorZ,
             beforeRouteEdit,
             onNotice: (message) => live && setNote(message),
+            onPlace: (request) => void place(request),
+            onPlaceEnd: () => live && setPlacing(null),
             spawns: async (spawnMap, box) => {
               const current = apiRef.current;
               if (!current) return { error: 'the app is not connected' };
@@ -262,6 +294,7 @@ function WorldStage({ map, start, hasClient, own, onSelect, onOwnEdit }: ViewPro
             },
           });
           created.setSpawnVisibility(layersRef.current);
+          created.setPlacing(placingRef.current ? { kind: placingRef.current.kind, entry: placingRef.current.entry } : null);
           if (ownRef.current) created.setOwnSpawns(ownRef.current);
           world.current = created;
           void apiRef.current?.worldLayer().then((result) => live && result.ok && applyLayer(result.value));
@@ -292,6 +325,23 @@ function WorldStage({ map, start, hasClient, own, onSelect, onOwnEdit }: ViewPro
       // Storage unavailable: the choice lasts for this view only.
     }
   }, [layers]);
+
+  // What is being placed, told to the world
+  useEffect(() => {
+    world.current?.setPlacing(placing ? { kind: placing.kind, entry: placing.entry } : null);
+  }, [placing]);
+
+  /** Takes a spawn placed in this view back out of the world layer */
+  async function removePlaced(spawn: PickedSpawn): Promise<void> {
+    const result = await api?.worldRevert({ kind: 'spawn', spawnKind: spawn.kind === 'object' ? 'gameobject' : 'creature', guid: spawn.guid });
+    if (!result) return;
+    if (!result.ok) {
+      setNote(result.error.message);
+      return;
+    }
+    takeLayer(result.value);
+    clearSelection();
+  }
 
   function clearSelection(): void {
     world.current?.select(null);
@@ -341,12 +391,34 @@ function WorldStage({ map, start, hasClient, own, onSelect, onOwnEdit }: ViewPro
               {label}
             </label>
           ))}
+          <button type="button" className="world3d__changes" disabled={!api} title="Choose an existing NPC or object, then click the ground to place it" onClick={() => setChoosing(true)}>
+            Place…
+          </button>
           <button type="button" className="world3d__changes" disabled={changes === 0} onClick={() => setChangesOpen(true)}>
             World changes ({changes})
           </button>
         </fieldset>
       )}
-      {!unavailable && selected && <SelectedSpawn spawn={selected} note={note} onClose={clearSelection} />}
+      {!unavailable && placing && (
+        <p role="status" className="world3d__placing">
+          Placing {placing.name || `${placing.kind === 'creature' ? 'NPC' : 'object'} ${placing.entry}`} (#{placing.entry}): click the ground to put one down. Esc stops.
+          <button type="button" className="btn" onClick={() => setPlacing(null)}>
+            Done
+          </button>
+        </p>
+      )}
+      {choosing && api && (
+        <PlaceDialog
+          onPick={(chosen) => {
+            setChoosing(false);
+            setPlacing(chosen);
+            // Focus back on the view, so Esc and the keys are its own again
+            container.current?.querySelector('canvas')?.focus();
+          }}
+          onClose={() => setChoosing(false)}
+        />
+      )}
+      {!unavailable && selected && <SelectedSpawn spawn={selected} note={note} onClose={clearSelection} onRemove={selected.added ? () => void removePlaced(selected) : undefined} />}
       {!unavailable && !selected && note && (
         <p role="status" className="world3d__edit-note">
           {note}
@@ -421,7 +493,7 @@ function SharedRouteDialog({ shared, onAnswer }: { shared: SharedRoute; onAnswer
 }
 
 /** The NPC or object picked in the view: what it is and where it stands, and what its last edit said. */
-function SelectedSpawn({ spawn, note, onClose }: { spawn: PickedSpawn; note: string | null; onClose(): void }): React.JSX.Element {
+function SelectedSpawn({ spawn, note, onClose, onRemove }: { spawn: PickedSpawn; note: string | null; onClose(): void; onRemove?(): void }): React.JSX.Element {
   const kind = spawn.kind === 'creature' ? 'NPC' : 'Object';
   return (
     <section className="world3d__selected" aria-label="Selected spawn">
@@ -440,7 +512,15 @@ function SelectedSpawn({ spawn, note, onClose }: { spawn: PickedSpawn; note: str
       </p>
       {spawn.event && <p>Only during event {spawn.event.id}{spawn.event.name ? `: ${spawn.event.name}` : ''}</p>}
       {spawn.pathId > 0 && <p>Route {spawn.pathId}</p>}
+      {spawn.added && <p>Placed here; it is not in the database until the world patch is applied.</p>}
       {note && <p className="world3d__selected-note">{note}</p>}
+      {onRemove && (
+        <p className="world3d__selected-actions">
+          <button type="button" className="btn" onClick={onRemove}>
+            Remove
+          </button>
+        </p>
+      )}
     </section>
   );
 }
