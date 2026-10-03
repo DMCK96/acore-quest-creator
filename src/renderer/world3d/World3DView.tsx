@@ -170,10 +170,18 @@ function WorldStage({ map, start, hasClient, own, onSelect, onOwnEdit }: ViewPro
       setLayer(next);
       created?.setWorldLayer(next);
     };
+    // The card follows the selected spawn to where an edit put it
+    const placed = (change: SpawnEdit): void => {
+      if (change.kind !== 'place') return;
+      const { kind, guid } = change.spawn;
+      const { x, y, z } = change.to;
+      setSelected((s) => (s && s.kind === kind && s.guid === guid ? { ...s, position: { x, y, z } } : s));
+    };
     // Own spawns go to the quest; the rest to the world layer, and a refused edit is drawn back
     const edit = async (change: SpawnEdit): Promise<void> => {
       if (change.spawn.own && onOwnEditRef.current) {
         onOwnEditRef.current(change);
+        placed(change);
         return;
       }
       const current = apiRef.current;
@@ -188,6 +196,7 @@ function WorldStage({ map, start, hasClient, own, onSelect, onOwnEdit }: ViewPro
       if (!live) return;
       if (result.ok) {
         applyLayer(result.value);
+        placed(change);
         setNote(null);
       } else {
         setNote(result.error.message);

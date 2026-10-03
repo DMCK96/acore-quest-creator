@@ -112,22 +112,40 @@ function placementStatement(spawn: WorldSpawnEdit, at: Placement): PatchStatemen
   return { kind: 'update', table: spawn.kind, key: { guid: text(spawn.guid) }, set };
 }
 
-function routeStatements(pathId: number, points: readonly RoutePoint[]): PatchStatement[] {
+/**
+ * What a point has in the columns it does not carry: the database's own defaults for every column it
+ * has (a fork's extra `velocity`, say), with a new point's usual values where the database has them
+ */
+function pointBase(columnDefaults: Record<string, string | null> | undefined): Record<string, string | null> {
+  if (!columnDefaults) return NEW_POINT_REST;
+  const usual = Object.entries(NEW_POINT_REST).filter(([column]) => column in columnDefaults);
+  return { ...columnDefaults, ...Object.fromEntries(usual) };
+}
+
+function routeStatements(pathId: number, points: readonly RoutePoint[], base: Record<string, string | null>): PatchStatement[] {
   const id = text(pathId);
   return [
     { kind: 'delete', table: 'waypoint_data', key: { id } },
     ...points.map((p, i): PatchStatement => ({
       kind: 'insert',
       table: 'waypoint_data',
-      row: { id, point: text(i + 1), position_x: text(p.x), position_y: text(p.y), position_z: text(p.z), ...NEW_POINT_REST, ...p.rest },
+      row: { ...base, id, point: text(i + 1), position_x: text(p.x), position_y: text(p.y), position_z: text(p.z), ...p.rest },
     })),
   ];
 }
 
-/** The layer as a patch, and the patch that puts the database back as it was: spawns first, then routes */
-export function worldStatements(layer: WorldLayer): { apply: PatchStatement[]; revert: PatchStatement[] } {
+/**
+ * The layer as a patch, and the patch that puts the database back as it was: spawns first, then
+ * routes. `pointDefaults` is every `waypoint_data` column's default in the database written to, so a
+ * point added in the view fills columns this tool does not know about.
+ */
+export function worldStatements(
+  layer: WorldLayer,
+  pointDefaults?: Record<string, string | null>,
+): { apply: PatchStatement[]; revert: PatchStatement[] } {
+  const base = pointBase(pointDefaults);
   return {
-    apply: [...layer.spawns.map((s) => placementStatement(s, s.current)), ...layer.routes.flatMap((r) => routeStatements(r.pathId, r.current))],
-    revert: [...layer.spawns.map((s) => placementStatement(s, s.original)), ...layer.routes.flatMap((r) => routeStatements(r.pathId, r.original))],
+    apply: [...layer.spawns.map((s) => placementStatement(s, s.current)), ...layer.routes.flatMap((r) => routeStatements(r.pathId, r.current, base))],
+    revert: [...layer.spawns.map((s) => placementStatement(s, s.original)), ...layer.routes.flatMap((r) => routeStatements(r.pathId, r.original, base))],
   };
 }

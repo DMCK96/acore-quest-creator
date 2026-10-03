@@ -120,4 +120,14 @@ describe('the world layer through the API', () => {
     const again: any = await api.exportWorld();
     expect(again.value.applyPath).toMatch(/2026_10_03_01_world\.sql$/);
   });
+
+  it('exports a point added in 3D with every column the database has, at its default', async () => {
+    const { api, written } = await setup(world);
+    const first: any = await api.worldRoute(801);
+    await api.worldSetRoute(801, [...first.value.points, { x: 30, y: 0, z: 1, rest: {} }]);
+    const out: any = await api.exportWorld();
+    expect(out.ok).toBe(true);
+    const sql = written.get(out.value.applyPath)!;
+    expect(sql).toMatch(/INSERT INTO `waypoint_data` .*`velocity`.*VALUES \(801, 3, 30, 0, 1,/);
+  });
 });

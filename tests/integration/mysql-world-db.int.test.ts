@@ -2,6 +2,7 @@ import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { openMysqlWorldDb, WorldDbConnectionError } from '@core/db/mysql-world-db';
 import { UnknownColumnError, UnknownTableError, type WorldDb } from '@core/db/world-db';
 import { mysqlUrl } from '../helpers/env';
+import { countWalkers, readRoute } from '../../src/main/world/world-api';
 
 function opts() {
   const u = new URL(mysqlUrl());
@@ -88,6 +89,12 @@ describe('MysqlWorldDb', () => {
       expect(c.pathId).toBeGreaterThan(0);
       expect(c.path![0]!.carry).toHaveProperty('delay');
     }
+  });
+  it('reads the route and walkers of a Goldshire patroller for the world layer as the view draws them', async () => {
+    const { creatures } = await db.spawnsForView!(0, { minX: -9600, maxX: -9300, minY: -100, maxY: 200 }, 2000);
+    const walker = creatures.find((c) => c.pathId > 0 && c.path)!;
+    expect(await readRoute(db, walker.pathId)).toHaveLength(walker.path!.length);
+    expect(await countWalkers(db, walker.pathId)).toBeGreaterThanOrEqual(1);
   });
   it('reports a named error when the server is unreachable', async () => {
     await expect(openMysqlWorldDb({ ...opts(), port: 1 })).rejects.toBeInstanceOf(WorldDbConnectionError);

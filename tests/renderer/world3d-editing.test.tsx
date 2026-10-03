@@ -81,6 +81,13 @@ describe('editing in the quest map\'s 3D view', () => {
     expect(screen.getByRole('button', { name: 'World changes (0)' })).toBeDisabled();
   });
 
+  it('shows where the selected spawn now stands after it is moved', async () => {
+    const { world } = await questMap(makeMockApi({ worldLayer: vi.fn(async () => okv(EMPTY)), worldMoveSpawn: vi.fn(async () => okv(moved)) }));
+    world.options.onSelect({ kind: 'creature', guid: 80330, entry: 1423, name: 'Guard', own: false, event: null, position: { x: 0, y: 0, z: 0 }, pathId: 0 });
+    world.options.onEdit(place(false, 80330, 1423));
+    expect(await screen.findByText('X 1.00 · Y 2.00 · Z 3.00')).toBeTruthy();
+  });
+
   it('puts the spawn back and says why when the world edit fails', async () => {
     const { world } = await questMap(makeMockApi({ worldLayer: vi.fn(async () => okv(EMPTY)), worldMoveSpawn: vi.fn(async () => errv('NOT_CONNECTED', 'Connect to a world database first.')) }));
     world.options.onSelect({ kind: 'creature', guid: 80330, entry: 1423, name: 'Guard', own: false, event: null, position: { x: 0, y: 0, z: 0 }, pathId: 0 });

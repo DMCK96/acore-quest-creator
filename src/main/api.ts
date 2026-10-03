@@ -9,7 +9,7 @@ import { buildPatch, type PatchStatement, type PatchWarning } from '../core/expo
 import { findQuestGiverFixes, type QuestGiverFix } from '../core/export/quest-giver';
 import { patchFileName, renderPatch, renderStatement } from '../core/export/render-patch';
 import { allocateQuestId, assertIdFree, collectTakenIds } from '../core/ids/allocator';
-import { importQuest } from '../core/import/importer';
+import { defaultColumnValues, importQuest } from '../core/import/importer';
 import { fetchLinkedContext } from '../core/import/linked-context';
 import { createNewAggregate } from '../core/import/new-quest';
 import { findQuestChain, MAX_CHAIN_QUESTS } from '../core/import/quest-chain';
@@ -1618,8 +1618,8 @@ export function createApi(deps: ApiDeps): Api {
         const live = connected();
         const layer: WorldLayer = deps.session.world.get();
         if (layer.spawns.length === 0 && layer.routes.length === 0) throw fail('BAD_REQUEST', 'There are no world changes to export.');
-        const { apply, revert } = worldStatements(layer);
         const schema = await worldSchema(live.db, live.schema.hash);
+        const { apply, revert } = worldStatements(layer, defaultColumnValues('waypoint_data', schema));
         const date = patchDate(deps.now());
         const sql = renderPatch(apply, schema, { toolVersion: TOOL_VERSION, date, label: 'World changes' });
         const revertSql = renderPatch(revert, schema, { toolVersion: TOOL_VERSION, date, label: 'World changes: revert' });

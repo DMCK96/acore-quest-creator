@@ -127,7 +127,7 @@ function ChangeRow({ change, onRevert }: { change: WorldChange; onRevert(): void
   return (
     <tr>
       <td>
-        Route {change.pathId} · {change.walkers} spawns {drift}
+        Route {change.pathId} · {change.walkers} {change.walkers === 1 ? 'spawn' : 'spawns'} {drift}
       </td>
       <td>{points(change.original)}</td>
       <td>{points(change.current)}</td>

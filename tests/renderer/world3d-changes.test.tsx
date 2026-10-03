@@ -45,4 +45,11 @@ describe('the World changes modal', () => {
     expect(await screen.findByText('C:\\out\\2026-10-03_00_world.sql')).toBeTruthy();
     expect(screen.getByText('C:\\out\\2026-10-03_00_world_revert.sql')).toBeTruthy();
   });
+
+  it('says one spawn, not one spawns', async () => {
+    render(<WorldChanges api={makeMockApi({ worldChanges: vi.fn(async () => okv([{ ...route, walkers: 1 }])) })} onLayer={vi.fn()} onClose={vi.fn()} />);
+    const rows = await screen.findAllByRole('row');
+    expect(rows[1]).toHaveTextContent('Route 802 · 1 spawn');
+    expect(rows[1]).not.toHaveTextContent('1 spawns');
+  });
 });

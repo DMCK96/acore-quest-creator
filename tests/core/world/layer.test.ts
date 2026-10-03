@@ -74,6 +74,13 @@ describe('world layer: statements', () => {
     expect(revert[0]).toEqual({ kind: 'delete', table: 'waypoint_data', key: { id: '801' } });
   });
 
+  it('fills every column the database has under a point, and leaves out defaults it does not have', () => {
+    const fresh = { x: 5, y: 0, z: 1, rest: {} };
+    const defaults = { id: '0', point: '0', position_x: '0', position_y: '0', position_z: '0', orientation: null, velocity: '0', delay: '0', move_type: '0', action: '0', action_chance: '100' };
+    const { apply } = worldStatements(setRoute(EMPTY_WORLD, route, [point(1), fresh]), defaults);
+    expect(apply[2]).toEqual({ kind: 'insert', table: 'waypoint_data', row: { id: '801', point: '2', position_x: '5', position_y: '0', position_z: '1', orientation: null, velocity: '0', delay: '0', move_type: '0', action: '0', action_chance: '100' } });
+  });
+
   it('has nothing to write for an empty layer', () => {
     expect(worldStatements(EMPTY_WORLD)).toEqual({ apply: [], revert: [] });
   });
