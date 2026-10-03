@@ -49,3 +49,14 @@ describe('a dressed NPC\'s body texture', () => {
     warn.mockRestore();
   });
 });
+
+describe('reading each file once', () => {
+  it('reads a file, and asks after a missing one, once across every outfit', async () => {
+    const read = files({ 'Skin.blp': solidBlp(256, 256, [1, 1, 1, 255]), 'Shirt_U.blp': solidBlp(4, 4, [9, 9, 9, 255]), 'Boot_U.blp': solidBlp(4, 4, [5, 5, 5, 255]) });
+    const builder = new CharacterTexture({ read, register: () => {} });
+    await builder.build({ base: 'Skin.blp', layers: [{ files: ['Shirt_F.blp', 'Shirt_U.blp'], region: 'torsoUpper' }] });
+    await builder.build({ base: 'Skin.blp', layers: [{ files: ['Shirt_F.blp', 'Shirt_U.blp'], region: 'torsoUpper' }, { files: ['Boot_U.blp'], region: 'foot' }] });
+    const asked = (path: string) => read.mock.calls.filter((c) => c[0] === path).length;
+    expect([asked('Skin.blp'), asked('Shirt_F.blp'), asked('Shirt_U.blp'), asked('Boot_U.blp')]).toEqual([1, 1, 1, 1]);
+  });
+});

@@ -332,3 +332,14 @@ describe('dressed NPCs', () => {
     expect(created[0].textures[1]).toBe('Skin.blp');
   });
 });
+
+describe('one dressed-NPC texture builder for every world', () => {
+  it('is shared, as the texture manager it registers with is', async () => {
+    // jsdom has no workers; the texture manager only starts one
+    vi.stubGlobal('Worker', class { postMessage() {} addEventListener() {} removeEventListener() {} terminate() {} });
+    const { sharedManagers } = await import('../../src/renderer/world3d/world3d');
+    expect(sharedManagers().characterTexture).toBeDefined();
+    expect(sharedManagers().characterTexture).toBe(sharedManagers().characterTexture);
+    vi.unstubAllGlobals();
+  });
+});

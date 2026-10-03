@@ -8,8 +8,11 @@
 export const OUTFIT_SLOTS = ['head', 'shoulders', 'shirt', 'chest', 'waist', 'legs', 'feet', 'wrists', 'hands', 'tabard', 'back'] as const;
 export type OutfitSlot = (typeof OUTFIT_SLOTS)[number];
 
-/** The order items are painted on the body, lowest first: a shirt under the chest, boots over trousers */
-export const PAINT_ORDER: OutfitSlot[] = ['shirt', 'wrists', 'chest', 'legs', 'feet', 'waist', 'hands', 'tabard'];
+/**
+ * The order items are painted on the body, lowest first: a shirt under everything, boots over
+ * trousers, and the chest over both, so a robe's skirt covers them as it does in game
+ */
+export const PAINT_ORDER: OutfitSlot[] = ['shirt', 'legs', 'feet', 'wrists', 'chest', 'waist', 'hands', 'tabard'];
 
 /** The order shapes are applied: the legs before the chest, so a chest's robe wins over the legs' */
 export const SHAPE_ORDER: OutfitSlot[] = ['shirt', 'legs', 'chest', 'feet', 'waist', 'hands', 'tabard', 'back'];

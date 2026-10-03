@@ -36,6 +36,8 @@ const DETAIL_DISTANCE_EXTENSION = MAP_CHUNK_HEIGHT;
 type MapManagerOptions = {
   host: AssetHost;
   textureManager?: TextureManager;
+  /** Dressed NPCs' body texture builder, shared with every world that shares the texture manager */
+  characterTexture?: CharacterTexture;
   dbManager?: DbManager;
   soundManager?: SoundManager;
   viewDistance?: number;
@@ -143,7 +145,7 @@ class MapManager extends EventTarget {
       get: (name) => this.#dbManager.get(`${name}.dbc`, DISPLAY_RECORDS[name]),
     });
     // Dressed NPCs' body textures, built from the client's own files and given to the texture manager
-    const characterTexture = new CharacterTexture({
+    const characterTexture = options.characterTexture ?? new CharacterTexture({
       read: async (path) => {
         const response = await fetch(getAssetUrl(options.host, path));
         return response.ok ? new Uint8Array(await response.arrayBuffer()) : null;

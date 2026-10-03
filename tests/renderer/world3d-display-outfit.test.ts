@@ -68,14 +68,14 @@ describe('a preset NPC dressed in its items', () => {
     expect(look.textures[1]).toBe('Skin01.blp');
   });
 
-  it('paints its items over its underwear, shirt under chest under boots', async () => {
+  it('paints its items over its underwear: shirt first, boots, then the chest over them', async () => {
     const look = (await resolver().creature(50, preset({ body: 1, chest: 2, feet: 3 }))) as any;
     expect(look.body.layers.slice(4)).toEqual([
       { files: U('ArmUpperTexture', 'ShirtAU'), region: 'armUpper' },
-      { files: U('TorsoUpperTexture', 'RobeTU'), region: 'torsoUpper' },
-      { files: U('LegUpperTexture', 'RobeLU'), region: 'legUpper' },
       { files: U('LegLowerTexture', 'BootLL'), region: 'legLower' },
       { files: U('FootTexture', 'BootFO'), region: 'foot' },
+      { files: U('TorsoUpperTexture', 'RobeTU'), region: 'torsoUpper' },
+      { files: U('LegUpperTexture', 'RobeLU'), region: 'legUpper' },
     ]);
   });
 
@@ -100,6 +100,27 @@ describe('a preset NPC dressed in its items', () => {
   it('leaves out an item display the client does not know, and draws the rest', async () => {
     const look = (await resolver().creature(50, preset({ chest: 4242, feet: 3 }))) as any;
     expect(look.body.layers.map((l: any) => l.region)).toEqual(['faceLower', 'faceUpper', 'legUpper', 'torsoUpper', 'legLower', 'foot']);
+  });
+});
+
+describe('what covers what', () => {
+  it('paints a robe over trousers and boots, as the game does', async () => {
+    const robe = () => db(ItemDisplayInfoRecord, [
+      display(2, { groups: [2, 0, 1], regions: ['', '', '', 'RobeTU', '', 'RobeLU', 'RobeLL'] }),
+      display(3, { groups: [2, 0, 0], regions: ['', '', '', '', '', '', 'BootLL', 'BootFO'] }),
+      display(8, { groups: [0, 0, 0], regions: ['', '', '', '', '', 'PantLU', 'PantLL'] }),
+    ], 25);
+    const look = (await resolver({ ...tables, ItemDisplayInfo: robe }).creature(50, preset({ chest: 2, feet: 3, legs: 8 }))) as any;
+    const firsts = look.body.layers.map((l: any) => l.files[0].split('\\').pop());
+    expect(firsts.indexOf('RobeLL_F.blp')).toBeGreaterThan(firsts.indexOf('PantLL_F.blp'));
+    expect(firsts.indexOf('RobeLL_F.blp')).toBeGreaterThan(firsts.indexOf('BootLL_F.blp'));
+    expect(firsts.indexOf('RobeLU_F.blp')).toBeGreaterThan(firsts.indexOf('PantLU_F.blp'));
+  });
+
+  it('wears its race\'s first skin colour when its own is not in the client, never black', async () => {
+    const look = (await resolver().creature(50, { ...preset(), skin: 9 })) as any;
+    expect(look.textures[1]).toBe('Skin01.blp');
+    expect(look.body.base).toBe('Skin01.blp');
   });
 });
 

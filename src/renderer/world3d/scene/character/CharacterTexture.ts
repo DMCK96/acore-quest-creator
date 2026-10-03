@@ -24,6 +24,8 @@ export class CharacterTexture {
   readonly #register: CharacterTextureOptions['register'];
   readonly #built = new Map<string, Promise<string | null>>();
   readonly #warned = new Set<string>();
+  // Each file decoded once, and each missing one asked after once, however many outfits use it
+  readonly #images = new Map<string, Promise<RgbaImage | null>>();
 
   constructor(options: CharacterTextureOptions) {
     this.#read = options.read;
@@ -73,14 +75,21 @@ export class CharacterTexture {
     return path;
   }
 
-  /** A file decoded, or null when it cannot be read or is not a texture this can decode */
-  async #image(path: string): Promise<RgbaImage | null> {
-    try {
-      const bytes = await this.#read(path);
-      return bytes ? decodeBlp(bytes) : null;
-    } catch {
-      return null;
+  /** A file decoded, or null when it cannot be read or is not a texture this can decode; read once */
+  #image(path: string): Promise<RgbaImage | null> {
+    let image = this.#images.get(path);
+    if (!image) {
+      image = (async () => {
+        try {
+          const bytes = await this.#read(path);
+          return bytes ? decodeBlp(bytes) : null;
+        } catch {
+          return null;
+        }
+      })();
+      this.#images.set(path, image);
     }
+    return image;
   }
 
   #warnOnce(key: string, message: string) {

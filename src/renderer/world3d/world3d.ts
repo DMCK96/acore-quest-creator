@@ -1,6 +1,8 @@
 import * as THREE from 'three';
 import { DbManager, MapManager, TextureManager, type SoundManager } from './scene';
 import { WorldControls } from './controls';
+import { CharacterTexture } from './scene/character/CharacterTexture';
+import { getAssetUrl } from './scene/asset';
 import { spawnBounds, type PickedSpawn, type SpawnSource, type SpawnStatus, type SpawnVisibility } from './scene/spawn/SpawnManager';
 import type { ViewSpawns } from '@core/db/view-spawns';
 import { clearProblems, onProblems } from './scene/diagnostics';
@@ -81,8 +83,26 @@ const SELECTED_COLOUR = 0xffd34d;
 
 const HOST = { baseUrl: ASSET_BASE_URL, normalizePath: true };
 /** Textures and database tables are the same for every map, so every world shares them (and their workers). */
-let shared: { textures: TextureManager; databases: DbManager } | null = null;
-const sharedManagers = (): NonNullable<typeof shared> => (shared ??= { textures: new TextureManager({ host: HOST }), databases: new DbManager({ host: HOST }) });
+let shared: { textures: TextureManager; databases: DbManager; characterTexture: CharacterTexture } | null = null;
+/**
+ * The managers every world shares, made once: textures and tables are the same for every map, and so
+ * are dressed NPCs' body textures, which are registered with the shared texture manager (one builder
+ * per world would build and register every outfit again each time a world opens, and never free them)
+ */
+export const sharedManagers = (): NonNullable<typeof shared> => {
+  if (!shared) {
+    const textures = new TextureManager({ host: HOST });
+    const characterTexture = new CharacterTexture({
+      read: async (path) => {
+        const response = await fetch(getAssetUrl(HOST, path));
+        return response.ok ? new Uint8Array(await response.arrayBuffer()) : null;
+      },
+      register: (path, texture) => textures.register(path, texture),
+    });
+    shared = { textures, databases: new DbManager({ host: HOST }), characterTexture };
+  }
+  return shared;
+};
 
 /**
  * Wowser's sound manager plays each area's zone music, which an editor must not, and it throws when
@@ -192,8 +212,8 @@ export function createWorld3D(options: World3DOptions): World3D {
     outline.visible = drawn !== null;
     if (drawn) spawnBounds(drawn, outline.box);
   };
-  const { textures, databases } = sharedManagers();
-  const manager = new MapManager({ host: HOST, textureManager: textures, dbManager: databases, soundManager: SILENT });
+  const { textures, databases, characterTexture } = sharedManagers();
+  const manager = new MapManager({ host: HOST, textureManager: textures, dbManager: databases, characterTexture, soundManager: SILENT });
   manager.addEventListener('area:change', (event) => {
     const name = (event as CustomEvent<{ areaName?: string }>).detail.areaName;
     if (name) options.onArea?.(name);

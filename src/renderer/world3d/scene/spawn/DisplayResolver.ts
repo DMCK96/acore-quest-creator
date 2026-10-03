@@ -187,10 +187,21 @@ class DisplayResolver {
     return this.#bodies;
   }
 
-  /** A race's body skin in one of its colours, from CharSections; null when the client has none */
+  /**
+   * A race's body skin in one of its colours, from CharSections; its lowest colour when the client
+   * has not that one (a body left without a skin draws black); null when the race has none at all
+   */
   async #skin(race: number, sex: number, colour: number): Promise<string | null> {
     const skins = await this.#index('CharSections', (r) => (r.baseSection === SKIN_SECTION ? `${r.race}:${r.sex}:${r.variation}:${r.colour}` : null), 'CharSections:skin');
-    return skins.get(`${race}:${sex}:0:${colour}`)?.textures[0] || null;
+    const exact = skins.get(`${race}:${sex}:0:${colour}`)?.textures[0];
+    if (exact) return exact;
+    let fallback: { colour: number; texture: string } | null = null;
+    for (const record of skins.values()) {
+      if (record.race === race && record.sex === sex && record.variation === 0 && record.textures[0] && (!fallback || record.colour < fallback.colour)) {
+        fallback = { colour: record.colour, texture: record.textures[0] };
+      }
+    }
+    return fallback?.texture ?? null;
   }
 
   /**
