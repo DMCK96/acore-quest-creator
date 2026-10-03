@@ -1,4 +1,6 @@
 // @ts-nocheck
+import { LiquidSpec } from '../../map/loader/liquid.js';
+
 type WmoBatchSpec = {
   /** First index, and how many, in the group's index buffer */
   start: number;
@@ -28,6 +30,8 @@ type WmoMaterialSpec = {
 type WmoSpec = {
   materials: WmoMaterialSpec[];
   groups: WmoGroupSpec[];
+  /** Its groups' water, magma and slime, in the building's space */
+  liquids: LiquidSpec[];
   /** What could not be read: a group file that is missing or broken */
   problems: string[];
 };

@@ -113,15 +113,16 @@ class MapManager extends EventTarget {
       textureManager: this.#textureManager,
       mapLight: this.#mapLight,
     });
-    this.#wmoManager = new WmoManager({
-      host: options.host,
-      textureManager: this.#textureManager,
-      mapLight: this.#mapLight,
-    });
     this.#liquidManager = new LiquidManager({
       textureManager: this.#textureManager,
       dbManager: this.#dbManager,
       mapLight: this.#mapLight,
+    });
+    this.#wmoManager = new WmoManager({
+      host: options.host,
+      textureManager: this.#textureManager,
+      mapLight: this.#mapLight,
+      liquidManager: this.#liquidManager,
     });
 
     this.#root = new THREE.Group();

@@ -63,8 +63,9 @@ compiler setting than this project's.
   black baked colours that only make sense on top of the sun; drawn as the only light, they were
   black. The lighting law follows Kruithne/wow.export (MIT, see `map/liquid/LICENSE`). The
   area loader now passes on the buildings an area places (`objDefs`), which it used to drop.
-  Not drawn yet: the props inside buildings (doodad sets), water inside buildings (`MLIQ`), the
-  building shaders beyond a plain diffuse texture (two-layer, environment, emissive), and interior
+  A group's water (`MLIQ`, read in `wmo/format/group.ts`) is turned into a liquid spec in the
+  building's space by `wmo/loader/liquid.ts` and drawn with the terrain's liquid materials, as part of
+  the building. Not drawn yet: the props inside buildings (doodad sets), the building shaders beyond a plain diffuse texture (two-layer, environment, emissive), and interior
   lighting (interior groups are lit by the sun like the rest).
 - `map/liquid/` and `map/loader/liquid.ts`: water, ocean, magma and slime on the terrain, which
   upstream does not draw. The area loader reads the ADT's `MH2O` chunk (which `@wowserhq/format` finds
@@ -74,8 +75,9 @@ compiler setting than this project's.
   database's river or ocean colour (`map/light` now blends those bands and LightParams' water
   alphas), and draws magma and slime unlit and solid. Water is as see-through as the database's
   shallow alpha at its edges and solid where it is deep: the client darkens what lies under deep
-  water, which is not done here. Not done yet: water inside buildings, the underwater look, and
-  waves or reflections.
+  water, which is not done here. Buildings' water (canals, fountains, moonwells) uses the same
+  materials. It has no depth, so it is drawn half way between shallow and solid. Not done yet: the
+  underwater look, and waves or reflections.
 - `../world3d.ts` switches Three's colour management off, as wowserhq's own viewer (spelunker) does.
   With it on, every light colour was darkened to linear and never brightened back, and the world was
   drawn too dark and too red.

@@ -95,6 +95,8 @@ test('draws the terrain, and a model or texture that cannot be read costs the ar
   const [roofR, , roofB] = (await page.evaluate(`window.__pixel(${JSON.stringify(picture.toString('base64'))}, 0.5, 0.5)`)) as number[];
   expect(roofR!).toBeGreaterThan(roofB! + 60);
   expect(client.requested).toContain('200 tileset/grass.blp');
+  // A building's water (MLIQ) is drawn: the terrain here has none, so only the house's pool asks for a flipbook
+  await expect.poll(() => client.requested.includes('200 xtextures/river/lake_a.1.blp'), { timeout: 10000 }).toBe(true);
 });
 
 test('draws liquid: magma covering a tile, its look read from LiquidType.dbc and its flipbook only as long as it is', async ({ page }) => {

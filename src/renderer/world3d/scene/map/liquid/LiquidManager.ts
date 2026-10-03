@@ -59,8 +59,7 @@ class LiquidManager {
     group.matrixWorldAutoUpdate = false;
 
     for (const spec of area.liquids ?? []) {
-      const material = await this.#getMaterial(spec.liquidType);
-      group.add(this.#createMesh(spec, material));
+      group.add(await this.createMesh(spec));
     }
 
     this.#areas.set(areaId, group);
@@ -100,7 +99,21 @@ class LiquidManager {
     this.#materials.clear();
   }
 
-  #createMesh(spec: LiquidSpec, material: LiquidMaterial) {
+  /** A liquid's mesh, at its spec's position, with the shared material for its type */
+  async createMesh(spec: LiquidSpec, geometry = this.createGeometry(spec)) {
+    const material = await this.#getMaterial(spec.liquidType);
+    const mesh = new THREE.Mesh(geometry, material);
+    mesh.name = `liquid:${spec.liquidType}`;
+    mesh.position.set(spec.position[0], spec.position[1], spec.position[2]);
+    // See-through surfaces are drawn after the solid world, so what is under them shows
+    mesh.renderOrder = material.transparent ? 1 : 0;
+    // Its own world matrix: the terrain's liquid group does not update them (a building redoes it)
+    mesh.updateMatrixWorld();
+    return mesh;
+  }
+
+  /** A liquid's geometry alone, for a caller that keeps and shares it (a building's water) */
+  createGeometry(spec: LiquidSpec) {
     const geometry = new THREE.BufferGeometry();
 
     const vertices = new THREE.InterleavedBuffer(new Float32Array(spec.vertexBuffer), LIQUID_VERTEX_STRIDE);
@@ -114,14 +127,7 @@ class LiquidManager {
     geometry.boundingBox = new THREE.Box3().setFromArray(spec.bounds.extent);
     geometry.boundingSphere = geometry.boundingBox.getBoundingSphere(new THREE.Sphere());
 
-    const mesh = new THREE.Mesh(geometry, material);
-    mesh.name = `liquid:${spec.liquidType}`;
-    mesh.position.set(spec.position[0], spec.position[1], spec.position[2]);
-    // See-through surfaces are drawn after the solid world, so what is under them shows
-    mesh.renderOrder = material.transparent ? 1 : 0;
-    mesh.updateMatrixWorld();
-
-    return mesh;
+    return geometry;
   }
 
   #getMaterial(liquidType: number) {

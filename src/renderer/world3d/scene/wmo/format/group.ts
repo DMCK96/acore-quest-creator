@@ -18,6 +18,24 @@ type WmoGroupBatch = {
   materialIndex: number;
 };
 
+/**
+ * MLIQ: the group's water, magma or slime, a grid of heights from a corner in the building's space.
+ * Layout from https://wowdev.wiki/WMO#MLIQ_chunk: vertex and tile counts, the corner, a material,
+ * then 8 bytes per vertex (the height last) and 1 byte per tile (low 4 bits a liquid type, 0x0F none).
+ */
+type WmoGroupLiquid = {
+  vertsX: number;
+  vertsY: number;
+  tilesX: number;
+  tilesY: number;
+  corner: [number, number, number];
+  heights: Float32Array;
+  tiles: Uint8Array;
+  /** MOGP's liquid field and flags, which with the root's flags decide the liquid type */
+  groupLiquid: number;
+  groupFlags: number;
+};
+
 type WmoGroupData = {
   vertices: Float32Array | null;
   normals: Float32Array | null;
@@ -26,6 +44,7 @@ type WmoGroupData = {
   colors: Uint8Array | null;
   indices: Uint16Array | null;
   batches: WmoGroupBatch[];
+  liquid: WmoGroupLiquid | null;
 };
 
 type Chunk = { tag: string; start: number; size: number };
@@ -89,6 +108,7 @@ const parseGroup = (buffer: ArrayBuffer, rootFlags: number): WmoGroupData => {
   const normalsChunk = first('MONR');
   const uvChunk = first('MOTV');
   const colorChunk = first('MOCV');
+  const liquidChunk = first('MLIQ');
 
   let colors: Uint8Array | null = colorChunk ? copyArray(buffer, colorChunk, Uint8Array) : null;
   if (colors && !(rootFlags & FLAG_CVERTS_FIXED)) {
@@ -126,8 +146,53 @@ const parseGroup = (buffer: ArrayBuffer, rootFlags: number): WmoGroupData => {
     colors,
     indices: indicesChunk ? copyArray(buffer, indicesChunk, Uint16Array) : null,
     batches,
+    liquid: liquidChunk ? readLiquid(view, liquidChunk, view.getUint32(mogp.start + 52, true), view.getUint32(mogp.start + 8, true)) : null,
+  };
+};
+
+const MLIQ_HEADER_SIZE = 30;
+
+/** A group's liquid, or null when the chunk is too short for the grid it states */
+const readLiquid = (view: DataView, chunk: Chunk, groupLiquid: number, groupFlags: number): WmoGroupLiquid | null => {
+  if (chunk.size < MLIQ_HEADER_SIZE) {
+    return null;
+  }
+
+  const at = chunk.start;
+  const vertsX = view.getUint32(at, true);
+  const vertsY = view.getUint32(at + 4, true);
+  const tilesX = view.getUint32(at + 8, true);
+  const tilesY = view.getUint32(at + 12, true);
+  const vertexCount = vertsX * vertsY;
+  const tileCount = tilesX * tilesY;
+
+  if (vertexCount === 0 || MLIQ_HEADER_SIZE + vertexCount * 8 + tileCount > chunk.size) {
+    return null;
+  }
+
+  const heights = new Float32Array(vertexCount);
+  for (let i = 0; i < vertexCount; i++) {
+    heights[i] = view.getFloat32(at + MLIQ_HEADER_SIZE + i * 8 + 4, true);
+  }
+
+  const tilesAt = at + MLIQ_HEADER_SIZE + vertexCount * 8;
+  const tiles = new Uint8Array(tileCount);
+  for (let i = 0; i < tileCount; i++) {
+    tiles[i] = view.getUint8(tilesAt + i);
+  }
+
+  return {
+    vertsX,
+    vertsY,
+    tilesX,
+    tilesY,
+    corner: [view.getFloat32(at + 16, true), view.getFloat32(at + 20, true), view.getFloat32(at + 24, true)],
+    heights,
+    tiles,
+    groupLiquid,
+    groupFlags,
   };
 };
 
 export { parseGroup };
-export type { WmoGroupBatch, WmoGroupData };
+export type { WmoGroupBatch, WmoGroupData, WmoGroupLiquid };

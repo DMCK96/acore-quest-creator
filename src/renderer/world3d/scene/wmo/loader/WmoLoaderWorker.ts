@@ -4,6 +4,7 @@ import { parseGroup, WmoGroupData } from '../format/group.js';
 import { WmoGroupSpec, WmoSpec } from './types.js';
 import SceneWorker from '../../worker/SceneWorker.js';
 import { AssetHost, loadAsset } from '../../asset.js';
+import { createBuildingLiquidSpec } from './liquid.js';
 
 type WmoLoaderWorkerOptions = {
   host: AssetHost;
@@ -23,6 +24,7 @@ class WmoLoaderWorker extends SceneWorker {
 
     const basePath = path.replace(/\.wmo$/i, '');
     const problems: string[] = [];
+    const liquids = [];
 
     // A group that is missing or broken is left out; the rest of the building still draws
     const groups = await Promise.all(
@@ -30,7 +32,17 @@ class WmoLoaderWorker extends SceneWorker {
         const groupPath = `${basePath}_${index.toString().padStart(3, '0')}.wmo`;
         try {
           const data = await loadAsset(this.#host, groupPath);
-          return this.#createGroupSpec(parseGroup(data, root.flags));
+          const group = parseGroup(data, root.flags);
+          // A group's water is kept apart from its walls: some groups are only water
+          if (group.liquid) {
+            try {
+              const liquid = createBuildingLiquidSpec(group.liquid, root.flags);
+              if (liquid) liquids.push(liquid);
+            } catch (error) {
+              problems.push(`${groupPath} water: ${error.message}`);
+            }
+          }
+          return this.#createGroupSpec(group);
         } catch (error) {
           problems.push(`${groupPath}: ${error.message}`);
           return null;
@@ -45,6 +57,7 @@ class WmoLoaderWorker extends SceneWorker {
         textures: material.textures,
       })),
       groups: groups.filter((group) => group !== null && group.indices.length > 0),
+      liquids,
       problems,
     };
 
@@ -55,6 +68,10 @@ class WmoLoaderWorker extends SceneWorker {
       if (group.normals) transfer.add(group.normals.buffer);
       if (group.uvs) transfer.add(group.uvs.buffer);
       if (group.colors) transfer.add(group.colors.buffer);
+    }
+    for (const liquid of liquids) {
+      transfer.add(liquid.vertexBuffer);
+      transfer.add(liquid.indexBuffer);
     }
 
     return [spec, [...transfer]];

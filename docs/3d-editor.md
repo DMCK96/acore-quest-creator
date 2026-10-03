@@ -54,7 +54,7 @@ Looked at and **not** used: `wowserhq/client` (it is the game's UI layer), `vjeu
   - Leaving a world, or changing continent, cannot take the view down; a failure inside the view stays inside it.
   - Sound is switched off (the library would play zone music).
   - A model whose texture transform has no animation leaves its texture still; it used to stop the whole view (seen at Stormwind Harbor).
-- Water, ocean, magma and slime on the terrain, read from the map's `MH2O` data, with their types from the client's `LiquidType.dbc` (so CoA's own types draw too). Animated flipbooks, water tinted by the light database's river and ocean colours, see-through at the edges and solid where deep, magma and slime glowing and solid.
+- Water, ocean, magma and slime on the terrain and inside buildings, read from the map's `MH2O` data and the buildings' `MLIQ` data, with their types from the client's `LiquidType.dbc` (so CoA's own types draw too). Animated flipbooks, water tinted by the light database's river and ocean colours, see-through at the edges and solid where deep, magma and slime glowing and solid.
 - Colours as the game has them: Three's colour management is off, as in wowserhq's own viewer. With it on, the whole world was drawn too dark and too red.
 - Buildings lit by the map's light and fogged like the terrain, with baked lighting added on top. Ascension's later buildings (its Stormwind, the Kul Tiras docks) have dark or black baked lighting and drew black before.
 - Format fixes: uncompressed textures, texture files with garbage in unused mip slots, four model material types the library lacked, building group files with unusual chunk sizes or all see-through batches.
@@ -70,7 +70,7 @@ Things that are missing or approximate. Roughly in order of how much they matter
 4. **Textures the client does not ship.** The user's client places custom modern-expansion buildings (Kul Tiras, Draenor, Dragonflight) whose textures are not in its archives; those parts draw grey. Not loose in the `Data` folder either. Where the references come from is not established; reports now name the building or model that asked, so the next run will show it.
 5. **Tree leaves are unconfirmed on real data.** Three causes were found and fixed (see the commit `e8972f1`), and each fix has a test, but it has not yet been confirmed on the user's client. The original `Invalid typed array length: 4294791348` texture error is believed to come from garbage in unused mip slots; if canopies are still grey, the report now includes the file's size and first bytes.
 6. **Buildings are approximate:** two-sided, one diffuse texture per batch (the game's two-layer, environment and emissive building shaders are not done), and interior parts are lit by the sun like the rest. They are lit by the map's light and fogged like the terrain, with baked lighting added on top. The same building placed in two neighbouring tiles is drawn twice (identical, so it does not flicker, but it costs).
-7. **Water is terrain-only and approximate.** Water inside buildings (canals, fountains, Stormwind's inner harbour pools) is not drawn yet. There is no underwater look, no waves or reflections, and deep water is simply made solid instead of darkening what is under it as the client does.
+7. **Water is approximate.** There is no underwater look, no waves or reflections, and deep water is simply made solid instead of darkening what is under it as the client does. Buildings' water has no depth, so it is drawn half way between shallow and solid. (Ascension's Stormwind canals are terrain water; the city's only building water is the Park District moonwell.)
 8. **Memory:** the library cannot stop its workers, so each continent switch leaves two idle workers behind; loaded buildings and models are cached for the life of the page.
 9. **Only the four continents.** Dungeons and battlegrounds need their own map-file handling.
 10. **Not run in the full app in this sandbox.** There is no game client or world database here, so the Electron app has not been driven end to end by us; the user runs it and reports. The 56 test files that need `ACQC_AC_SQL_DIR` (the AzerothCore SQL files) cannot run here, and failed identically before and after our changes.
@@ -89,7 +89,7 @@ In order. Each is meant to be a step the user can try before the next begins.
 3. **Patrol paths in 3D.** Draw a patrol as a line with points; move, add and delete points; keep the existing actions at points.
 4. **Rotate, and scale.** Facing first; then tilt for objects; scale with the template-wide warning.
 5. **Reshape the quest grid** into a chain builder beside the 3D view. Needs a design conversation first: what "managing a chain" should mean day to day.
-6. **Fill the gaps** above as they get in the way: props inside buildings first, then water inside buildings, then the remaining building shaders.
+6. **Fill the gaps** above as they get in the way: props inside buildings first, then the remaining building shaders.
 
 Open questions for the user:
 

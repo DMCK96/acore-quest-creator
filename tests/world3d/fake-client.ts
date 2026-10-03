@@ -243,7 +243,7 @@ function houseRoot(): Buffer {
 }
 
 /** One group: a box, with baked lighting when `colour` is given. */
-function houseGroup(x: number, y: number, colour: number | null, options: { allSeeThrough?: boolean; oddSizes?: boolean; material?: number } = {}): Buffer {
+function houseGroup(x: number, y: number, colour: number | null, options: { allSeeThrough?: boolean; oddSizes?: boolean; material?: number; water?: boolean } = {}): Buffer {
   const { positions, indices } = box(x, y, 24, 14);
   const vertexCount = positions.length / 3;
   const batch = Buffer.alloc(24);
@@ -259,6 +259,12 @@ function houseGroup(x: number, y: number, colour: number | null, options: { allS
   const stray = options.oddSizes ? Buffer.alloc(2) : Buffer.alloc(0);
   const parts = [chunk('MOVI', uint16s(indices)), chunk('MOVT', Buffer.concat([floats(positions), stray])), chunk('MONR', Buffer.concat([normals, stray])), chunk('MOTV', uvs), chunk('MOBA', batch)];
   if (colour !== null) parts.push(chunk('MOCV', colours));
+  // A pool of water inside the group (MLIQ): 3 x 3 vertices, 2 x 2 tiles of water (legacy type 0)
+  if (options.water) {
+    const header = Buffer.concat([u32(3), u32(3), u32(2), u32(2), floats([x - 8, y - 8, 2]), Buffer.from([0, 0])]);
+    const vertices = Buffer.concat(Array.from({ length: 9 }, () => Buffer.concat([Buffer.alloc(4), f32(2)])));
+    parts.push(chunk('MLIQ', Buffer.concat([header, vertices, Buffer.alloc(4, 0)])));
+  }
   const header = Buffer.alloc(68);
   header.writeUInt32LE(colour === null ? 0 : 4, 8);
   // Every batch see-through: the lit vertices would begin after the last of them, and there are none
@@ -319,7 +325,7 @@ export async function startFakeClient(port = 0): Promise<FakeClient> {
     // Baked colours all black, as Ascension's Kul Tiras docks have: baked light adds to the sun, so it still shows
     ['world/wmo/test/house_000.wmo', houseGroup(0, 0, 0x00)],
     ['world/wmo/test/house_001.wmo', houseGroup(0, -40, 0x80)],
-    ['world/wmo/test/house_002.wmo', houseGroup(0, -80, 0x80, { allSeeThrough: true })],
+    ['world/wmo/test/house_002.wmo', houseGroup(0, -80, 0x80, { allSeeThrough: true, water: true })],
     ['world/wmo/test/house_003.wmo', houseGroup(0, -120, null, { oddSizes: true, material: 1 })],
     ['tileset/garbage.blp', Buffer.alloc(200, 0x67)],
     ['tileset/raw.blp', rawTexture()],
@@ -329,6 +335,8 @@ export async function startFakeClient(port = 0): Promise<FakeClient> {
     ['dbfilesclient/liquidtype.dbc', liquidTypeDbc()],
     ['xtextures/lava/lava.1.blp', lavaTexture()],
     ['xtextures/lava/lava.2.blp', lavaTexture()],
+    // The building pool's water: no such type in the fake LiquidType.dbc, so it is drawn as plain water
+    ['xtextures/river/lake_a.1.blp', lavaTexture()],
   ]);
   const requested: string[] = [];
   const server: Server = createServer((req, res) => {

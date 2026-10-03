@@ -8,6 +8,7 @@ import { MapAreaSpec } from '../map/loader/types.js';
 import { describeError, reportProblem } from '../diagnostics.js';
 import MapLight from '../map/light/MapLight.js';
 import WmoMaterial from './WmoMaterial.js';
+import LiquidManager from '../map/liquid/LiquidManager.js';
 
 /**
  * Buildings: the large placed models (a house, the Abbey, a city wall). Each is a root file of
@@ -31,6 +32,8 @@ type WmoResources = {
   path: string;
   spec: WmoSpec;
   geometries: THREE.BufferGeometry[];
+  /** Its water, magma and slime, made once and shared by every placement */
+  liquidGeometries: THREE.BufferGeometry[];
   /** Materials for groups with baked lighting, and for those without; made on first use */
   materials: { lit: Promise<THREE.Material[]> | null; baked: Promise<THREE.Material[]> | null };
 };
@@ -39,11 +42,13 @@ type WmoManagerOptions = {
   host: AssetHost;
   textureManager: TextureManager;
   mapLight: MapLight;
+  liquidManager: LiquidManager;
 };
 
 class WmoManager {
   #textureManager: TextureManager;
   #mapLight: MapLight;
+  #liquidManager: LiquidManager;
   #loader: WmoLoader;
 
   #loaded = new globalThis.Map<string, WmoResources>();
@@ -53,6 +58,7 @@ class WmoManager {
   constructor(options: WmoManagerOptions) {
     this.#textureManager = options.textureManager;
     this.#mapLight = options.mapLight;
+    this.#liquidManager = options.liquidManager;
     this.#loader = new WmoLoader({ host: options.host });
   }
 
@@ -119,6 +125,19 @@ class WmoManager {
       building.add(mesh);
     }
 
+    // Canals, fountains, a harbour: water that cannot be drawn leaves the building standing
+    const liquids = await Promise.allSettled(
+      resources.spec.liquids.map((spec, i) => this.#liquidManager.createMesh(spec, resources.liquidGeometries[i])),
+    );
+    for (const liquid of liquids) {
+      if (liquid.status === 'fulfilled') {
+        liquid.value.matrixAutoUpdate = false;
+        building.add(liquid.value);
+      } else {
+        console.warn(`3D view: the water of building ${path} could not be drawn: ${describeError(liquid.reason)}`);
+      }
+    }
+
     return building;
   }
 
@@ -156,6 +175,7 @@ class WmoManager {
       path,
       spec,
       geometries: spec.groups.map((group) => this.#createGeometry(group)),
+      liquidGeometries: (spec.liquids ?? []).map((liquid) => this.#liquidManager.createGeometry(liquid)),
       materials: { lit: null, baked: null },
     };
 
