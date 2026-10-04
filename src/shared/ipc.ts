@@ -7,6 +7,7 @@ import type { ViewSpawns } from '@core/db/view-spawns';
 import type { Placement, RoutePoint, WorldAddedSpawn, WorldLayer, WorldMovementEdit, WorldRouteEdit, WorldSpawnEdit, WorldSpawnKind } from '@core/world/layer';
 import type { Movement } from '@core/world/movement';
 import type { ProjectEntities } from '@core/entities/model';
+import type { QuestUse } from '@core/entities/links';
 
 export type { Movement, Placement, RoutePoint, WorldAddedSpawn, WorldLayer, WorldMovementEdit, WorldRouteEdit, WorldSpawnEdit, WorldSpawnKind };
 
@@ -301,6 +302,8 @@ export interface CanvasNode {
   offCanvasLinks: number;
   /** Shares no edge with any other quest on the canvas; also counted in `warnings`. */
   notConnected: boolean;
+  /** The project's new NPCs, objects and items the quest uses (made for it, or named by it) */
+  uses: QuestUse;
 }
 
 /** How a quest is offered, reduced to the few kinds a canvas node has room to show. */

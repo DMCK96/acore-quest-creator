@@ -24,6 +24,7 @@ import type {
   Viewport,
 } from '@shared/ipc';
 import type { WorldLayer } from '@core/world/layer';
+import { EMPTY_ENTITIES, newItem, newNpc, newObject, type CustomItem, type CustomNpc, type CustomObject, type ProjectEntities } from '@core/entities/model';
 import { toggleRole } from '@core/modules/quest-roles';
 import type { ModuleId } from '@core/modules/model';
 import { resetModule } from '@core/modules/catalog';
@@ -67,6 +68,10 @@ export interface AppState {
   historyNote: { text: string; where: StepPlace | null; skipped: string[] } | null;
   /** The world layer as an undo or redo left it, with a count that moves each time, for the views to take */
   worldLayer: { layer: WorldLayer; seq: number } | null;
+  /** The project's new NPCs, objects and items, as edited here (sent after a pause, like quest edits) */
+  entities: ProjectEntities;
+  /** Moves each time the store is replaced from the main process (an undo, a load), for the views to redraw */
+  entitiesSeq: number;
 
   loadProfiles(): Promise<void>;
   /** Launch: lists the saved profiles and which one to offer. Connecting is always the user's click. */
@@ -100,6 +105,17 @@ export interface AppState {
   addQuestChain(id: number, position?: NodePosition): Promise<void>;
   newQuest(position?: NodePosition): Promise<void>;
   setValue(fieldId: string, value: FieldValue): void;
+  /** Replaces the project's NPCs, objects and items here at once, and sends them after the pause */
+  setEntities(next: ProjectEntities): void;
+  /** Sends the project's NPCs, objects and items now if an edit is waiting */
+  flushEntities(): Promise<void>;
+  /** Reads the project's NPCs, objects and items from the main process */
+  loadEntities(): Promise<void>;
+  /**
+   * Makes a new NPC, object or item with a fresh ID, made for `madeFor` (a quest, or null), and sends
+   * it at once so it is its own undo step before an editor opens on it
+   */
+  createEntity(kind: 'npc' | 'object' | 'item', preset: Partial<CustomNpc> | Partial<CustomObject> | Partial<CustomItem>, madeFor: number | null): Promise<{ entry: number } | { error: string }>;
   /** Switches the previewed quest into the module editor. */
   editQuest(): void;
   /** Leaves the editor for the chain canvas, sending any pending edit first; the quest stays previewed. */
@@ -184,6 +200,10 @@ const missingTablesMessage = (tables: string[], forbidden: string[] = []): strin
 export function createAppStore(api: Api, opts: { saveDelayMs?: number } = {}): AppStore {
   const saveDelayMs = opts.saveDelayMs ?? 400;
   let saveTimer: ReturnType<typeof setTimeout> | null = null;
+  // An edit to the project's NPCs waiting to be sent
+  let entitiesTimer: ReturnType<typeof setTimeout> | null = null;
+  let entitiesPending = false;
+  let entitiesSeq = 0;
   // Guards against an older, slower `search`/`openQuest` response landing after a newer one.
   let searchToken = 0;
   let openToken = 0;
@@ -255,6 +275,8 @@ export function createAppStore(api: Api, opts: { saveDelayMs?: number } = {}): A
     history: { steps: [], current: 0, saved: 0 },
     historyNote: null,
     worldLayer: null,
+    entities: structuredClone(EMPTY_ENTITIES),
+    entitiesSeq: 0,
 
     async loadProfiles() {
       const result = await api.listProfiles();
@@ -301,6 +323,7 @@ export function createAppStore(api: Api, opts: { saveDelayMs?: number } = {}): A
       }
       set((s) => ({ summary, error: null, screen: 'pick', connection: s.connection + 1 }));
       await loadHistory();
+      await get().loadEntities();
     },
 
     async saveConnection(draft, original) {
@@ -460,6 +483,59 @@ export function createAppStore(api: Api, opts: { saveDelayMs?: number } = {}): A
         saveTimer = null;
         void get().flushSave();
       }, saveDelayMs);
+    },
+
+    setEntities(next) {
+      set({ entities: next });
+      entitiesPending = true;
+      if (entitiesTimer) clearTimeout(entitiesTimer);
+      entitiesTimer = setTimeout(() => {
+        entitiesTimer = null;
+        void get().flushEntities();
+      }, saveDelayMs);
+    },
+
+    async flushEntities() {
+      if (entitiesTimer) clearTimeout(entitiesTimer);
+      entitiesTimer = null;
+      if (!entitiesPending) return;
+      entitiesPending = false;
+      const sent = await api.putProjectEntities(get().entities);
+      if (!sent.ok) {
+        set({ error: sent.error.message });
+        // What the main process holds is the truth: the edit it refused is not kept here
+        await get().loadEntities();
+        return;
+      }
+      await get().loadProjectState();
+    },
+
+    async loadEntities() {
+      const read = await api.projectEntities();
+      if (read.ok) set({ entities: read.value, entitiesSeq: ++entitiesSeq });
+    },
+
+    async createEntity(kind, preset, madeFor) {
+      await get().flushEntities();
+      const allocated = await api.allocateIds(kind === 'npc' ? 'creature' : kind === 'object' ? 'gameobject' : 'item', 1);
+      if (!allocated.ok) return { error: allocated.error.message };
+      const entry = allocated.value[0];
+      if (entry === undefined) return { error: 'No free ID could be found.' };
+      const now = get().entities;
+      const next: ProjectEntities =
+        kind === 'npc'
+          ? { ...now, npcs: [...now.npcs, { ...newNpc(entry, madeFor), ...(preset as Partial<CustomNpc>), entry, madeFor }] }
+          : kind === 'object'
+            ? { ...now, objects: [...now.objects, { ...newObject(entry, madeFor), ...(preset as Partial<CustomObject>), entry, madeFor }] }
+            : { ...now, items: [...now.items, { ...newItem(entry, madeFor), ...(preset as Partial<CustomItem>), entry, madeFor }] };
+      set({ entities: next });
+      const sent = await api.putProjectEntities(next);
+      if (!sent.ok) {
+        await get().loadEntities();
+        return { error: sent.error.message };
+      }
+      await get().loadProjectState();
+      return { entry };
     },
 
     editQuest() {
@@ -630,7 +706,8 @@ export function createAppStore(api: Api, opts: { saveDelayMs?: number } = {}): A
       set({ exportError: null });
       const result = await api.exportQuest(open.questId);
       if (result.ok) {
-        set({ exportResult: result.value, exportError: null, pendingApply: { sql: result.value.sql } });
+        const { projectSql, sql } = result.value;
+        set({ exportResult: result.value, exportError: null, pendingApply: { sql: projectSql ? `${projectSql}\n${sql}` : sql } });
       } else {
         set({ exportResult: null, exportError: result.error });
       }
@@ -669,6 +746,7 @@ export function createAppStore(api: Api, opts: { saveDelayMs?: number } = {}): A
 
     async flushAll() {
       await get().flushSave();
+      await get().flushEntities();
       await get().flushMoves();
     },
 
@@ -690,6 +768,8 @@ export function createAppStore(api: Api, opts: { saveDelayMs?: number } = {}): A
         return;
       }
       if (result.value.done) await switchedProject();
+      // An older project's quest NPCs were moved into the project; what that had to say is shown
+      if (result.value.warnings && result.value.warnings.length > 0) set({ error: result.value.warnings.join(' ') });
     },
 
     async saveProject() {
@@ -760,6 +840,7 @@ export function createAppStore(api: Api, opts: { saveDelayMs?: number } = {}): A
       const step = async (): Promise<void> => {
         // A quest edit typed before the step began is a step of its own
         await get().flushSave();
+        await get().flushEntities();
         const begun = await api.historyBegin(label, where);
         if (!begun.ok) {
           await work();
@@ -769,6 +850,7 @@ export function createAppStore(api: Api, opts: { saveDelayMs?: number } = {}): A
           await work();
           // A quest edit the work made is still on the debounce: it belongs to this step
           await get().flushSave();
+          await get().flushEntities();
         } finally {
           await api.historyEnd(begun.value);
         }
@@ -865,6 +947,7 @@ export function createAppStore(api: Api, opts: { saveDelayMs?: number } = {}): A
       const world = result.world;
       store.setState({ worldLayer: { layer: world, seq: ++layerSeq } });
     }
+    if (result.entities) store.setState({ entities: result.entities, entitiesSeq: ++entitiesSeq });
     if (result.step) {
       // A quest the undo took out of the project cannot be shown: opening it would put it back
       const where = result.step.where;
@@ -886,6 +969,11 @@ export function createAppStore(api: Api, opts: { saveDelayMs?: number } = {}): A
       clearTimeout(saveTimer);
       saveTimer = null;
     }
+    if (entitiesTimer) {
+      clearTimeout(entitiesTimer);
+      entitiesTimer = null;
+    }
+    entitiesPending = false;
     pendingMoves.clear();
     pendingViewport = null;
     store.setState({
@@ -900,6 +988,7 @@ export function createAppStore(api: Api, opts: { saveDelayMs?: number } = {}): A
       worldLayer: null,
     });
     await store.getState().loadNodes();
+    await store.getState().loadEntities();
     // Last, so the canvas applies the new project's viewport rather than the old one's.
     store.setState((s) => ({ projectEpoch: s.projectEpoch + 1 }));
   }

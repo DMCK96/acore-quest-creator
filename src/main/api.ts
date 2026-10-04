@@ -1470,6 +1470,7 @@ export function createApi(deps: ApiDeps): Api {
         // One checker for the whole canvas: the same NPC or item is asked about once, not per node.
         const refs = refsFor(live);
         const projectQuests = quests.list();
+        const store = projectEntities();
         const canvasIds = projectQuests.map((d) => d.questId);
         const onCanvas = new Set(canvasIds);
         // One link snapshot for the whole canvas, so the context is read once rather than per node.
@@ -1543,6 +1544,7 @@ export function createApi(deps: ApiDeps): Api {
             groups,
             offCanvasLinks: [...neighbours].filter((id) => existing.has(id)).length,
             notConnected,
+            uses: questUses(quest, store),
           });
         }
         return nodes;
