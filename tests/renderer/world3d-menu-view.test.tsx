@@ -159,4 +159,10 @@ describe('the right-click menu in the 3D view', () => {
     act(() => world.options.onEdit({ kind: 'presence', spawn, present: true, at: placement, map: 0 }));
     await waitFor(() => expect(api.worldAddSpawn).toHaveBeenCalledWith('creature', 1423, 0, placement, 90001));
   });
+
+  it('counts movement changes on the World changes button', async () => {
+    const movements = [{ guid: 80330, entry: 1423, name: 'Guard', map: 0, addonRow: false, original: { type: 'idle', wander: 0, pathId: null }, current: { type: 'wander', wander: 5, pathId: null } }];
+    await view({ worldLayer: vi.fn(async () => okv({ ...EMPTY, movements })) });
+    expect(await screen.findByRole('button', { name: 'World changes (1)' })).toBeEnabled();
+  });
 });

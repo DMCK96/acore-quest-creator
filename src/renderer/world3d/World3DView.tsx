@@ -9,7 +9,7 @@ import { useApi } from '../state/names';
 import type { EventFilter, PickedSpawn, SpawnStatus, SpawnVisibility } from './scene/spawn/SpawnManager';
 import type { ViewSpawns } from '@core/db/view-spawns';
 import { chooseZ, floorCandidates } from '@core/map/floors';
-import { EMPTY_WORLD, type WorldLayer } from '@core/world/layer';
+import { EMPTY_WORLD, movementsOf, type WorldLayer } from '@core/world/layer';
 import type { SpawnEdit, SpawnRef } from './edits';
 import { WorldChanges } from './WorldChanges';
 import { PlaceDialog, type Chosen } from './PlaceDialog';
@@ -231,7 +231,7 @@ function WorldStage({
   const [note, setNote] = useState<string | null>(null);
   const [shared, setShared] = useState<SharedRoute | null>(null);
   const [changesOpen, setChangesOpen] = useState(false);
-  const changes = layer.spawns.length + layer.routes.length + layer.added.length;
+  const changes = layer.spawns.length + layer.routes.length + layer.added.length + movementsOf(layer).length;
   // Choosing an existing NPC or object to place, and the one being placed (each click on the ground puts one down)
   const [choosing, setChoosing] = useState(false);
   const [placing, setPlacing] = useState<Chosen | null>(null);
