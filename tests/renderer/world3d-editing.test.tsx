@@ -39,10 +39,11 @@ async function questMap(api = makeMockApi({ worldLayer: vi.fn(async () => okv(EM
   const onChange = vi.fn();
   const view = <QuestMapView open={open()} onChange={onChange} focusId={null} onClose={vi.fn()} hasClient />;
   // With steps, the view runs under the app's history, as in the app
-  render(<NamesProvider api={api}>{steps ? <HistoryProvider store={createAppStore(api)}>{view}</HistoryProvider> : view}</NamesProvider>);
+  const store = createAppStore(api);
+  render(<NamesProvider api={api}>{steps ? <HistoryProvider store={store}>{view}</HistoryProvider> : view}</NamesProvider>);
   await userEvent.click(await screen.findByRole('button', { name: '3D view' }));
   await waitFor(() => expect(worlds).toHaveLength(1));
-  return { api, onChange, world: worlds[0] };
+  return { api, onChange, world: worlds[0], store };
 }
 
 describe('editing in the quest map\'s 3D view', () => {
@@ -132,6 +133,18 @@ describe('editing in the quest map\'s 3D view', () => {
     expect(begin).toBeLessThan(move);
     expect(move).toBeLessThan(end);
     expect(onChange).toHaveBeenCalled();
+  });
+
+  it('a gesture on its way holds an undo until it is sent', async () => {
+    const api = makeMockApi({ worldLayer: vi.fn(async () => okv(EMPTY)) });
+    const { world, store } = await questMap(api, true);
+    const release = world.options.onGestureStart();
+    const undo = store.getState().undo();
+    await new Promise((r) => setTimeout(r, 20));
+    expect(api.historyUndo).not.toHaveBeenCalled();
+    release();
+    await undo;
+    expect(api.historyUndo).toHaveBeenCalled();
   });
 
   it('a click while placing is one step', async () => {

@@ -55,7 +55,7 @@ test('Ctrl+Z undoes the last changes anywhere, newest first, and Ctrl+Y does the
   const page = await app.firstWindow();
   await newQuestTitled(page, 'Undo me');
 
-  await page.getByRole('button', { name: 'Project' }).click();
+  await page.getByRole('button', { name: 'Project', exact: true }).click();
   const modal = page.getByRole('dialog', { name: 'Project' });
   await modal.getByLabel('Project name').fill('Undo test');
   await modal.getByLabel('Project name').press('Enter');
@@ -91,7 +91,7 @@ test('undoing back to the save makes the project clean again', async () => {
   await page.keyboard.press('Control+Shift+s');
   await expect(page.getByLabel('Unsaved changes')).toHaveCount(0);
 
-  await page.getByRole('button', { name: 'Project' }).click();
+  await page.getByRole('button', { name: 'Project', exact: true }).click();
   await page.getByRole('dialog', { name: 'Project' }).getByLabel('Project name').fill('After the save');
   await page.getByRole('dialog', { name: 'Project' }).getByLabel('Project name').press('Enter');
   await closeProjectDialog(page);

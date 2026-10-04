@@ -243,9 +243,11 @@ function WorldStage({
     world.current?.setWorldLayer(next);
   };
   // An undo or redo changed the world layer: a drag under way is dropped first, then the layer is drawn
-  const { worldLayer: undone, runStep } = useHistorySteps();
+  const { worldLayer: undone, runStep, hold } = useHistorySteps();
   const runStepRef = useRef(runStep);
   runStepRef.current = runStep;
+  const holdRef = useRef(hold);
+  holdRef.current = hold;
   const seenSeq = useRef(undone?.seq ?? 0);
   useEffect(() => {
     if (!undone || undone.seq === seenSeq.current) return;
@@ -500,6 +502,8 @@ function WorldStage({
             beforeRouteEdit,
             onNotice: (message) => live && setNote(message),
             onPlace: (request) => void runStepRef.current(() => place(request)),
+            // A gesture waiting for the floor holds undo, so Ctrl+Z takes it back rather than the step before
+            onGestureStart: () => holdRef.current(),
             onPlaceEnd: () => live && setPlacing(null),
             spawns: async (spawnMap, box) => {
               const current = apiRef.current;

@@ -150,6 +150,11 @@ export interface AppState {
    */
   newQuestFrom(giver: { entry: number; name: string }, previous: number | null): Promise<void>;
   setHistory(list: HistoryList): void;
+  /**
+   * Holds undo back while a change is on its way to the project (a 3D gesture waiting for the floor):
+   * an undo waits for it, so it takes that change back and not the one before. Returns the release
+   */
+  holdHistory(): () => void;
   dismissHistoryNote(): void;
 }
 
@@ -183,8 +188,31 @@ export function createAppStore(api: Api, opts: { saveDelayMs?: number } = {}): A
   let searchToken = 0;
   let openToken = 0;
   let nodesToken = 0;
+  // Each read of the project state is numbered when it is asked for; only the newest is kept, so a
+  // read waiting on the graph cannot put back an unsaved marker a later read has cleared
+  let projectToken = 0;
+  const readProject = async (): Promise<{ token: number; result: Result<ProjectState> }> => {
+    const token = ++projectToken;
+    return { token, result: await api.projectState() };
+  };
   // StrictMode runs effects twice in development; launch must still connect only once.
   let started = false;
+  // The world layers an undo hands the views are counted, never from zero again, so a view that saw
+  // one count in an earlier project still sees the next
+  let layerSeq = 0;
+  // Changes on their way to the project, which an undo waits for
+  const holds = new Set<Promise<void>>();
+  const hold = (): (() => void) => {
+    let release!: () => void;
+    const held = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    holds.add(held);
+    return () => {
+      holds.delete(held);
+      release();
+    };
+  };
   // The latest position per quest queued by a drag, and the latest queued viewport, cleared once
   // `flushMoves` has sent them. `lastSavedViewport` is what the API last saw, so an unchanged
   // viewport (e.g. a pan back to where it started) does not trigger a redundant save.
@@ -509,10 +537,11 @@ export function createAppStore(api: Api, opts: { saveDelayMs?: number } = {}): A
 
     async loadNodes() {
       const token = ++nodesToken;
-      const [nodesResult, projectResult] = await Promise.all([api.listNodes(), api.projectState()]);
+      const [nodesResult, read] = await Promise.all([api.listNodes(), readProject()]);
       if (token !== nodesToken) return;
       if (nodesResult.ok) set({ nodes: nodesResult.value });
-      if (projectResult.ok) {
+      const projectResult = read.result;
+      if (projectResult.ok && read.token === projectToken) {
         lastSavedViewport = projectResult.value.viewport;
         set({ viewport: projectResult.value.viewport, project: projectResult.value });
       }
@@ -629,8 +658,8 @@ export function createAppStore(api: Api, opts: { saveDelayMs?: number } = {}): A
     },
 
     async loadProjectState() {
-      const result = await api.projectState();
-      if (result.ok) set({ project: result.value });
+      const { token, result } = await readProject();
+      if (result.ok && token === projectToken) set({ project: result.value });
     },
 
     async flushAll() {
@@ -722,19 +751,26 @@ export function createAppStore(api: Api, opts: { saveDelayMs?: number } = {}): A
     jumpTo: (stepId) => travel(() => api.historyJump(stepId)),
 
     async historyStep(work, label, where) {
-      const begun = await api.historyBegin(label, where);
-      if (!begun.ok) {
-        await work();
-        return;
-      }
+      const release = hold();
       try {
-        await work();
-        // A quest edit the work made is still on the debounce: it belongs to this step
-        await get().flushSave();
+        const begun = await api.historyBegin(label, where);
+        if (!begun.ok) {
+          await work();
+          return;
+        }
+        try {
+          await work();
+          // A quest edit the work made is still on the debounce: it belongs to this step
+          await get().flushSave();
+        } finally {
+          await api.historyEnd(begun.value);
+        }
       } finally {
-        await api.historyEnd(begun.value);
+        release();
       }
     },
+
+    holdHistory: () => hold(),
 
     async newQuestFrom(giver, previous) {
       const label = `${previous === null ? 'New' : 'Next'} quest from ${giver.name}`;
@@ -755,6 +791,8 @@ export function createAppStore(api: Api, opts: { saveDelayMs?: number } = {}): A
 
     setHistory(list) {
       set({ history: list });
+      // A step closed after its changes (a gesture's end) can be what leaves the project unsaved
+      void get().loadProjectState();
     },
 
     dismissHistoryNote() {
@@ -772,6 +810,7 @@ export function createAppStore(api: Api, opts: { saveDelayMs?: number } = {}): A
    * not the one before it; if that could not be saved, nothing is undone.
    */
   async function travel(call: () => Promise<Result<HistoryResult>>): Promise<void> {
+    while (holds.size > 0) await Promise.all([...holds]);
     await store.getState().flushAll();
     if (store.getState().dirty) return;
     const result = await call();
@@ -792,7 +831,9 @@ export function createAppStore(api: Api, opts: { saveDelayMs?: number } = {}): A
       if (mine.aggregate === null) {
         store.setState({ screen: 'pick', open: null, dirty: false, links: null, openPanel: null });
       } else {
-        store.setState({ open: { ...open, aggregate: mine.aggregate }, dirty: false });
+        store.setState({ open: { ...open, aggregate: mine.aggregate }, dirty: false, exportResult: null });
+        // The Changes panel compares the quest as it was; it is read again for the quest as it now is
+        if (store.getState().preview !== null) await store.getState().loadPreview();
         const issues = await api.validate(open.questId);
         if (issues.ok) store.setState({ issues: issues.value });
         await store.getState().loadLinks();
@@ -800,11 +841,14 @@ export function createAppStore(api: Api, opts: { saveDelayMs?: number } = {}): A
     }
     if (result.world) {
       const world = result.world;
-      store.setState((s) => ({ worldLayer: { layer: world, seq: (s.worldLayer?.seq ?? 0) + 1 } }));
+      store.setState({ worldLayer: { layer: world, seq: ++layerSeq } });
     }
     if (result.step) {
+      // A quest the undo took out of the project cannot be shown: opening it would put it back
+      const where = result.step.where;
+      const gone = where && 'questId' in where && result.quests.some((q) => q.questId === where.questId && q.aggregate === null);
       store.setState({
-        historyNote: { text: `${result.direction === 'undo' ? 'Undid' : 'Redid'}: ${result.step.label}`, where: result.step.where, skipped: result.skipped },
+        historyNote: { text: `${result.direction === 'undo' ? 'Undid' : 'Redid'}: ${result.step.label}`, where: gone ? null : where, skipped: result.skipped },
       });
     }
     if (result.positions || result.quests.length > 0) await store.getState().loadNodes();

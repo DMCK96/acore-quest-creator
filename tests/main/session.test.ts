@@ -235,3 +235,17 @@ describe('the session\'s history', () => {
     expect(heard).toHaveBeenCalled();
   });
 });
+
+describe('review findings: the session', () => {
+  it('tells title listeners when a step made between begin and end leaves the project unsaved', () => {
+    const s = fresh();
+    s.markSaved('C:\p.aqc');
+    const heard = vi.fn();
+    s.onChange(heard);
+    const t = s.history.begin('Move');
+    s.world.put({ ...EMPTY_WORLD, routes: [{ pathId: 1, walkers: 1, original: [], current: [] }] });
+    s.history.end(t);
+    expect(s.dirty()).toBe(true);
+    expect(heard).toHaveBeenCalled();
+  });
+});

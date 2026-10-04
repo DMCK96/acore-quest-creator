@@ -38,7 +38,7 @@ import { addSpawn, hasWorldChanges, isAdded, moveSpawn, movementsOf, revertMovem
 import { IDLE } from '../core/world/movement';
 import { describeStep } from './project/step-labels';
 import type { HistoryStep } from './project/history';
-import type { HistoryResult, StepSummary } from '../shared/history';
+import type { HistoryPart, HistoryResult, QuestEdit, StepSummary } from '../shared/history';
 import { addedDrifted, countWalkers, movementDrifted, readMovement, readPlacement, readRoute, readTemplateLook, routeDrifted, spawnDrifted, worldSchema } from './world/world-api';
 import type {
   Api,
@@ -369,14 +369,77 @@ export function createApi(deps: ApiDeps): Api {
     }
   };
   const historyList = () => history.list(describeStep);
-  /**
-   * Applies steps in order and says what they changed. A part that would bring back a placed spawn or a
-   * new quest whose id the database has taken since is left out, with why.
-   */
-  const applySteps = async (steps: HistoryStep[], direction: 'undo' | 'redo'): Promise<HistoryResult> => {
+  /** The spawns and new quests the steps would bring back that the database has taken since */
+  const takenBy = async (steps: HistoryStep[], direction: 'undo' | 'redo'): Promise<{ spawns: Set<string>; quests: Set<number> }> => {
+    const spawns = new Set<string>();
+    const quests = new Set<number>();
     const db = session?.db ?? null;
+    if (!db) return { spawns, quests };
+    // Walked against the project as it will stand at each step, not the step's own other side
+    let added = deps.session.world.get().added;
+    const present = new Set(quests_present());
+    const spawnAsks: { key: string; kind: WorldLayer['added'][number]['kind']; guid: number }[] = [];
+    const questAsks: number[] = [];
+    for (const step of steps) {
+      for (const part of step.parts) {
+        const to = direction === 'undo' ? part.before : part.after;
+        if (part.kind === 'world') {
+          const layer = to as WorldLayer;
+          for (const a of layer.added) {
+            const key = `${a.kind}:${a.guid}`;
+            if (!added.some((b) => b.kind === a.kind && b.guid === a.guid) && !spawnAsks.some((x) => x.key === key)) spawnAsks.push({ key, kind: a.kind, guid: a.guid });
+          }
+          added = layer.added;
+        } else if (part.kind === 'quest') {
+          const quest = to as QuestEdit | null;
+          if (quest && quest.isNew && !present.has(part.questId) && !questAsks.includes(part.questId)) questAsks.push(part.questId);
+          if (quest) present.add(part.questId);
+          else present.delete(part.questId);
+        }
+      }
+    }
+    for (const ask of spawnAsks) if ((await readPlacement(db, ask.kind, ask.guid)) !== null) spawns.add(ask.key);
+    if (questAsks.length > 0) for (const id of await db.existingIds('quest', questAsks)) quests.add(id);
+    return { spawns, quests };
+  };
+  const quests_present = (): number[] => quests.list().map((q) => q.questId);
+
+  /** A layer without the placed spawns (and their movements) whose ids the database has taken */
+  const withoutTaken = (layer: WorldLayer, taken: Set<string>): WorldLayer => {
+    if (taken.size === 0) return layer;
+    const gone = (kind: string, guid: number) => taken.has(`${kind}:${guid}`);
+    return {
+      ...layer,
+      added: layer.added.filter((a) => !gone(a.kind, a.guid)),
+      ...(layer.movements ? { movements: layer.movements.filter((m) => !gone('creature', m.guid)) } : {}),
+    };
+  };
+
+  /**
+   * An undo, redo or jump. The database is asked first, about what the steps would bring back; then,
+   * with nothing awaited, the steps are taken from the history and applied, so no other change can
+   * land in between. If the project changed while the database was asked, it is planned again.
+   */
+  const travel = async (
+    plan: () => { direction: 'undo' | 'redo'; steps: HistoryStep[] },
+    take: () => { direction: 'undo' | 'redo'; steps: HistoryStep[] },
+  ): Promise<HistoryResult> => {
+    for (let attempt = 0; ; attempt++) {
+      history.endAll();
+      const revision = deps.session.revision();
+      const planned = plan();
+      const taken = await takenBy(planned.steps, planned.direction);
+      const again = plan();
+      const same = again.steps.length === planned.steps.length && again.steps.every((st, i) => st.id === planned.steps[i]!.id);
+      if ((!same || deps.session.revision() !== revision) && attempt < 3) continue;
+      return applySteps(take(), taken);
+    }
+  };
+
+  /** Applies steps in order, with nothing awaited, leaving out what the database has taken, and says what they changed */
+  const applySteps = ({ direction, steps }: { direction: 'undo' | 'redo'; steps: HistoryStep[] }, taken: { spawns: Set<string>; quests: Set<number> }): HistoryResult => {
     const verb = direction === 'undo' ? 'undo' : 'redo';
-    const skipped: string[] = [];
+    const left = new Set<string>();
     const touched: number[] = [];
     let positions = false;
     let world = false;
@@ -384,28 +447,22 @@ export function createApi(deps: ApiDeps): Api {
     let last: StepSummary | null = null;
     for (const step of steps) {
       const skip = new Set<number>();
-      const parts = await Promise.all(step.parts.map(async (part, i) => {
-        if (part.kind === 'world' && db) {
-          const from = direction === 'undo' ? part.after : part.before;
+      const parts = step.parts.map((part, i): HistoryPart => {
+        if (part.kind === 'world') {
           const to = direction === 'undo' ? part.before : part.after;
-          const coming = to.added.filter((a) => !from.added.some((b) => b.kind === a.kind && b.guid === a.guid));
-          const taken: typeof coming = [];
-          for (const a of coming) if ((await readPlacement(db, a.kind, a.guid)) !== null) taken.push(a);
-          if (taken.length === 0) return part;
-          for (const a of taken) skipped.push(`Could not ${verb}: spawn ${a.guid} is now in the database`);
-          const kept = { ...to, added: to.added.filter((a) => !taken.includes(a)) };
+          const kept = withoutTaken(to, taken.spawns);
+          for (const a of to.added) if (!kept.added.includes(a)) left.add(`Could not ${verb}: spawn ${a.guid} is now in the database`);
           return direction === 'undo' ? { ...part, before: kept } : { ...part, after: kept };
         }
-        if (part.kind === 'quest' && db) {
+        if (part.kind === 'quest') {
           const to = direction === 'undo' ? part.before : part.after;
-          const from = direction === 'undo' ? part.after : part.before;
-          if (to && !from && to.isNew && (await db.existingIds('quest', [part.questId])).has(part.questId)) {
-            skipped.push(`Could not ${verb}: quest ${part.questId} is now in the database`);
+          if (to && to.isNew && taken.quests.has(part.questId) && !quests.get(part.questId)) {
+            left.add(`Could not ${verb}: quest ${part.questId} is now in the database`);
             skip.add(i);
           }
         }
         return part;
-      }));
+      });
       deps.session.applyStep({ ...step, parts }, direction, skip);
       step.parts.forEach((part, i) => {
         if (skip.has(i)) return;
@@ -426,9 +483,16 @@ export function createApi(deps: ApiDeps): Api {
       positions,
       world: world ? { ...layer, movements: movementsOf(layer) } : null,
       name,
-      skipped,
+      skipped: [...left],
       history: historyList(),
     };
+  };
+  // Undo, redo and jump one at a time: Ctrl+Z held down sends them faster than they finish
+  let travelling: Promise<unknown> = Promise.resolve();
+  const queued = <T,>(work: () => Promise<T>): Promise<T> => {
+    const next = travelling.then(work, work);
+    travelling = next.catch(() => undefined);
+    return next;
   };
 
   const questOf = (questId: number): ProjectQuest => {
@@ -1821,22 +1885,32 @@ export function createApi(deps: ApiDeps): Api {
     historyList: () => run(async () => historyList()),
 
     historyUndo: () =>
-      run(async () => {
-        const step = history.undo();
-        return applySteps(step ? [step] : [], 'undo');
-      }),
+      run(() =>
+        queued(() =>
+          travel(
+            () => ({ direction: 'undo', steps: history.peekUndo() ? [history.peekUndo()!] : [] }),
+            () => {
+              const step = history.undo();
+              return { direction: 'undo', steps: step ? [step] : [] };
+            },
+          ),
+        ),
+      ),
 
     historyRedo: () =>
-      run(async () => {
-        const step = history.redo();
-        return applySteps(step ? [step] : [], 'redo');
-      }),
+      run(() =>
+        queued(() =>
+          travel(
+            () => ({ direction: 'redo', steps: history.peekRedo() ? [history.peekRedo()!] : [] }),
+            () => {
+              const step = history.redo();
+              return { direction: 'redo', steps: step ? [step] : [] };
+            },
+          ),
+        ),
+      ),
 
-    historyJump: (stepId) =>
-      run(async () => {
-        const { direction, steps } = history.jump(stepId);
-        return applySteps(steps, direction);
-      }),
+    historyJump: (stepId) => run(() => queued(() => travel(() => history.peekJump(stepId), () => history.jump(stepId)))),
 
     historyBegin: (label, where) => run(async () => history.begin(label, where)),
 

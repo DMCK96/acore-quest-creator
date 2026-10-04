@@ -44,6 +44,8 @@ export interface World3DOptions {
   onSelect?(spawn: PickedSpawn | null): void;
   /** Told each gesture made in the view: its whole placements and routes, to store as one step. */
   onGesture?(edits: SpawnEdit[]): void;
+  /** A gesture has started on its way to the host; undo waits until the release is called. */
+  onGestureStart?(): () => void;
   /** The server's floor nearest a height at a place, or null when it has none there. */
   floorZ?(x: number, y: number, nearZ: number): Promise<number | null>;
   /** Asked once per route before the first change to a world route that is not the quest's. */
@@ -367,6 +369,7 @@ export function createWorld3D(options: World3DOptions): World3D {
     },
     {
       onGesture: options.onGesture,
+      onGestureStart: options.onGestureStart,
       floorZ: options.floorZ,
       beforeRouteEdit: options.beforeRouteEdit,
       onNotice: options.onNotice,

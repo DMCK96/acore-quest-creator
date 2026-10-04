@@ -600,3 +600,46 @@ describe('a drag dropped by an undo', () => {
     expect(t.edits).toEqual([]);
   });
 });
+
+describe('a gesture on its way', () => {
+  it('holds undo from the release until its edits are sent, while the floor is looked up', async () => {
+    const t = setup({ floor: 1 });
+    const order: string[] = [];
+    const editor = new Editor(t.world, {
+      onGesture: () => order.push('sent'),
+      floorZ: async () => {
+        order.push('floor');
+        return 1;
+      },
+      onGestureStart: () => {
+        order.push('held');
+        return () => order.push('released');
+      },
+    });
+    t.npc(1, 0, 0);
+    const gizmo = gizmos.at(-1);
+    editor.setSelection(sel({ spawns: [{ kind: 'creature', guid: 1 }] }));
+    editor.update();
+    gizmo.events.started();
+    gizmo.events.moved(t.change([0, 4, 0]));
+    await gizmo.events.ended(false);
+    // Held before the floor is asked, and every hold let go only once the edits are sent
+    expect(order.slice(0, 2)).toEqual(['held', 'floor']);
+    expect(order.at(-1)).toBe('released');
+    expect(order.indexOf('sent')).toBeLessThan(order.indexOf('released'));
+    expect(order.filter((o) => o === 'held')).toHaveLength(order.filter((o) => o === 'released').length);
+  });
+
+  it('holds nothing for a drag that changed nothing', async () => {
+    const t = setup();
+    const held = vi.fn(() => () => {});
+    const editor = new Editor(t.world, { onGestureStart: held });
+    t.npc(1, 0, 0);
+    const gizmo = gizmos.at(-1);
+    editor.setSelection(sel({ spawns: [{ kind: 'creature', guid: 1 }] }));
+    editor.update();
+    gizmo.events.started();
+    await gizmo.events.ended(false);
+    expect(held).not.toHaveBeenCalled();
+  });
+});

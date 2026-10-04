@@ -74,15 +74,28 @@ export function createProjectSession(initial: ProjectMeta, newId: () => string =
   let revision = 0;
   const history = createHistory({ now: opts.now });
   const dirty = (): boolean => extraDirty || !history.atSaved();
+  // A step closed later (the end of a gesture) can leave the project unsaved without a change of its own
+  let toldDirty = false;
+  // A change under way tells its own listeners when it is done
+  let mutating = false;
+  history.onChange(() => {
+    if (!mutating && dirty() !== toldDirty) notify();
+  });
   const listeners = new Set<() => void>();
 
   const notify = (): void => {
+    toldDirty = dirty();
     for (const l of listeners) l();
   };
   /** Runs `mutate`, then tells listeners if anything the title shows moved. */
   const watched = (mutate: () => void, always = false): void => {
     const before = [meta.name, filePath, dirty()];
-    mutate();
+    mutating = true;
+    try {
+      mutate();
+    } finally {
+      mutating = false;
+    }
     if (always || before[0] !== meta.name || before[1] !== filePath || before[2] !== dirty()) notify();
   };
   const change = (): void => {

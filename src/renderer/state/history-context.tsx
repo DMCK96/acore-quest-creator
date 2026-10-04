@@ -7,18 +7,20 @@ import type { AppStore } from './app-store';
 export interface HistorySteps {
   /** Runs `work` as one step of the project's history */
   runStep(work: () => Promise<void>, label?: string, where?: StepPlace): Promise<void>;
+  /** Holds undo back while a change is on its way to the project; returns the release */
+  hold(): () => void;
   /** The world layer as the last undo or redo left it; its count moves each time */
   worldLayer: { layer: WorldLayer; seq: number } | null;
 }
 
 // Outside the app (a view rendered on its own, as in tests) a step is just the work
-const standalone: HistorySteps = { runStep: (work) => work(), worldLayer: null };
+const standalone: HistorySteps = { runStep: (work) => work(), hold: () => () => {}, worldLayer: null };
 const HistoryContext = createContext<HistorySteps>(standalone);
 
 export function HistoryProvider({ store, children }: { store: AppStore; children: React.ReactNode }): React.JSX.Element {
   const worldLayer = store((s) => s.worldLayer);
   const value = useMemo<HistorySteps>(
-    () => ({ runStep: (work, label, where) => store.getState().historyStep(work, label, where), worldLayer }),
+    () => ({ runStep: (work, label, where) => store.getState().historyStep(work, label, where), hold: () => store.getState().holdHistory(), worldLayer }),
     [store, worldLayer],
   );
   return <HistoryContext.Provider value={value}>{children}</HistoryContext.Provider>;

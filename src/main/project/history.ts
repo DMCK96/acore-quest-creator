@@ -35,6 +35,12 @@ export interface ProjectHistory {
   redo(): HistoryStep | null;
   /** The steps to undo (newest first) or redo (oldest first) to stand just after `stepId`; 0 is before every step */
   jump(stepId: number): { direction: 'undo' | 'redo'; steps: HistoryStep[] };
+  /** The step `undo` would give, without moving */
+  peekUndo(): HistoryStep | null;
+  /** The step `redo` would give, without moving */
+  peekRedo(): HistoryStep | null;
+  /** The steps `jump` would give, without moving */
+  peekJump(stepId: number): { direction: 'undo' | 'redo'; steps: HistoryStep[] };
   list(describe: (step: HistoryStep) => Omit<StepSummary, 'id'>): HistoryList;
   /** The id of the last applied step, 0 before any */
   current(): number;
@@ -208,6 +214,15 @@ export function createHistory(opts: { now?: () => number; limit?: number } = {})
       mergeable = false;
       tell();
       return { direction, steps };
+    },
+    peekUndo: () => done.at(-1) ?? null,
+    peekRedo: () => undone.at(-1) ?? null,
+    peekJump(stepId) {
+      const at = done.findIndex((s) => s.id === stepId);
+      if (stepId === 0 || at >= 0) return { direction: 'undo', steps: done.slice(at + 1).reverse() };
+      const ahead = undone.findIndex((s) => s.id === stepId);
+      if (ahead >= 0) return { direction: 'redo', steps: undone.slice(ahead).reverse() };
+      return { direction: 'undo', steps: [] };
     },
     list(describe) {
       const steps = [...done, ...[...undone].reverse()].map((s) => ({ id: s.id, ...describe(s) }));

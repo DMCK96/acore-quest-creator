@@ -109,3 +109,55 @@ describe('undo and redo through the API', () => {
     expect(out.value.world.spawns).toEqual([]);
   });
 });
+
+describe('review findings', () => {
+  it('keeps the history and the project in step when a change lands while an undo checks the database', async () => {
+    const { api, db, session } = await setup();
+    const placed: any = await api.worldAddSpawn('creature', 1423, 0, at(-9400));
+    await api.worldRevert({ kind: 'spawn', spawnKind: 'creature', guid: placed.value.guid });
+    // The undo brings the placed spawn back, so it asks the database, slowly; a move lands meanwhile
+    const select = db.selectRows.bind(db);
+    let slow = true;
+    (db as any).selectRows = async (table: string, where: Record<string, string>) => {
+      if (slow && table === 'creature' && where.guid === String(placed.value.guid)) {
+        slow = false;
+        await new Promise((r) => setTimeout(r, 30));
+      }
+      return select(table, where);
+    };
+    await Promise.all([api.historyUndo(), api.worldMoveSpawn('creature', 80330, at(-9470))]);
+    const now = session.world.get();
+    await api.historyUndo();
+    await api.historyRedo();
+    expect(session.world.get()).toEqual(now);
+  });
+
+  it('leaves a taken spawn out of every later step of a redo, not only the step that placed it', async () => {
+    const { api, db } = await setup();
+    const placed: any = await api.worldAddSpawn('creature', 1423, 0, at(-9400));
+    const guid = placed.value.guid;
+    await api.worldMoveSpawn('creature', 80330, at(-9470));
+    await api.historyJump(0);
+    db.insert('creature', { guid: String(guid), id1: '1423', map: '0', position_x: '0', position_y: '0', position_z: '0', orientation: '0' });
+    await api.historyRedo();
+    const second: any = await api.historyRedo();
+    expect(second.value.world.added).toEqual([]);
+    expect(second.value.world.spawns).toHaveLength(1);
+    expect(second.value.skipped).toEqual([`Could not redo: spawn ${guid} is now in the database`]);
+  });
+
+  it('leaves a taken new quest out of every later step of a jump', async () => {
+    const { api, db, session } = await setup();
+    const created: any = await api.newQuest();
+    const id = created.value.questId;
+    await api.updateQuest({ ...created.value.aggregate, values: { ...created.value.aggregate.values, 'quest_template.LogTitle': 'Mine' } });
+    await api.historyJump(0);
+    db.insert('quest_template', { ID: String(id), LogTitle: 'Theirs' });
+    const list: any = await api.historyList();
+    const out: any = await api.historyJump(list.value.steps.at(-1).id);
+    expect(session.quests.get(id)).toBeUndefined();
+    // Neither step brought it back, so there is nothing to tell the window about it
+    expect(out.value.quests).toEqual([]);
+    expect(out.value.skipped).toEqual([`Could not redo: quest ${id} is now in the database`]);
+  });
+});

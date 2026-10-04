@@ -54,6 +54,8 @@ export interface EditingWorld {
 export interface EditingOptions {
   /** One gesture's edits, to be stored as one step */
   onGesture?(edits: SpawnEdit[]): void;
+  /** A gesture has started on its way (waiting for the floor or a question); undo waits until the release is called */
+  onGestureStart?(): () => void;
   /** The server's floor nearest a height at a place, or null when it has none there */
   floorZ?(x: number, y: number, nearZ: number): Promise<number | null>;
   /** Asked once per route before the first change to a world route; false leaves it as it was */
@@ -520,56 +522,62 @@ export class Editor {
     // A lone object tilted on its X or Y ring has turned, though not about Z
     const tilted = !!change && attached?.turns === 'all' && change.quaternion.angleTo(attached.quaternion) > 1e-9;
     if (!drag || !change || (change.delta.lengthSq() === 0 && change.angle === 0 && !tilted)) return;
-    const moving = this.#mode === 'move' || this.#attached?.turns === 'none';
+    // An undo waits until this gesture is sent: the floor and any question come first
+    const release = this.#options.onGestureStart?.();
+    try {
+      const moving = this.#mode === 'move' || this.#attached?.turns === 'none';
 
-    const spawns = drag.spawns.flatMap((s) => {
-      const object = this.#world.findSpawn(s.kind, s.guid);
-      return object ? [{ ...s, object }] : [];
-    });
-    const routes = drag.routes.map((r) => ({ ...r, changed: r.current.flatMap((p, i) => (p === r.before[i] ? [] : [i])) }));
-    // Drawn where they were dragged from now on, while the server's floor and any question are awaited,
-    // so the gizmo stays with them and a quick second drag starts from there
-    for (const r of routes) if (r.changed.length > 0) this.#pend(r.guid, r.current);
+      const spawns = drag.spawns.flatMap((s) => {
+        const object = this.#world.findSpawn(s.kind, s.guid);
+        return object ? [{ ...s, object }] : [];
+      });
+      const routes = drag.routes.map((r) => ({ ...r, changed: r.current.flatMap((p, i) => (p === r.before[i] ? [] : [i])) }));
+      // Drawn where they were dragged from now on, while the server's floor and any question are awaited,
+      // so the gizmo stays with them and a quick second drag starts from there
+      for (const r of routes) if (r.changed.length > 0) this.#pend(r.guid, r.current);
 
-    // Dropped along the ground: onto the server's floor nearest where each thing was dragged, when it has one
-    if (moving && !lifted && this.#options.floorZ) {
-      const floorZ = this.#options.floorZ;
-      const asks = [
-        ...spawns.map(async (s) => {
-          const floor = await floorZ(s.object.position.x, s.object.position.y, s.object.position.z);
-          if (floor !== null) s.object.position.z = floor;
-          return floor !== null;
-        }),
-        ...routes.flatMap((r) =>
-          r.changed.map(async (i) => {
-            const p = r.current[i]!;
-            const floor = await floorZ(p.x, p.y, p.z);
-            if (floor !== null) r.current[i] = { ...p, z: floor };
+      // Dropped along the ground: onto the server's floor nearest where each thing was dragged, when it has one
+      if (moving && !lifted && this.#options.floorZ) {
+        const floorZ = this.#options.floorZ;
+        const asks = [
+          ...spawns.map(async (s) => {
+            const floor = await floorZ(s.object.position.x, s.object.position.y, s.object.position.z);
+            if (floor !== null) s.object.position.z = floor;
             return floor !== null;
           }),
-        ),
-      ];
-      const unfloored = (await Promise.all(asks)).filter((found) => !found).length;
-      this.#options.onNotice?.(unfloored === 0 ? null : unfloored === 1 ? NOT_SNAPPED : `${unfloored} of them: the height is from the drawn ground, not the server.`);
-    }
+          ...routes.flatMap((r) =>
+            r.changed.map(async (i) => {
+              const p = r.current[i]!;
+              const floor = await floorZ(p.x, p.y, p.z);
+              if (floor !== null) r.current[i] = { ...p, z: floor };
+              return floor !== null;
+            }),
+          ),
+        ];
+        const unfloored = (await Promise.all(asks)).filter((found) => !found).length;
+        this.#options.onNotice?.(unfloored === 0 ? null : unfloored === 1 ? NOT_SNAPPED : `${unfloored} of them: the height is from the drawn ground, not the server.`);
+      }
 
-    const before: SpawnEdit[] = [];
-    const after: SpawnEdit[] = [];
-    for (const s of spawns) {
-      // A move puts the NPC where it was dragged to, so what it was lifted onto the ground by no longer applies
-      if (moving) s.object.userData.lift = 0;
-      s.object.updateMatrixWorld(true);
-      const spawn = this.#ref(s.kind, s.guid);
-      if (!spawn) continue;
-      before.push({ kind: 'place', spawn, to: s.before });
-      after.push({ kind: 'place', spawn, to: placementOf(s.object, s.kind) });
+      const before: SpawnEdit[] = [];
+      const after: SpawnEdit[] = [];
+      for (const s of spawns) {
+        // A move puts the NPC where it was dragged to, so what it was lifted onto the ground by no longer applies
+        if (moving) s.object.userData.lift = 0;
+        s.object.updateMatrixWorld(true);
+        const spawn = this.#ref(s.kind, s.guid);
+        if (!spawn) continue;
+        before.push({ kind: 'place', spawn, to: s.before });
+        after.push({ kind: 'place', spawn, to: placementOf(s.object, s.kind) });
+      }
+      for (const r of routes) {
+        if (r.changed.length === 0) continue;
+        before.push(this.#routeEdit(r.guid, r.before));
+        after.push(this.#routeEdit(r.guid, r.current));
+      }
+      await this.#commit(before, after);
+    } finally {
+      release?.();
     }
-    for (const r of routes) {
-      if (r.changed.length === 0) continue;
-      before.push(this.#routeEdit(r.guid, r.before));
-      after.push(this.#routeEdit(r.guid, r.current));
-    }
-    await this.#commit(before, after);
   }
 
   /** Delete: every picked point out of its route; a route that would be too short to walk is left as it was */
@@ -601,26 +609,32 @@ export class Editor {
    * gesture.
    */
   async #commit(before: SpawnEdit[], after: SpawnEdit[]): Promise<void> {
-    const kept: number[] = [];
-    for (let i = 0; i < after.length; i++) {
-      const edit = after[i]!;
-      if (edit.kind === 'route' && !edit.spawn.own) {
-        let answer = this.#answers.get(edit.pathId);
-        if (!answer) {
-          answer = this.#options.beforeRouteEdit?.(edit.spawn, edit.pathId) ?? Promise.resolve(true);
-          this.#answers.set(edit.pathId, answer);
+    // An undo waits while a shared route is asked about
+    const release = this.#options.onGestureStart?.();
+    try {
+      const kept: number[] = [];
+      for (let i = 0; i < after.length; i++) {
+        const edit = after[i]!;
+        if (edit.kind === 'route' && !edit.spawn.own) {
+          let answer = this.#answers.get(edit.pathId);
+          if (!answer) {
+            answer = this.#options.beforeRouteEdit?.(edit.spawn, edit.pathId) ?? Promise.resolve(true);
+            this.#answers.set(edit.pathId, answer);
+          }
+          if (!(await answer)) {
+            const was = before[i]!;
+            if (was.kind === 'route') this.#pend(was.spawn.guid, was.points);
+            continue;
+          }
         }
-        if (!(await answer)) {
-          const was = before[i]!;
-          if (was.kind === 'route') this.#pend(was.spawn.guid, was.points);
-          continue;
-        }
+        kept.push(i);
       }
-      kept.push(i);
+      if (kept.length === 0) return;
+      const done = kept.map((i) => after[i]!);
+      for (const edit of done) if (edit.kind === 'route') this.#pend(edit.spawn.guid, edit.points);
+      this.#options.onGesture?.(done);
+    } finally {
+      release?.();
     }
-    if (kept.length === 0) return;
-    const done = kept.map((i) => after[i]!);
-    for (const edit of done) if (edit.kind === 'route') this.#pend(edit.spawn.guid, edit.points);
-    this.#options.onGesture?.(done);
   }
 }

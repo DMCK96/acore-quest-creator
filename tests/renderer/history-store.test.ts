@@ -132,3 +132,82 @@ describe('a new quest from an NPC', () => {
     expect(failing.updateQuest).not.toHaveBeenCalled();
   });
 });
+
+describe('review findings: the store', () => {
+  it('reads the unsaved marker again when the main process tells of a new step', async () => {
+    const { api, store } = await connected();
+    const before = vi.mocked(api.projectState).mock.calls.length;
+    store.getState().setHistory(list(1));
+    await vi.waitFor(() => expect(vi.mocked(api.projectState).mock.calls.length).toBeGreaterThan(before));
+  });
+
+  it('gives each undone world layer a count that only goes up, across projects', async () => {
+    const layer = { spawns: [], routes: [], added: [], movements: [] };
+    const { store } = await connected({
+      historyUndo: async () => okv({ ...emptyHistoryResult, step: { id: 1, label: 'Moved Guard', kind: 'world', where: null }, world: layer }),
+      newProject: async () => okv({ done: true }),
+    });
+    await store.getState().undo();
+    const first = store.getState().worldLayer!.seq;
+    await store.getState().newProject('Next');
+    await store.getState().undo();
+    expect(store.getState().worldLayer!.seq).toBeGreaterThan(first);
+  });
+
+  it('waits for a gesture still on its way before undoing, so the undo takes it back', async () => {
+    const { api, store } = await connected();
+    const release = store.getState().holdHistory();
+    const undo = store.getState().undo();
+    await new Promise((r) => setTimeout(r, 20));
+    expect(api.historyUndo).not.toHaveBeenCalled();
+    release();
+    await undo;
+    expect(api.historyUndo).toHaveBeenCalled();
+  });
+
+  it('a step under way holds undo until it has ended', async () => {
+    const { api, store } = await connected();
+    let finish!: () => void;
+    const step = store.getState().historyStep(() => new Promise<void>((r) => { finish = r; }));
+    const undo = store.getState().undo();
+    await new Promise((r) => setTimeout(r, 20));
+    expect(api.historyUndo).not.toHaveBeenCalled();
+    finish();
+    await Promise.all([step, undo]);
+    expect(vi.mocked(api.historyEnd).mock.invocationCallOrder[0]!).toBeLessThan(vi.mocked(api.historyUndo).mock.invocationCallOrder[0]!);
+  });
+
+  it('offers no Show for a quest the undo took out of the project', async () => {
+    const { store } = await connected({ historyUndo: async () => okv({ ...emptyHistoryResult, step: { id: 1, label: 'Added Wolves', kind: 'quest', where: { questId: 33 } }, quests: [{ questId: 33, aggregate: null }], positions: true }) });
+    await store.getState().undo();
+    expect(store.getState().historyNote).toMatchObject({ text: 'Undid: Added Wolves', where: null });
+  });
+
+  it('reads the Changes panel again when an undo changed the open quest', async () => {
+    const base = sampleOpen();
+    const { api, store } = await connected({ historyUndo: async () => okv({ ...emptyHistoryResult, step: { id: 2, label: 'Quest title of X', kind: 'quest', where: null }, quests: [{ questId: base.questId, aggregate: base.aggregate }] }) });
+    await store.getState().openQuest(base.questId);
+    await store.getState().loadPreview();
+    const reads = vi.mocked(api.previewChanges).mock.calls.length;
+    await store.getState().undo();
+    expect(vi.mocked(api.previewChanges).mock.calls.length).toBeGreaterThan(reads);
+  });
+});
+
+describe('the unsaved marker', () => {
+  it('is never taken from a project state read before a later one', async () => {
+    let finishNodes!: () => void;
+    const states = [{ dirty: true }, { dirty: false }];
+    const { store } = await connected({
+      listNodes: vi.fn(() => new Promise((r) => { finishNodes = () => r(okv([])); })),
+      projectState: vi.fn(async () => okv({ name: 'P', filePath: null, idRangeStart: 60000, idRangeEnd: 99999, outputDir: '', viewport: { x: 0, y: 0, zoom: 1 }, ...(states.shift() ?? { dirty: false }) })),
+    });
+    // The graph waits for the database; meanwhile the project is saved and read again
+    const nodes = store.getState().loadNodes();
+    await store.getState().loadProjectState();
+    expect(store.getState().project.dirty).toBe(false);
+    finishNodes();
+    await nodes;
+    expect(store.getState().project.dirty).toBe(false);
+  });
+});
