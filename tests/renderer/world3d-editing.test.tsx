@@ -20,7 +20,7 @@ vi.mock('../../src/renderer/world3d/world3d', () => ({
 vi.mock('../../src/renderer/map/LeafletMap', () => ({ LeafletMap: () => <div /> }));
 
 import { QuestMapView } from '../../src/renderer/map/QuestMapView';
-import { World3DScreen } from '../../src/renderer/world3d/World3DScreen';
+import { WorldWorkspace } from '../../src/renderer/world3d/WorldWorkspace';
 
 afterEach(() => { worlds.length = 0; vi.unstubAllGlobals(); });
 const clientHasEverything = () => vi.stubGlobal('fetch', async () => new Response(new Uint8Array([1]), { status: 200 }));
@@ -132,11 +132,12 @@ describe('editing in the quest map\'s 3D view', () => {
   });
 });
 
-describe('editing in the world 3D screen', () => {
+describe('editing in the World workspace', () => {
   it('sends every spawn to the world layer, own or not', async () => {
     clientHasEverything();
+    localStorage.setItem('acqc.welcome.seen', JSON.stringify(['seen']));
     const worldMoveSpawn = vi.fn(async () => okv(moved));
-    render(<NamesProvider api={makeMockApi({ worldLayer: vi.fn(async () => okv(EMPTY)), worldMoveSpawn })}><World3DScreen hasClient onClose={vi.fn()} /></NamesProvider>);
+    render(<NamesProvider api={makeMockApi({ worldLayer: vi.fn(async () => okv(EMPTY)), worldMoveSpawn })}><WorldWorkspace hasClient projectKey="seen" projectName="" onOpenSettings={vi.fn()} onShowQuests={vi.fn()} onStartQuest={vi.fn()} /></NamesProvider>);
     await waitFor(() => expect(worlds).toHaveLength(1));
     worlds[0].options.onEdit({ ...place(false, 5, 143981), spawn: { kind: 'object', guid: 5, entry: 143981, own: false } });
     await waitFor(() => expect(worldMoveSpawn).toHaveBeenCalledWith('gameobject', 5, expect.anything()));

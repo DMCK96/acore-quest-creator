@@ -3,7 +3,7 @@ import { describe, it, expect, vi } from 'vitest';
 import { render, screen, waitFor, within, fireEvent } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { createAppStore } from '../../src/renderer/state/app-store';
-import { CanvasHome } from '../../src/renderer/views/CanvasHome';
+import { AppShell } from '../../src/renderer/views/AppShell';
 import { makeMockApi, okv } from './mock-api';
 
 const drift = { missingTables: [], unregistered: [], missingColumns: [], typeMismatches: [] };
@@ -14,7 +14,7 @@ async function home(over: Record<string, any> = {}) {
   const api = makeMockApi({ saveProfile: async () => okv({ id: 1, ...form }), connect: async () => okv({ profileId: 1, schemaHash: 'h', drift, blocking: false }), projectState: async () => okv(state()), ...over });
   const store = createAppStore(api, { saveDelayMs: 0 });
   await store.getState().connect(form);
-  render(<CanvasHome store={store} />);
+  render(<AppShell store={store} />);
   await screen.findByRole('heading', { name: 'Northshire' });
   return { api, store };
 }

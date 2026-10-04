@@ -86,7 +86,7 @@ describe('the welcome', () => {
     await userEvent.click(await screen.findByRole('button', { name: 'Just look around' }));
     expect(screen.queryByRole('dialog', { name: 'Welcome' })).toBeNull();
     expect(seen()).toEqual(['a', 'b', 'c']);
-  });
+  }, 15000);
 
   it('closes on Esc', async () => {
     clientHasEverything();

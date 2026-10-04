@@ -19,13 +19,7 @@ import { QuestNodeCard } from './QuestNodeCard';
 import { toFlowEdges } from './canvas-edges';
 import { QuestPreview } from './QuestPreview';
 import { QuestFlowView } from './QuestFlowView';
-import { World3DScreen } from '../world3d/World3DScreen';
 import { AddExistingDialog } from './AddExistingDialog';
-import { ProjectDialog } from './ProjectDialog';
-import { SettingsDialog } from './SettingsDialog';
-import { RecoveryDialog } from './RecoveryDialog';
-import { TopBar } from '../components/TopBar';
-import { ErrorBanner } from '../components/ErrorBanner';
 import { QuestOrb } from '../components/QuestOrb';
 import { AnimatedButton } from '../components/AnimatedButton';
 import './CanvasHome.css';
@@ -78,10 +72,6 @@ function CanvasInner({ store }: { store: AppStore }): React.JSX.Element {
 
   const { screenToFlowPosition, fitView, setViewport: setFlowViewport } = useReactFlow();
   const [showAddExisting, setShowAddExisting] = useState(false);
-  const [showProject, setShowProject] = useState(false);
-  const [showSettings, setShowSettings] = useState(false);
-  const [show3d, setShow3d] = useState(false);
-  const hasClient = store((s) => Boolean(s.summary?.clientDir));
   // `<ReactFlow>` only honours `defaultViewport` at mount, so it stays unmounted until the saved
   // viewport has loaded, then mounts exactly once — never re-keyed, so nodes a test (or the user)
   // is holding a reference to never get silently detached from a remount.
@@ -99,35 +89,11 @@ function CanvasInner({ store }: { store: AppStore }): React.JSX.Element {
     [],
   );
 
-  // Unsaved work a crash left behind is offered once, as soon as the canvas is up.
-  useEffect(() => {
-    void store.getState().loadRecoveries();
-  }, [store]);
-
   // `<ReactFlow>` only reads `defaultViewport` at mount, so a project switch moves it explicitly.
   useEffect(() => {
     if (projectEpoch === 0) return;
     void setFlowViewport(store.getState().viewport);
   }, [projectEpoch, setFlowViewport, store]);
-
-  // Ctrl+S saves, Ctrl+Shift+S saves as, Ctrl+O opens: the shortcuts every document app has.
-  useEffect(() => {
-    const onKeyDown = (e: KeyboardEvent): void => {
-      // A held-down shortcut repeats; one press is one save.
-      if (!(e.ctrlKey || e.metaKey) || e.repeat) return;
-      const key = e.key.toLowerCase();
-      const { saveProject, saveProjectAs, openProject } = store.getState();
-      if (key === 's') {
-        e.preventDefault();
-        void (e.shiftKey ? saveProjectAs() : saveProject());
-      } else if (key === 'o') {
-        e.preventDefault();
-        void openProject();
-      }
-    };
-    document.addEventListener('keydown', onKeyDown);
-    return () => document.removeEventListener('keydown', onKeyDown);
-  }, [store]);
 
   const scheduleFlush = useCallback(() => {
     if (flushTimer.current) clearTimeout(flushTimer.current);
@@ -162,27 +128,32 @@ function CanvasInner({ store }: { store: AppStore }): React.JSX.Element {
 
   return (
     <div className="canvas-shell">
-      <TopBar
-        store={store}
-        onNewQuest={() => void newQuest()}
-        onAddExisting={() => setShowAddExisting(true)}
-        onFitView={() => void fitView()}
-        onOpen3d={() => setShow3d(true)}
-        onOpenProject={() => setShowProject(true)}
-        onOpenSettings={() => setShowSettings(true)}
-      />
-      <ErrorBanner store={store} />
       <div className="canvas-body">
         <div className="canvas-pane" onDoubleClick={handlePaneDoubleClick}>
+          <div className="quest-tools glass" role="toolbar" aria-label="Quest tools">
+            <button type="button" className="btn" onClick={() => void newQuest()}>
+              New quest
+            </button>
+            <button type="button" className="btn" onClick={() => setShowAddExisting(true)}>
+              Add existing quest
+            </button>
+            <button type="button" className="btn" onClick={() => void fitView()}>
+              Fit view
+            </button>
+          </div>
           {nodes.length === 0 && (
             <div className="canvas-empty">
-              <div className="canvas-empty__circle">
+              <div className="canvas-empty__circle" data-orb-target="">
                 <QuestOrb />
                 <div className="canvas-empty__content">
-                  <div className="canvas-empty__icon">📜</div>
-                  <h2 className="canvas-empty__title">Start Your Journey</h2>
+                  <svg className="canvas-empty__icon" viewBox="0 0 24 24" aria-hidden="true">
+                    <path d="M7 3.5h10.5a2 2 0 0 1 2 2V17" />
+                    <path d="M7 3.5a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2h10.5a2 2 0 0 0 2-2V17H9v1.5a2 2 0 0 1-2 2" />
+                    <path d="M9 8h7M9 11.5h7" />
+                  </svg>
+                  <h2 className="canvas-empty__title">Quests</h2>
                   <p className="canvas-empty__subtitle">
-                    Begin by adding your first quest or an existing quest chain to the canvas.
+                    No quests in this project yet. Write one from scratch, or bring in an existing chain from the world database to rework it.
                   </p>
                   <div className="canvas-empty__actions">
                     <AnimatedButton className="canvas-empty__btn" onClick={() => void newQuest()}>
@@ -241,11 +212,7 @@ function CanvasInner({ store }: { store: AppStore }): React.JSX.Element {
         {screen === 'preview' && <QuestPreview store={store} />}
         {screen === 'edit' && <QuestFlowView store={store} />}
       </div>
-      {show3d && <World3DScreen hasClient={hasClient} onClose={() => setShow3d(false)} />}
       {showAddExisting && <AddExistingDialog store={store} onClose={() => setShowAddExisting(false)} />}
-      {showProject && <ProjectDialog store={store} onClose={() => setShowProject(false)} />}
-      {showSettings && <SettingsDialog store={store} onClose={() => setShowSettings(false)} />}
-      <RecoveryDialog store={store} />
     </div>
   );
 }
