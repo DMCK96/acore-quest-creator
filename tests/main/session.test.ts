@@ -132,3 +132,106 @@ describe('ProjectSession: the world layer', () => {
     expect(s.world.get()).toEqual(EMPTY_WORLD);
   });
 });
+
+describe('the session\'s history', () => {
+  it('records each kind of change as a step, and not quiet puts or exports', () => {
+    const s = fresh();
+    s.quests.put(q(60001));
+    s.quests.put(q(60001, { x: 1 }), { quiet: true });
+    s.quests.setPositions([{ questId: 60001, x: 40, y: 0 }]);
+    s.world.put({ ...EMPTY_WORLD, added: [] , spawns: [] , routes: [{ pathId: 1, walkers: 1, original: [], current: [] }] });
+    s.rename('Northshire');
+    s.quests.markExported(60001, 'C:\\a.sql');
+    s.quests.remove(60001);
+    const kinds = s.history.list(() => ({ label: '', kind: 'project', where: null })).steps.length;
+    expect(kinds).toBe(5);
+  });
+
+  it('undo and redo put the project back, leaving where it was exported alone', () => {
+    const s = fresh();
+    s.quests.put(q(60001, { aggregate: { ...q(60001).aggregate, values: { t: 'A' } } }));
+    s.quests.put({ ...s.quests.get(60001)!, aggregate: { ...s.quests.get(60001)!.aggregate, values: { t: 'B' } } });
+    s.quests.markExported(60001, 'C:\\a.sql');
+    s.applyStep(s.history.undo()!, 'undo');
+    expect(s.quests.get(60001)!.aggregate.values).toEqual({ t: 'A' });
+    expect(s.quests.get(60001)!.lastExportPath).toBe('C:\\a.sql');
+    s.applyStep(s.history.undo()!, 'undo');
+    expect(s.quests.get(60001)).toBeUndefined();
+    s.applyStep(s.history.redo()!, 'redo');
+    expect(s.quests.get(60001)!.lastExportPath).toBeNull();
+    s.applyStep(s.history.redo()!, 'redo');
+    expect(s.quests.get(60001)!.aggregate.values).toEqual({ t: 'B' });
+    expect(s.history.list(() => ({ label: '', kind: 'project', where: null })).steps).toHaveLength(2);
+  });
+
+  it('undoes a removal, positions, the world and the name', () => {
+    const s = fresh();
+    s.quests.put(q(60001));
+    s.quests.setPositions([{ questId: 60001, x: 40, y: 2 }]);
+    s.quests.remove(60001);
+    s.applyStep(s.history.undo()!, 'undo');
+    expect(s.quests.get(60001)).toMatchObject({ x: 40, y: 2 });
+    s.applyStep(s.history.undo()!, 'undo');
+    expect(s.quests.get(60001)).toMatchObject({ x: 0, y: 0 });
+    s.rename('North');
+    s.applyStep(s.history.undo()!, 'undo');
+    expect(s.meta().name).toBe('Untitled Project');
+    const layer = { ...EMPTY_WORLD, routes: [{ pathId: 1, walkers: 1, original: [], current: [] }] };
+    s.world.put(layer);
+    s.applyStep(s.history.undo()!, 'undo');
+    expect(s.world.get()).toEqual(EMPTY_WORLD);
+  });
+
+  it('is clean again when undone back to the save, unsaved after a new edit from there, and an export keeps it unsaved', () => {
+    const s = fresh();
+    s.quests.put(q(60001));
+    s.markSaved('C:\\p.aqc');
+    s.rename('North');
+    expect(s.dirty()).toBe(true);
+    s.applyStep(s.history.undo()!, 'undo');
+    expect(s.dirty()).toBe(false);
+    s.quests.markExported(60001, 'C:\\a.sql');
+    expect(s.dirty()).toBe(true);
+    s.markSaved('C:\\p.aqc');
+    expect(s.dirty()).toBe(false);
+  });
+
+  it('bumps the revision on undo, so the crash copy is written again', () => {
+    const s = fresh();
+    s.quests.put(q(60001));
+    const r = s.revision();
+    s.applyStep(s.history.undo()!, 'undo');
+    expect(s.revision()).toBe(r + 1);
+  });
+
+  it('skips the parts it is told to', () => {
+    const s = fresh();
+    const t = s.history.begin('Two');
+    s.quests.put(q(60001));
+    s.rename('North');
+    s.history.end(t);
+    const step = s.history.undo()!;
+    const nameIndex = step.parts.findIndex((p) => p.kind === 'name');
+    s.applyStep(step, 'undo', new Set([nameIndex]));
+    expect([s.quests.get(60001), s.meta().name]).toEqual([undefined, 'North']);
+  });
+
+  it('starts a fresh history on reset and load, and a recovered load is unsaved', () => {
+    const s = fresh();
+    s.quests.put(q(60001));
+    s.reset(defaultProjectMeta('Next', 'C:\\out'));
+    expect(s.history.undo()).toBeNull();
+    s.quests.put(q(60002));
+    s.load(s.toDocument(), 'C:\\p.aqc', { dirty: true });
+    expect([s.history.undo(), s.dirty()]).toEqual([null, true]);
+  });
+
+  it('tells title listeners when an undo makes it clean or unsaved', () => {
+    const s = fresh();
+    const heard = vi.fn(); s.onChange(heard);
+    s.quests.put(q(60001));
+    heard.mockClear();
+    s.applyStep(s.history.undo()!, 'undo');
+    expect(heard).toHaveBeenCalled();
+  });
+});
