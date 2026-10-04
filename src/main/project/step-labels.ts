@@ -118,16 +118,70 @@ function describeWorld(part: WorldPart): Described {
   return { label: `World: ${changes.length} changes`, where: changes.find((c) => c.where)?.where ?? null };
 }
 
+type EntitiesPart = Extract<HistoryPart, { kind: 'entities' }>;
+type AnyEntity = { entry: number; name: string; spawns?: { guid: number; map: number; x: number; y: number; z: number }[] };
+
+/** What changed among the project's NPCs, objects and items, entity by entity, each with where it stands */
+function entityChanges(before: EntitiesPart['before'], after: EntitiesPart['after']): WorldChange[] {
+  const out: WorldChange[] = [];
+  const kinds = [
+    ['npcs', 'NPC', 'creature'],
+    ['objects', 'object', 'gameobject'],
+    ['items', 'item', null],
+  ] as const;
+  for (const [key, word, spawnKind] of kinds) {
+    const was = new Map((before[key] as AnyEntity[]).map((e) => [e.entry, e]));
+    const now = new Map((after[key] as AnyEntity[]).map((e) => [e.entry, e]));
+    const placeOf = (e: AnyEntity): StepPlace | null => {
+      const s = e.spawns?.[0];
+      return s && spawnKind ? { map: s.map, x: s.x, y: s.y, z: s.z, spawn: { kind: spawnKind, guid: s.guid } } : null;
+    };
+    const named = (e: AnyEntity): string => e.name.trim();
+    for (const [entry, e] of now) {
+      const old = was.get(entry);
+      if (!old) {
+        out.push({ text: named(e) ? `New ${word} ${named(e)}` : `New ${word}`, where: placeOf(e) });
+        continue;
+      }
+      if (isDeepStrictEqual(old, e)) continue;
+      const name = named(e) || `${word} ${entry}`;
+      const fields = [...new Set([...Object.keys(old), ...Object.keys(e)])].filter((k) => !isDeepStrictEqual((old as Record<string, unknown>)[k], (e as Record<string, unknown>)[k]));
+      let text = `Edit to ${name}`;
+      if (fields.length === 1 && fields[0] === 'spawns') {
+        const a = old.spawns ?? [];
+        const b = e.spawns ?? [];
+        if (b.length === a.length + 1) text = `Placed ${name}`;
+        else if (b.length === a.length - 1) text = `Removed a spawn of ${name}`;
+        else if (b.length === a.length && b.filter((s, i) => !isDeepStrictEqual(s, a[i])).length === 1) text = `Moved ${name}`;
+        else text = `Spawns of ${name}`;
+      } else if (fields.length === 1 && fields[0] === 'loot') text = `Loot of ${name}`;
+      else if (fields.length === 1 && fields[0] === 'name') text = `Name of ${name}`;
+      else if (fields.length === 1 && fields[0] === 'type') text = `Type of ${name}`;
+      out.push({ text, where: placeOf(e) });
+    }
+    for (const [entry, e] of was) if (!now.has(entry)) out.push({ text: `Deleted ${named(e) || `${word} ${entry}`}`, where: null });
+  }
+  return out;
+}
+
+function describeEntities(part: EntitiesPart): Described {
+  const changes = entityChanges(part.before, part.after);
+  if (changes.length === 1) return { label: changes[0]!.text, where: changes[0]!.where };
+  return { label: `NPCs and objects: ${changes.length} changes`, where: changes.find((c) => c.where)?.where ?? null };
+}
+
 /** A step's name and where it happened, from what it changed; a name the window gave is kept */
 export function describeStep(step: HistoryStep): Omit<StepSummary, 'id'> {
   const quests = step.parts.filter((p): p is QuestPart => p.kind === 'quest');
   const world = step.parts.find((p): p is WorldPart => p.kind === 'world');
+  const entities = step.parts.find((p): p is EntitiesPart => p.kind === 'entities');
   const positions = step.parts.find((p) => p.kind === 'positions');
-  const kind: StepSummary['kind'] = quests.length > 0 ? 'quest' : world ? 'world' : positions ? 'graph' : 'project';
+  const kind: StepSummary['kind'] = quests.length > 0 ? 'quest' : world ? 'world' : entities ? 'entities' : positions ? 'graph' : 'project';
 
   let derived: Described;
   if (quests.length > 0) derived = describeQuests(quests);
   else if (world) derived = describeWorld(world);
+  else if (entities) derived = describeEntities(entities);
   else if (positions && positions.kind === 'positions') {
     const n = positions.after.length;
     derived = { label: n === 1 ? 'Moved a quest on the graph' : `Moved ${n} quests on the graph`, where: null };

@@ -3,6 +3,7 @@ import { describeStep } from '../../src/main/project/step-labels';
 import type { HistoryStep } from '../../src/main/project/history';
 import type { HistoryPart, QuestEdit } from '../../src/shared/history';
 import { EMPTY_WORLD } from '../../src/core/world/layer';
+import { EMPTY_ENTITIES, newNpc, newObject, newSpawn } from '../../src/core/entities/model';
 
 const TITLE = 'quest_template.LogTitle';
 const edit = (questId: number, values: Record<string, unknown>): QuestEdit => ({ questId, isNew: true,
@@ -82,5 +83,32 @@ describe('route labels', () => {
     const walking = { guid: 5, entry: 6, name: 'Kobold Vermin', map: 0, addonRow: true, original: { type: 'idle', wander: 0, pathId: null }, current: { type: 'path', wander: 0, pathId: 801 } } as any;
     const both = describeStep(step([{ kind: 'world', before: { ...EMPTY_WORLD, movements: [walking] }, after: { ...EMPTY_WORLD, movements: [walking], routes: [route()] } }]));
     expect(both.label).toBe('Route of Kobold Vermin');
+  });
+});
+
+describe('describeStep for the project store', () => {
+  const hela = { ...newNpc(12000001), name: 'Hela', spawns: [{ ...newSpawn(6000001), map: 0, x: 5, y: 6, z: 7 }] };
+  const npcs = (...list: any[]) => ({ ...EMPTY_ENTITIES, npcs: list });
+  const part = (before: any, after: any): HistoryPart => ({ kind: 'entities', before, after });
+
+  it('names a new, changed and deleted NPC, and says where it stands', () => {
+    expect(describeStep(step([part(EMPTY_ENTITIES, npcs(hela))]))).toEqual({ label: 'New NPC Hela', kind: 'entities', where: { map: 0, x: 5, y: 6, z: 7, spawn: { kind: 'creature', guid: 6000001 } } });
+    expect(describeStep(step([part(EMPTY_ENTITIES, npcs({ ...newNpc(12000002) }))])).label).toBe('New NPC');
+    expect(describeStep(step([part(npcs(hela), npcs({ ...hela, loot: [{ item: 1, chance: 1, min: 1, max: 1, questOnly: false }] }))])).label).toBe('Loot of Hela');
+    expect(describeStep(step([part(npcs(hela), npcs({ ...hela, minLevel: 5, faction: 14 }))])).label).toBe('Edit to Hela');
+    expect(describeStep(step([part(npcs(hela), EMPTY_ENTITIES)])).label).toBe('Deleted Hela');
+  });
+
+  it('names spawns added, moved and removed', () => {
+    const moved = { ...hela, spawns: [{ ...hela.spawns[0], x: 9 }] };
+    expect(describeStep(step([part(npcs(hela), npcs(moved))])).label).toBe('Moved Hela');
+    expect(describeStep(step([part(npcs(hela), npcs({ ...hela, spawns: [] }))])).label).toBe('Removed a spawn of Hela');
+    expect(describeStep(step([part(npcs(hela), npcs({ ...hela, spawns: [...hela.spawns, newSpawn(6000002)] }))])).label).toBe('Placed Hela');
+  });
+
+  it('names objects as objects, and several changes by count', () => {
+    const crate = { ...newObject(9100001), name: 'Crate' };
+    expect(describeStep(step([part(EMPTY_ENTITIES, { ...EMPTY_ENTITIES, objects: [crate] })])).label).toBe('New object Crate');
+    expect(describeStep(step([part(EMPTY_ENTITIES, { ...EMPTY_ENTITIES, npcs: [hela], objects: [crate] })])).label).toBe('NPCs and objects: 2 changes');
   });
 });
