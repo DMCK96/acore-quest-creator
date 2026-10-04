@@ -13,9 +13,9 @@ export function App(): React.JSX.Element {
   const store = useMemo(() => createAppStore(window.api), []);
   const screen = store((s) => s.screen);
   const connection = store((s) => s.connection);
-  // The open quest's new NPCs and objects, named in pickers before the main process has them.
-  const openValues = store((s) => s.open?.aggregate.values);
-  const local = useMemo(() => localNamesOf(openValues), [openValues]);
+  // The project's new NPCs and objects, named in pickers before the main process has them.
+  const entities = store((s) => s.entities);
+  const local = useMemo(() => localNamesOf(entities), [entities]);
   // Connecting from the login screen keeps it on top of the app for a moment while it leaves: its
   // orb spins down into the welcome's, or the app bar's (see LoginScreen's `leaving`).
   const [leaving, setLeaving] = useState(false);

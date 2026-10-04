@@ -26,9 +26,9 @@ describe('NPCs, objects & items module', () => {
     await mountBody('entities', {}, { openEditor });
     expect(screen.queryByRole('combobox', { name: /Copy/ })).toBeNull();
     await userEvent.click(screen.getByRole('button', { name: 'Add NPC' }));
-    expect(openEditor).toHaveBeenCalledWith({ kind: 'newNpc' });
+    expect(openEditor).toHaveBeenCalledWith({ kind: 'newNpc', madeFor: 60001 });
     await userEvent.click(screen.getByRole('button', { name: 'Add object' }));
-    expect(openEditor).toHaveBeenCalledWith({ kind: 'newObject' });
+    expect(openEditor).toHaveBeenCalledWith({ kind: 'newObject', madeFor: 60001 });
   });
 
   it('says why when a new one cannot be made', async () => {
@@ -45,7 +45,7 @@ describe('NPCs, objects & items module', () => {
     await userEvent.click(within(pearl).getByRole('button', { name: 'Edit' }));
     expect(openEditor).toHaveBeenCalledWith({ kind: 'item', entry: 990300 });
     await userEvent.click(screen.getByRole('button', { name: 'Add item' }));
-    expect(openEditor).toHaveBeenCalledWith({ kind: 'newItem' });
+    expect(openEditor).toHaveBeenCalledWith({ kind: 'newItem', madeFor: 60001 });
   });
 
   it('says on a row what an NPC or object still needs', async () => {

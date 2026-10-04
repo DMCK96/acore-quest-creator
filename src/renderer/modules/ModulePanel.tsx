@@ -97,7 +97,8 @@ export function ModulePanel({
         </ul>
       )}
       <ModuleBody id={id} {...body} />
-      {def.kind === 'optional' && def.id !== 'advanced' && (
+      {/* The NPCs, objects and items are the project's: the quest has nothing of its own to clear */}
+      {def.kind === 'optional' && def.id !== 'advanced' && def.id !== 'entities' && (
         <div className="module-panel__foot">
           <button type="button" className="btn module-panel__remove" onClick={remove}>
             Remove module

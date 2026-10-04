@@ -52,7 +52,8 @@ export function EntityEditorHost({
   state: EditorState;
   onTab(tab: string): void;
   onClose(): void;
-  onDelete?(kind: 'npc' | 'object' | 'item', entry: number): void;
+  /** Takes the entity out of the project (and off the quests' cards); the editor closes once it is done */
+  onDelete?(kind: 'npc' | 'object' | 'item', entry: number): void | Promise<unknown>;
 }): React.JSX.Element | null {
   const api = useApi();
   const npc = state.kind === 'npc' ? entities.npcs.find((n) => n.entry === state.entry) : undefined;
@@ -99,7 +100,7 @@ export function EntityEditorHost({
     return result?.ok && result.value ? (result.value as Partial<CustomItem>) : null;
   }
 
-  function remove(): void {
+  async function remove(): Promise<void> {
     const verb = state.isNew ? 'Discard' : 'Delete';
     const name = entity!.name.trim() || `this ${word}`;
     const titles = users.map((q) => q.title.trim() || `Quest ${q.questId}`);
@@ -110,7 +111,7 @@ export function EntityEditorHost({
           ? `${verb} ${name}? Quest ${quoted(titles)} names it; its giver cards will be emptied.`
           : `${verb} ${name}? Quests ${quoted(titles)} name it; their giver cards will be emptied.`;
     if (!window.confirm(question)) return;
-    if (onDelete) onDelete(state.kind, state.entry);
+    if (onDelete) await onDelete(state.kind, state.entry);
     else onChange({ ...entities, [useKey]: (entities[useKey] as { entry: number }[]).filter((e) => e.entry !== state.entry) } as ProjectEntities);
     onClose();
   }
@@ -120,7 +121,7 @@ export function EntityEditorHost({
     <>
       <span className="scene-hint">{needs && `Still needs ${needs}.`}</span>
       <span className="entry-card__actions">
-        <button type="button" className="btn entry-card__btn--danger" onClick={remove}>
+        <button type="button" className="btn entry-card__btn--danger" onClick={() => void remove()}>
           {state.isNew ? 'Discard' : `Delete ${word}`}
         </button>
         <button type="button" className="btn btn--primary" onClick={onClose}>

@@ -2,6 +2,9 @@ import { useEffect } from 'react';
 import { moduleById, presentModules } from '@core/modules/catalog';
 import type { AppStore } from '../state/app-store';
 import { useName, useNameBook } from '../state/names';
+import { EMPTY_ENTITIES } from '@core/entities/model';
+import { narrowTo, questUses } from '@core/entities/links';
+import { useProjectEntities } from '../state/project-entities';
 import './QuestPreview.css';
 
 const plural = (n: number, word: string): string => `${n} ${word}${n === 1 ? '' : 's'}`;
@@ -12,6 +15,7 @@ const plural = (n: number, word: string): string => `${n} ${word}${n === 1 ? '' 
  */
 export function QuestPreview({ store }: { store: AppStore }): React.JSX.Element | null {
   const open = store((s) => s.open);
+  const project = useProjectEntities();
   const issues = store((s) => s.issues);
   const editQuest = store((s) => s.editQuest);
   const closeEditor = store((s) => s.closeEditor);
@@ -32,6 +36,7 @@ export function QuestPreview({ store }: { store: AppStore }): React.JSX.Element 
   if (!open) return null;
 
   const values = open.aggregate.values;
+  const mine = project ? narrowTo(project.entities, questUses({ questId: open.questId, aggregate: open.aggregate }, project.entities)) : EMPTY_ENTITIES;
   const title = typeof values['quest_template.LogTitle'] === 'string' && values['quest_template.LogTitle'] !== ''
     ? values['quest_template.LogTitle']
     : '(untitled quest)';
@@ -62,9 +67,9 @@ export function QuestPreview({ store }: { store: AppStore }): React.JSX.Element 
         )}
       </header>
       <div className="quest-preview__body">
-        {presentModules(values, []).map((id) => {
+        {presentModules(values, [], mine).map((id) => {
           const def = moduleById(id);
-          const lines = def.summary(values, names);
+          const lines = def.summary(values, names, mine);
           return (
             <section key={id} className="quest-preview__module">
               <h3 className="quest-preview__module-title">{def.label}</h3>

@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { EMPTY_ENTITIES } from '@core/entities/model';
+import { narrowTo, questUses } from '@core/entities/links';
 import { useProjectEntities } from '../state/project-entities';
 import { EntityEditorProvider, type EditorRequest, type OpenEditor } from '../entities/EntityEditorContext';
 import { EntityEditorHost, type EditorState } from '../entities/EntityEditorHost';
@@ -80,8 +81,10 @@ export function QuestFlowView({ store }: { store: AppStore }): React.JSX.Element
   if (!open) return null;
 
   const values = open.aggregate.values;
-  const shown = presentModules(values, addedModules);
-  const offered = offeredModules(values, addedModules);
+  // The project's NPCs, objects and items this quest uses: they show its module and sum it up
+  const mine = project && open ? narrowTo(project.entities, questUses({ questId: open.questId, aggregate: open.aggregate }, project.entities)) : EMPTY_ENTITIES;
+  const shown = presentModules(values, addedModules, mine);
+  const offered = offeredModules(values, addedModules, mine);
   const routed = routeIssues(issues);
   const chips: ReadinessChip[] = shown.flatMap((id) => {
     const severity = worstSeverity(routed.byModule[id]);
@@ -96,7 +99,7 @@ export function QuestFlowView({ store }: { store: AppStore }): React.JSX.Element
   };
 
   const box = (id: (typeof shown)[number]): React.JSX.Element => (
-    <ModuleBox key={id} def={moduleById(id)} values={values} names={names} severity={worstSeverity(routed.byModule[id])}
+    <ModuleBox key={id} def={moduleById(id)} values={values} names={names} entities={mine} severity={worstSeverity(routed.byModule[id])}
       selected={openPanel === id} onOpen={() => setOpenPanel(id)} />
   );
 
@@ -204,7 +207,7 @@ export function QuestFlowView({ store }: { store: AppStore }): React.JSX.Element
       {editor && openPanel !== 'map' && (
         <EntityEditorHost entities={project?.entities ?? EMPTY_ENTITIES} onChange={(next) => project?.setEntities(next)} quests={project?.quests ?? []}
           state={editor} onTab={onEditorTab} onClose={closeEditor} hasServerData={hasServerData}
-          onDelete={(kind, entry) => void store.getState().deleteEntity(kind, entry)} />
+          onDelete={(kind, entry) => store.getState().deleteEntity(kind, entry)} />
       )}
     </div>
     </MapOpenerProvider>

@@ -1,6 +1,7 @@
 import type { CanvasNode, OpenResult } from '@shared/ipc';
 import type { NameBook } from '@core/links/component';
-import { readEntities } from '@core/entities/model';
+import type { ProjectEntities } from '@core/entities/model';
+import { narrowTo, questUses } from '@core/entities/links';
 import { questRoles } from '@core/modules/quest-roles';
 import { creatureName, objectName } from '@core/modules/summaries';
 import type { QuestMenuInfo } from './menu/model';
@@ -33,29 +34,34 @@ export function chainOf(nodes: readonly CanvasNode[], questId: number): number[]
   return [...seen].sort((a, b) => known.get(a)!.x - known.get(b)!.x || a - b);
 }
 
-export function questMenuInfo(open: OpenResult, nodes: readonly CanvasNode[], names: NameBook): QuestMenuInfo {
+/** `entities`: the project's whole store; the quest's own come first, then the rest of the project's */
+export function questMenuInfo(open: OpenResult, nodes: readonly CanvasNode[], names: NameBook, entities: ProjectEntities): QuestMenuInfo {
   const values = open.aggregate.values;
   const title = values['quest_template.LogTitle'];
   const roles = questRoles(values);
-  const { npcs, objects } = readEntities(values);
-  const entities: QuestMenuInfo['entities'] = [
-    ...npcs.map((n) => ({ kind: 'creature' as const, entry: n.entry, name: n.name.trim() || `New NPC ${n.entry}`, own: true })),
-    ...objects.map((o) => ({ kind: 'object' as const, entry: o.entry, name: o.name.trim() || `New object ${o.entry}`, own: true })),
+  const mine = narrowTo(entities, questUses({ questId: open.questId, aggregate: open.aggregate }, entities));
+  const ownNpcName = (n: { entry: number; name: string }): string => n.name.trim() || `New NPC ${n.entry}`;
+  const ownObjectName = (o: { entry: number; name: string }): string => o.name.trim() || `New object ${o.entry}`;
+  const listedEntities: QuestMenuInfo['entities'] = [
+    ...mine.npcs.map((n) => ({ kind: 'creature' as const, entry: n.entry, name: ownNpcName(n), own: true })),
+    ...mine.objects.map((o) => ({ kind: 'object' as const, entry: o.entry, name: ownObjectName(o), own: true })),
+    ...entities.npcs.filter((n) => !mine.npcs.includes(n)).map((n) => ({ kind: 'creature' as const, entry: n.entry, name: ownNpcName(n), own: true })),
+    ...entities.objects.filter((o) => !mine.objects.includes(o)).map((o) => ({ kind: 'object' as const, entry: o.entry, name: ownObjectName(o), own: true })),
   ];
-  const listed = new Set(entities.map((e) => `${e.kind}:${e.entry}`));
+  const listed = new Set(listedEntities.map((e) => `${e.kind}:${e.entry}`));
   for (const target of [...roles.givers, ...roles.enders, ...roles.objectives]) {
     if (!target) continue;
     const kind = target.kind === 'gameobject' ? 'object' : 'creature';
     const key = `${kind}:${target.id}`;
     if (listed.has(key)) continue;
     listed.add(key);
-    entities.push({ kind, entry: target.id, name: kind === 'creature' ? creatureName(target.id, names) : objectName(target.id, names), own: false });
+    listedEntities.push({ kind, entry: target.id, name: kind === 'creature' ? creatureName(target.id, names) : objectName(target.id, names), own: false });
   }
   return {
     id: open.questId,
     title: typeof title === 'string' && title !== '' ? title : `Quest ${open.questId}`,
     roles,
-    entities,
+    entities: listedEntities,
     chained: chainOf(nodes, open.questId).length > 1,
   };
 }

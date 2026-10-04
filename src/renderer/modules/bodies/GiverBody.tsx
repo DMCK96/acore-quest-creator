@@ -1,7 +1,8 @@
 import { useRef, useState } from 'react';
 import { readGivers, writeGivers, type GiverTarget } from '@core/modules/givers';
 import { removeEntry } from '@core/modules/entries';
-import { readEntities } from '@core/entities/model';
+import { EMPTY_ENTITIES } from '@core/entities/model';
+import { useProjectEntities } from '../../state/project-entities';
 import { EntityPicker } from '../../controls/EntityPicker';
 import { QuestStartsList } from '../../views/QuestStartsList';
 import { useMapOpener } from '../../map/MapOpener';
@@ -20,7 +21,8 @@ export function GiverBody({ open, links, onChange, onOpenQuest }: ModuleBodyProp
   const { aggregate } = open;
   const openMap = useMapOpener();
   const openEditor = useEntityEditor();
-  const entities = readEntities(aggregate.values);
+  // The project's NPCs and objects: a card naming one shows its spawn and offers Place on map
+  const entities = useProjectEntities()?.entities ?? EMPTY_ENTITIES;
   // Edits made after waiting for the server start from the values as they are then.
   const valuesRef = useRef(aggregate.values);
   valuesRef.current = aggregate.values;

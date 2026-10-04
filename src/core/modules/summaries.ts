@@ -6,7 +6,7 @@ import { readGivers, type GiverTarget } from './givers';
 import type { Values } from './model';
 import { isUnset } from './values';
 import { readScenes } from '../scripts/model';
-import { readEntities } from '../entities/model';
+import { EMPTY_ENTITIES, type ProjectEntities } from '../entities/model';
 import { describeScene } from '../scripts/describe';
 
 /**
@@ -32,18 +32,17 @@ export function itemName(id: number, names: NameBook): string {
 }
 
 /**
- * A new NPC's or object's name as the quest holds it now. The name book cannot know it: the world
+ * A project NPC's or object's name as the project holds it now. The name book cannot know it: the world
  * database does not have it yet, and a name looked up while it was still blank would stay blank.
  */
-function ownName(values: Values, kind: GiverTarget['kind'], id: number): string | undefined {
-  const entities = readEntities(values);
+function ownName(entities: ProjectEntities, kind: GiverTarget['kind'], id: number): string | undefined {
   const own = kind === 'creature' ? entities.npcs.find((n) => n.entry === id) : entities.objects.find((o) => o.entry === id);
   if (!own) return undefined;
   return own.name.trim() || `${kind === 'creature' ? 'New NPC' : 'New object'} ${id}`;
 }
 
-const giverName = (t: GiverTarget, names: NameBook, values: Values): string =>
-  ownName(values, t.kind, t.id) ?? (t.kind === 'creature' ? creatureName(t.id, names) : objectName(t.id, names));
+const giverName = (t: GiverTarget, names: NameBook, entities: ProjectEntities): string =>
+  ownName(entities, t.kind, t.id) ?? (t.kind === 'creature' ? creatureName(t.id, names) : objectName(t.id, names));
 
 /** Copper as `1g 50s 25c`, leaving out the zero parts; zero itself is `0c`. */
 export function formatMoney(copper: number): string {
@@ -57,24 +56,24 @@ export function formatMoney(copper: number): string {
   return parts.length === 0 ? '0c' : sign + parts.join(' ');
 }
 
-export function giverSummary(values: Values, names: NameBook): string[] {
+export function giverSummary(values: Values, names: NameBook, entities: ProjectEntities = EMPTY_ENTITIES): string[] {
   const lines: string[] = [];
   for (const [role, label] of [['start', 'Starts'], ['end', 'Ends']] as const) {
     const targets = readGivers(values, role).filter((t) => t.id !== 0);
-    if (targets.length > 0) lines.push(`${label}: ${targets.map((t) => giverName(t, names, values)).join(', ')}`);
+    if (targets.length > 0) lines.push(`${label}: ${targets.map((t) => giverName(t, names, entities)).join(', ')}`);
   }
   return lines;
 }
 
-export function objectivesSummary(values: Values, names: NameBook): string[] {
+export function objectivesSummary(values: Values, names: NameBook, entities: ProjectEntities = EMPTY_ENTITIES): string[] {
   const lines: string[] = [];
   for (const row of rowsOf(values, 'quest_template.RequiredNpcOrGo')) {
     const target = row.target as CreatureOrGoValue | null;
     if (!target || target.id === 0) continue;
     lines.push(
       target.target === 'creature'
-        ? `Kill ${num(row.count)} × ${ownName(values, 'creature', target.id) ?? creatureName(target.id, names)}`
-        : `Use ${num(row.count)} × ${ownName(values, 'gameobject', target.id) ?? objectName(target.id, names)}`,
+        ? `Kill ${num(row.count)} × ${ownName(entities, 'creature', target.id) ?? creatureName(target.id, names)}`
+        : `Use ${num(row.count)} × ${ownName(entities, 'gameobject', target.id) ?? objectName(target.id, names)}`,
     );
   }
   for (const row of rowsOf(values, 'quest_template.RequiredItems')) {
@@ -99,9 +98,9 @@ export function dialogueSummary(values: Values): string[] {
   return written.length === 0 ? [] : [`Written: ${written.join(', ')}`];
 }
 
-/** How many new NPCs and objects, then the first two names. */
-export function entitiesSummary(values: Values): string[] {
-  const { npcs, objects, items } = readEntities(values);
+/** How many of the project's NPCs, objects and items the quest uses, then the first two names. */
+export function entitiesSummary(_values: Values, _names: NameBook, entities: ProjectEntities = EMPTY_ENTITIES): string[] {
+  const { npcs, objects, items } = entities;
   if (npcs.length + objects.length + items.length === 0) return [];
   const count = (n: number, one: string, many: string): string => `${n} ${n === 1 ? one : many}`;
   const names = [...npcs, ...objects, ...items].map((e) => e.name.trim() || `#${e.entry}`).slice(0, 2);

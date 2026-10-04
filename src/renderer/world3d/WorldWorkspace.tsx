@@ -83,11 +83,11 @@ export function WorldWorkspace({
     if (values.current) values.current = { ...values.current, [fieldId]: value };
     onQuestField?.(fieldId, value);
   };
-  const info = useMemo(() => (quest ? questMenuInfo(quest.open, quest.nodes, names) : undefined), [quest, names]);
-  const chainIds = useMemo(() => (quest ? chainOf(quest.nodes, quest.open.questId) : undefined), [quest]);
-  // The project's NPCs and objects; edits to their spawns go to the whole store
   const project = useProjectEntities();
   const store = project?.entities ?? EMPTY_ENTITIES;
+  const info = useMemo(() => (quest ? questMenuInfo(quest.open, quest.nodes, names, store) : undefined), [quest, names, store]);
+  const chainIds = useMemo(() => (quest ? chainOf(quest.nodes, quest.open.questId) : undefined), [quest]);
+  // The project's NPCs and objects; edits to their spawns go to the whole store
   const storeRef = useRef(store);
   storeRef.current = store;
   const own = useMemo(

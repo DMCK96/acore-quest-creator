@@ -13,7 +13,7 @@ import {
 } from './summaries';
 import { emptyValue, isUnset } from './values';
 import { SCRIPTS_FIELD } from '../scripts/model';
-import { ENTITIES_FIELD } from '../entities/model';
+import { ENTITIES_FIELD, type ProjectEntities } from '../entities/model';
 
 export { formatMoney } from './summaries';
 
@@ -141,9 +141,10 @@ const DECLARED: readonly Declared[] = [
   {
     id: 'entities',
     label: 'NPCs, objects & items',
-    description: 'New NPCs, objects and items this quest needs.',
+    description: 'The project\'s new NPCs, objects and items this quest uses, and new ones made for it.',
     kind: 'optional',
-    owns: [ENTITIES_FIELD],
+    // The NPCs, objects and items are the project's: the quest owns no field of them
+    owns: [],
     summary: entitiesSummary,
   },
   {
@@ -245,8 +246,10 @@ export function isModulePresent(id: ModuleId, values: Values): boolean {
 }
 
 /** The modules shown for a quest: the core four always, then optional ones in use or just added. */
-export function presentModules(values: Values, added: readonly ModuleId[]): ModuleId[] {
-  return MODULES.filter((m) => m.kind === 'core' || added.includes(m.id) || isModulePresent(m.id, values)).map(
+/** `entities`: the project's NPCs, objects and items the quest uses; the module shows while there are any */
+export function presentModules(values: Values, added: readonly ModuleId[], entities?: ProjectEntities): ModuleId[] {
+  const uses = entities ? entities.npcs.length + entities.objects.length + entities.items.length > 0 : false;
+  return MODULES.filter((m) => m.kind === 'core' || added.includes(m.id) || isModulePresent(m.id, values) || (m.id === 'entities' && uses)).map(
     (m) => m.id,
   );
 }
@@ -255,8 +258,8 @@ export function presentModules(values: Values, added: readonly ModuleId[]): Modu
  * The optional modules "Add module" offers: not shown yet, and backed by at least one field.
  * Advanced is always offered, because the columns the tool does not model are shown there.
  */
-export function offeredModules(values: Values, added: readonly ModuleId[]): ModuleId[] {
-  const shown = new Set(presentModules(values, added));
+export function offeredModules(values: Values, added: readonly ModuleId[], entities?: ProjectEntities): ModuleId[] {
+  const shown = new Set(presentModules(values, added, entities));
   return MODULES.filter(
     (m) =>
       m.kind === 'optional' &&
@@ -277,10 +280,6 @@ export function resetModule(id: ModuleId, values: Values, readOnly: readonly str
     if (isUnset(fieldId, values[fieldId])) continue;
     if (fieldId === SCRIPTS_FIELD) {
       out[fieldId] = [];
-      continue;
-    }
-    if (fieldId === ENTITIES_FIELD) {
-      out[fieldId] = { npcs: [], objects: [] } as unknown as FieldValue;
       continue;
     }
     const field = fieldById(fieldId);

@@ -19,14 +19,19 @@ import { screen } from '@testing-library/react';
 import { RewardTablesProvider } from '../../src/renderer/state/reward-tables';
 import { forkDb } from '../helpers/fixtures';
 import { ENTITIES_FIELD, readEntities, writeEntities } from '../../src/core/entities/model';
-import type { ProjectQuestUse } from '../../src/renderer/state/project-entities';
+import { ProjectEntitiesProvider, type ProjectQuestUse } from '../../src/renderer/state/project-entities';
+import type { ProjectEntities } from '../../src/core/entities/model';
 import { makeMockApi, sampleOpen } from './mock-api';
 
 /** Renders one module body over a brand new quest (level 10) with `over` applied on top. */
 export async function mountBody(
   id: ModuleId,
   over: Record<string, FieldValue> = {},
-  opts: { api?: Api; onChange?: Mock; links?: QuestLinks | null; readOnly?: ReadOnlyReason[]; sharedItems?: Record<string, number[]>; openMap?: (request: any) => void; openEditor?: OpenEditor } = {},
+  opts: {
+    api?: Api; onChange?: Mock; links?: QuestLinks | null; readOnly?: ReadOnlyReason[]; sharedItems?: Record<string, number[]>; openMap?: (request: any) => void; openEditor?: OpenEditor;
+    /** The project store; by default read from `over`'s old `entities` field, each made for the quest */
+    entities?: ProjectEntities; quests?: ProjectQuestUse[]; setEntities?: Mock;
+  } = {},
 ): Promise<{ onChange: Mock; api: Api }> {
   const schema = await loadSchema(forkDb(), registry.tables.map((t) => t.table));
   const a = createNewAggregate(schema, registry, 60001);
@@ -34,7 +39,13 @@ export async function mountBody(
   const api = opts.api ?? makeMockApi();
   const onChange = opts.onChange ?? vi.fn();
   const withEditor = (ui: React.ReactNode): React.ReactNode => (opts.openEditor ? <EntityEditorProvider open={opts.openEditor}>{ui}</EntityEditorProvider> : ui);
+  const old = readEntities(over);
+  const entities = opts.entities ?? {
+    npcs: old.npcs.map((e) => ({ ...e, madeFor: 60001 })), objects: old.objects.map((e) => ({ ...e, madeFor: 60001 })), items: old.items.map((e) => ({ ...e, madeFor: 60001 })),
+  };
+  const project = { entities, setEntities: opts.setEntities ?? vi.fn(), quests: opts.quests ?? [], create: vi.fn(async () => ({ error: 'not here' })) };
   render(
+    <ProjectEntitiesProvider value={project}>
     <NamesProvider api={api}>
       <RewardTablesProvider api={api}>
         {withEditor(opts.openMap ? (
@@ -45,7 +56,8 @@ export async function mountBody(
           <ModuleBody id={id} open={sampleOpen({ questId: 60001, aggregate })} links={opts.links ?? null} onChange={onChange} onOpenQuest={vi.fn()} />
         ))}
       </RewardTablesProvider>
-    </NamesProvider>,
+    </NamesProvider>
+    </ProjectEntitiesProvider>,
   );
   return { onChange, api };
 }

@@ -108,7 +108,7 @@ export function QuestMapView({
   const mine = useMemo(() => narrowTo(store, questUses({ questId: open.questId, aggregate: open.aggregate }, store)), [store, open]);
   const names = useNameBook();
   // The quest as the 3D view's right-click menu sees it: its own NPCs to paste and spawn, its givers and objectives
-  const questInfo = useMemo(() => questMenuInfo(open, [], names), [open, names]);
+  const questInfo = useMemo(() => questMenuInfo(open, [], names, store), [open, names, store]);
   const [maps, setMaps] = useState<MapInfo[]>(CONTINENTS);
   const [refs, setRefs] = useState<QuestMapRef[]>([]);
   const [dots, setDots] = useState<SpawnDot[]>([]);
