@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { act, render, screen, waitFor } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { NamesProvider } from '../../src/renderer/state/names';
 import { makeMockApi, okv, errv, sampleOpen } from './mock-api';
@@ -196,5 +196,28 @@ describe('Select mode and the selection in the 3D view', () => {
     first(okv(layerA));
     await waitFor(() => expect(world.setWorldLayer).toHaveBeenLastCalledWith(layerB));
     expect(worldMoveSpawn).toHaveBeenCalledTimes(2);
+  });
+});
+
+describe('findings from the review, in the view', () => {
+  beforeEach(() => localStorage.clear());
+
+  it('keeps sending world edits after one of them fails outright', async () => {
+    const worldMoveSpawn = vi.fn()
+      .mockImplementationOnce(async () => { throw new Error('the main process went away'); })
+      .mockImplementationOnce(async () => okv(moved));
+    const { world } = await questMap(makeMockApi({ worldLayer: vi.fn(async () => okv(EMPTY)), worldMoveSpawn }));
+    world.options.onEdit(place(false, 1, 1423));
+    world.options.onEdit(place(false, 80330, 1423));
+    await waitFor(() => expect(world.setWorldLayer).toHaveBeenLastCalledWith(moved));
+    expect(worldMoveSpawn).toHaveBeenCalledTimes(2);
+  });
+
+  it('leaves the keyboard with the view when a tool is clicked', async () => {
+    await questMap();
+    for (const name of ['Camera', 'Select']) {
+      const pressed = fireEvent.mouseDown(screen.getByRole('button', { name }));
+      expect(pressed).toBe(false);
+    }
   });
 });

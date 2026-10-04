@@ -326,3 +326,102 @@ describe('the selection after an undo', () => {
     expect(t.editor.selection.points).toEqual([]);
   });
 });
+
+describe('findings from the review', () => {
+  it('keeps a tilt of one object even when its turn about Z did not change', async () => {
+    const t = setup();
+    const box = new THREE.Object3D();
+    box.userData.spawn = { kind: 'object', guid: 30, entry: 300, own: false };
+    t.world.findSpawn = (kind, guid) => (kind === 'object' && guid === 30 ? box : null);
+    t.editor.setSelection(sel({ spawns: [{ kind: 'object', guid: 30 }] }));
+    t.editor.setMode('rotate');
+    t.editor.update();
+    expect(t.gizmo.turns).toBe('all');
+    t.gizmo.events.started();
+    const tilt = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(1, 0, 0), 0.3);
+    t.gizmo.events.moved({ delta: new THREE.Vector3(), angle: 0, quaternion: tilt, axis: 'X' });
+    await t.gizmo.events.ended(false);
+    expect(t.edits).toHaveLength(1);
+    expect((t.edits[0] as any).to.rotation[0]).toBeCloseTo(Math.sin(0.15), 6);
+  });
+
+  it('edits the route of an NPC too far away to be drawn: drag, delete and insert', async () => {
+    // No npc(7): the NPC is out of draw distance, its route still drawn
+    const t = setup({ routes: { 7: line(50, [0, 10, 20, 30]) }, floor: 0 });
+    t.editor.setSelection(sel({ points: [{ guid: 7, index: 1 }], routes: [7] }));
+    await t.drag([0, 4, 0]);
+    expect(t.edits[0]).toMatchObject({ kind: 'route', pathId: 50, spawn: { kind: 'creature', guid: 7, entry: 1, own: false } });
+    t.editor.keyDown(key('Delete'));
+    await vi.waitFor(() => expect(t.edits).toHaveLength(2));
+    expect((t.edits[1] as any).points).toHaveLength(3);
+    t.world.pickGround = () => new THREE.Vector3(5, 0.5, 0);
+    t.editor.insertPoint(0, 0);
+    await vi.waitFor(() => expect(t.edits).toHaveLength(3));
+    expect((t.edits[2] as any).points).toHaveLength(4);
+  });
+
+  it('draws a released route where it was dragged at once, so a quick second drag starts from there', async () => {
+    let release!: () => void;
+    const held = new Promise<void>((resolve) => (release = resolve));
+    const t = setup({ routes: { 7: line(50, [0, 10, 20]) } });
+    t.npc(7, -5, 0);
+    const floor = vi.fn(async () => {
+      await held;
+      return 0;
+    });
+    // The world says where routes are drawn: pending ones as they are pending
+    const pending = new Map<number, EditPoint[]>();
+    const base = t.world.spawnRoute;
+    t.world.setPendingRoute = (guid, points) => pending.set(guid, points);
+    t.world.spawnRoute = (guid) => {
+      const route = base(guid);
+      return route && pending.has(guid) ? { ...route, points: pending.get(guid)! } : route;
+    };
+    const editor = new Editor(t.world, { onEdit: (e) => t.edits.push(e), floorZ: floor });
+    const gizmo = gizmos.at(-1);
+    editor.setSelection(sel({ points: [{ guid: 7, index: 1 }], routes: [7] }));
+    editor.update();
+    gizmo.events.started();
+    gizmo.events.moved(t.change([0, 4, 0]));
+    const first = gizmo.events.ended(false);
+    // Still waiting for the server's floor, the route is already drawn as dragged, and the gizmo stays with it
+    expect(t.world.spawnRoute(7)!.points[1]!.y).toBe(4);
+    editor.update();
+    expect(gizmo.at.y).toBe(4);
+    release();
+    await first;
+  });
+
+  it('saves a spawn redrawn after the last move where it was dragged to', async () => {
+    const t = setup({ floor: 0 });
+    t.npc(1, 0, 0);
+    t.editor.setSelection(sel({ spawns: [{ kind: 'creature', guid: 1 }] }));
+    t.editor.update();
+    t.gizmo.events.started();
+    t.gizmo.events.moved(t.change([0, 4, 0]));
+    // A redraw lands while the pointer holds still: a fresh object back at the stored place
+    t.npc(1, 0, 0);
+    await t.gizmo.events.ended(false);
+    expect(placed(t.edits)).toEqual([[1, 0, 4, 0]]);
+  });
+
+  it('lets go of a route\'s picked points when an undo changes how many points it has', async () => {
+    const t = setup({ routes: { 7: line(50, [0, 10, 20, 30, 40]) } });
+    t.npc(7, -5, 0);
+    t.editor.setSelection(sel({ points: [{ guid: 7, index: 2 }, { guid: 7, index: 4 }], routes: [7] }));
+    t.editor.keyDown(key('Delete'));
+    await vi.waitFor(() => expect(t.edits).toHaveLength(1));
+    t.editor.setSelection(sel({ points: [{ guid: 7, index: 2 }], routes: [7] }));
+    t.editor.undo();
+    expect(t.editor.selection.points).toEqual([]);
+  });
+
+  it('leaves a Shift-click alone when no active route exists (an NPC that stands still)', () => {
+    const t = setup();
+    t.npc(3, 0, 0);
+    t.world.pickGround = () => new THREE.Vector3(1, 1, 0);
+    t.editor.setSelection(sel({ spawns: [{ kind: 'creature', guid: 3 }], routes: [3] }));
+    expect(t.editor.insertPoint(0, 0)).toBe(false);
+    expect(t.notices).toEqual([]);
+  });
+});

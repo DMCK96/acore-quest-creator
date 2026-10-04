@@ -131,7 +131,8 @@ export class Editor {
    * the nearest leg of an active route, else after the last picked point. True when the click was used.
    */
   insertPoint(ndcX: number, ndcY: number): boolean {
-    const { routes, points } = this.#selection;
+    const { points } = this.#selection;
+    const routes = this.#selection.routes.filter((guid) => this.#world.spawnRoute(guid) !== null);
     if (routes.length === 0) return false;
     const ground = this.#world.pickGround(ndcX, ndcY);
     if (!ground) return true;
@@ -281,11 +282,13 @@ export class Editor {
     return data ? { kind: data.kind, guid: data.guid, entry: data.entry, own: data.own } : null;
   }
 
-  /** A route edit for an NPC's route; callers check first that the NPC and its route are drawn */
+  /**
+   * A route edit for an NPC's route; callers check first that the route is drawn. The NPC is named from
+   * the route, which is drawn however far the NPC itself has been left behind.
+   */
   #routeEdit(guid: number, points: EditPoint[]): SpawnEdit {
-    const spawn = this.#ref('creature', guid)!;
     const route = this.#world.spawnRoute(guid)!;
-    return { kind: 'route', spawn, pathId: route.pathId, points };
+    return { kind: 'route', spawn: { kind: 'creature', guid, entry: route.entry, own: route.own }, pathId: route.pathId, points };
   }
 
   /** Each other point of the dragged routes' share of a move, with falloff on */
@@ -304,7 +307,7 @@ export class Editor {
     const guids = [...new Set(this.#selection.points.map((p) => p.guid))];
     const routes = guids.flatMap((guid): DraggedRoute[] => {
       const route = this.#world.spawnRoute(guid);
-      if (!route || !this.#ref('creature', guid)) return [];
+      if (!route) return [];
       const before = route.points.map((p) => ({ ...p }));
       return [{ guid, before, current: before, picked: pickedOf(this.#selection, guid) }];
     });
@@ -347,9 +350,14 @@ export class Editor {
 
   async #ended(lifted: boolean): Promise<void> {
     const drag = this.#drag;
-    this.#drag = null;
     const change = drag?.last;
-    if (!drag || !change || (change.delta.lengthSq() === 0 && change.angle === 0)) return;
+    // A redraw since the last move may have put fresh objects back where they were stored
+    if (change) this.#moved(change);
+    this.#drag = null;
+    const attached = this.#attached;
+    // A lone object tilted on its X or Y ring has turned, though not about Z
+    const tilted = !!change && attached?.turns === 'all' && change.quaternion.angleTo(attached.quaternion) > 1e-9;
+    if (!drag || !change || (change.delta.lengthSq() === 0 && change.angle === 0 && !tilted)) return;
     const moving = this.#mode === 'move' || this.#attached?.turns === 'none';
 
     const spawns = drag.spawns.flatMap((s) => {
@@ -357,6 +365,9 @@ export class Editor {
       return object ? [{ ...s, object }] : [];
     });
     const routes = drag.routes.map((r) => ({ ...r, changed: r.current.flatMap((p, i) => (p === r.before[i] ? [] : [i])) }));
+    // Drawn where they were dragged from now on, while the server's floor and any question are awaited,
+    // so the gizmo stays with them and a quick second drag starts from there
+    for (const r of routes) if (r.changed.length > 0) this.#world.setPendingRoute(r.guid, r.current);
 
     // Dropped along the ground: onto the server's floor nearest where each thing was dragged, when it has one
     if (moving && !lifted && this.#options.floorZ) {
@@ -392,7 +403,7 @@ export class Editor {
       after.push({ kind: 'place', spawn, to: placementOf(s.object, s.kind) });
     }
     for (const r of routes) {
-      if (r.changed.length === 0 || !this.#ref('creature', r.guid)) continue;
+      if (r.changed.length === 0) continue;
       before.push(this.#routeEdit(r.guid, r.before));
       after.push(this.#routeEdit(r.guid, r.current));
     }
@@ -406,7 +417,7 @@ export class Editor {
     const after: SpawnEdit[] = [];
     for (const guid of [...new Set(selection.points.map((p) => p.guid))]) {
       const route = this.#world.spawnRoute(guid);
-      if (!route || !this.#ref('creature', guid)) continue;
+      if (!route) continue;
       const picked = pickedOf(selection, guid);
       const left = route.points.filter((_, i) => !picked.has(i));
       if (left.length < MIN_ROUTE_POINTS) {
@@ -462,8 +473,11 @@ export class Editor {
         object.updateMatrixWorld(true);
       }
     } else {
-      // A picked point the route no longer has (an insert undone) is let go; the rest stay picked
-      const kept = this.#selection.points.filter((p) => p.guid !== edit.spawn.guid || p.index < edit.points.length);
+      // A route that gains or loses points lets go of its picked ones, which would name other points now;
+      // a move keeps them picked
+      const drawn = this.#world.spawnRoute(edit.spawn.guid);
+      const reshaped = !drawn || drawn.points.length !== edit.points.length;
+      const kept = this.#selection.points.filter((p) => p.guid !== edit.spawn.guid || !reshaped);
       if (kept.length !== this.#selection.points.length) this.#select({ ...this.#selection, points: kept });
       this.#world.setPendingRoute(edit.spawn.guid, edit.points);
     }

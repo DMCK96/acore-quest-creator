@@ -386,7 +386,10 @@ function WorldStage({ map, start, hasClient, own, onSelect, onOwnEdit, focus, ac
             onEdit: (change) => {
               // The quest's own edits are taken at once; world edits wait their turn
               if (change.spawn.own && onOwnEditRef.current) void edit(change);
-              else queue = queue.then(() => edit(change));
+              // One that fails outright is said, and the queue goes on
+              else queue = queue.then(() => edit(change)).catch((error: unknown) => {
+                  if (live) setNote(`The change could not be kept: ${error instanceof Error ? error.message : String(error)}`);
+                });
             },
             onSelection: (next) => live && setSummary(next),
             onTool: (tool) => live && setLayers((l) => ({ ...l, tool })),
@@ -511,6 +514,9 @@ function WorldStage({ map, start, hasClient, own, onSelect, onOwnEdit, focus, ac
   const chosen = typeof layers.events === 'number' && !nearbyEvents.some((e) => e.id === layers.events) ? [{ id: layers.events, name: layers.eventName ?? '' }] : [];
   const eventChoices = [...nearbyEvents, ...chosen];
 
+  /** A click on a tool leaves the keyboard with the view, so Tab, G and R still reach it */
+  const keepFocus = (event: React.MouseEvent): void => event.preventDefault();
+
   // More than one spawn, or any route points: the card sums them up instead of showing one spawn
   const several = summary !== null && summary.creatures + summary.objects + summary.points > 0 && !(summary.creatures + summary.objects === 1 && summary.points === 0);
 
@@ -575,16 +581,17 @@ function WorldStage({ map, start, hasClient, own, onSelect, onOwnEdit, focus, ac
       )}
       {!unavailable && (
         <div className="world3d__tools glass" role="toolbar" aria-label="Tools">
-          <button type="button" className="world3d__tool" aria-pressed={layers.tool === 'camera'} title="Camera: left-drag orbits (Tab)" onClick={() => setLayers((l) => ({ ...l, tool: 'camera' }))}>
+          <button type="button" className="world3d__tool" onMouseDown={keepFocus} aria-pressed={layers.tool === 'camera'} title="Camera: left-drag orbits (Tab)" onClick={() => setLayers((l) => ({ ...l, tool: 'camera' }))}>
             Camera
           </button>
-          <button type="button" className="world3d__tool" aria-pressed={layers.tool === 'select'} title="Select: left-drag draws a box, Alt+drag orbits (Tab)" onClick={() => setLayers((l) => ({ ...l, tool: 'select' }))}>
+          <button type="button" className="world3d__tool" onMouseDown={keepFocus} aria-pressed={layers.tool === 'select'} title="Select: left-drag draws a box, Alt+drag orbits (Tab)" onClick={() => setLayers((l) => ({ ...l, tool: 'select' }))}>
             Select
           </button>
           {layers.tool === 'select' && (
             <button
               type="button"
               className="world3d__tool"
+              onMouseDown={keepFocus}
               aria-pressed={layers.falloff}
               title="Nearby route points follow a move (O; [ and ] change the radius)"
               onClick={() => setLayers((l) => ({ ...l, falloff: !l.falloff }))}

@@ -564,3 +564,13 @@ describe('one dressed-NPC texture builder for every world', () => {
     vi.unstubAllGlobals();
   });
 });
+
+describe('a route edited in the view', () => {
+  it('is read back as edited at once, before the area is drawn again', async () => {
+    const m = manager({ creatures: [creature(2, 0, { pathId: 77, path: [{ x: 10, y: 0, z: 0 }, { x: 20, y: 0, z: 0 }] })], objects: [], capped: { creatures: false, objects: false } });
+    await m.loadArea(1, 0, box);
+    const drawing = m.setPendingRoute(2, [{ x: 10, y: 5, z: 0 }, { x: 20, y: 0, z: 0 }]);
+    expect(m.route(2)!.points[0]).toEqual({ x: 10, y: 5, z: 0 });
+    await drawing;
+  });
+});

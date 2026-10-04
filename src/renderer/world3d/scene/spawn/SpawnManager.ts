@@ -344,13 +344,17 @@ class SpawnManager {
     await this.#redraw();
   }
 
-  /** A drawn NPC's route as the view has it (with the layer's edits), or null when it has none */
+  /**
+   * A drawn NPC's route as the view has it (with the layer's edits, and as edited in the view while
+   * that waits to be stored, before the redraw), or null when it has none
+   */
   route(guid: number): { pathId: number; own: boolean; entry: number; points: ViewPoint[]; home: { x: number; y: number; z: number } } | null {
     for (const group of this.#areas.values()) {
       const creature: ViewCreature | undefined = group.userData.creatures?.get(guid);
       if (creature) {
-        return creature.path && creature.path.length > 0
-          ? { pathId: creature.pathId, own: creature.own, entry: creature.entry, points: creature.path, home: { x: creature.x, y: creature.y, z: creature.z } }
+        const points = this.#pendingRoutes.get(guid) ?? creature.path;
+        return points && points.length > 0
+          ? { pathId: creature.pathId, own: creature.own, entry: creature.entry, points, home: { x: creature.x, y: creature.y, z: creature.z } }
           : null;
       }
     }
