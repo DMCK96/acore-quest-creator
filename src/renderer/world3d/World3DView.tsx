@@ -77,7 +77,19 @@ interface ViewProps {
   onOwnEdit?(edit: SpawnEdit): void;
   /** A spawn to bring into view: the camera goes close to it and it is selected. Its map is `map`. */
   focus?: FocusTarget;
+  /** False while the view is hidden: the world stops drawing until it is shown again. True by default. */
+  active?: boolean;
+  /** Whether the view labels the area itself; a host that names it elsewhere turns this off. True by default. */
+  showArea?: boolean;
+  /** Told the name of the area the camera is over, and null while a new world starts. */
+  onArea?(name: string | null): void;
+  /** Told where the camera rests (the point it looks at) once it has moved more than a yard. */
+  onPlaceChange?(place: { x: number; y: number; z: number }): void;
 }
+
+/** How often the view checks where the camera rests, and how far it must move to count */
+const PLACE_CHECK_MS = 2000;
+const PLACE_MOVE = 1;
 
 /** A spawn to bring into view: the camera goes to it, it is selected, and what hides it is switched on. */
 export interface FocusTarget {
@@ -132,7 +144,7 @@ class Contained extends Component<{ children: ReactNode }, { failure: string | n
   }
 }
 
-function WorldStage({ map, start, hasClient, own, onSelect, onOwnEdit, focus }: ViewProps): React.JSX.Element {
+function WorldStage({ map, start, hasClient, own, onSelect, onOwnEdit, focus, active = true, showArea = true, onArea, onPlaceChange }: ViewProps): React.JSX.Element {
   const container = useRef<HTMLDivElement>(null);
   const world = useRef<World3D | null>(null);
   const startRef = useRef(start);
@@ -149,6 +161,12 @@ function WorldStage({ map, start, hasClient, own, onSelect, onOwnEdit, focus }: 
   onSelectRef.current = onSelect;
   const onOwnEditRef = useRef(onOwnEdit);
   onOwnEditRef.current = onOwnEdit;
+  const onAreaRef = useRef(onArea);
+  onAreaRef.current = onArea;
+  const onPlaceChangeRef = useRef(onPlaceChange);
+  onPlaceChangeRef.current = onPlaceChange;
+  const activeRef = useRef(active);
+  activeRef.current = active;
   // A spawn to bring into view; kept until the world that is to show it is there (a map switch builds a new one)
   const pendingFocus = useRef<FocusTarget | null>(null);
   // The world layer as the main process last gave it, drawn over the database
@@ -201,6 +219,7 @@ function WorldStage({ map, start, hasClient, own, onSelect, onOwnEdit, focus }: 
     if (!element || !directory || !hasClient) return;
     setProblem(null);
     setArea(null);
+    onAreaRef.current?.(null);
     setMissing([]);
     setStatus('loading');
     setSelected(null);
@@ -306,7 +325,10 @@ function WorldStage({ map, start, hasClient, own, onSelect, onOwnEdit, focus }: 
             directory,
             map,
             start: startRef.current,
-            onArea: setArea,
+            onArea: (name) => {
+              setArea(name);
+              onAreaRef.current?.(name);
+            },
             onReady: () => live && setStatus('ready'),
             onProblems: (all) => live && setMissing(all),
             onError: setProblem,
@@ -330,6 +352,7 @@ function WorldStage({ map, start, hasClient, own, onSelect, onOwnEdit, focus }: 
             },
           });
           created.setSpawnVisibility(layersRef.current);
+          if (!activeRef.current) created.setActive(false);
           if (ownRef.current) created.setOwnSpawns(ownRef.current);
           world.current = created;
           bringIntoViewRef.current();
@@ -385,6 +408,24 @@ function WorldStage({ map, start, hasClient, own, onSelect, onOwnEdit, focus }: 
     onSelectRef.current?.(null);
   }
 
+  // A hidden view stops drawing
+  useEffect(() => {
+    world.current?.setActive(active);
+  }, [active]);
+
+  // Where the camera rests, told to the host once it has moved far enough to matter
+  useEffect(() => {
+    let last: { x: number; y: number; z: number } | null = null;
+    const timer = setInterval(() => {
+      const at = world.current?.target();
+      if (!at || !onPlaceChangeRef.current) return;
+      if (last && Math.hypot(at.x - last.x, at.y - last.y, at.z - last.z) <= PLACE_MOVE) return;
+      last = { x: at.x, y: at.y, z: at.z };
+      onPlaceChangeRef.current(last);
+    }, PLACE_CHECK_MS);
+    return () => clearInterval(timer);
+  }, []);
+
   // What the spawn source said last: capped kinds, or why there are none.
   useEffect(() => {
     const timer = setInterval(() => {
@@ -418,7 +459,7 @@ function WorldStage({ map, start, hasClient, own, onSelect, onOwnEdit, focus }: 
   return (
     <div className="world3d" aria-label="3D view">
       <div ref={container} className="world3d__stage" />
-      {area && <p className="world3d__area">{area}</p>}
+      {showArea && area && <p className="world3d__area">{area}</p>}
       {missing.length > 0 && (
         <p className="world3d__missing" title={missing.join('\n')}>
           {missing.length === 1 ? '1 thing' : `${missing.length} things`} could not be loaded and {missing.length === 1 ? 'is' : 'are'} left out:{' '}

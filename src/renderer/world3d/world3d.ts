@@ -71,6 +71,10 @@ export interface World3D {
   setPlacing(target: PlaceTarget | null): void;
   undo(): void;
   redo(): void;
+  /** Stops drawing (while the world is hidden) or starts again; a hidden world costs nothing. */
+  setActive(active: boolean): void;
+  /** The point the camera looks at and turns round. */
+  target(): { x: number; y: number; z: number };
   dispose(): void;
 }
 
@@ -296,8 +300,9 @@ export function createWorld3D(options: World3DOptions): World3D {
   const clock = new THREE.Clock();
   let frame = 0;
   let ready = false;
+  let running = true;
   const tick = (): void => {
-    if (disposed) return;
+    if (disposed || !running) return;
     frame = requestAnimationFrame(tick);
     const delta = clock.getDelta();
     try {
@@ -341,6 +346,18 @@ export function createWorld3D(options: World3DOptions): World3D {
     },
     undo: () => editor.undo(),
     redo: () => editor.redo(),
+    setActive(active) {
+      if (active === running || disposed) return;
+      running = active;
+      if (active) {
+        // The time spent hidden is not one long frame
+        clock.getDelta();
+        frame = requestAnimationFrame(tick);
+      } else {
+        cancelAnimationFrame(frame);
+      }
+    },
+    target: () => ({ x: controls.target.x, y: controls.target.y, z: controls.target.z }),
     camera() {
       const direction = camera.getWorldDirection(new THREE.Vector3());
       return { position: { ...camera.position }, direction: { x: direction.x, y: direction.y, z: direction.z } };
