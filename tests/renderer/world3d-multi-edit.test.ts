@@ -302,3 +302,27 @@ describe('where the picked points are drawn', () => {
     expect(t.editor.pointPositions()).toEqual([{ x: 10, y: 3, z: 0 }]);
   });
 });
+
+describe('the selection after an undo', () => {
+  it('keeps the picked points that the route still has, so the move can be tried again at once', async () => {
+    const t = setup({ routes: { 7: line(50, [0, 10, 20]) }, floor: 0 });
+    t.npc(7, -5, 0);
+    t.editor.setSelection(sel({ points: [{ guid: 7, index: 1 }, { guid: 7, index: 2 }], routes: [7] }));
+    await t.drag([0, 4, 0]);
+    t.editor.undo();
+    expect(t.editor.selection.points).toEqual([{ guid: 7, index: 1 }, { guid: 7, index: 2 }]);
+  });
+
+  it('drops a picked point an undo takes out of the route', async () => {
+    const t = setup({ routes: { 7: line(50, [0, 10]) } });
+    t.npc(7, -5, 0);
+    t.world.pickGround = () => new THREE.Vector3(5, 1, 0);
+    t.editor.setSelection(sel({ routes: [7] }));
+    t.editor.insertPoint(0, 0);
+    await vi.waitFor(() => expect(t.edits).toHaveLength(1));
+    expect(t.editor.selection.points).toEqual([{ guid: 7, index: 1 }]);
+    t.editor.setSelection(sel({ points: [{ guid: 7, index: 2 }], routes: [7] }));
+    t.editor.undo();
+    expect(t.editor.selection.points).toEqual([]);
+  });
+});

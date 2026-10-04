@@ -462,10 +462,9 @@ export class Editor {
         object.updateMatrixWorld(true);
       }
     } else {
-      // The route's points may have changed under its picked ones
-      if (this.#selection.points.some((p) => p.guid === edit.spawn.guid)) {
-        this.#select({ ...this.#selection, points: this.#selection.points.filter((p) => p.guid !== edit.spawn.guid) });
-      }
+      // A picked point the route no longer has (an insert undone) is let go; the rest stay picked
+      const kept = this.#selection.points.filter((p) => p.guid !== edit.spawn.guid || p.index < edit.points.length);
+      if (kept.length !== this.#selection.points.length) this.#select({ ...this.#selection, points: kept });
       this.#world.setPendingRoute(edit.spawn.guid, edit.points);
     }
     this.#options.onEdit?.(edit);
