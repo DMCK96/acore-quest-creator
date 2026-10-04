@@ -1,6 +1,7 @@
 import { ENTITIES_FIELD, newSpawn, readEntities, writeEntities, type QuestEntities } from '../entities/model';
 import type { FieldValue } from '../registry/types';
-import { movePoint, setPatrol } from './patrol';
+import { movePoint, newPatrol, setPatrol } from './patrol';
+import type { Movement } from '../world/movement';
 import { readScenes, SCRIPTS_FIELD, writeScenes, type Position, type QuestScene, type SceneStep } from '../scripts/model';
 
 /**
@@ -248,4 +249,36 @@ export function addSpawn(
   }
   const objects = add(entities.objects);
   return objects ? { field: ENTITIES_FIELD, value: writeEntities({ ...entities, objects }) } : null;
+}
+
+/** Takes one of the quest's own spawns away; null when the quest has no such spawn */
+export function removeSpawn(values: Values, target: { kind: 'npc' | 'object'; entry: number }, guid: number): Edit {
+  const entities = readEntities(values);
+  const remove = <T extends { entry: number; spawns: { guid: number }[] }>(list: T[]): T[] | null => {
+    const owner = list.find((e) => e.entry === target.entry);
+    if (!owner || !owner.spawns.some((s) => s.guid === guid)) return null;
+    return list.map((e) => (e === owner ? { ...e, spawns: e.spawns.filter((s) => s.guid !== guid) } : e));
+  };
+  if (target.kind === 'npc') {
+    const npcs = remove(entities.npcs);
+    return npcs ? { field: ENTITIES_FIELD, value: writeEntities({ ...entities, npcs }) } : null;
+  }
+  const objects = remove(entities.objects);
+  return objects ? { field: ENTITIES_FIELD, value: writeEntities({ ...entities, objects }) } : null;
+}
+
+/**
+ * How one of the quest's own NPC spawns moves: a path keeps the patrol it has (a new one when its id
+ * differs), wander and standing still drop the patrol. Null when the quest has no such spawn.
+ */
+export function setSpawnMovement(values: Values, entry: number, guid: number, to: Movement): Edit {
+  const entities = readEntities(values);
+  const npc = entities.npcs.find((n) => n.entry === entry);
+  if (!npc || !npc.spawns.some((s) => s.guid === guid)) return null;
+  const spawns = npc.spawns.map((s) => {
+    if (s.guid !== guid) return s;
+    if (to.type === 'path') return { ...s, wander: 0, patrol: s.patrol && s.patrol.pathId === to.pathId ? s.patrol : newPatrol(to.pathId ?? 0) };
+    return { ...s, wander: to.type === 'wander' ? to.wander : 0, patrol: null };
+  });
+  return { field: ENTITIES_FIELD, value: writeEntities({ ...entities, npcs: entities.npcs.map((n) => (n === npc ? { ...n, spawns } : n)) }) };
 }
