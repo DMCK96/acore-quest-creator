@@ -172,7 +172,7 @@ export function createWorld3D(options: World3DOptions): World3D {
   let selected: { kind: 'creature' | 'object'; guid: number } | null = null;
   const choose = (spawn: { kind: 'creature' | 'object'; guid: number } | null): void => {
     selected = spawn ? { kind: spawn.kind, guid: spawn.guid } : null;
-    manager.setSelectedSpawn(selected);
+    manager.setActiveRoutes(selected?.kind === 'creature' ? [selected.guid] : []);
     editor.select(selected);
     // Tells a screen round the view that Esc is the view's while something is selected
     refreshEscape();

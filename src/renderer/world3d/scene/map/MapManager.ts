@@ -231,9 +231,29 @@ class MapManager extends EventTarget {
     return this.#spawnManager.route(guid);
   }
 
-  /** Marks the selected spawn: only its paths are drawn */
-  setSelectedSpawn(spawn: { kind: 'creature' | 'object'; guid: number } | null) {
-    this.#spawnManager.setSelected(spawn);
+  /** The NPCs whose routes are worked on: only their routes and wander circles are drawn */
+  setActiveRoutes(guids: number[]) {
+    this.#spawnManager.setActiveRoutes(guids);
+  }
+
+  /** The picked route points, marked on their routes */
+  markRoutePoints(points: { guid: number; index: number }[]) {
+    this.#spawnManager.markPoints(points);
+  }
+
+  /** What a selection box can catch: drawn route points, and spawns within draw distance */
+  selectionCandidates(cameraPosition: THREE.Vector3) {
+    return this.#spawnManager.candidates(cameraPosition);
+  }
+
+  /** Moves an NPC's drawn route to points being dragged */
+  previewRoute(guid: number, points: { x: number; y: number; z: number; carry?: unknown }[]) {
+    this.#spawnManager.previewRoute(guid, points);
+  }
+
+  /** A drawn spawn as a click would pick it, or null */
+  pickedSpawn(kind: 'creature' | 'object', guid: number) {
+    return this.#spawnManager.picked(kind, guid);
   }
 
   /** A spawn's drawn object, while it is drawn */

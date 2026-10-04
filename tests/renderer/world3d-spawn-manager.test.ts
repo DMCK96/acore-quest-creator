@@ -169,7 +169,7 @@ describe('standing NPCs on the drawn ground', () => {
 });
 
 describe('which routes are drawn', () => {
-  it('draws only the route and wander circle of the selected NPC, however far away it is', async () => {
+  it('draws only the routes and wander circles of the active NPCs, however far away they are', async () => {
     const m = manager({
       creatures: [creature(1, 1, { x: 400, wander: 5 }), creature(2, 1, { x: 400, path: [{ x: 410, y: 0, z: 0 }] }), creature(3, 1, { x: 20, wander: 5 })],
       objects: [], capped: { creatures: false, objects: false },
@@ -178,12 +178,60 @@ describe('which routes are drawn', () => {
     const shown = () => group.getObjectByName('paths')!.children.map((p) => p.visible);
     m.cull(new THREE.Vector3(0, 0, 0));
     expect(shown()).toEqual([false, false, false]);
-    m.setSelected({ kind: 'creature', guid: 2 });
+    m.setActiveRoutes([2]);
     m.cull(new THREE.Vector3(0, 0, 0));
     expect(shown()).toEqual([false, true, false]);
-    m.setSelected({ kind: 'object', guid: 2 });
+    m.setActiveRoutes([1, 2]);
+    m.cull(new THREE.Vector3(0, 0, 0));
+    expect(shown()).toEqual([true, true, false]);
+    m.setActiveRoutes([]);
     m.cull(new THREE.Vector3(0, 0, 0));
     expect(shown()).toEqual([false, false, false]);
+  });
+
+  it('marks the picked points of a drawn route, and unmarks them', async () => {
+    const m = manager({ creatures: [creature(2, 0, { path: [{ x: 10, y: 0, z: 0 }, { x: 20, y: 0, z: 0 }] })], objects: [], capped: { creatures: false, objects: false } });
+    const group = (await m.loadArea(1, 0, box))!;
+    const scales = () => group.getObjectByName('route')!.children.filter((c) => typeof c.userData.point === 'number').map((b) => b.scale.x);
+    m.setActiveRoutes([2]);
+    m.markPoints([{ guid: 2, index: 1 }]);
+    m.cull(new THREE.Vector3(0, 0, 0));
+    expect(scales()[0]).toBe(1);
+    expect(scales()[1]).toBeGreaterThan(1);
+    m.markPoints([]);
+    m.cull(new THREE.Vector3(0, 0, 0));
+    expect(scales()).toEqual([1, 1]);
+  });
+
+  it('offers a box the points of drawn routes and the shown spawns within draw distance', async () => {
+    const m = manager({
+      creatures: [creature(2, 0, { path: [{ x: 10, y: 0, z: 0 }, { x: 20, y: 0, z: 0 }] }), creature(5, 0, { x: 500 })],
+      objects: [object(3, 0, { x: 4 })], capped: { creatures: false, objects: false },
+    });
+    await m.loadArea(1, 0, box);
+    m.setActiveRoutes([2]);
+    m.cull(new THREE.Vector3(0, 0, 0));
+    const c = m.candidates(new THREE.Vector3(0, 0, 0));
+    expect(c.points.map((p) => [p.guid, p.index, p.at.x])).toEqual([[2, 0, 10], [2, 1, 20]]);
+    expect(c.spawns.map((s) => [s.kind, s.guid])).toEqual([['creature', 2], ['object', 3]]);
+    m.setVisibility({ creatures: true, objects: false, paths: true, events: 'none' });
+    expect(m.candidates(new THREE.Vector3(0, 0, 0)).spawns.map((s) => s.guid)).toEqual([2]);
+  });
+
+  it('moves a drawn route to dragged points without drawing its area again', async () => {
+    const m = manager({ creatures: [creature(2, 0, { path: [{ x: 10, y: 0, z: 0 }, { x: 20, y: 0, z: 0 }] })], objects: [], capped: { creatures: false, objects: false } });
+    const group = (await m.loadArea(1, 0, box))!;
+    const route = group.getObjectByName('route')!;
+    m.previewRoute(2, [{ x: 10, y: 5, z: 0 }, { x: 20, y: 0, z: 0 }]);
+    expect(group.getObjectByName('route')).toBe(route);
+    expect(route.children.find((c) => c.userData.point === 0)!.position.toArray()).toEqual([10, 5, 0]);
+  });
+
+  it('gives a drawn spawn as a click picks it, by guid', async () => {
+    const m = manager({ creatures: [creature(2, 0, { x: 3 })], objects: [], capped: { creatures: false, objects: false } });
+    await m.loadArea(1, 0, box);
+    expect(m.picked('creature', 2)).toMatchObject({ kind: 'creature', guid: 2, position: { x: 3, y: 0, z: 0 } });
+    expect(m.picked('creature', 9)).toBeNull();
   });
 });
 
@@ -436,7 +484,7 @@ describe('the world layer in the view', () => {
   it('picks a route point of the selected NPC by its ball', async () => {
     const m = manager({ creatures: [creature(2, 0, { pathId: 77, path: [{ x: 10, y: 0, z: 1 }, { x: 20, y: 0, z: 1 }] })], objects: [], capped: { creatures: false, objects: false } });
     await m.loadArea(1, 0, box);
-    m.setSelected({ kind: 'creature', guid: 2 });
+    m.setActiveRoutes([2]);
     m.cull(new THREE.Vector3(0, 0, 0));
     const down = (x: number) => new THREE.Ray(new THREE.Vector3(x, 0, 50), new THREE.Vector3(0, 0, -1));
     expect(m.pickRoutePoint(down(20.3), 2)).toBe(1);

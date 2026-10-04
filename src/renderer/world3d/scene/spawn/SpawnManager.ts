@@ -11,7 +11,9 @@ import { ViewCreature, ViewEvent, ViewObject, ViewPoint, ViewSpawns } from '../.
 import { WorldLayer } from '../../../../core/world/layer.js';
 import { BodyTexture, DisplayResolver, Look, ModelLook } from './DisplayResolver.js';
 import { creatureTransform, objectTransform, Transform } from './placement.js';
-import { routeObject, wanderObject } from './paths.js';
+import { moveRouteDrawing, routeObject, setBallSelected, wanderObject } from './paths.js';
+import type { Candidates } from '../edit/box.js';
+import type { SelectedPoint } from '../edit/selection.js';
 
 type Box = { minX: number; maxX: number; minY: number; maxY: number };
 
@@ -172,8 +174,11 @@ class SpawnManager {
   /** Routes edited in the view and not yet stored by its host, drawn in place of what it has */
   #pendingRoutes = new globalThis.Map<number, ViewPoint[]>();
 
-  /** The selected spawn, whose paths are the ones drawn */
-  #selected: { kind: 'creature' | 'object'; guid: number } | null = null;
+  /** The NPCs whose routes and wander circles are drawn: those being worked on */
+  #activeRoutes = new globalThis.Set<number>();
+
+  /** Picked route points, drawn larger and in the selection's colour */
+  #marked = new globalThis.Set<string>();
 
   status: SpawnStatus = { capped: { creatures: false, objects: false }, error: null, events: [] };
 
@@ -441,9 +446,60 @@ class SpawnManager {
     return { ...best.spawn.userData.spawn, position: { ...best.spawn.userData.spawn.position } };
   }
 
-  /** Marks a spawn as selected: an NPC's route and wander circle are drawn only while it is */
-  setSelected(spawn: { kind: 'creature' | 'object'; guid: number } | null) {
-    this.#selected = spawn ? { kind: spawn.kind, guid: spawn.guid } : null;
+  /** The NPCs whose routes are worked on: an NPC's route and wander circle are drawn only while it is one */
+  setActiveRoutes(guids: number[]) {
+    this.#activeRoutes = new globalThis.Set(guids);
+  }
+
+  /** The picked route points, marked on their routes */
+  markPoints(points: SelectedPoint[]) {
+    this.#marked = new globalThis.Set(points.map((p) => `${p.guid}:${p.index}`));
+  }
+
+  /**
+   * What a selection box can catch: the points of the drawn routes, and the drawn NPCs and objects
+   * of the shown kinds within draw distance, each at the middle of its bounds
+   */
+  candidates(cameraPosition: THREE.Vector3): Candidates {
+    const points: Candidates['points'] = [];
+    const spawns: Candidates['spawns'] = [];
+    for (const group of this.#areas.values()) {
+      const paths = group.getObjectByName('paths');
+      for (const shown of paths?.visible ? paths.children : []) {
+        if (!shown.visible) continue;
+        for (const ball of shown.children) {
+          if (typeof ball.userData.point === 'number') points.push({ guid: shown.userData.guid, index: ball.userData.point, at: ball.position.clone() });
+        }
+      }
+      for (const name of ['creatures', 'objects']) {
+        const kind = group.getObjectByName(name);
+        if (!kind?.visible) continue;
+        for (const spawn of kind.children) {
+          if (!spawn.visible || !spawn.userData.spawn || spawn.position.distanceTo(cameraPosition) > SPAWN_DRAW_DISTANCE) continue;
+          const bounds = spawnBounds(spawn, new THREE.Box3());
+          const at = bounds.isEmpty() ? spawn.position.clone() : bounds.getCenter(new THREE.Vector3());
+          spawns.push({ kind: spawn.userData.spawn.kind, guid: spawn.userData.spawn.guid, at });
+        }
+      }
+    }
+    return { points, spawns };
+  }
+
+  /** Moves an NPC's drawn route to points being dragged, without drawing its area again */
+  previewRoute(guid: number, points: ViewPoint[]) {
+    for (const group of this.#areas.values()) {
+      const creature: ViewCreature | undefined = group.userData.creatures?.get(guid);
+      if (!creature) continue;
+      for (const shown of group.getObjectByName('paths')?.children ?? []) {
+        if (shown.userData.guid === guid && shown.name === 'route') moveRouteDrawing(shown, { x: creature.x, y: creature.y, z: creature.z }, points);
+      }
+    }
+  }
+
+  /** A drawn spawn as a click would pick it, or null when it is not drawn */
+  picked(kind: 'creature' | 'object', guid: number): PickedSpawn | null {
+    const spawn = this.find(kind, guid);
+    return spawn ? { ...spawn.userData.spawn, position: { ...spawn.userData.spawn.position } } : null;
   }
 
   /** The drawn object of a spawn, or null when it is not drawn (its area unloaded, or it is hidden) */
@@ -473,10 +529,18 @@ class SpawnManager {
           }
         }
       }
-      // Only the selected NPC's route and wander circle, however far it has been left behind
-      const selected = this.#selected?.kind === 'creature' ? this.#selected.guid : null;
+      // Only the active routes and wander circles, however far they have been left behind; picked points marked
       for (const shown of group.getObjectByName('paths')?.children ?? []) {
-        shown.visible = shown.userData.guid === selected;
+        shown.visible = this.#activeRoutes.has(shown.userData.guid);
+        if (!shown.visible || shown.name !== 'route') continue;
+        for (const ball of shown.children) {
+          if (typeof ball.userData.point !== 'number') continue;
+          const marked = this.#marked.has(`${shown.userData.guid}:${ball.userData.point}`);
+          if (marked !== (ball.userData.marked === true)) {
+            ball.userData.marked = marked;
+            setBallSelected(ball, marked);
+          }
+        }
       }
     }
   }

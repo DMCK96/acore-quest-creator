@@ -9,6 +9,9 @@ import * as THREE from 'three';
 
 const PATH_COLOUR = 0xf0d060;
 const OWN_COLOUR = 0x60e0a0;
+/** A picked point: the selection's gold, and larger */
+const SELECTED_COLOUR = 0xffd34d;
+const SELECTED_SCALE = 1.6;
 
 const POINT_RADIUS = 0.35;
 const ARROW = { radius: 0.4, length: 1 };
@@ -38,6 +41,25 @@ const materialsFor = (own: boolean) => {
 
 type Point = { x: number; y: number; z: number };
 
+let selectedMaterial = null;
+
+/** An arrow along each leg that has a length, from each stop to the next */
+const addArrows = (group, stops, mesh) => {
+  for (let i = 0; i + 1 < stops.length; i++) {
+    const direction = stops[i + 1].clone().sub(stops[i]);
+    if (direction.lengthSq() === 0) {
+      continue;
+    }
+    const arrow = new THREE.Mesh(arrowGeometry, mesh);
+    arrow.position.copy(stops[i]).add(stops[i + 1]).multiplyScalar(0.5);
+    arrow.quaternion.setFromUnitVectors(Y, direction.normalize());
+    arrow.renderOrder = RENDER_ORDER;
+    // So a redraw while dragging can find and replace it
+    arrow.userData.arrow = true;
+    group.add(arrow);
+  }
+};
+
 /** A patrol route, or null for an NPC without one */
 const routeObject = (creature: { x: number; y: number; z: number; path: Point[] | null; own: boolean }): THREE.Group | null => {
   const path = creature.path;
@@ -50,6 +72,8 @@ const routeObject = (creature: { x: number; y: number; z: number; path: Point[] 
 
   const group = new THREE.Group();
   group.name = 'route';
+  // Its arrows' look, for a redraw while dragging
+  group.userData.mesh = mesh;
 
   const route = new THREE.Line(new THREE.BufferGeometry().setFromPoints(stops), line);
   route.renderOrder = RENDER_ORDER;
@@ -60,24 +84,51 @@ const routeObject = (creature: { x: number; y: number; z: number; path: Point[] 
     ball.position.set(p.x, p.y, p.z);
     // Which point it is, so a click on it can pick the point
     ball.userData.point = index;
+    // Its own look, to go back to once it is no longer picked
+    ball.userData.plain = mesh;
     ball.renderOrder = RENDER_ORDER;
     group.add(ball);
   });
 
-  for (let i = 0; i + 1 < stops.length; i++) {
-    const direction = stops[i + 1].clone().sub(stops[i]);
-    if (direction.lengthSq() === 0) {
-      continue;
-    }
-    const arrow = new THREE.Mesh(arrowGeometry, mesh);
-    arrow.position.copy(stops[i]).add(stops[i + 1]).multiplyScalar(0.5);
-    arrow.quaternion.setFromUnitVectors(Y, direction.normalize());
-    arrow.renderOrder = RENDER_ORDER;
-    group.add(arrow);
-  }
+  addArrows(group, stops, mesh);
 
   group.updateMatrixWorld(true);
   return group;
+};
+
+/**
+ * Moves a drawn route to new points in place (the line, each ball and the arrows), while its points
+ * are dragged; cheaper than drawing the whole area again every frame
+ */
+const moveRouteDrawing = (group: THREE.Group, home: Point, points: Point[]): void => {
+  const stops = [home, ...points, points[0]].map((p) => new THREE.Vector3(p.x, p.y, p.z));
+  for (const child of [...group.children]) {
+    if (child.userData.arrow) {
+      // The geometry and material are shared by every arrow, so they stay
+      group.remove(child);
+    } else if (typeof child.userData.point === 'number') {
+      const p = points[child.userData.point];
+      if (p) child.position.set(p.x, p.y, p.z);
+    } else if (child instanceof THREE.Line) {
+      child.geometry.dispose();
+      child.geometry = new THREE.BufferGeometry().setFromPoints(stops);
+    }
+  }
+  addArrows(group, stops, group.userData.mesh);
+  group.updateMatrixWorld(true);
+};
+
+/** Marks a route point as picked (larger, in the selection's colour) or not */
+const setBallSelected = (ball: THREE.Mesh, selected: boolean): void => {
+  if (selected) {
+    selectedMaterial ??= new THREE.MeshBasicMaterial({ color: SELECTED_COLOUR, depthTest: false });
+    ball.material = selectedMaterial;
+    ball.scale.setScalar(SELECTED_SCALE);
+  } else {
+    ball.material = ball.userData.plain ?? ball.material;
+    ball.scale.setScalar(1);
+  }
+  ball.updateMatrixWorld(true);
 };
 
 /** A wander circle, or null for an NPC that stands still */
@@ -105,4 +156,4 @@ const wanderObject = (creature: { x: number; y: number; z: number; wander: numbe
   return ring;
 };
 
-export { OWN_COLOUR, PATH_COLOUR, routeObject, wanderObject };
+export { OWN_COLOUR, PATH_COLOUR, moveRouteDrawing, routeObject, setBallSelected, wanderObject };
