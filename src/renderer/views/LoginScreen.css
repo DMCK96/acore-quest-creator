@@ -3,7 +3,8 @@
   position: fixed;
   inset: 0;
   display: grid;
-  place-items: center;
+  /* Safe: a card taller than the window starts at its top and scrolls, rather than being cut off above */
+  place-items: safe center;
   overflow-x: hidden;
   overflow-y: auto;
   padding: 2rem 1rem;

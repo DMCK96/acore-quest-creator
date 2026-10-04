@@ -155,11 +155,11 @@ describe('game client pill', () => {
   };
   it('shows the client folder read cleanly', async () => {
     await connectWith({ dir: 'E:/WoW', archives: ['common.MPQ', 'patch.MPQ'], problems: [] });
-    expect(screen.getByText('Game client')).toHaveAttribute('title', expect.stringContaining('Read 2 archives'));
+    expect(screen.getByText('Game client').closest('.status-pill')).toHaveAttribute('title', expect.stringContaining('Read 2 archives'));
   });
   it('warns when the folder is not a game client', async () => {
     await connectWith({ dir: 'E:/Downloads', archives: [], problems: ['No game archives were found in this folder.'] });
-    const pill = screen.getByText('Game client: 1 problem');
+    const pill = screen.getByText('Game client: 1 problem').closest('.status-pill');
     expect(pill).toHaveClass('status-pill--warning');
     expect(pill).toHaveAttribute('title', expect.stringContaining('No game archives'));
   });

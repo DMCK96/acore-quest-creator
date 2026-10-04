@@ -63,7 +63,7 @@ export function AppBar({
           <svg className="app-bar__icon" viewBox="0 0 16 16" aria-hidden="true">
             <path d="M1.5 4.5v8a1 1 0 0 0 1 1h11a1 1 0 0 0 1-1v-6.5a1 1 0 0 0-1-1H8L6.5 3.5h-4a1 1 0 0 0-1 1z" />
           </svg>
-          Project
+          <span className="app-bar__project-label">Project</span>
         </button>
       </div>
       <div className="app-bar__tabs" role="tablist" aria-label="Workspace">
@@ -86,9 +86,13 @@ export function AppBar({
         ))}
       </div>
       <div className="app-bar__status">
-        <span className={`status-pill${connectedDatabase ? ' status-pill--connected' : ''}`} role="status">
+        <span
+          className={`status-pill${connectedDatabase ? ' status-pill--connected' : ''}`}
+          role="status"
+          title={connectedDatabase ? `Connected: ${connectedDatabase}` : 'Not connected'}
+        >
           <span className="status-pill__dot" />
-          {connectedDatabase ? `Connected: ${connectedDatabase}` : 'Not connected'}
+          <span className="status-pill__label">{connectedDatabase ? `Connected: ${connectedDatabase}` : 'Not connected'}</span>
         </span>
         {connectedDatabase && summary?.serverData && <ServerDataPill status={summary.serverData} />}
         {connectedDatabase && summary?.client && <ClientPill status={summary.client} />}
@@ -111,7 +115,7 @@ function ServerDataPill({ status }: { status: ServerDataStatus }): React.JSX.Ele
   return (
     <span className={`status-pill ${problems === 0 ? 'status-pill--connected' : 'status-pill--warning'}`} title={detail}>
       <span className="status-pill__dot" />
-      {label}
+      <span className="status-pill__label">{label}</span>
     </span>
   );
 }
@@ -125,7 +129,7 @@ function ClientPill({ status }: { status: ClientStatus }): React.JSX.Element {
   return (
     <span className={`status-pill ${problems === 0 ? 'status-pill--connected' : 'status-pill--warning'}`} title={detail}>
       <span className="status-pill__dot" />
-      {label}
+      <span className="status-pill__label">{label}</span>
     </span>
   );
 }

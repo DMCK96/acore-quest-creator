@@ -199,6 +199,9 @@ function createWindow(session: ProjectSession, recovery: Recovery, projects: Pro
   const win = new BrowserWindow({
     width: 1280,
     height: 800,
+    // Smaller than this the quest editor and the 3D view's panels no longer fit beside each other
+    minWidth: 720,
+    minHeight: 500,
     show: false,
     title: 'ACORE Quest Creator',
     webPreferences: {
