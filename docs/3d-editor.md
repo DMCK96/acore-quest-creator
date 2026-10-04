@@ -110,11 +110,17 @@ Looked at and **not** used: `wowserhq/client` (it is the game's UI layer), `vjeu
   - With several things selected the card sums them up ("3 NPCs, 1 object, 12 route points on 2 routes") with **Clear**. World edits from one gesture go to the main process one after another, so a slower answer never replaces a later layer.
   - Dragged routes are redrawn in place every frame (`moveRouteDrawing`), not by drawing the area again.
 
+- **Right-click menu** (2026-10-04; spec `internal_docs/superpowers/specs/2026-10-04-3d-context-menu-design.md`; `menu/`, `WorldContextMenu.tsx`, `useWorldMenu.tsx`, `clipboard.ts`, `WanderDialog.tsx`, `quest-context.ts`):
+  - A right-click that does not drag (or the ContextMenu key, or Shift+F10) opens a menu at the cursor; a right-drag still looks around. It is about what was hit (a route point, then a spawn, then the ground), and a spawn not yet selected is selected first. Items that cannot run say why.
+  - **World:** *Place NPC here…* and *Place object here…* put one spawn down where you right-clicked. *Copy*, *Paste here* and *Duplicate* (also **Ctrl+C**, **Ctrl+V** under the cursor, **Ctrl+D**) keep a group's layout and facing; each pasted spawn drops onto the server's floor. A quest's own NPC pastes only while its quest is open. *Remove* takes away a placed spawn; *Copy coordinates* puts `.go xyz X Y Z MAP` on the clipboard. Placing, pasting and removing are undo steps.
+  - **Movement:** *Start path here* (one NPC selected, no route) gives it a new path: each click adds a point, **Enter** or **Esc** finishes, **Ctrl+Z** takes a point back, *Cancel path* puts everything back; a path needs two points. *Change wander distance…* (0 to 100 yards, its circle following what is typed) and *Remove path*. For database NPCs this is the world layer's new **movements** section: `creature.wander_distance` and `MovementType`, and the spawn's own `creature_addon.path_id` (a row is written when it has none, and deleted by the revert). A database path's points are never deleted. Movements are listed and reverted in World changes.
+  - **Quest** (the open quest's own spawns are now drawn and edited in the World workspace too): *Spawn quest NPC here ▸* lists its own NPCs and objects and the existing ones it names; *Quest giver*, *Quest ender* and *Kill/Use objective* toggle a right-clicked spawn's part in it; *Start a new quest from this NPC* and *Start the next quest in this chain* make a quest it gives and takes back (the second after the open one); *Show quest spawns* / *Show chain spawns* ring them in gold and list them in the Find dialog, *Hide quest spawns* takes the rings away.
+
 ### Known gaps
 
 Things that are missing or approximate. Roughly in order of how much they matter.
 
-1. **Editing is partial.** No scale yet (a template change, so step E). A route cannot be given to, or taken from, an existing NPC (step E). A placed NPC has the defaults (it stands still, respawns in 300 seconds); its settings cannot be edited in 3D. Waits and actions on existing routes are kept but cannot be edited in 3D; the 2D map edits them for the quest's own NPCs.
+1. **Editing is partial.** No scale yet (a template change, so step E). A placed NPC respawns in 300 seconds, and its respawn cannot be edited in 3D. Waits and actions on existing routes are kept but cannot be edited in 3D; the 2D map edits them for the quest's own NPCs.
 2. **NPCs and objects are approximate:** only the idle animation; no mounts or spell effects; no names over them. Hair shows through some helmets (the game hides it with `HelmetGeosetVisData`, not read yet), and item visual effects (enchant glows) are not drawn. Items newer than the client's files (some Ascension backports) are left off, named once in the console. Spawns are drawn whatever their phase; members of a spawn pool are all drawn, though the server shows only some at a time. A custom item held as a weapon, not in the client's `Item.dbc`, is not drawn.
 3. **Props inside buildings** (furniture in the Abbey) are not drawn. Buildings carry them as "doodad sets".
 4. **Textures the client does not ship.** The user's client places custom modern-expansion buildings (Kul Tiras, Draenor, Dragonflight) whose textures are not in its archives; those parts draw grey. Not loose in the `Data` folder either. Where the references come from is not established; reports now name the building or model that asked, so the next run will show it.
@@ -138,7 +144,7 @@ In order. Each is meant to be a step the user can try before the next begins.
 The maintainer's eight asked-for features are split into sub-projects A to E. A (camera), B (the spawn layer) and C (select and transform, and the world layer) are done. Edits not part of a quest go to a project-level world layer, exported as its own patch.
 
 1. **D: create from 3D.** Placing existing NPCs and objects is done (see Done). Still to do: create new objects (chests that can be looted, with a loot table) and new NPCs (loot, faction, level), opening the existing editors.
-2. **E: edit existing.** Change existing spawns and templates (loot, faction, level); settings of a placed spawn (wander, route, respawn); copy another spawn with its settings.
+2. **E: edit existing.** Change existing spawns and templates (loot, faction, level); a placed spawn's respawn; copy another spawn with its settings (a paste copies only what it is and how it faces).
 3. **Reshape the quest grid** into a chain builder beside the 3D view. Needs a design conversation first: what "managing a chain" should mean day to day.
 4. **Fill the gaps** above as they get in the way: props inside buildings first, then the remaining building shaders.
 
@@ -150,8 +156,8 @@ Open questions for the user:
 
 ## Testing
 
-- `npm run typecheck`, `npm test` (unit tests), `npm run build`.
-- `npm run test:world3d`: opens the real 3D code in a browser (software WebGL, no graphics card needed) against a fake game client (`tests/world3d/fake-client.ts`): one terrain tile, textures, a building of four groups, and deliberately broken files. It checks that terrain and a building are on screen, that broken files are reported by name and do not stop the rest, that worlds can be left and reopened, and that every model shader compiles. Set `PW_CHROMIUM` to a Chromium binary if Playwright's own is not installed; set `WORLD3D_SHOT=<file.png>` to keep the picture it takes.
+- `npm run typecheck`, `npm test` (unit tests), `npm run build`. The right-click menu: `tests/renderer/world3d-menu-*.test.ts(x)`, `world3d-context-menu`, `world3d-clipboard`, `world3d-wander-dialog`, `world3d-quest-*`.
+- `npm run test:world3d`: opens the real 3D code in a browser (software WebGL, no graphics card needed) against a fake game client (`tests/world3d/fake-client.ts`): one terrain tile, textures, a building of four groups, and deliberately broken files. It checks that terrain and a building are on screen, that a right-click selects an NPC and asks for the menu (and a right-drag does not), that a new path is drawn by clicks, that broken files are reported by name and do not stop the rest, that worlds can be left and reopened, and that every model shader compiles. Set `PW_CHROMIUM` to a Chromium binary if Playwright's own is not installed; set `WORLD3D_SHOT=<file.png>` to keep the picture it takes.
 - Every fix so far was checked to fail with the old code and pass with the fix. Keep doing that: the failures here are silent (an empty view), so a test that only passes proves little.
 - Not covered by any automated test: real game data. The user's client is the only real check; ask them to restart `npm run dev` (config and worker changes need a full restart), look at the same spot, and send back the "could not be loaded" lines.
 
