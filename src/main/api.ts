@@ -76,8 +76,8 @@ import { sceneIssues } from '../core/scripts/validate';
 import { compileEntities } from '../core/entities/compile';
 import { compilePatrols, hasPointActions } from '../core/patrol/compile';
 import { ENTITY_KEYS, ENTITY_TABLES, readEntityContext } from '../core/entities/context';
-import { objectivesOf, questItemsOf, relationOwners } from '../core/entities/links';
-import { ENTITIES_FIELD, NPC_TYPE_VALUE, OBJECT_TYPE_VALUE, RANK_VALUE, readEntities, writeEntities, type QuestEntities } from '../core/entities/model';
+import { narrowTo, objectivesOf, questItemsOf, questUses, relationOwners } from '../core/entities/links';
+import { NPC_TYPE_VALUE, OBJECT_TYPE_VALUE, RANK_VALUE, projectEntitiesSchema, readProjectEntities, type ProjectEntities, type QuestEntities } from '../core/entities/model';
 import { entityIssues } from '../core/entities/validate';
 import { gmCommands } from '../core/testing/gm';
 import { TerrainFormatError, gridFileName, parseMapFile, terrainHeight, type TerrainFile } from '../core/game/terrain';
@@ -371,11 +371,15 @@ export function createApi(deps: ApiDeps): Api {
   };
   const historyList = () => history.list(describeStep);
   /** The spawns and new quests the steps would bring back that the database has taken since */
-  const takenBy = async (steps: HistoryStep[], direction: 'undo' | 'redo'): Promise<{ spawns: Set<string>; quests: Set<number> }> => {
+  const takenBy = async (steps: HistoryStep[], direction: 'undo' | 'redo'): Promise<Taken> => {
     const spawns = new Set<string>();
     const quests = new Set<number>();
+    const entities = new Set<string>();
     const db = session?.db ?? null;
-    if (!db) return { spawns, quests };
+    if (!db) return { spawns, quests, entities };
+    // NPCs, objects and items a step would bring back, and their spawns, walked like the world layer
+    let store = deps.session.entities.get();
+    const entityAsks: { key: string; kind: 'creature' | 'gameobject' | 'item'; entry: number; guids: number[] }[] = [];
     // Walked against the project as it will stand at each step, not the step's own other side
     let added = deps.session.world.get().added;
     const present = new Set(quests_present());
@@ -396,14 +400,33 @@ export function createApi(deps: ApiDeps): Api {
           if (quest && quest.isNew && !present.has(part.questId) && !questAsks.includes(part.questId)) questAsks.push(part.questId);
           if (quest) present.add(part.questId);
           else present.delete(part.questId);
+        } else if (part.kind === 'entities') {
+          const next = to as ProjectEntities;
+          for (const [list, kind] of [['npcs', 'creature'], ['objects', 'gameobject'], ['items', 'item']] as const) {
+            for (const e of next[list] as { entry: number; spawns?: { guid: number }[] }[]) {
+              const key = `${list}:${e.entry}`;
+              const had = (store[list] as { entry: number }[]).some((x) => x.entry === e.entry);
+              if (!had && !entityAsks.some((x) => x.key === key)) entityAsks.push({ key, kind, entry: e.entry, guids: (e.spawns ?? []).map((sp) => sp.guid) });
+            }
+          }
+          store = next;
         }
       }
     }
     for (const ask of spawnAsks) if ((await readPlacement(db, ask.kind, ask.guid)) !== null) spawns.add(ask.key);
     if (questAsks.length > 0) for (const id of await db.existingIds('quest', questAsks)) quests.add(id);
-    return { spawns, quests };
+    for (const ask of entityAsks) {
+      const template = (await db.existingIds(ask.kind, [ask.entry])).has(ask.entry);
+      let spawned = false;
+      if (!template && ask.kind !== 'item') {
+        for (const guid of ask.guids) if ((await readPlacement(db, ask.kind, guid)) !== null) spawned = true;
+      }
+      if (template || spawned) entities.add(ask.key);
+    }
+    return { spawns, quests, entities };
   };
   const quests_present = (): number[] => quests.list().map((q) => q.questId);
+  type Taken = { spawns: Set<string>; quests: Set<number>; entities: Set<string> };
 
   /** A layer without the placed spawns (and their movements) whose ids the database has taken */
   const withoutTaken = (layer: WorldLayer, taken: Set<string>): WorldLayer => {
@@ -438,7 +461,7 @@ export function createApi(deps: ApiDeps): Api {
   };
 
   /** Applies steps in order, with nothing awaited, leaving out what the database has taken, and says what they changed */
-  const applySteps = ({ direction, steps }: { direction: 'undo' | 'redo'; steps: HistoryStep[] }, taken: { spawns: Set<string>; quests: Set<number> }): HistoryResult => {
+  const applySteps = ({ direction, steps }: { direction: 'undo' | 'redo'; steps: HistoryStep[] }, taken: Taken): HistoryResult => {
     const verb = direction === 'undo' ? 'undo' : 'redo';
     const left = new Set<string>();
     const touched: number[] = [];
@@ -454,6 +477,23 @@ export function createApi(deps: ApiDeps): Api {
           const to = direction === 'undo' ? part.before : part.after;
           const kept = withoutTaken(to, taken.spawns);
           for (const a of to.added) if (!kept.added.includes(a)) left.add(`Could not ${verb}: spawn ${a.guid} is now in the database`);
+          return direction === 'undo' ? { ...part, before: kept } : { ...part, after: kept };
+        }
+        if (part.kind === 'entities' && taken.entities.size > 0) {
+          const to = direction === 'undo' ? part.before : part.after;
+          const now = deps.session.entities.get();
+          const kept: ProjectEntities = { npcs: [], objects: [], items: [] };
+          for (const list of ['npcs', 'objects', 'items'] as const) {
+            for (const e of to[list] as { entry: number; name: string }[]) {
+              const back = !(now[list] as { entry: number }[]).some((x) => x.entry === e.entry);
+              if (back && taken.entities.has(`${list}:${e.entry}`)) {
+                const word = list === 'npcs' ? 'NPC' : list === 'objects' ? 'Object' : 'Item';
+                left.add(`${e.name.trim() || `${word} ${e.entry}`} was left out: its ID is now used in the database.`);
+                continue;
+              }
+              (kept[list] as unknown[]).push(e);
+            }
+          }
           return direction === 'undo' ? { ...part, before: kept } : { ...part, after: kept };
         }
         if (part.kind === 'quest') {
@@ -702,15 +742,14 @@ export function createApi(deps: ApiDeps): Api {
   }
 
   /** Every new NPC, object and item in the project, from every quest. */
-  function projectEntities(): QuestEntities {
-    const all: QuestEntities = { npcs: [], objects: [], items: [] };
-    for (const quest of quests.list()) {
-      const { npcs, objects, items } = readEntities(quest.aggregate.values);
-      all.npcs.push(...npcs);
-      all.objects.push(...objects);
-      all.items.push(...items);
-    }
-    return all;
+  function projectEntities(): ProjectEntities {
+    return deps.session.entities.get();
+  }
+
+  /** The project's NPCs, objects and items a quest uses: made for it, or named by it */
+  function questEntities(aggregate: QuestAggregate): ProjectEntities {
+    const store = projectEntities();
+    return narrowTo(store, questUses({ questId: aggregate.questId, aggregate }, store));
   }
 
   /**
@@ -738,7 +777,7 @@ export function createApi(deps: ApiDeps): Api {
   }
 
   async function newEntityIssues(live: Session, aggregate: QuestAggregate): Promise<Issue[]> {
-    const entities = readEntities(aggregate.values);
+    const entities = questEntities(aggregate);
     if (entities.npcs.length + entities.objects.length + entities.items.length === 0) return [];
     const startedQuests = [...new Set(entities.items.map((i) => i.startsQuest).filter((q) => q > 0))];
     const [creatures, objects, itemRows, questRows] = await Promise.all([
@@ -1000,7 +1039,7 @@ export function createApi(deps: ApiDeps): Api {
    */
   async function compileFor(live: Session, aggregate: QuestAggregate): Promise<{ context: ScriptContext; compiled: CompiledScripts }> {
     const scenes = readScenes(aggregate.values);
-    const { npcs } = readEntities(aggregate.values);
+    const { npcs } = questEntities(aggregate);
     const fighters = npcs.filter((n) => !fightIsEmpty(n.fight) || hasPointActions(n)).map((n) => n.entry);
     const context = await readScriptContext(live.db, aggregate.questId, scenes, fighters);
     const objectives = objectivesOf(aggregate);
@@ -1070,7 +1109,7 @@ export function createApi(deps: ApiDeps): Api {
     });
     const { context: scriptContext, compiled } = await compileFor(live, quest.aggregate);
     const scripts = scriptStatements(compiled, exportSchema(live));
-    const entities = readEntities(quest.aggregate.values);
+    const entities = questEntities(quest.aggregate);
     const givers = [...relationOwners(quest.aggregate, 'starter'), ...relationOwners(quest.aggregate, 'ender')]
       .flatMap((o) => (o.kind === 'creature' ? [o.entry] : []));
     const entityContext = await readEntityContext(live.db, entities, [quest.questId]);
@@ -1330,7 +1369,7 @@ export function createApi(deps: ApiDeps): Api {
         const created = createNewAggregate(live.schema, registry, questId);
         const aggregate = {
           ...created,
-          values: { ...created.values, [SCRIPTS_FIELD]: writeScenes([]), [ENTITIES_FIELD]: writeEntities({ npcs: [], objects: [], items: [] }) },
+          values: { ...created.values, [SCRIPTS_FIELD]: writeScenes([]) },
         };
         const fidelity: FidelityReport = { ok: true };
 
@@ -1710,6 +1749,16 @@ export function createApi(deps: ApiDeps): Api {
         };
       }),
 
+    projectEntities: () => run(async () => deps.session.entities.get()),
+
+    putProjectEntities: (next) =>
+      run(async () => {
+        const parsed = projectEntitiesSchema.safeParse(next);
+        if (!parsed.success) throw fail('BAD_REQUEST', 'The NPCs, objects and items sent are not valid.');
+        deps.session.entities.put(parsed.data);
+        return true as const;
+      }),
+
     worldLayer: () => run(async () => deps.session.world.get()),
 
     worldAddSpawn: (kind, entry, map, at, wanted) =>
@@ -1936,7 +1985,7 @@ export function createApi(deps: ApiDeps): Api {
         const db = connected().db;
         if (!db.spawnsOfEntries) return [];
         const aggregate = questOf(questId).aggregate;
-        const { npcs, objects } = readEntities(aggregate.values);
+        const { npcs, objects } = questEntities(aggregate);
         // The quest's own NPCs and objects are markers already.
         const own = new Set([...npcs.map((n) => `creature:${n.entry}`), ...objects.map((o) => `gameobject:${o.entry}`)]);
         const wanted = wantedOf(aggregate);
@@ -1962,7 +2011,7 @@ export function createApi(deps: ApiDeps): Api {
         for (const questId of questIds) {
           const aggregate = questOf(questId).aggregate;
           const title = aggregate.values['quest_template.LogTitle'];
-          const { npcs, objects } = readEntities(aggregate.values);
+          const { npcs, objects } = questEntities(aggregate);
           const spawns: QuestSpawn[] = [];
           const seen = new Set<string>();
           const add = (spawn: QuestSpawn): void => {
@@ -2003,7 +2052,7 @@ export function createApi(deps: ApiDeps): Api {
           const entry = s.kind === 'insert' ? s.row.entry : s.key.entry;
           return entry === undefined || entry === null ? [] : [Number(entry)];
         });
-        const { npcs, objects } = readEntities(quest.aggregate.values);
+        const { npcs, objects } = questEntities(quest.aggregate);
         const spawns = [...npcs, ...objects].flatMap((e) => e.spawns.map((s) => ({ name: e.name || `#${e.entry}`, map: s.map, x: s.x, y: s.y, z: s.z })));
         return gmCommands({
           questId,

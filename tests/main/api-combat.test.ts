@@ -8,6 +8,7 @@ import { ENTITIES_FIELD, newNpc, newSpawn, writeEntities } from '../../src/core/
 import { SCRIPTS_FIELD, writeScenes } from '../../src/core/scripts/model';
 import { emptyFight, newAbility } from '../../src/core/combat/model';
 import { forkDb } from '../helpers/fixtures';
+import { madeFor } from '../helpers/entities';
 
 const box = { encrypt: (s: string) => Uint8Array.from(Buffer.from(s)), decrypt: (b: Uint8Array) => Buffer.from(b).toString() };
 
@@ -29,7 +30,7 @@ describe('fights through the API', () => {
     const q = aggregate.questId;
     aggregate.values['quest_template.LogTitle'] = 'Defeat Hela';
     const fight = { ...emptyFight(), abilities: [{ ...newAbility(emptyFight()), spellId: 116 }] };
-    aggregate.values[ENTITIES_FIELD] = writeEntities({ npcs: [{ ...newNpc(11000240), name: 'Hela', displayId: 1234, spawns: [{ ...newSpawn(5300800), x: 5 }], fight }], objects: [], items: [] });
+    await api.putProjectEntities(madeFor({ npcs: [{ ...newNpc(11000240), name: 'Hela', displayId: 1234, spawns: [{ ...newSpawn(5300800), x: 5 }], fight }], objects: [], items: [] }, aggregate.questId));
     aggregate.values[SCRIPTS_FIELD] = writeScenes([{ id: 's1', name: '', owner: { kind: 'creature', entry: 11000240 }, trigger: { kind: 'dies' }, gates: [], steps: [{ kind: 'eventCredit', group: false, waitMs: 0 }] }]);
     await api.updateQuest(aggregate);
 
@@ -50,7 +51,7 @@ describe('fights through the API', () => {
     const aggregate = opened.value.aggregate;
     aggregate.values['quest_template.LogTitle'] = 'Defeat Hela';
     const fight = { ...emptyFight(), abilities: [newAbility(emptyFight())] };
-    aggregate.values[ENTITIES_FIELD] = writeEntities({ npcs: [{ ...newNpc(11000241), name: 'Hela', displayId: 1234, spawns: [{ ...newSpawn(5300801), x: 5 }], fight }], objects: [], items: [] });
+    await api.putProjectEntities(madeFor({ npcs: [{ ...newNpc(11000241), name: 'Hela', displayId: 1234, spawns: [{ ...newSpawn(5300801), x: 5 }], fight }], objects: [], items: [] }, aggregate.questId));
     await api.updateQuest(aggregate);
     const issues: any = await api.validate(aggregate.questId);
     expect(issues.value.map((i: any) => i.code)).toContain('FIGHT_NO_SPELL');

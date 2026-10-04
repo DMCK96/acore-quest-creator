@@ -6,6 +6,7 @@ import type { MapBox, SpawnDot } from '@core/db/spawns';
 import type { ViewSpawns } from '@core/db/view-spawns';
 import type { Placement, RoutePoint, WorldAddedSpawn, WorldLayer, WorldMovementEdit, WorldRouteEdit, WorldSpawnEdit, WorldSpawnKind } from '@core/world/layer';
 import type { Movement } from '@core/world/movement';
+import type { ProjectEntities } from '@core/entities/model';
 
 export type { Movement, Placement, RoutePoint, WorldAddedSpawn, WorldLayer, WorldMovementEdit, WorldRouteEdit, WorldSpawnEdit, WorldSpawnKind };
 
@@ -403,6 +404,10 @@ export interface Api {
   mapSpawns(map: number, box: MapBox): Promise<Result<{ dots: SpawnDot[]; capped: boolean }>>;
   /** NPCs and objects in an area of a map as the 3D view draws them; each kind capped at 2000. */
   viewSpawns(map: number, box: MapBox): Promise<Result<ViewSpawns>>;
+  /** The project's new NPCs, objects and items. */
+  projectEntities(): Promise<Result<ProjectEntities>>;
+  /** Replaces the project's new NPCs, objects and items: one undo step (typing in one merges). */
+  putProjectEntities(next: ProjectEntities): Promise<Result<true>>;
   /** The project's edits to spawns and routes outside any quest. */
   worldLayer(): Promise<Result<WorldLayer>>;
   /** Moves or turns an existing spawn in the world layer; its original is read from the database at the first edit. */
@@ -600,6 +605,9 @@ const REQUEST_SCHEMAS: Record<keyof Api, z.ZodType<unknown[]>> = {
   mapFloors: z.tuple([z.number().int(), z.number().finite(), z.number().finite()]),
   mapSpawns: z.tuple([z.number().int(), z.object({ minX: z.number().finite(), maxX: z.number().finite(), minY: z.number().finite(), maxY: z.number().finite() })]),
   viewSpawns: z.tuple([z.number().int(), z.object({ minX: z.number().finite(), maxX: z.number().finite(), minY: z.number().finite(), maxY: z.number().finite() })]),
+  projectEntities: z.tuple([]),
+  // Each entry is checked against the entity schemas by the main process
+  putProjectEntities: z.tuple([z.object({ npcs: z.array(z.unknown()), objects: z.array(z.unknown()), items: z.array(z.unknown()) })]),
   worldLayer: z.tuple([]),
   worldMoveSpawn: z.tuple([worldKindArg, z.number().int(), placementArg]),
   worldAddSpawn: z.tuple([worldKindArg, z.number().int().min(1), z.number().int().min(0), placementArg, z.number().int().min(1).optional()]),

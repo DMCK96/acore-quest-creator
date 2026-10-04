@@ -310,9 +310,9 @@ describe('the spawns a quest uses', () => {
       creature_queststarter: [{ id: 1423 }],
       creature_questender: [{ id: 1423 }],
       'quest_template.RequiredNpcOrGo': [{ target: { target: 'gameobject', id: 143981 }, count: 1 }],
-      entities: writeEntities({ npcs: [{ ...newNpc(12000001), name: 'Hela', spawns: [{ ...newSpawn(900), map: 0, x: 1, y: 2, z: 3 }] }], objects: [], items: [] }),
     };
     await api.updateQuest({ ...created.value.aggregate, values });
+    await api.putProjectEntities({ npcs: [{ ...newNpc(12000001, questId), name: 'Hela', spawns: [{ ...newSpawn(900), map: 0, x: 1, y: 2, z: 3 }] }], objects: [], items: [] });
     const out: any = await api.questSpawnList([questId]);
     const [group] = out.value;
     expect(group).toMatchObject({ questId, title: 'Guards', capped: false });

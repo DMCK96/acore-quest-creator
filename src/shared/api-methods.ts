@@ -40,6 +40,8 @@ export const API_METHODS = [
   'mapFloors',
   'mapSpawns',
   'viewSpawns',
+  'projectEntities',
+  'putProjectEntities',
   'worldLayer',
   'worldMoveSpawn',
   'worldAddSpawn',
