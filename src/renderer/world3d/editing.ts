@@ -231,7 +231,7 @@ export class Editor {
       const object = this.#world.findSpawn(s.kind, s.guid);
       return object ? [{ kind: s.kind, object }] : [];
     });
-    const points = this.#pointPositions();
+    const points = this.pointPositions();
     if (spawns.length + points.length === 0) {
       if (this.#gizmo.attached) this.#gizmo.detach();
       this.#attached = null;
@@ -254,9 +254,12 @@ export class Editor {
     this.#gizmo.dispose();
   }
 
-  /** Where the picked points are drawn: as the route has them */
-  #pointPositions(): At[] {
+  /** Where the picked points are drawn: where a drag has them, else as the route has them */
+  pointPositions(): At[] {
+    const drag = this.#drag;
     return this.#selection.points.flatMap((p) => {
+      const dragged = drag?.routes.find((r) => r.guid === p.guid)?.current[p.index];
+      if (dragged) return [{ x: dragged.x, y: dragged.y, z: dragged.z }];
       const point = this.#world.spawnRoute(p.guid)?.points[p.index];
       return point ? [{ x: point.x, y: point.y, z: point.z }] : [];
     });

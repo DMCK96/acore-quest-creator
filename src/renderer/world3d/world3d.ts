@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { DbManager, MapManager, TextureManager, type SoundManager } from './scene';
-import { WorldControls, type ClickKeys } from './controls';
+import { WorldControls, type ClickKeys, type Tool } from './controls';
 import { CharacterTexture } from './scene/character/CharacterTexture';
 import { getAssetUrl } from './scene/asset';
 import { spawnBounds, type PickedSpawn, type SpawnSource, type SpawnStatus, type SpawnVisibility } from './scene/spawn/SpawnManager';
@@ -9,7 +9,9 @@ import { clearProblems, onProblems } from './scene/diagnostics';
 import { ASSET_BASE_URL } from '@core/client/asset-url';
 import type { WorldLayer } from '@core/world/layer';
 import { Editor, NOT_SNAPPED } from './editing';
-import { combine, EMPTY_SELECTION } from './scene/edit/selection';
+import { combine, EMPTY_SELECTION, isEmpty, type Hit, type Modifier, type Selection } from './scene/edit/selection';
+import { boxHits, type Rect } from './scene/edit/box';
+import type { Falloff } from './scene/edit/falloff';
 import type { SpawnEdit, SpawnRef } from './edits';
 import { placementAt, type PlaceRequest, type PlaceTarget } from './placing';
 
@@ -49,7 +51,16 @@ export interface World3DOptions {
   onPlace?(request: PlaceRequest): void;
   /** Told when Esc ended placing. */
   onPlaceEnd?(): void;
+  /** Told how much is selected, after every change of the selection. */
+  onSelection?(summary: SelectionSummary): void;
+  /** Told when Tab flipped between Camera and Select. */
+  onTool?(tool: Tool): void;
+  /** Told when falloff was switched or its radius changed by a key or the wheel. */
+  onFalloff?(falloff: Falloff): void;
 }
+
+/** How much is selected: NPCs, objects, and route points with how many routes they are on */
+export type SelectionSummary = { creatures: number; objects: number; points: number; routes: number };
 
 /** Which of the world's scenery is drawn */
 export type Scenery = { buildings: boolean; doodads: boolean };
@@ -67,8 +78,12 @@ export interface World3D {
   spawnStatus(): SpawnStatus;
   /** The open quest's own NPCs and objects, drawn with the world's in place of their database rows. */
   setOwnSpawns(spawns: ViewSpawns): void;
-  /** Marks a spawn as selected (outlined while it is drawn), or clears the selection. */
+  /** Selects one spawn (outlined while it is drawn, its route active), or clears the selection. */
   select(spawn: { kind: 'creature' | 'object'; guid: number } | null): void;
+  /** What a left-drag does: orbit (Camera) or draw a selection box (Select). */
+  setTool(tool: Tool): void;
+  /** Whether nearby route points follow a move, and how far. */
+  setFalloff(falloff: Falloff): void;
   /** Draws the world layer's edits over the database's spawns and routes. */
   setWorldLayer(layer: WorldLayer): void;
   /** Whether the gizmo moves or rotates. */
@@ -99,6 +114,9 @@ const WORLD_EDGE = 17066;
 const NEAR = 0.5;
 const FOV = 60;
 const SELECTED_COLOUR = 0xffd34d;
+/** The falloff ring: how round it is drawn, and how far above the ground, so it does not sink into it */
+const RING_SEGMENTS = 48;
+const RING_LIFT = 0.2;
 
 const HOST = { baseUrl: ASSET_BASE_URL, normalizePath: true };
 /** Textures and database tables are the same for every map, so every world shares them (and their workers). */
@@ -168,23 +186,40 @@ export function createWorld3D(options: World3DOptions): World3D {
     raycaster.setFromCamera(new THREE.Vector2(x, y), camera);
     return raycaster.intersectObjects(manager.root.children.filter(clickable), true)[0]?.point ?? null;
   };
-  // A click selects the nearest NPC or object under it that nothing solid stands in front of, unless
-  // it was on the selected NPC's route (a point, or Shift to add one)
-  let selected: { kind: 'creature' | 'object'; guid: number } | null = null;
-  const choose = (spawn: { kind: 'creature' | 'object'; guid: number } | null): void => {
-    selected = spawn ? { kind: spawn.kind, guid: spawn.guid } : null;
-    const selection = selected ? combine(EMPTY_SELECTION, { spawns: [selected] }, 'replace', (guid) => manager.spawnRoute(guid) !== null) : EMPTY_SELECTION;
-    manager.setActiveRoutes(selection.routes);
-    manager.markRoutePoints(selection.points);
-    editor.setSelection(selection);
-    // Tells a screen round the view that Esc is the view's while something is selected
+  // What is selected: spawns, points of active routes, and the routes being worked on
+  let selection: Selection = EMPTY_SELECTION;
+  const hasRoute = (guid: number): boolean => manager.spawnRoute(guid) !== null;
+  /**
+   * A new selection, drawn and told about. `tell` also tells the host which one spawn is selected
+   * (or none); a selection the host made itself (`select`) is not told back.
+   */
+  const setSelection = (next: Selection, tell = true): void => {
+    selection = next;
+    editor.setSelection(next);
+    manager.setActiveRoutes(next.routes);
+    manager.markRoutePoints(next.points);
     refreshEscape();
+    options.onSelection?.({
+      creatures: next.spawns.filter((s) => s.kind === 'creature').length,
+      objects: next.spawns.filter((s) => s.kind === 'object').length,
+      points: next.points.length,
+      routes: new Set(next.points.map((p) => p.guid)).size,
+    });
+    if (!tell) return;
+    const one = next.spawns.length === 1 && next.points.length === 0 ? next.spawns[0]! : null;
+    options.onSelect?.(one ? manager.pickedSpawn(one.kind, one.guid) : null);
   };
   // While placing, a click puts the chosen NPC or object on the ground instead of selecting anything
   let placing: PlaceTarget | null = null;
+  let tool: Tool = 'camera';
   const refreshEscape = (): void => {
-    renderer.domElement.dataset.selection = selected || placing ? 'on' : '';
-    renderer.domElement.style.cursor = placing ? 'crosshair' : '';
+    renderer.domElement.dataset.selection = !isEmpty(selection) || placing ? 'on' : '';
+    renderer.domElement.style.cursor = placing ? 'crosshair' : tool === 'select' ? 'default' : '';
+  };
+  const applyTool = (next: Tool): void => {
+    tool = next;
+    controls.setMode(next);
+    refreshEscape();
   };
   const place = async (x: number, y: number): Promise<void> => {
     const target = placing;
@@ -200,29 +235,52 @@ export function createWorld3D(options: World3DOptions): World3D {
     options.onNotice?.(floor === null ? NOT_SNAPPED : null);
     if (placing === target) options.onPlace?.({ target, at: { ...at, z: floor ?? at.z } });
   };
+  /** What is under a place on screen: a point of an active route first, else the nearest spawn nothing solid stands in front of */
+  const hitAt = (x: number, y: number): Hit => {
+    raycaster.setFromCamera(new THREE.Vector2(x, y), camera);
+    const ray = raycaster.ray.clone();
+    let nearest: { guid: number; index: number; distance: number } | null = null;
+    for (const guid of selection.routes) {
+      const index = manager.pickRoutePoint(ray, guid);
+      const at = index === null ? null : manager.spawnRoute(guid)?.points[index];
+      if (index === null || !at) continue;
+      const distance = ray.origin.distanceTo(new THREE.Vector3(at.x, at.y, at.z));
+      if (!nearest || distance < nearest.distance) nearest = { guid, index, distance };
+    }
+    if (nearest) return { points: [{ guid: nearest.guid, index: nearest.index }] };
+    const ground = pick(x, y);
+    const spawn = manager.pickSpawn(ray, ground ? ground.distanceTo(camera.position) : Infinity);
+    return { spawns: spawn ? [{ kind: spawn.kind, guid: spawn.guid }] : [] };
+  };
+  const modifierOf = (keys: ClickKeys): Modifier => (keys.ctrl ? 'remove' : keys.shift ? 'add' : 'replace');
   const click = (x: number, y: number, keys: ClickKeys): void => {
     if (placing) {
       void place(x, y);
       return;
     }
-    if (keys.shift && editor.insertPoint(x, y)) return;
-    raycaster.setFromCamera(new THREE.Vector2(x, y), camera);
-    // A point of an active route under the cursor is picked in preference to a spawn
-    for (const guid of editor.selection.routes) {
-      const index = manager.pickRoutePoint(raycaster.ray, guid);
-      if (index === null) continue;
-      const selection = combine(editor.selection, { points: [{ guid, index }] }, 'replace', () => false);
-      editor.setSelection(selection);
-      manager.markRoutePoints(selection.points);
-      options.onNotice?.(null);
-      return;
-    }
-    const ground = pick(x, y);
-    const spawn = manager.pickSpawn(raycaster.ray, ground ? ground.distanceTo(camera.position) : Infinity);
-    choose(spawn);
-    options.onSelect?.(spawn);
+    // A new route point: Shift-click in Camera mode, Alt-click in Select mode
+    if ((tool === 'camera' ? keys.shift : keys.alt) && editor.insertPoint(x, y)) return;
+    const hit = hitAt(x, y);
+    if ('points' in hit) options.onNotice?.(null);
+    setSelection(combine(selection, hit, tool === 'select' ? modifierOf(keys) : 'replace', hasRoute));
   };
-  const controls = new WorldControls(camera, renderer.domElement, { pick, onClick: click, blocked: () => editor.blocked });
+  // A box drawn in Select mode: the route points or spawns inside it, by where they land on screen
+  const box = (rect: Rect, keys: ClickKeys): void => {
+    if (placing) return;
+    const project = (at: { x: number; y: number; z: number }) => new THREE.Vector3(at.x, at.y, at.z).project(camera);
+    setSelection(combine(selection, boxHits(manager.selectionCandidates(camera.position), project, rect), modifierOf(keys), hasRoute));
+  };
+  const controls = new WorldControls(camera, renderer.domElement, {
+    pick,
+    onClick: click,
+    onBox: box,
+    onWheel: (deltaY) => editor.wheel(deltaY),
+    onModeChange: (next) => {
+      applyTool(next);
+      options.onTool?.(next);
+    },
+    blocked: () => editor.blocked,
+  });
   const solid = (): THREE.Object3D[] => manager.root.children.filter(clickable);
   const editor = new Editor(
     {
@@ -241,20 +299,27 @@ export function createWorld3D(options: World3DOptions): World3D {
       setPendingRoute: (guid, points) => manager.setPendingRoute(guid, points),
       previewRoute: (guid, points) => manager.previewRoute(guid, points),
     },
-    options,
+    {
+      onEdit: options.onEdit,
+      floorZ: options.floorZ,
+      beforeRouteEdit: options.beforeRouteEdit,
+      onNotice: options.onNotice,
+      // A delete or an insert changed the picked points
+      onSelection: (next) => setSelection(next, false),
+      onFalloff: (next) => options.onFalloff?.(next),
+    },
   );
   // The editing keys, on the view itself so they only act while it has focus; a key used here goes
   // no further (Esc that clears a selection must not also close the screen or the quest editor)
   const onKeyDown = (event: KeyboardEvent): void => {
-    const used = event.code === 'Escape' ? selected !== null || placing !== null : editor.keyDown(event);
+    const used = event.code === 'Escape' ? !isEmpty(selection) || placing !== null : editor.keyDown(event);
     if (event.code === 'Escape' && placing) {
       // Esc stops placing first; a second one clears the selection
       placing = null;
       refreshEscape();
       options.onPlaceEnd?.();
-    } else if (event.code === 'Escape' && selected) {
-      choose(null);
-      options.onSelect?.(null);
+    } else if (event.code === 'Escape' && !isEmpty(selection)) {
+      setSelection(EMPTY_SELECTION);
     }
     if (used) {
       event.preventDefault();
@@ -263,16 +328,44 @@ export function createWorld3D(options: World3DOptions): World3D {
   };
   renderer.domElement.addEventListener('keydown', onKeyDown);
 
-  // The selected spawn's outline: its bounds, followed every frame (it may be redrawn, or leave)
-  const outline = new THREE.Box3Helper(new THREE.Box3(), SELECTED_COLOUR);
-  (outline.material as THREE.LineBasicMaterial).depthTest = false;
-  outline.renderOrder = 1;
-  outline.visible = false;
-  scene.add(outline);
+  // An outline round each selected spawn (its bounds), and a falloff ring round each picked point,
+  // followed every frame: what they are on may be redrawn, move, or leave
+  const outlines: THREE.Box3Helper[] = [];
+  const rings: THREE.LineLoop[] = [];
+  const ringGeometry = new THREE.BufferGeometry().setFromPoints(
+    Array.from({ length: RING_SEGMENTS }, (_, i) => new THREE.Vector3(Math.cos((i / RING_SEGMENTS) * Math.PI * 2), Math.sin((i / RING_SEGMENTS) * Math.PI * 2), 0)),
+  );
+  const ringMaterial = new THREE.LineBasicMaterial({ color: SELECTED_COLOUR, depthTest: false });
+  /** The pool's first `count` members, made as needed; the rest hidden */
+  const pooled = <T extends THREE.Object3D>(pool: T[], count: number, make: () => T): T[] => {
+    while (pool.length < count) {
+      const made = make();
+      scene.add(made);
+      pool.push(made);
+    }
+    pool.forEach((member, i) => (member.visible = i < count));
+    return pool.slice(0, count);
+  };
   const followSelected = (): void => {
-    const drawn = selected ? manager.findSpawn(selected.kind, selected.guid) : null;
-    outline.visible = drawn !== null;
-    if (drawn) spawnBounds(drawn, outline.box);
+    const drawn = selection.spawns.flatMap((s) => manager.findSpawn(s.kind, s.guid) ?? []);
+    pooled(outlines, drawn.length, () => {
+      const outline = new THREE.Box3Helper(new THREE.Box3(), SELECTED_COLOUR);
+      (outline.material as THREE.LineBasicMaterial).depthTest = false;
+      outline.renderOrder = 1;
+      return outline;
+    }).forEach((outline, i) => spawnBounds(drawn[i]!, outline.box));
+    const falloff = editor.falloff;
+    const points = falloff.on ? editor.pointPositions() : [];
+    pooled(rings, points.length, () => {
+      const ring = new THREE.LineLoop(ringGeometry, ringMaterial);
+      ring.renderOrder = 2;
+      return ring;
+    }).forEach((ring, i) => {
+      const at = points[i]!;
+      ring.position.set(at.x, at.y, at.z + RING_LIFT);
+      ring.scale.set(falloff.radius, falloff.radius, 1);
+      ring.updateMatrixWorld(true);
+    });
   };
   const { textures, databases, characterTexture } = sharedManagers();
   // The drawn ground a short way below a point, for standing NPCs on it
@@ -358,16 +451,15 @@ export function createWorld3D(options: World3DOptions): World3D {
     },
     spawnStatus: () => manager.spawnStatus,
     setOwnSpawns: (spawns) => manager.setOwnSpawns(spawns),
-    select: (spawn) => choose(spawn),
+    select: (spawn) => setSelection(spawn ? combine(EMPTY_SELECTION, { spawns: [spawn] }, 'replace', hasRoute) : EMPTY_SELECTION, false),
+    setTool: (next) => applyTool(next),
+    setFalloff: (falloff) => editor.setFalloff(falloff),
     setWorldLayer: (layer) => manager.setWorldLayer(layer),
     setMode: (mode) => editor.setMode(mode),
     setPlacing: (target) => {
       placing = target;
       // Placing starts from nothing selected, so a click never means anything else
-      if (target && selected) {
-        choose(null);
-        options.onSelect?.(null);
-      }
+      if (target && !isEmpty(selection)) setSelection(EMPTY_SELECTION);
       refreshEscape();
     },
     undo: () => editor.undo(),
@@ -393,7 +485,7 @@ export function createWorld3D(options: World3DOptions): World3D {
       cancelAnimationFrame(frame);
       observer.disconnect();
       // Nothing here may throw: this runs while React unmounts the view, and a throw would take the whole screen with it.
-      for (const step of [() => controls.dispose?.(), () => renderer.domElement.removeEventListener('keydown', onKeyDown), () => editor.dispose(), stopProblems, () => manager.dispose(), () => release(manager.root), () => release(outline), () => renderer.dispose()]) {
+      for (const step of [() => controls.dispose?.(), () => renderer.domElement.removeEventListener('keydown', onKeyDown), () => editor.dispose(), stopProblems, () => manager.dispose(), () => release(manager.root), () => outlines.forEach(release), () => rings.forEach((ring) => ring.removeFromParent()), () => ringGeometry.dispose(), () => ringMaterial.dispose(), () => renderer.dispose()]) {
         try {
           step();
         } catch (error) {

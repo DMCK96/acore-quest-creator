@@ -289,3 +289,16 @@ describe('route edits on several routes at once', () => {
     expect(t.falloffs.at(-1)!.on).toBe(false);
   });
 });
+
+describe('where the picked points are drawn', () => {
+  it('as the route has them, following a drag', () => {
+    const t = setup({ routes: { 7: line(50, [0, 10]) } });
+    t.npc(7, -5, 0);
+    t.editor.setSelection(sel({ points: [{ guid: 7, index: 1 }], routes: [7] }));
+    expect(t.editor.pointPositions()).toEqual([{ x: 10, y: 0, z: 0 }]);
+    t.editor.update();
+    t.gizmo.events.started();
+    t.gizmo.events.moved(t.change([0, 3, 0]));
+    expect(t.editor.pointPositions()).toEqual([{ x: 10, y: 3, z: 0 }]);
+  });
+});

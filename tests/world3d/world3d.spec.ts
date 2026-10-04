@@ -55,6 +55,9 @@ interface PageState {
   escapes: number;
   placed: { target: { kind: string; entry: number }; at: { x: number; y: number; z: number; orientation: number; rotation: number[] | null } }[];
   placeEnds: number;
+  selection: { creatures: number; objects: number; points: number; routes: number } | null;
+  tools: string[];
+  falloffs: { on: boolean; radius: number }[];
 }
 const state = async (page: Page): Promise<PageState> => (await page.evaluate('window.__state')) as PageState;
 const open = (page: Page, directory: string, map: number): Promise<unknown> =>
@@ -446,4 +449,112 @@ test('every model shader compiles, and none the game uses is missing', async ({ 
   expect(result.failures).toEqual([]);
   // The game's shaders 0-22 are all implemented (a missing one drew its model without its leaves).
   expect(result.unimplemented).toEqual([]);
+});
+
+test('in Select mode a box picks two NPCs, the gizmo moves both, and Ctrl+Z puts both back', async ({ page }) => {
+  await openPage(page);
+  const SPOT = { x: START.x + 60, y: START.y - 60, z: START.z };
+  // Either side of the camera's target, across the view, so the group's middle is the middle of the picture
+  const A = { x: SPOT.x + 2, y: SPOT.y - 2 };
+  const B = { x: SPOT.x - 2, y: SPOT.y + 2 };
+  await page.evaluate(`window.__spawns = { creatures: [
+    { guid: 21, entry: 1, name: 'A', map: 0, x: ${A.x}, y: ${A.y}, z: ${SPOT.z}, orientation: 0, displayId: 0, scale: 4, wander: 0, path: null, pathId: 0, equipment: [0,0,0], own: false, event: null },
+    { guid: 22, entry: 1, name: 'B', map: 0, x: ${B.x}, y: ${B.y}, z: ${SPOT.z}, orientation: 0, displayId: 0, scale: 4, wander: 0, path: null, pathId: 0, equipment: [0,0,0], own: false, event: null }
+  ], objects: [], capped: { creatures: false, objects: false } }`);
+  await page.evaluate(`window.__floorZ = ${SPOT.z + 0.25}`);
+  await page.evaluate(`window.__open('azeroth', 0, ${JSON.stringify(SPOT)})`);
+  await page.waitForFunction('window.__state.ready', null, { timeout: 45000 });
+  await page.waitForTimeout(1000);
+  await page.evaluate("window.__tool('select')");
+  const box = (await page.locator('canvas.world3d__canvas').boundingBox())!;
+  await page.mouse.move(box.x + box.width * 0.3, box.y + box.height * 0.3);
+  await page.mouse.down();
+  await page.mouse.move(box.x + box.width * 0.7, box.y + box.height * 0.7, { steps: 5 });
+  await page.mouse.up();
+  await expect.poll(async () => (await state(page)).selection).toMatchObject({ creatures: 2, objects: 0, points: 0 });
+
+  await page.keyboard.press('KeyG');
+  const [cx, cy] = [box.x + box.width / 2, box.y + box.height / 2];
+  await page.mouse.move(cx, cy);
+  await page.mouse.down();
+  await page.mouse.move(cx + 60, cy + 20, { steps: 10 });
+  await page.mouse.up();
+  await expect.poll(async () => (await state(page)).edits.length).toBe(2);
+  const edits = (await state(page)).edits;
+  expect(edits.map((e) => e.spawn.guid).sort()).toEqual([21, 22]);
+  for (const edit of edits) expect(edit.to.z).toBe(SPOT.z + 0.25);
+  // Moved together: still as far apart as they stood
+  expect(Math.hypot(edits[0].to.x - edits[1].to.x, edits[0].to.y - edits[1].to.y)).toBeCloseTo(Math.hypot(4, 4), 3);
+  expect(Math.hypot(edits[0].to.x - A.x, edits[0].to.y - A.y)).toBeGreaterThan(1);
+
+  await page.keyboard.press('Control+KeyZ');
+  await expect.poll(async () => (await state(page)).edits.length).toBe(4);
+  const back = Object.fromEntries((await state(page)).edits.slice(2).map((e) => [e.spawn.guid, [e.to.x, e.to.y]]));
+  expect(back[21][0]).toBeCloseTo(A.x, 3);
+  expect(back[21][1]).toBeCloseTo(A.y, 3);
+  expect(back[22][0]).toBeCloseTo(B.x, 3);
+  expect(back[22][1]).toBeCloseTo(B.y, 3);
+  expect((await state(page)).errors).toEqual([]);
+});
+
+test('a box over the selected NPC\'s route picks its points; Delete takes them out, and Esc then clears the route', async ({ page }) => {
+  await openPage(page);
+  const SPOT = { x: START.x + 60, y: START.y - 60, z: START.z };
+  // Two points either side of the middle of the picture, two far off to the sides
+  await page.evaluate(`window.__spawns = { creatures: [
+    { guid: 9, entry: 1, name: 'P', map: 0, x: ${SPOT.x - 20}, y: ${SPOT.y + 20}, z: ${SPOT.z}, orientation: 0, displayId: 0, scale: 1, wander: 0, pathId: 77,
+      path: [ { x: ${SPOT.x - 3}, y: ${SPOT.y + 3}, z: ${SPOT.z} }, { x: ${SPOT.x + 3}, y: ${SPOT.y - 3}, z: ${SPOT.z} },
+              { x: ${SPOT.x + 40}, y: ${SPOT.y - 40}, z: ${SPOT.z} }, { x: ${SPOT.x - 40}, y: ${SPOT.y + 40}, z: ${SPOT.z} } ],
+      equipment: [0,0,0], own: false, event: null }
+  ], objects: [], capped: { creatures: false, objects: false } }`);
+  await page.evaluate(`window.__open('azeroth', 0, ${JSON.stringify(SPOT)})`);
+  await page.waitForFunction('window.__state.ready', null, { timeout: 45000 });
+  await page.evaluate(`window.__select({ kind: 'creature', guid: 9 })`);
+  await page.waitForTimeout(1500);
+  await page.evaluate("window.__tool('select')");
+  const box = (await page.locator('canvas.world3d__canvas').boundingBox())!;
+  await page.mouse.move(box.x + box.width * 0.3, box.y + box.height * 0.3);
+  await page.mouse.down();
+  await page.mouse.move(box.x + box.width * 0.7, box.y + box.height * 0.7, { steps: 5 });
+  await page.mouse.up();
+  await expect.poll(async () => (await state(page)).selection).toEqual({ creatures: 0, objects: 0, points: 2, routes: 1 });
+
+  await page.keyboard.press('Delete');
+  await expect.poll(async () => (await state(page)).edits.length).toBe(1);
+  const [edit] = (await state(page)).edits;
+  expect(edit).toMatchObject({ kind: 'route', pathId: 77 });
+  expect(edit.points.map((p: any) => p.x)).toEqual([SPOT.x + 40, SPOT.x - 40]);
+
+  // Nothing picked now, but the route is still active: Esc clears it, and goes no further
+  await page.keyboard.press('Escape');
+  expect((await state(page)).selection).toEqual({ creatures: 0, objects: 0, points: 0, routes: 0 });
+  expect((await state(page)).escapes).toBe(0);
+  expect((await state(page)).errors).toEqual([]);
+});
+
+test('Tab flips to Select mode and back; in Select mode Alt+drag orbits and draws no box', async ({ page }) => {
+  await openPage(page);
+  await open(page, 'azeroth', 0);
+  await page.waitForFunction('window.__state.ready', null, { timeout: 45000 });
+  const box = (await page.locator('canvas.world3d__canvas').boundingBox())!;
+  // A click in a corner gives the view focus and selects nothing
+  await page.mouse.click(box.x + box.width * 0.05, box.y + box.height * 0.9);
+  await page.keyboard.press('Tab');
+  expect((await state(page)).tools).toEqual(['select']);
+
+  const before = (await page.evaluate('window.__camera()')) as { position: { x: number; y: number; z: number } };
+  const [cx, cy] = [box.x + box.width / 2, box.y + box.height / 2];
+  await page.keyboard.down('Alt');
+  await page.mouse.move(cx, cy);
+  await page.mouse.down();
+  await page.mouse.move(cx + 150, cy, { steps: 10 });
+  expect(await page.locator('.world3d__marquee').count()).toBe(0);
+  await page.mouse.up();
+  await page.keyboard.up('Alt');
+  const after = (await page.evaluate('window.__camera()')) as { position: { x: number; y: number; z: number } };
+  expect(Math.hypot(after.position.x - before.position.x, after.position.y - before.position.y)).toBeGreaterThan(1);
+
+  await page.keyboard.press('Tab');
+  expect((await state(page)).tools).toEqual(['select', 'camera']);
+  expect((await state(page)).errors).toEqual([]);
 });

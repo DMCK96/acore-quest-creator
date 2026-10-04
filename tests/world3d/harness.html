@@ -6,7 +6,7 @@
       import { createWorld3D } from '/src/renderer/world3d/world3d.ts';
 
       // Each world the page makes is kept so a test can leave it; what a test reads is in `__state`.
-      const state = (window.__state = { ready: false, problems: [], errors: [], selected: null, edits: [], notices: [], placed: [], placeEnds: 0 });
+      const state = (window.__state = { ready: false, problems: [], errors: [], selected: null, edits: [], notices: [], placed: [], placeEnds: 0, selection: null, tools: [], falloffs: [] });
       window.addEventListener('error', (e) => state.errors.push(String(e.message)));
       // Esc that reaches the document: what a screen or editor round the view would see
       state.escapes = 0;
@@ -22,6 +22,9 @@
         state.notices = [];
         state.placed = [];
         state.placeEnds = 0;
+        state.selection = null;
+        state.tools = [];
+        state.falloffs = [];
         world = createWorld3D({
           container: document.getElementById('stage'),
           directory,
@@ -38,6 +41,9 @@
           onNotice: (message) => message && state.notices.push(message),
           onPlace: (request) => state.placed.push(request),
           onPlaceEnd: () => (state.placeEnds += 1),
+          onSelection: (summary) => (state.selection = summary),
+          onTool: (tool) => state.tools.push(tool),
+          onFalloff: (falloff) => state.falloffs.push(falloff),
           // Spawns the test sets in window.__spawns (none by default)
           spawns: () => Promise.resolve(window.__spawns ?? { creatures: [], objects: [], capped: { creatures: false, objects: false } }),
         });
@@ -48,6 +54,8 @@
       window.__setScenery = (scenery) => world?.setScenery(scenery);
       window.__select = (spawn) => world?.select(spawn);
       window.__mode = (mode) => world?.setMode(mode);
+      window.__tool = (tool) => world?.setTool(tool);
+      window.__falloff = (falloff) => world?.setFalloff(falloff);
       window.__undo = () => world?.undo();
       window.__placing = (target) => world?.setPlacing(target);
       window.__close = () => {
