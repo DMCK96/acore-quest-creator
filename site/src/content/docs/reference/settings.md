@@ -5,7 +5,7 @@ sidebar:
   order: 1
 ---
 
-Choose **⚙** in the top bar to open **Settings**. It holds the same fields as the login screen.
+Choose **Settings** (the cog) at the right of the top bar. It holds the same fields as the login screen.
 
 ![The Settings dialog](../../../assets/screenshots/settings.png)
 

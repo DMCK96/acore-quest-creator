@@ -33,10 +33,10 @@ Use **Browse…** to pick a folder instead of typing it.
 
 ## Connect
 
-Choose **Connect**. The top bar then shows what the app reached: **Connected: _database_**, plus **Server data** and **Game client** when those folders opened.
+Choose **Connect**. The app opens on the **World**: the game world in 3D, drawn from your game client, where you last left it (Northshire the first time). The first time a project opens there, a welcome offers a place to start. The bar across the top shows what the app reached: **Connected: _database_**, plus **Server data** and **Game client** when those folders opened. Without a game client folder the World says so and offers Settings; your quests are always on the **Quests** tab.
 
 ![Settings, with the same fields as the login screen](../../../assets/screenshots/settings.png)
 
-To change any of this later, choose the **⚙** button in the top bar to open **Settings**. Saving there reconnects with the new details and closes the open quest; your project stays open.
+To change any of this later, choose **Settings** (the cog) at the right of the top bar. Saving there reconnects with the new details and closes the open quest; your project stays open.
 
 Next: [your first quest](/acore-quest-creator/getting-started/first-quest/).

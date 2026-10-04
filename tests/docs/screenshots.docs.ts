@@ -96,6 +96,9 @@ test.describe.serial('docs screenshots', () => {
 
   test('canvas', async () => {
     await page.getByRole('button', { name: 'Connect', exact: true }).click();
+    // The app opens on the world, greeting a fresh profile; the quest graph is the Quests tab.
+    await page.getByRole('button', { name: 'Just look around' }).click({ timeout: 30000 });
+    await page.getByRole('tab', { name: 'Quests' }).click();
     await expect(page.getByRole('button', { name: 'New quest', exact: true })).toBeVisible({ timeout: 30000 });
     await expect(page.getByText('Game client', { exact: true })).toBeVisible();
     await page.getByRole('button', { name: 'Add existing quest', exact: true }).click();

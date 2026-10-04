@@ -43,6 +43,8 @@ test('a scene added in the Scripts module shows in Changes and is exported with 
   await page.getByLabel('Database').fill(u.pathname.slice(1));
   await page.getByLabel('Password').fill(decodeURIComponent(u.password));
   await page.getByRole('button', { name: 'Save and connect' }).click();
+  // The world is the home screen; the quest graph is the Quests tab.
+  await page.getByRole('tab', { name: 'Quests' }).click();
 
   // A new quest opens straight into the editor.
   await page.getByRole('button', { name: 'New quest', exact: true }).click();

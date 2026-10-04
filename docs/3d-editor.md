@@ -2,7 +2,7 @@
 
 A living document. Update it in the same change as the work it describes.
 
-Last updated: 2026-10-03. Branch: `feature/3d-editor`.
+Last updated: 2026-10-04. Branch: `feature/3d-editor`.
 
 ## Goal
 
@@ -23,7 +23,7 @@ Other people have built similar editors but not shared the code. We are not copy
 - The loaders run in Web Workers; the main thread only builds Three.js objects.
 - The camera (`src/renderer/world3d/controls.ts`) works as in the game and in Noggit: right-drag looks around in place, left-drag on empty space orbits round the point under the cursor, middle-drag pans, the wheel moves along the view, W/S/A/D fly and strafe, Q/E turn, Space/X rise and sink, Shift goes faster. Keys act only while the view has focus. A "?" in the corner lists them. Left-click is kept free for selecting things later.
 - Entry points:
-  - **3D view** button in the top bar: `src/renderer/world3d/World3DScreen.tsx` (pick a continent, go to X/Y/Z).
+  - The **World** workspace, where the app opens after Connect: `src/renderer/world3d/WorldWorkspace.tsx` inside `src/renderer/views/AppShell.tsx` (see "World-first shell" below).
   - **3D view** toggle in the quest map: same view, starting where the map was looking.
   - The scene itself: `src/renderer/world3d/world3d.ts`.
 
@@ -47,7 +47,7 @@ Looked at and **not** used: `wowserhq/client` (it is the game's UI layer), `vjeu
 ### Done
 
 - 3D view of a continent's terrain, props (trees, fences, carts) and buildings, from the user's client. Verified on the user's client for terrain, props and buildings; later fixes below are verified against a fake client only (see Testing).
-- A **3D view** button in the top bar, working with no quest open: four continents, each opening on solid ground, plus go-to X/Y/Z. Also a toggle in the quest map.
+- The 3D view works with no quest open: four continents, each opening on solid ground, plus go-to X/Y/Z. Also a toggle in the quest map.
 - Robustness, because real clients are messier than the format specs:
   - One bad model, building or terrain tile is skipped and reported; the rest still draws. The view lists what was left out, the console has the full list, and the terminal running the app logs each client file that was asked for and missing.
   - A texture that cannot be read or is missing becomes an opaque grey stand-in, so its model or terrain still draws. Textures are logged to the console only, not listed in the view: nothing is left out, and modded clients such as Ascension's lack many by design.
@@ -88,6 +88,12 @@ Looked at and **not** used: `wowserhq/client` (it is the game's UI layer), `vjeu
 - A **Teleport** panel in the 3D screen: 1,300 named places from AzerothAdmin's teleport list (`src/core/map/teleports.json`, made by `scripts/teleports.ts`), searched by place or zone or browsed by region. Picking one switches the map and moves the camera there; places on maps the 3D view does not draw (dungeons, battlegrounds) are listed but cannot be picked.
 
 - A **Find…** panel in the 3D screen (`FindDialog.tsx`, the `findSpawns` call): search the database's NPCs or objects by name or id, pick one, and see every spawn it has (up to 300), nearest first on the map being looked at, then the other maps. Each row has its spawn id, map, position, how far it is, and tags: moved in the 3D view (listed where it stands now), placed in the 3D view (listed from the world layer), or only during a game event (`SpawnDot.event`, from `game_event_creature` / `game_event_gameobject`). **Go** switches map if needed, takes the camera close to the spawn (seven yards off and a little above; `lookAt(..., close)`), selects it, and switches on whatever would hide it (the NPC or object layer, and event spawns for an event spawn). Maps the view does not draw (dungeons) are listed, not clickable. Shares its search with the Place dialog (`useEntityHits`). Spawns an NPC gets only from scripts or summons are not in any table, so are not listed.
+
+- **World-first shell** (2026-10-04; spec `internal_docs/superpowers/specs/2026-10-04-world-first-shell-design.md`):
+  - After Connect the app opens on the **World** workspace; the quest graph is the **Quests** tab (`AppBar`: the orb mark, the project, World and Quests tabs, the status pills and Settings). Both workspaces stay mounted, so switching keeps the camera and the graph; the world stops drawing while hidden (`World3D.setActive`). Opening a quest switches to Quests. The 3D screen is no longer a dialog over the graph.
+  - The World opens where it was left (`acqc.world.lastPlace` in browser storage, the camera's target written every couple of seconds it moves and on every jump; `last-place.ts`). A place card at the top left names the area and map and holds **Teleport**, **Find…** and **Coordinates** (the map, X, Y, Z and Go, on demand). Esc closes these panels, never the World.
+  - The first time a project is shown in the World (`acqc.welcome.seen`, by project file or `untitled`; `welcome-seen.ts`), a welcome over the glowing orb offers well-known places (`teleport-picks.ts`), the teleport search (`TeleportPicker`, shared with the Teleport panel), **Find an NPC or object**, **Start a quest** and **Just look around**. Without a game client, the World shows a card offering Settings and the Quests instead. The login orb flies into the welcome's orb, or the app bar's.
+  - One look: the login card's frosted surface (`--glass-*` tokens, `.glass`, `.section-label` in `theme.css`) for the app bar, modals, the place card, the layers card, the selected-spawn card, notes, the loading pill (a spinning orb mark) and the graph's quest tools, minimap and zoom.
 
 ### Known gaps
 
