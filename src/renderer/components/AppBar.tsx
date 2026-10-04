@@ -2,6 +2,7 @@ import { useRef } from 'react';
 import type { ClientStatus, ServerDataStatus } from '@shared/ipc';
 import type { AppStore } from '../state/app-store';
 import { OrbMark } from './OrbMark';
+import { HistoryButtons } from './HistoryButtons';
 import './AppBar.css';
 
 /** The app's two workspaces: the world in 3D, and the quest graph */
@@ -85,6 +86,7 @@ export function AppBar({
           </button>
         ))}
       </div>
+      <HistoryButtons store={store} />
       <div className="app-bar__status">
         <span
           className={`status-pill${connectedDatabase ? ' status-pill--connected' : ''}`}

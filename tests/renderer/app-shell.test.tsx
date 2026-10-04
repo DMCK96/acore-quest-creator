@@ -48,6 +48,21 @@ afterEach(() => {
 const tab = (name: string) => screen.getByRole('tab', { name });
 
 describe('the app shell', () => {
+  it('Ctrl+Z and Ctrl+Y undo and redo outside text fields, and leave text fields alone', async () => {
+    const { api } = await shell();
+    fireEvent.keyDown(document.body, { key: 'z', ctrlKey: true });
+    await waitFor(() => expect(api.historyUndo).toHaveBeenCalledTimes(1));
+    fireEvent.keyDown(document.body, { key: 'y', ctrlKey: true });
+    fireEvent.keyDown(document.body, { key: 'Z', ctrlKey: true, shiftKey: true });
+    await waitFor(() => expect(api.historyRedo).toHaveBeenCalledTimes(2));
+    const field = document.createElement('input');
+    document.body.appendChild(field);
+    fireEvent.keyDown(field, { key: 'z', ctrlKey: true });
+    await new Promise((r) => setTimeout(r, 20));
+    expect(api.historyUndo).toHaveBeenCalledTimes(1);
+    field.remove();
+  });
+
   it('opens on the world, with the quests one tab away', async () => {
     await shell();
     expect(tab('World')).toHaveAttribute('aria-selected', 'true');

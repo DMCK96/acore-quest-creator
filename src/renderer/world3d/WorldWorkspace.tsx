@@ -36,6 +36,8 @@ export interface WorldWorkspaceProps {
   onQuestField?(fieldId: string, value: FieldValue): void;
   /** Starts a new quest given and taken back by an NPC, after `previous` in its chain when that is set */
   onNewQuest?(giver: { entry: number }, previous: number | null): void;
+  /** A place to take the camera to (Show on the undo note); each request is its own, even to the same place */
+  goTo?: { map: number; x: number; y: number; z: number; nonce: number };
 }
 
 const ROLE_LABELS: Record<QuestSpawnGroup['spawns'][number]['role'], string> = { giver: 'givers', ender: 'enders', objective: 'objectives', own: 'own' };
@@ -69,7 +71,7 @@ const WELCOME_FADE_MS = 500;
  * a place to start.
  */
 export function WorldWorkspace({
-  hasClient, active = true, projectKey, projectName, onOpenSettings, onShowQuests, onStartQuest, quest, onQuestField, onNewQuest,
+  hasClient, active = true, projectKey, projectName, onOpenSettings, onShowQuests, onStartQuest, quest, onQuestField, onNewQuest, goTo: goToRequest,
 }: WorldWorkspaceProps): React.JSX.Element {
   const names = useNameBook();
   // The open quest's values as last changed here, so edits made one after another build on each other
@@ -124,6 +126,13 @@ export function WorldWorkspace({
     writeLastPlace({ map, ...point });
   };
   const chooseMap = (id: number): void => goTo(worldMapById(id)!.start, id);
+  // Show on the undo note: the camera goes to where the step happened
+  useEffect(() => {
+    if (!goToRequest || !worldMapById(goToRequest.map)) return;
+    goTo({ x: goToRequest.x, y: goToRequest.y, z: goToRequest.z }, goToRequest.map);
+    // Only a new request moves the camera
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [goToRequest?.nonce]);
   const teleport = (spot: TeleportSpot): void => {
     setTeleporting(false);
     goTo({ x: spot.x, y: spot.y, z: spot.z }, spot.map);

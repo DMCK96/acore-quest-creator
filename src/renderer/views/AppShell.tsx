@@ -2,6 +2,8 @@ import { useEffect, useState } from 'react';
 import type { AppStore } from '../state/app-store';
 import { AppBar, type Workspace } from '../components/AppBar';
 import { ErrorBanner } from '../components/ErrorBanner';
+import { HistoryNote } from '../components/HistoryNote';
+import { isTextField } from '../components/HistoryButtons';
 import { CanvasHome } from './CanvasHome';
 import { WorldWorkspace } from '../world3d/WorldWorkspace';
 import { projectKey } from '../world3d/welcome-seen';
@@ -26,6 +28,7 @@ export function AppShell({ store }: { store: AppStore }): React.JSX.Element {
   const hasClient = store((s) => Boolean(s.summary?.clientDir));
   const open = store((s) => s.open);
   const nodes = store((s) => s.nodes);
+  const [goTo, setGoTo] = useState<{ map: number; x: number; y: number; z: number; nonce: number } | undefined>();
 
   // A quest opened from anywhere is previewed on the graph, so the quests come forward
   useEffect(() => {
@@ -37,13 +40,23 @@ export function AppShell({ store }: { store: AppStore }): React.JSX.Element {
     void store.getState().loadRecoveries();
   }, [store]);
 
-  // Ctrl+S saves, Ctrl+Shift+S saves as, Ctrl+O opens: the shortcuts every document app has.
+  // Ctrl+S saves, Ctrl+Shift+S saves as, Ctrl+O opens: the shortcuts every document app has. Ctrl+Z
+  // and Ctrl+Y undo and redo the last change anywhere in the project, except in a text field, whose
+  // own undo they are.
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent): void => {
-      // A held-down shortcut repeats; one press is one save.
-      if (!(e.ctrlKey || e.metaKey) || e.repeat) return;
+      if (!(e.ctrlKey || e.metaKey)) return;
       const key = e.key.toLowerCase();
-      const { saveProject, saveProjectAs, openProject } = store.getState();
+      const { saveProject, saveProjectAs, openProject, undo, redo } = store.getState();
+      if ((key === 'z' || key === 'y') && !e.altKey) {
+        if (isTextField(e.target) || e.defaultPrevented) return;
+        e.preventDefault();
+        // Held down, it walks back step by step
+        void (key === 'y' || e.shiftKey ? redo() : undo());
+        return;
+      }
+      // A held-down shortcut repeats; one press is one save.
+      if (e.repeat) return;
       if (key === 's') {
         e.preventDefault();
         void (e.shiftKey ? saveProjectAs() : saveProject());
@@ -66,6 +79,17 @@ export function AppShell({ store }: { store: AppStore }): React.JSX.Element {
         onOpenSettings={() => setShowSettings(true)}
       />
       <ErrorBanner store={store} />
+      <HistoryNote
+        store={store}
+        onShowQuest={(questId) => {
+          setWorkspace('quests');
+          void store.getState().openQuest(questId);
+        }}
+        onShowPlace={(place) => {
+          setWorkspace('world');
+          setGoTo((was) => ({ map: place.map, x: place.x, y: place.y, z: place.z, nonce: (was?.nonce ?? 0) + 1 }));
+        }}
+      />
       <div className="app-shell__workspace" hidden={workspace !== 'world'}>
         <WorldWorkspace
           hasClient={hasClient}
@@ -80,6 +104,7 @@ export function AppShell({ store }: { store: AppStore }): React.JSX.Element {
             void store.getState().newQuest();
           }}
           quest={open ? { open, nodes } : undefined}
+          goTo={goTo}
           onQuestField={(fieldId, value) => store.getState().setValue(fieldId, value)}
           onNewQuest={(giver, previous) => {
             void (async () => {
