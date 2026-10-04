@@ -313,7 +313,8 @@ export function createWorld3D(options: World3DOptions): World3D {
   };
   // A right-click: what it hit is selected first (unless it is already), then the menu is asked for
   const contextClick = (x: number, y: number, client: { x: number; y: number }): void => {
-    if (editor.blocked) return;
+    // The gizmo only takes left presses: hovering it never stops the menu, only a drag of it does
+    if (editor.dragging) return;
     const hit = hitAt(x, y);
     const ground = pick(x, y);
     if ('spawns' in hit && hit.spawns.length > 0) {

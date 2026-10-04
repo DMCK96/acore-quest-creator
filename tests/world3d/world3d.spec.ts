@@ -608,3 +608,24 @@ test('drawing a path: clicks add points to the selected NPC’s new path, Enter 
   expect(routes.at(-1)).toMatchObject({ pathId: 90, spawn: { guid: 9 } });
   expect(routes.at(-1).points).toHaveLength(2);
 });
+
+test('a right-click on a selected NPC, under its gizmo, still asks for the menu', async ({ page }) => {
+  await openPage(page);
+  const SPOT = { x: START.x + 60, y: START.y - 60, z: START.z };
+  await page.evaluate(`window.__spawns = { creatures: [
+    { guid: 9, entry: 1, name: 'P', map: 0, x: ${SPOT.x}, y: ${SPOT.y}, z: ${SPOT.z}, orientation: 0, displayId: 0, scale: 1, wander: 0, pathId: 0, path: null,
+      equipment: [0,0,0], own: false, event: null }
+  ], objects: [], capped: { creatures: false, objects: false } }`);
+  await page.evaluate(`window.__open('azeroth', 0, ${JSON.stringify(SPOT)})`);
+  await page.waitForFunction('window.__state.ready', null, { timeout: 45000 });
+  await page.evaluate(`window.__select({ kind: 'creature', guid: 9 })`);
+  await page.waitForTimeout(1500);
+  const box = (await page.locator('canvas.world3d__canvas').boundingBox())!;
+  const middle = { x: box.x + box.width / 2, y: box.y + box.height / 2 };
+  // The gizmo sits on the selected NPC: hovering it first is what blocked the menu
+  await page.mouse.move(middle.x, middle.y);
+  await page.waitForTimeout(200);
+  await page.mouse.click(middle.x, middle.y, { button: 'right' });
+  await expect.poll(async () => (await state(page)).contexts.length).toBe(1);
+  expect((await state(page)).contexts[0].target.selection.map((s: any) => s.guid)).toEqual([9]);
+});

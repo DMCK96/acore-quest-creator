@@ -118,6 +118,11 @@ export class Editor {
     return this.#gizmo.hovered || this.#gizmo.dragging;
   }
 
+  /** Whether the gizmo is being dragged: a right-click then belongs to the drag, not the menu */
+  get dragging(): boolean {
+    return this.#gizmo.dragging || this.#drag !== null;
+  }
+
   get selection(): Selection {
     return this.#selection;
   }
