@@ -267,6 +267,11 @@ class MapManager extends EventTarget {
     return this.#spawnManager.picked(kind, guid);
   }
 
+  /** A drawn spawn as the right-click menu describes it, or null */
+  spawnInfo(kind: 'creature' | 'object', guid: number) {
+    return this.#spawnManager.info(kind, guid);
+  }
+
   /** A spawn's drawn object, while it is drawn */
   findSpawn(kind: 'creature' | 'object', guid: number) {
     return this.#spawnManager.find(kind, guid);

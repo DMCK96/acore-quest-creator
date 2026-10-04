@@ -14,6 +14,9 @@ import { boxHits, type Rect } from './scene/edit/box';
 import type { Falloff } from './scene/edit/falloff';
 import type { SpawnEdit, SpawnRef } from './edits';
 import { placementAt, type PlaceRequest, type PlaceTarget } from './placing';
+import type { MenuTarget } from './menu/model';
+import type { Movement } from '@core/world/movement';
+import type { SpawnInfo } from './scene/spawn/SpawnManager';
 
 /**
  * The 3D world: the game's own terrain, props and models for one map, read from the client's
@@ -59,6 +62,8 @@ export interface World3DOptions {
   onFalloff?(falloff: Falloff): void;
   /** Told when a new path starts or stops being drawn, and how many points it has. */
   onDrawing?(drawing: { guid: number; points: number } | null): void;
+  /** Asked for the right-click menu: what was right-clicked (selected first), and where in the window. */
+  onContextMenu?(target: MenuTarget, client: { x: number; y: number }): void;
 }
 
 /** How much is selected: NPCs, objects, and route points with how many routes they are on */
@@ -104,6 +109,20 @@ export interface World3D {
   cancelPath(): void;
   /** Takes back the last point of the path being drawn. */
   undoPoint(): void;
+  /** Rings the spawns a quest uses, under each that is drawn; null takes the rings away. */
+  setMarked(spawns: { kind: 'creature' | 'object'; guid: number }[] | null): void;
+  /** The selected spawns, as the menu describes them. */
+  selectedSpawns(): SpawnInfo[];
+  /** Selects these spawns (a paste selects what it put down). */
+  selectSpawns(spawns: { kind: 'creature' | 'object'; guid: number }[]): void;
+  /** Draws an NPC's movement as edited until the host stores it; null draws it as stored again. */
+  setPendingMovement(guid: number, movement: Movement | null): void;
+  /** How a drawn NPC moves, as the view has it; null when it is not drawn. */
+  spawnMovement(guid: number): Movement | null;
+  /** The ground under a place in the window, or null for sky. */
+  groundAt(client: { x: number; y: number }): { x: number; y: number; z: number } | null;
+  /** Where the pointer last was over the view, or null. */
+  lastPointer(): { x: number; y: number } | null;
   /** Stops drawing (while the world is hidden) or starts again; a hidden world costs nothing. */
   setActive(active: boolean): void;
   /** The point the camera looks at and turns round. */
@@ -129,6 +148,9 @@ const SELECTED_COLOUR = 0xffd34d;
 /** The falloff ring: how round it is drawn, and how far above the ground, so it does not sink into it */
 const RING_SEGMENTS = 48;
 const RING_LIFT = 0.2;
+/** The ring under a spawn a quest uses: a warm gold, apart from the selection's outline, and its size in yards */
+const MARK_COLOUR = 0xf2c14e;
+const MARK_RADIUS = 1.5;
 
 const HOST = { baseUrl: ASSET_BASE_URL, normalizePath: true };
 /** Textures and database tables are the same for every map, so every world shares them (and their workers). */
@@ -283,6 +305,28 @@ export function createWorld3D(options: World3DOptions): World3D {
     const project = (at: { x: number; y: number; z: number }) => new THREE.Vector3(at.x, at.y, at.z).project(camera);
     setSelection(combine(selection, boxHits(manager.selectionCandidates(camera.position), project, rect), modifierOf(keys)));
   };
+  // A right-click: what it hit is selected first (unless it is already), then the menu is asked for
+  const contextClick = (x: number, y: number, client: { x: number; y: number }): void => {
+    if (editor.blocked) return;
+    const hit = hitAt(x, y);
+    const ground = pick(x, y);
+    if ('spawns' in hit && hit.spawns.length > 0) {
+      const [spawn] = hit.spawns;
+      const selected = selection.spawns.some((s) => s.kind === spawn!.kind && s.guid === spawn!.guid);
+      if (!selected) setSelection(combine(EMPTY_SELECTION, hit, 'replace'));
+    }
+    const spawnHit = 'spawns' in hit && hit.spawns.length > 0 ? manager.spawnInfo(hit.spawns[0]!.kind, hit.spawns[0]!.guid) : null;
+    const pointHit = 'points' in hit && hit.points.length > 0 ? hit.points[0]! : null;
+    options.onContextMenu?.(
+      {
+        ground: ground ? { x: ground.x, y: ground.y, z: ground.z } : null,
+        hit: spawnHit ? { type: 'spawn', spawn: spawnHit } : pointHit ? { type: 'point', guid: pointHit.guid, index: pointHit.index } : null,
+        selection: selectedInfo(),
+      },
+      client,
+    );
+  };
+  const selectedInfo = (): SpawnInfo[] => selection.spawns.flatMap((s) => manager.spawnInfo(s.kind, s.guid) ?? []);
   const controls = new WorldControls(camera, renderer.domElement, {
     pick,
     onClick: click,
@@ -293,6 +337,7 @@ export function createWorld3D(options: World3DOptions): World3D {
       options.onTool?.(next);
     },
     blocked: () => editor.blocked,
+    onContextClick: (x, y, client) => contextClick(x, y, client),
   });
   const solid = (): THREE.Object3D[] => manager.root.children.filter(clickable);
   const editor = new Editor(
@@ -391,6 +436,23 @@ export function createWorld3D(options: World3DOptions): World3D {
       ring.updateMatrixWorld(true);
     });
   };
+  // A ring under each spawn a quest uses, while they are shown: re-found each frame, as areas reload
+  let marked: { kind: 'creature' | 'object'; guid: number }[] = [];
+  const marks: THREE.LineLoop[] = [];
+  const markMaterial = new THREE.LineBasicMaterial({ color: MARK_COLOUR, depthTest: false });
+  const followMarked = (): void => {
+    const drawn = marked.flatMap((s) => manager.findSpawn(s.kind, s.guid) ?? []);
+    pooled(marks, drawn.length, () => {
+      const ring = new THREE.LineLoop(ringGeometry, markMaterial);
+      ring.renderOrder = 2;
+      return ring;
+    }).forEach((ring, i) => {
+      const at = drawn[i]!.position;
+      ring.position.set(at.x, at.y, at.z + RING_LIFT);
+      ring.scale.set(MARK_RADIUS, MARK_RADIUS, 1);
+      ring.updateMatrixWorld(true);
+    });
+  };
   const { textures, databases, characterTexture } = sharedManagers();
   // The drawn ground a short way below a point, for standing NPCs on it
   const down = new THREE.Raycaster();
@@ -452,6 +514,7 @@ export function createWorld3D(options: World3DOptions): World3D {
       camera.updateMatrixWorld();
       manager.update(delta, camera);
       followSelected();
+      followMarked();
       editor.update();
       renderer.setClearColor(manager.clearColor);
       renderer.render(scene, camera);
@@ -493,6 +556,21 @@ export function createWorld3D(options: World3DOptions): World3D {
     finishPath: () => editor.finishPath(),
     cancelPath: () => editor.cancelPath(),
     undoPoint: () => editor.undoPoint(),
+    setMarked(spawns) {
+      marked = spawns ? [...spawns] : [];
+      followMarked();
+    },
+    selectedSpawns: () => selectedInfo(),
+    selectSpawns: (spawns) => setSelection(spawns.length > 0 ? combine(EMPTY_SELECTION, { spawns }, 'replace') : EMPTY_SELECTION),
+    setPendingMovement: (guid, movement) => manager.setPendingMovement(guid, movement),
+    spawnMovement: (guid) => manager.movement(guid),
+    groundAt(client) {
+      const rect = renderer.domElement.getBoundingClientRect();
+      if (rect.width === 0 || rect.height === 0) return null;
+      const point = pick(((client.x - rect.left) / rect.width) * 2 - 1, -((client.y - rect.top) / rect.height) * 2 + 1);
+      return point ? { x: point.x, y: point.y, z: point.z } : null;
+    },
+    lastPointer: () => controls.lastPointer,
     setActive(active) {
       if (active === running || disposed) return;
       running = active;
@@ -514,7 +592,7 @@ export function createWorld3D(options: World3DOptions): World3D {
       cancelAnimationFrame(frame);
       observer.disconnect();
       // Nothing here may throw: this runs while React unmounts the view, and a throw would take the whole screen with it.
-      for (const step of [() => controls.dispose?.(), () => renderer.domElement.removeEventListener('keydown', onKeyDown), () => editor.dispose(), stopProblems, () => manager.dispose(), () => release(manager.root), () => outlines.forEach(release), () => rings.forEach((ring) => ring.removeFromParent()), () => ringGeometry.dispose(), () => ringMaterial.dispose(), () => renderer.dispose()]) {
+      for (const step of [() => controls.dispose?.(), () => renderer.domElement.removeEventListener('keydown', onKeyDown), () => editor.dispose(), stopProblems, () => manager.dispose(), () => release(manager.root), () => outlines.forEach(release), () => rings.forEach((ring) => ring.removeFromParent()), () => marks.forEach((ring) => ring.removeFromParent()), () => ringGeometry.dispose(), () => ringMaterial.dispose(), () => markMaterial.dispose(), () => renderer.dispose()]) {
         try {
           step();
         } catch (error) {

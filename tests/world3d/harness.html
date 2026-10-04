@@ -6,7 +6,7 @@
       import { createWorld3D } from '/src/renderer/world3d/world3d.ts';
 
       // Each world the page makes is kept so a test can leave it; what a test reads is in `__state`.
-      const state = (window.__state = { ready: false, problems: [], errors: [], selected: null, edits: [], notices: [], placed: [], placeEnds: 0, selection: null, tools: [], falloffs: [] });
+      const state = (window.__state = { ready: false, problems: [], errors: [], selected: null, edits: [], notices: [], placed: [], placeEnds: 0, selection: null, tools: [], falloffs: [], contexts: [], drawings: [] });
       window.addEventListener('error', (e) => state.errors.push(String(e.message)));
       // Esc that reaches the document: what a screen or editor round the view would see
       state.escapes = 0;
@@ -25,6 +25,8 @@
         state.selection = null;
         state.tools = [];
         state.falloffs = [];
+        state.contexts = [];
+        state.drawings = [];
         world = createWorld3D({
           container: document.getElementById('stage'),
           directory,
@@ -44,6 +46,8 @@
           onSelection: (summary) => (state.selection = summary),
           onTool: (tool) => state.tools.push(tool),
           onFalloff: (falloff) => state.falloffs.push(falloff),
+          onContextMenu: (target, client) => state.contexts.push({ target, client }),
+          onDrawing: (drawing) => state.drawings.push(drawing),
           // Spawns the test sets in window.__spawns (none by default)
           spawns: () => Promise.resolve(window.__spawns ?? { creatures: [], objects: [], capped: { creatures: false, objects: false } }),
         });
@@ -58,6 +62,7 @@
       window.__falloff = (falloff) => world?.setFalloff(falloff);
       window.__undo = () => world?.undo();
       window.__placing = (target) => world?.setPlacing(target);
+      window.__world = () => world;
       window.__close = () => {
         world?.dispose();
         world = null;
