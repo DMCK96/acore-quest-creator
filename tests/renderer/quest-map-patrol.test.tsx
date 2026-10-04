@@ -5,6 +5,7 @@ import { act, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import type { LeafletMapProps } from '../../src/renderer/map/LeafletMap';
 import { QuestMapView } from '../../src/renderer/map/QuestMapView';
+import { MapWithStore } from './map-with-store';
 import type { MapMode } from '../../src/renderer/map/MapOpener';
 import { NamesProvider } from '../../src/renderer/state/names';
 import { makeMockApi, okv, sampleOpen } from './mock-api';
@@ -31,7 +32,7 @@ function Live({ api, values, mode }: { api: Api; values: Record<string, unknown>
   current = vals;
   const base = sampleOpen();
   const open = { ...base, aggregate: { ...base.aggregate, values: vals as Record<string, FieldValue> } };
-  return <NamesProvider api={api}><QuestMapView open={open} focusId={null} onClose={vi.fn()} mode={mode}
+  return <NamesProvider api={api}><MapWithStore open={open} focusId={null} onClose={vi.fn()} mode={mode}
     onChange={(field, value) => setVals((v) => { const next = { ...v, [field]: value }; current = next; return next; })} /></NamesProvider>;
 }
 const patrolNow = () => readEntities(current).npcs[0]?.spawns[0]?.patrol ?? null;
@@ -112,10 +113,10 @@ describe('drawing a patrol', () => {
 
   it('leaves patrol mode when its spawn is removed', async () => {
     const api = floorsApi();
-    const view = render(<NamesProvider api={api}><QuestMapView open={{ ...sampleOpen(), aggregate: { ...sampleOpen().aggregate, values: valuesWith(newPatrol(9000)) as any } }}
+    const view = render(<NamesProvider api={api}><MapWithStore open={{ ...sampleOpen(), aggregate: { ...sampleOpen().aggregate, values: valuesWith(newPatrol(9000)) as any } }}
       onChange={vi.fn()} focusId={null} onClose={vi.fn()} mode={PATROL} /></NamesProvider>);
     await screen.findByRole('heading', { name: 'Patrol: Hela' });
-    view.rerender(<NamesProvider api={api}><QuestMapView open={{ ...sampleOpen(), aggregate: { ...sampleOpen().aggregate, values: valuesWith(null, []) as any } }}
+    view.rerender(<NamesProvider api={api}><MapWithStore open={{ ...sampleOpen(), aggregate: { ...sampleOpen().aggregate, values: valuesWith(null, []) as any } }}
       onChange={vi.fn()} focusId={null} onClose={vi.fn()} mode={PATROL} /></NamesProvider>);
     expect(await screen.findByText('That spawn is no longer in the quest.')).toBeTruthy();
     expect(screen.queryByRole('heading', { name: 'Patrol: Hela' })).toBeNull();

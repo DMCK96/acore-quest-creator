@@ -1,7 +1,9 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import type { CanvasNode, OpenResult, QuestSpawnGroup } from '@shared/ipc';
 import type { FieldValue } from '@core/registry/types';
-import { readEntities } from '@core/entities/model';
+import { EMPTY_ENTITIES } from '@core/entities/model';
+import { narrowTo, questUses } from '@core/entities/links';
+import { useProjectEntities } from '../state/project-entities';
 import { ownViewSpawns } from '@core/entities/view-spawns';
 import { toggleRole } from '@core/modules/quest-roles';
 import { useNameBook } from '../state/names';
@@ -83,7 +85,15 @@ export function WorldWorkspace({
   };
   const info = useMemo(() => (quest ? questMenuInfo(quest.open, quest.nodes, names) : undefined), [quest, names]);
   const chainIds = useMemo(() => (quest ? chainOf(quest.nodes, quest.open.questId) : undefined), [quest]);
-  const own = useMemo(() => (quest ? ownViewSpawns(readEntities(quest.open.aggregate.values)) : undefined), [quest]);
+  // The project's NPCs and objects; edits to their spawns go to the whole store
+  const project = useProjectEntities();
+  const store = project?.entities ?? EMPTY_ENTITIES;
+  const storeRef = useRef(store);
+  storeRef.current = store;
+  const own = useMemo(
+    () => (quest ? ownViewSpawns(narrowTo(store, questUses({ questId: quest.open.questId, aggregate: quest.open.aggregate }, store))) : undefined),
+    [quest, store],
+  );
   // The spawns of the open quest or its chain, listed after the menu showed them
   const [preset, setPreset] = useState<FindPreset | null>(null);
   const [first] = useState(readLastPlace);
@@ -219,9 +229,12 @@ export function WorldWorkspace({
         onOwnEdit={
           quest
             ? (edit) => {
-                const made = values.current ? ownEdit(values.current, edit) : null;
-                if (made) change(made.field, made.value);
-                return made !== null;
+                const next = ownEdit(storeRef.current, edit);
+                if (next) {
+                  storeRef.current = next;
+                  project?.setEntities(next);
+                }
+                return next !== null;
               }
             : undefined
         }

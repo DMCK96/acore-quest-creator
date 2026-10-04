@@ -1,6 +1,5 @@
-import { useEffect, useMemo, useState } from 'react';
-import { questUses } from '@core/entities/links';
-import { ProjectEntitiesProvider, type ProjectEntitiesValue } from '../state/project-entities';
+import { useEffect, useState } from 'react';
+import { ProjectEntitiesFromStore } from '../state/project-entities';
 import type { AppStore } from '../state/app-store';
 import { AppBar, type Workspace } from '../components/AppBar';
 import { ErrorBanner } from '../components/ErrorBanner';
@@ -29,20 +28,6 @@ export function AppShell({ store }: { store: AppStore }): React.JSX.Element {
   const hasClient = store((s) => Boolean(s.summary?.clientDir));
   const open = store((s) => s.open);
   const nodes = store((s) => s.nodes);
-  const entities = store((s) => s.entities);
-  // The store and the quests that use what is in it: the open quest as it is being edited, the rest as listed
-  const projectEntities = useMemo((): ProjectEntitiesValue => {
-    const quests = nodes.map((n) => ({ questId: n.questId, title: n.title, uses: n.uses }));
-    if (open) {
-      const title = open.aggregate.values['quest_template.LogTitle'];
-      const mine = { questId: open.questId, title: typeof title === 'string' ? title : '', uses: questUses({ questId: open.questId, aggregate: open.aggregate }, entities) };
-      const at = quests.findIndex((q) => q.questId === open.questId);
-      if (at >= 0) quests[at] = mine;
-      else quests.push(mine);
-    }
-    const { setEntities, createEntity } = store.getState();
-    return { entities, setEntities, quests, create: createEntity };
-  }, [store, nodes, open, entities]);
   const [goTo, setGoTo] = useState<{ map: number; x: number; y: number; z: number; nonce: number } | undefined>();
 
   // A quest opened from anywhere is previewed on the graph, so the quests come forward
@@ -88,7 +73,7 @@ export function AppShell({ store }: { store: AppStore }): React.JSX.Element {
   }, [store]);
 
   return (
-    <ProjectEntitiesProvider value={projectEntities}>
+    <ProjectEntitiesFromStore store={store}>
     <div className="app-shell">
       <AppBar
         store={store}
@@ -138,6 +123,6 @@ export function AppShell({ store }: { store: AppStore }): React.JSX.Element {
       {showSettings && <SettingsDialog store={store} onClose={() => setShowSettings(false)} />}
       <RecoveryDialog store={store} />
     </div>
-    </ProjectEntitiesProvider>
+    </ProjectEntitiesFromStore>
   );
 }

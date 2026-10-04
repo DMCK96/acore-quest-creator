@@ -1,5 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { readEntities } from '@core/entities/model';
+import { EMPTY_ENTITIES, type ProjectEntities } from '@core/entities/model';
+import { narrowTo, questUses } from '@core/entities/links';
+import { useProjectEntities } from '../state/project-entities';
 import { addZ, chooseZ, floorCandidates } from '@core/map/floors';
 import { addSpawn, moveMarker, questMarkers, questRoutes } from '@core/map/positions';
 import type { PointAction, Spawn } from '@core/entities/model';
@@ -94,6 +96,16 @@ export function QuestMapView({
   // while the first waited must not be undone by it.
   const valuesRef = useRef(values);
   valuesRef.current = values;
+  // The project's NPCs and objects: the map shows those the quest uses, and edits go to the whole store
+  const project = useProjectEntities();
+  const store = project?.entities ?? EMPTY_ENTITIES;
+  const entitiesRef = useRef(store);
+  entitiesRef.current = store;
+  const setEntities = (next: ProjectEntities): void => {
+    entitiesRef.current = next;
+    project?.setEntities(next);
+  };
+  const mine = useMemo(() => narrowTo(store, questUses({ questId: open.questId, aggregate: open.aggregate }, store)), [store, open]);
   const names = useNameBook();
   // The quest as the 3D view's right-click menu sees it: its own NPCs to paste and spawn, its givers and objectives
   const questInfo = useMemo(() => questMenuInfo(open, [], names), [open, names]);
@@ -138,14 +150,14 @@ export function QuestMapView({
   const allMarkers = useMemo<MapMarkerView[]>(() => {
     const knownMaps = new Map<string, number>();
     for (const ref of refs) if (!knownMaps.has(`${ref.kind}:${ref.entry}`)) knownMaps.set(`${ref.kind}:${ref.entry}`, ref.map);
-    const own: MapMarkerView[] = questMarkers(values, knownMaps);
+    const own: MapMarkerView[] = questMarkers(values, mine, knownMaps);
     const referenced: MapMarkerView[] = refs.map((ref) => ({
       id: `ref:${ref.kind}:${ref.guid}`, kind: ref.kind === 'creature' ? 'npcSpawn' : 'objectSpawn',
       label: `${ref.name || `#${ref.entry}`} (${ROLE_WORDS[ref.role]})`, map: ref.map, x: ref.x, y: ref.y, z: ref.z,
       draggable: false, readOnlyRole: ref.role,
     }));
     return [...own, ...referenced];
-  }, [values, refs]);
+  }, [values, mine, refs]);
 
   const shownIds = new Set(maps.map((m) => m.id));
   const focus = allMarkers.find((m) => m.id === focusId);
@@ -170,7 +182,7 @@ export function QuestMapView({
     setView((v) => ({ x: spawn.x, y: spawn.y, seq: (v?.seq ?? 0) + 1 }));
   }, []);
   const patrol = usePatrolMode({
-    api, target: patrolTarget, values, valuesRef, onChange, floorsAt, currentMap,
+    api, target: patrolTarget, entities: mine, entitiesRef, onEntities: setEntities, floorsAt, currentMap,
     mapName: (id) => maps.find((m) => m.id === id)?.name ?? `map ${id}`,
     onLeave: leavePatrol, onEnter: enterPatrol,
     onFloors: (id, at, candidates, reason) => {
@@ -184,8 +196,8 @@ export function QuestMapView({
   const markers = allMarkers.filter((m) => m.kind !== 'patrolPoint' || (activeRoute !== null && m.id.startsWith(`${activeRoute}:`)));
   // The same array while the routes are the same, so the map does not redraw them on every render.
   const routes = useMemo(
-    () => questRoutes(values).filter((r) => r.map === currentMap).map((r) => ({ id: r.id, points: r.points, facings: r.facings, active: r.id === activeRoute })),
-    [values, currentMap, activeRoute],
+    () => questRoutes(mine).filter((r) => r.map === currentMap).map((r) => ({ id: r.id, points: r.points, facings: r.facings, active: r.id === activeRoute })),
+    [mine, currentMap, activeRoute],
   );
   // While a route is drawn its selected point is the panel's; a patrol point never stays marked after it is let go.
   const shownSelectedId =
@@ -234,9 +246,10 @@ export function QuestMapView({
     const { result, reason } = await floorsAt(currentMap, at.x, at.y);
     const candidates = result ? floorCandidates(result) : [];
     const z = chooseZ(candidates, marker.z) ?? marker.z;
-    const edit = moveMarker(valuesRef.current, id, { x: at.x, y: at.y, z });
+    const edit = moveMarker(valuesRef.current, entitiesRef.current, id, { x: at.x, y: at.y, z });
     if (!edit) return;
-    onChange(edit.field, edit.value);
+    if ('entities' in edit) setEntities(edit.entities);
+    else onChange(edit.field, edit.value);
     setSelectedId(id);
     setClickAt(null);
     setFloors({ id, x: at.x, y: at.y, candidates });
@@ -245,8 +258,9 @@ export function QuestMapView({
 
   function pickFloor(z: number): void {
     if (!floors) return;
-    const edit = moveMarker(valuesRef.current, floors.id, { x: floors.x, y: floors.y, z });
-    if (edit) onChange(edit.field, edit.value);
+    const edit = moveMarker(valuesRef.current, entitiesRef.current, floors.id, { x: floors.x, y: floors.y, z });
+    if (edit && 'entities' in edit) setEntities(edit.entities);
+    else if (edit) onChange(edit.field, edit.value);
   }
 
   /** Adds a spawn at a point; the new spawn's guid, or null when none was added. */
@@ -264,9 +278,9 @@ export function QuestMapView({
       const { result, reason } = await floorsAt(map, spot.x, spot.y);
       const candidates = result ? floorCandidates(result) : [];
       const z = (result ? addZ(result) : null) ?? 0;
-      const edit = addSpawn(valuesRef.current, { kind, entry }, { guid, map, x: spot.x, y: spot.y, z, o: 0 });
-      if (!edit) return null;
-      onChange(edit.field, edit.value);
+      const next = addSpawn(entitiesRef.current, { kind, entry }, { guid, map, x: spot.x, y: spot.y, z, o: 0 });
+      if (!next) return null;
+      setEntities(next);
       const id = `spawn:${kind === 'npc' ? 'npc' : 'obj'}:${entry}:${guid}`;
       setSelectedId(id);
       setFloors({ id, x: spot.x, y: spot.y, candidates });
@@ -317,7 +331,7 @@ export function QuestMapView({
     flyTo(spot.x, spot.y);
   }
 
-  const { npcs, objects } = readEntities(values);
+  const { npcs, objects } = mine;
   const targetName = (t: Target): string => {
     const found = t.kind === 'npc' ? npcs.find((n) => n.entry === t.entry) : objects.find((o) => o.entry === t.entry);
     return found?.name.trim() || `${t.kind === 'npc' ? 'New NPC' : 'New object'} ${t.entry}`;
@@ -474,9 +488,9 @@ export function QuestMapView({
         {show3d ? (
           <World3DView map={currentMap} hasClient={hasClient} start={{ x: shownView.x, y: shownView.y, z: start?.z ?? 0 }} own={ownViewSpawns({ npcs, objects })}
             onOwnEdit={(edit) => {
-              const change = ownEdit(valuesRef.current, edit);
-              if (change) onChange(change.field, change.value);
-              return change !== null;
+              const next = ownEdit(entitiesRef.current, edit);
+              if (next) setEntities(next);
+              return next !== null;
             }}
             quest={questInfo}
             onQuestRole={(role, target, on) => {

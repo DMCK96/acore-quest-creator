@@ -19,7 +19,7 @@ vi.mock('../../src/renderer/world3d/world3d', () => ({
 }));
 vi.mock('../../src/renderer/map/LeafletMap', () => ({ LeafletMap: () => <div /> }));
 
-import { QuestMapView } from '../../src/renderer/map/QuestMapView';
+import { MapWithStore } from './map-with-store';
 import { HistoryProvider } from '../../src/renderer/state/history-context';
 import { createAppStore } from '../../src/renderer/state/app-store';
 import { WorldWorkspace } from '../../src/renderer/world3d/WorldWorkspace';
@@ -37,7 +37,7 @@ const open = () => { const base = sampleOpen(); return { ...base, aggregate: { .
 async function questMap(api = makeMockApi({ worldLayer: vi.fn(async () => okv(EMPTY)) }), steps = false) {
   clientHasEverything();
   const onChange = vi.fn();
-  const view = <QuestMapView open={open()} onChange={onChange} focusId={null} onClose={vi.fn()} hasClient />;
+  const view = <MapWithStore open={open()} onChange={onChange} focusId={null} onClose={vi.fn()} hasClient />;
   // With steps, the view runs under the app's history, as in the app
   const store = createAppStore(api);
   render(<NamesProvider api={api}>{steps ? <HistoryProvider store={store}>{view}</HistoryProvider> : view}</NamesProvider>);

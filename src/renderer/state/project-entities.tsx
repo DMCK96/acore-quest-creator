@@ -1,6 +1,6 @@
-import { createContext, useContext, type ReactNode } from 'react';
+import { createContext, useContext, useMemo, type ReactNode } from 'react';
 import type { ProjectEntities } from '@core/entities/model';
-import type { QuestUse } from '@core/entities/links';
+import { questUses, type QuestUse } from '@core/entities/links';
 import type { AppStore } from './app-store';
 
 /** A project quest as the NPC, object and item views need it: its name and what it uses */
@@ -35,4 +35,27 @@ export function useProjectEntities(): ProjectEntitiesValue | null {
 /** The quests other than `questId` that use an entity, by title */
 export function otherUsers(quests: readonly ProjectQuestUse[], questId: number | null, kind: keyof QuestUse, entry: number): string[] {
   return quests.filter((q) => q.questId !== questId && q.uses[kind].includes(entry)).map((q) => q.title.trim() || `Quest ${q.questId}`);
+}
+
+/**
+ * The provider as the app store feeds it: the store, and the quests that use what is in it (the open
+ * quest as it is being edited, the rest as the graph lists them)
+ */
+export function ProjectEntitiesFromStore({ store, children }: { store: AppStore; children: ReactNode }): React.JSX.Element {
+  const entities = store((s) => s.entities);
+  const nodes = store((s) => s.nodes);
+  const open = store((s) => s.open);
+  const value = useMemo((): ProjectEntitiesValue => {
+    const quests = nodes.map((n) => ({ questId: n.questId, title: n.title, uses: n.uses }));
+    if (open) {
+      const title = open.aggregate.values['quest_template.LogTitle'];
+      const mine = { questId: open.questId, title: typeof title === 'string' ? title : '', uses: questUses({ questId: open.questId, aggregate: open.aggregate }, entities) };
+      const at = quests.findIndex((q) => q.questId === open.questId);
+      if (at >= 0) quests[at] = mine;
+      else quests.push(mine);
+    }
+    const { setEntities, createEntity } = store.getState();
+    return { entities, setEntities, quests, create: createEntity };
+  }, [store, nodes, open, entities]);
+  return <ProjectEntitiesProvider value={value}>{children}</ProjectEntitiesProvider>;
 }

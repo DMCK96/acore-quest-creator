@@ -1,4 +1,4 @@
-import { ENTITIES_FIELD, readEntities, writeEntities, type Pace, type Patrol, type PatrolPoint, type PointAction } from '../entities/model';
+import type { Pace, Patrol, PatrolPoint, PointAction, ProjectEntities } from '../entities/model';
 import type { FieldValue } from '../registry/types';
 
 /**
@@ -118,15 +118,14 @@ export function nearestSegment(route: readonly { x: number; y: number }[], at: {
   return best;
 }
 
-export function patrolOf(values: Values, entry: number, guid: number): Patrol | null {
-  const npc = readEntities(values).npcs.find((n) => n.entry === entry);
+export function patrolOf(entities: ProjectEntities, entry: number, guid: number): Patrol | null {
+  const npc = entities.npcs.find((n) => n.entry === entry);
   return npc?.spawns.find((s) => s.guid === guid)?.patrol ?? null;
 }
 
-export function setPatrol(values: Values, entry: number, guid: number, patrol: Patrol): { field: string; value: FieldValue } | null {
-  const entities = readEntities(values);
+export function setPatrol(entities: ProjectEntities, entry: number, guid: number, patrol: Patrol): ProjectEntities | null {
   const npc = entities.npcs.find((n) => n.entry === entry);
   if (!npc || !npc.spawns.some((s) => s.guid === guid)) return null;
   const next = { ...npc, spawns: npc.spawns.map((s) => (s.guid === guid ? { ...s, patrol } : s)) };
-  return { field: ENTITIES_FIELD, value: writeEntities({ ...entities, npcs: entities.npcs.map((n) => (n === npc ? next : n)) }) };
+  return { ...entities, npcs: entities.npcs.map((n) => (n === npc ? next : n)) };
 }

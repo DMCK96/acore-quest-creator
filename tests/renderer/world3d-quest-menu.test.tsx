@@ -1,4 +1,6 @@
 // @vitest-environment jsdom
+import { ProjectEntitiesProvider } from '../../src/renderer/state/project-entities';
+import { storeOf } from './map-with-store';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { act, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
@@ -46,22 +48,22 @@ async function workspace(overrides: Record<string, unknown> = {}) {
   vi.stubGlobal('fetch', async () => new Response(new Uint8Array([1]), { status: 200 }));
   const api = makeMockApi({ worldLayer: vi.fn(async () => okv(EMPTY)), ...overrides });
   const open = sampleOpen({ questId: 60001 });
-  open.aggregate.values = {
-    ...open.aggregate.values,
-    [ENTITIES_FIELD]: writeEntities({ npcs: [{ ...newNpc(12000001), name: 'Hela', spawns: [{ ...newSpawn(900), map: 0, x: 1, y: 2, z: 3 }] }], objects: [], items: [] }),
-  } as typeof open.aggregate.values;
+  const entities = { npcs: [{ ...newNpc(12000001, 60001), name: 'Hela', spawns: [{ ...newSpawn(900), map: 0, x: 1, y: 2, z: 3 }] }], objects: [], items: [] };
+  const setEntities = vi.fn();
   const onQuestField = vi.fn();
   const onNewQuest = vi.fn();
   render(
     <NamesProvider api={api}>
       <HistoryProvider store={createAppStore(api)}>
+        <ProjectEntitiesProvider value={storeOf(entities, setEntities)}>
         <WorldWorkspace hasClient projectKey="p" projectName="P" onOpenSettings={vi.fn()} onShowQuests={vi.fn()} onStartQuest={vi.fn()}
           quest={{ open, nodes: [nodeOf({ questId: 60001 })] }} onQuestField={onQuestField} onNewQuest={onNewQuest} />
+        </ProjectEntitiesProvider>
       </HistoryProvider>
     </NamesProvider>,
   );
   await waitFor(() => expect(worlds).toHaveLength(1));
-  return { api, world: worlds[0], onQuestField, onNewQuest };
+  return { api, world: worlds[0], onQuestField, onNewQuest, setEntities };
 }
 const rightClick = (world: any, target: any) => act(() => world.options.onContextMenu(target, { x: 40, y: 40 }));
 
@@ -98,11 +100,11 @@ describe('quest actions in the World workspace', () => {
   });
 
   it('the open quest’s own spawns are drawn and edited in the World workspace', async () => {
-    const { world, onQuestField } = await workspace();
+    const { world, setEntities } = await workspace();
     await waitFor(() => expect(world.setOwnSpawns).toHaveBeenCalledWith(expect.objectContaining({ creatures: [expect.objectContaining({ guid: 900, own: true })] })));
     act(() => world.options.onGesture([{ kind: 'place', spawn: { kind: 'creature', guid: 900, entry: 12000001, own: true }, to: { x: 4, y: 5, z: 6, orientation: 0, rotation: null } }]));
     // The gesture's step opens first
-    await waitFor(() => expect(onQuestField).toHaveBeenCalledWith('entities', expect.anything()));
+    await waitFor(() => expect(setEntities).toHaveBeenCalledWith(expect.objectContaining({ npcs: [expect.objectContaining({ spawns: [expect.objectContaining({ x: 4, y: 5, z: 6 })] })] })));
   });
 
   it('Show quest spawns lists them by quest and role, marks those here, and Hide clears the marks', async () => {
