@@ -1,6 +1,7 @@
 import type { QuestAggregate, Snapshot } from '@core/model/aggregate';
 import type { FidelityReport } from '@core/roundtrip/verify';
 import type { WorldLayer } from '@core/world/layer';
+import type { ProjectEntities } from '@core/entities/model';
 
 /**
  * The project's undo history, as the main process keeps it and the window shows it. A step is a
@@ -29,6 +30,7 @@ export type HistoryPart =
   | { kind: 'quest'; questId: number; before: QuestEdit | null; after: QuestEdit | null }
   | { kind: 'positions'; before: NodeMove[]; after: NodeMove[] }
   | { kind: 'world'; before: WorldLayer; after: WorldLayer }
+  | { kind: 'entities'; before: ProjectEntities; after: ProjectEntities }
   | { kind: 'name'; before: string; after: string };
 
 /** Where a step happened, for going to it: a quest (and the module that changed), or a place in the world */
@@ -39,7 +41,7 @@ export type StepPlace =
 export interface StepSummary {
   id: number;
   label: string;
-  kind: 'quest' | 'world' | 'graph' | 'project';
+  kind: 'quest' | 'world' | 'graph' | 'project' | 'entities';
   where: StepPlace | null;
 }
 
@@ -61,6 +63,8 @@ export interface HistoryResult {
   positions: boolean;
   /** The world layer as it now is, when it changed */
   world: WorldLayer | null;
+  /** The project's NPCs, objects and items as they now are, when they changed */
+  entities: ProjectEntities | null;
   name: boolean;
   /** Parts that could not be applied, with why */
   skipped: string[];

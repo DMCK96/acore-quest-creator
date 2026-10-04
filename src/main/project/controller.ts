@@ -122,7 +122,7 @@ export function createProjectController(deps: {
     const doc = parseProject(text);
     await replaceWith(() => session.load(doc, path, { dirty: false }));
     recent.touch(path, doc.name, deps.now());
-    return { done: true };
+    return doc.migrationWarnings && doc.migrationWarnings.length > 0 ? { done: true, warnings: doc.migrationWarnings } : { done: true };
   }
 
   /** Swaps in new content, then drops the recovery copy of what was open before. */

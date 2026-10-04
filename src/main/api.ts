@@ -444,6 +444,7 @@ export function createApi(deps: ApiDeps): Api {
     const touched: number[] = [];
     let positions = false;
     let world = false;
+    let entities = false;
     let name = false;
     let last: StepSummary | null = null;
     for (const step of steps) {
@@ -472,6 +473,7 @@ export function createApi(deps: ApiDeps): Api {
           if (part.before === null || part.after === null) positions = true;
         } else if (part.kind === 'positions') positions = true;
         else if (part.kind === 'world') world = true;
+        else if (part.kind === 'entities') entities = true;
         else name = true;
       });
       last = { id: step.id, ...describeStep(step) };
@@ -483,6 +485,7 @@ export function createApi(deps: ApiDeps): Api {
       quests: touched.map((questId) => ({ questId, aggregate: quests.get(questId)?.aggregate ?? null })),
       positions,
       world: world ? { ...layer, movements: movementsOf(layer) } : null,
+      entities: entities ? deps.session.entities.get() : null,
       name,
       skipped: [...left],
       history: historyList(),

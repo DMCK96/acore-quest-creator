@@ -2,6 +2,8 @@ import { z } from 'zod';
 import type { QuestAggregate, Snapshot } from '../../core/model/aggregate';
 import type { FidelityReport } from '../../core/roundtrip/verify';
 import { TOOL_VERSION } from '../../core/version';
+import { migrateQuestEntities } from '../../core/entities/migrate';
+import { EMPTY_ENTITIES, readProjectEntities, type ProjectEntities } from '../../core/entities/model';
 import { EMPTY_WORLD, type Placement, type RoutePoint, type WorldLayer } from '../../core/world/layer';
 import type { Viewport } from '../../shared/ipc';
 
@@ -11,8 +13,11 @@ import type { Viewport } from '../../shared/ipc';
  */
 
 export const PROJECT_FORMAT = 'acore-quest-creator/project';
-/** 2 added the world layer (a version 1 file opens with an empty one); 3 added the spawns placed in it. */
-export const PROJECT_VERSION = 3;
+/**
+ * 2 added the world layer (a version 1 file opens with an empty one); 3 added the spawns placed in it;
+ * 4 moved new NPCs, objects and items from quests into the project (older files move them on open).
+ */
+export const PROJECT_VERSION = 4;
 export const PROJECT_EXTENSION = 'aqc';
 export const DEFAULT_PROJECT_NAME = 'Untitled Project';
 export const DEFAULT_ID_RANGE = { start: 60000, end: 99999 } as const;
@@ -41,6 +46,10 @@ export interface ProjectDocument extends ProjectMeta {
   quests: ProjectQuest[];
   /** Edits to spawns and routes that are not part of any quest. */
   world: WorldLayer;
+  /** The project's new NPCs, objects and items. */
+  entities: ProjectEntities;
+  /** What moving an older project's quest entities into the store had to say; set only by `parseProject` */
+  migrationWarnings?: string[];
 }
 
 /** The file system as the project code needs it, injected so tests run without a disk. */
@@ -131,6 +140,7 @@ export function serializeProject(doc: ProjectDocument): string {
         look: { displayId: a.look.displayId, scale: a.look.scale, equipment: a.look.equipment, preset: a.look.preset },
       })),
     },
+    entities: doc.entities,
   };
   return `${JSON.stringify(file, null, 2)}\n`;
 }
@@ -245,6 +255,8 @@ const fileSchema = z.object({
     }),
   ),
   world: worldSchema.optional(),
+  // Absent before version 4, whose quests carry their own; checked entry by entry when read
+  entities: z.unknown().optional(),
 });
 
 const NOT_A_PROJECT = 'This file is not an ACORE Quest Creator project.';
@@ -273,23 +285,27 @@ export function parseProject(text: string): ProjectDocument {
     throw new ProjectFileError('corrupt', `The project file is damaged at ${path}: ${issue?.message ?? 'invalid'}`);
   }
   const f = parsed.data;
+  const quests = f.quests.map((q) => ({
+    questId: q.questId,
+    isNew: q.isNew,
+    aggregate: q.aggregate as unknown as QuestAggregate,
+    snapshot: q.snapshot as unknown as Snapshot | null,
+    fidelity: q.fidelity as unknown as FidelityReport | null,
+    x: q.x,
+    y: q.y,
+    lastExportPath: q.lastExportPath,
+  }));
+  const moved = f.version < 4 ? migrateQuestEntities(quests) : null;
   return {
     name: f.name,
     idRangeStart: f.idRange.start,
     idRangeEnd: f.idRange.end,
     outputDir: f.outputDir,
     viewport: f.viewport,
-    quests: f.quests.map((q) => ({
-      questId: q.questId,
-      isNew: q.isNew,
-      aggregate: q.aggregate as unknown as QuestAggregate,
-      snapshot: q.snapshot as unknown as Snapshot | null,
-      fidelity: q.fidelity as unknown as FidelityReport | null,
-      x: q.x,
-      y: q.y,
-      lastExportPath: q.lastExportPath,
-    })),
+    quests: moved ? moved.quests : quests,
     world: f.world ?? structuredClone(EMPTY_WORLD),
+    entities: moved ? moved.entities : f.entities === undefined ? structuredClone(EMPTY_ENTITIES) : readProjectEntities(f.entities),
+    ...(moved ? { migrationWarnings: moved.warnings } : {}),
   };
 }
 

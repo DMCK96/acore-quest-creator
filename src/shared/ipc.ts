@@ -193,6 +193,8 @@ export interface RecentProject {
 /** New, Open and Save can each be cancelled by the user part way; `done` says whether it happened. */
 export interface ProjectActionResult {
   done: boolean;
+  /** What opening an older project had to say about moving its quests' NPCs into the project */
+  warnings?: string[];
 }
 
 /** Unsaved work a crash left behind, offered back on the next launch. */

@@ -105,6 +105,22 @@ function changedFields(part: HistoryPart): string[] | null {
   return [...keys].filter((k) => !isDeepStrictEqual(a[k], b[k])).sort();
 }
 
+type EntitiesPart = Extract<HistoryPart, { kind: 'entities' }>;
+
+/** The one NPC, object or item an entities part changed, as `kind:entry`; null when it changed none or several */
+function changedEntity(part: EntitiesPart): string | null {
+  const keyed = (store: EntitiesPart['before']): Map<string, unknown> =>
+    new Map<string, unknown>([...store.npcs.map((e) => [`npc:${e.entry}`, e] as const), ...store.objects.map((e) => [`object:${e.entry}`, e] as const), ...store.items.map((e) => [`item:${e.entry}`, e] as const)]);
+  const a = keyed(part.before);
+  const b = keyed(part.after);
+  const changed = [...new Set([...a.keys(), ...b.keys()])].filter((k) => !isDeepStrictEqual(a.get(k), b.get(k)));
+  if (changed.length !== 1) return null;
+  const key = changed[0]!;
+  // Typing changes only text: a new or deleted entity, or a click that changes its shape, is its own step
+  if (!a.has(key) || !b.has(key) || !isDeepStrictEqual(shapeOf(a.get(key)), shapeOf(b.get(key)))) return null;
+  return key;
+}
+
 export function createHistory(opts: { now?: () => number; limit?: number } = {}): ProjectHistory {
   const now = opts.now ?? Date.now;
   const limit = opts.limit ?? HISTORY_LIMIT;
@@ -154,8 +170,12 @@ export function createHistory(opts: { now?: () => number; limit?: number } = {})
   const mergesInto = (last: HistoryStep | undefined, part: HistoryPart): last is HistoryStep => {
     if (!last || !mergeable || last.explicit || last.id === savedId || last.parts.length !== 1) return false;
     const was = last.parts[0]!;
-    if (was.kind !== 'quest' || part.kind !== 'quest' || was.questId !== part.questId) return false;
     if (now() - last.at >= TYPING_MERGE_MS) return false;
+    if (was.kind === 'entities' && part.kind === 'entities') {
+      const typed = changedEntity(was);
+      return typed !== null && typed === changedEntity(part);
+    }
+    if (was.kind !== 'quest' || part.kind !== 'quest' || was.questId !== part.questId) return false;
     const a = changedFields(was);
     const b = changedFields(part);
     return a !== null && b !== null && isDeepStrictEqual(a, b) && typedOnly(was, a) && typedOnly(part, b);

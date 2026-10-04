@@ -13,7 +13,7 @@ export function isTextField(target: EventTarget | null): boolean {
   return target.isContentEditable || target.contentEditable === 'true';
 }
 
-const KIND_LABEL: Record<StepSummary['kind'], string> = { quest: 'Quest', world: 'World', graph: 'Graph', project: 'Project' };
+const KIND_LABEL: Record<StepSummary['kind'], string> = { quest: 'Quest', world: 'World', graph: 'Graph', project: 'Project', entities: 'NPCs & objects' };
 
 /**
  * Undo and Redo for the whole project, each naming the step it would act on, and the History list:

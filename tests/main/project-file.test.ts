@@ -5,6 +5,7 @@ import {
 } from '../../src/main/project/project-file';
 import { memFs } from '../helpers/mem-fs';
 import { EMPTY_WORLD } from '../../src/core/world/layer';
+import { EMPTY_ENTITIES } from '../../src/core/entities/model';
 
 const aggregate = { questId: 60001, isNew: false, values: { 'quest_template.LogTitle': "It's \\ ok\r\n🙂 \0 \u2028", creature_queststarter: [{ id: 1 }] }, readOnly: [], sharedItems: { '2000': [60002] } };
 const snapshot = { questId: 60001, tables: { quest_template: [{ ID: '60001', LogTitle: null }] }, columnsRead: { quest_template: ['ID', 'LogTitle'] }, linkedContext: {}, schemaHash: 'abc' };
@@ -15,7 +16,7 @@ const doc = (over: Partial<ProjectDocument> = {}): ProjectDocument => ({
     { questId: 60001, isNew: false, aggregate, snapshot, fidelity: { ok: true }, x: 320, y: -50.5, lastExportPath: 'C:\\out\\a.sql' },
     { questId: 60000, isNew: true, aggregate: { ...aggregate, questId: 60000, isNew: true }, snapshot: null, fidelity: null, x: 0, y: 0, lastExportPath: null },
   ] as ProjectDocument['quests'],
-  world: EMPTY_WORLD,
+  world: EMPTY_WORLD, entities: EMPTY_ENTITIES,
   ...over,
 });
 const reasonOf = (fn: () => unknown): string => {
@@ -98,11 +99,11 @@ describe('project file: the world layer', () => {
     ],
   };
 
-  it('is version 3 and round-trips the world layer, with its placed spawns, after the quests', () => {
-    expect(PROJECT_VERSION).toBe(3);
+  it('round-trips the world layer, with its placed spawns, after the quests and before the NPCs', () => {
     const text = serializeProject(doc({ world }));
     expect(parseProject(text).world).toEqual(world);
     expect(text.indexOf('"quests"')).toBeLessThan(text.indexOf('"world"'));
+    expect(text.indexOf('"world"')).toBeLessThan(text.indexOf('"entities"'));
   });
 
   it('opens a version 2 project, saved before spawns could be placed, with none', () => {

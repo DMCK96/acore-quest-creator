@@ -2,6 +2,7 @@ import { describe, it, expect, vi } from 'vitest';
 import { createProjectSession } from '../../src/main/project/session';
 import { defaultProjectMeta, InvalidNameError, type ProjectQuest } from '../../src/main/project/project-file';
 import { EMPTY_WORLD } from '../../src/core/world/layer';
+import { EMPTY_ENTITIES } from '../../src/core/entities/model';
 
 const q = (questId: number, over: Partial<ProjectQuest> = {}): ProjectQuest => ({
   questId, isNew: false, aggregate: { questId, isNew: false, values: {}, readOnly: [], sharedItems: {} } as ProjectQuest['aggregate'],
@@ -86,7 +87,7 @@ describe('ProjectSession', () => {
 
   it('load takes a document, a path and a dirty flag, under a new id', () => {
     const s = fresh();
-    const doc = { ...defaultProjectMeta('Loaded', 'C:\\out'), quests: [q(60005, { x: 7 })], world: EMPTY_WORLD };
+    const doc = { ...defaultProjectMeta('Loaded', 'C:\\out'), quests: [q(60005, { x: 7 })], world: EMPTY_WORLD, entities: EMPTY_ENTITIES };
     s.load(doc, 'C:\\l.aqc', { dirty: true });
     expect([s.id(), s.filePath(), s.dirty(), s.meta().name]).toEqual(['s2', 'C:\\l.aqc', true, 'Loaded']);
     expect(s.toDocument()).toEqual(doc);

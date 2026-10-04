@@ -2,6 +2,7 @@ import { randomUUID } from 'node:crypto';
 import { isDeepStrictEqual } from 'node:util';
 import type { Viewport } from '../../shared/ipc';
 import { EMPTY_WORLD, type WorldLayer } from '../../core/world/layer';
+import { EMPTY_ENTITIES, type ProjectEntities } from '../../core/entities/model';
 import { InvalidNameError, type ProjectDocument, type ProjectMeta, type ProjectQuest } from './project-file';
 import { createHistory, type HistoryStep, type ProjectHistory } from './history';
 import type { NodeMove, QuestEdit } from '../../shared/history';
@@ -39,6 +40,11 @@ export interface ProjectSession {
     get(): WorldLayer;
     put(layer: WorldLayer): void;
   };
+  /** The project's new NPCs, objects and items; a put is a change */
+  entities: {
+    get(): ProjectEntities;
+    put(next: ProjectEntities): void;
+  };
   rename(name: string): void;
   /** The undo history of this project; cleared by `reset` and `load` */
   history: ProjectHistory;
@@ -68,6 +74,7 @@ export function createProjectSession(initial: ProjectMeta, newId: () => string =
   let meta: ProjectMeta = structuredClone(initial);
   let quests = new Map<number, ProjectQuest>();
   let world: WorldLayer = structuredClone(EMPTY_WORLD);
+  let entities: ProjectEntities = structuredClone(EMPTY_ENTITIES);
   let filePath: string | null = null;
   // A change that is not a step of the history (marking a quest exported) still needs saving
   let extraDirty = false;
@@ -181,6 +188,18 @@ export function createProjectSession(initial: ProjectMeta, newId: () => string =
         });
       },
     },
+    entities: {
+      get: () => structuredClone(entities),
+      put(next) {
+        if (isDeepStrictEqual(entities, next)) return;
+        watched(() => {
+          const was = entities;
+          entities = structuredClone(next);
+          history.record({ kind: 'entities', before: was, after: structuredClone(next) });
+          change();
+        });
+      },
+    },
     rename(name) {
       const trimmed = name.trim();
       if (trimmed === '') throw new InvalidNameError('A project needs a name.');
@@ -200,6 +219,7 @@ export function createProjectSession(initial: ProjectMeta, newId: () => string =
         meta = structuredClone(next);
         quests = new Map();
         world = structuredClone(EMPTY_WORLD);
+        entities = structuredClone(EMPTY_ENTITIES);
         filePath = null;
         extraDirty = false;
         history.clear();
@@ -209,10 +229,11 @@ export function createProjectSession(initial: ProjectMeta, newId: () => string =
     },
     load(doc, path, loadOpts) {
       watched(() => {
-        const { quests: docQuests, world: docWorld, ...docMeta } = structuredClone(doc);
+        const { quests: docQuests, world: docWorld, entities: docEntities, migrationWarnings: _warnings, ...docMeta } = structuredClone(doc);
         id = newId();
         meta = docMeta;
         world = docWorld ?? structuredClone(EMPTY_WORLD);
+        entities = docEntities ?? structuredClone(EMPTY_ENTITIES);
         quests = new Map(docQuests.map((q) => [q.questId, q]));
         filePath = path;
         history.clear();
@@ -225,6 +246,7 @@ export function createProjectSession(initial: ProjectMeta, newId: () => string =
       ...structuredClone(meta),
       quests: [...quests.values()].sort((a, b) => a.questId - b.questId).map((q) => structuredClone(q)),
       world: structuredClone(world),
+      entities: structuredClone(entities),
     }),
     markSaved(path) {
       watched(() => {
@@ -253,6 +275,8 @@ export function createProjectSession(initial: ProjectMeta, newId: () => string =
             }
           } else if (part.kind === 'world') {
             world = structuredClone(undoing ? part.before : part.after);
+          } else if (part.kind === 'entities') {
+            entities = structuredClone(undoing ? part.before : part.after);
           } else {
             meta = { ...meta, name: undoing ? part.before : part.after };
           }

@@ -2,6 +2,7 @@ import { describe, it, expect, vi } from 'vitest';
 import { createHistory, HISTORY_LIMIT } from '../../src/main/project/history';
 import type { HistoryPart, QuestEdit } from '../../src/shared/history';
 import { EMPTY_WORLD } from '../../src/core/world/layer';
+import { EMPTY_ENTITIES, newNpc } from '../../src/core/entities/model';
 
 const quest = (questId: number, values: Record<string, unknown>): QuestEdit => ({
   questId, isNew: true, aggregate: { questId, isNew: true, values, readOnly: [], sharedItems: {} } as QuestEdit['aggregate'],
@@ -175,5 +176,23 @@ describe('typing merge on structured fields', () => {
     h.record(part(['A'], ['A', ''])); c.tick(500);
     h.record(part(['A', ''], ['A', 'B']));
     expect(h.list(plain).steps).toHaveLength(2);
+  });
+});
+
+describe('typing in the project\'s NPCs', () => {
+  const npc = (entry: number, name: string, minLevel = 1) => ({ ...newNpc(entry), name, minLevel });
+  const named = (before: ReturnType<typeof npc>[], after: ReturnType<typeof npc>[]): HistoryPart =>
+    ({ kind: 'entities', before: { ...EMPTY_ENTITIES, npcs: before }, after: { ...EMPTY_ENTITIES, npcs: after } });
+
+  it('typing one NPC\'s name is one step; another NPC, or a change that is not text, is a step of its own', () => {
+    const c = clock(); const h = createHistory({ now: c.now });
+    h.record(named([npc(1, ''), npc(2, '')], [npc(1, 'H'), npc(2, '')])); c.tick(1000);
+    h.record(named([npc(1, 'H'), npc(2, '')], [npc(1, 'He'), npc(2, '')])); c.tick(1000);
+    expect(h.list(plain).steps).toHaveLength(1);
+    expect(h.peekUndo()!.parts[0]!.before).toEqual({ ...EMPTY_ENTITIES, npcs: [npc(1, ''), npc(2, '')] });
+    h.record(named([npc(1, 'He'), npc(2, '')], [npc(1, 'He'), npc(2, 'B')])); c.tick(1000);
+    expect(h.list(plain).steps).toHaveLength(2);
+    h.record(named([npc(1, 'He'), npc(2, 'B')], [npc(1, 'He'), npc(2, 'B', 5)]));
+    expect(h.list(plain).steps).toHaveLength(3);
   });
 });
