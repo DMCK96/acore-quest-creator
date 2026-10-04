@@ -45,7 +45,7 @@ function presetOf(groups: QuestSpawnGroup[], scope: 'quest' | 'chain'): FindPres
   const title = scope === 'chain' ? 'Spawns of the chain' : `Spawns of ${groups[0]?.title ?? 'the quest'}`;
   return {
     title,
-    capped: groups.some((g) => g.capped),
+    cut: groups.reduce((sum, g) => sum + (g.cut ?? 0), 0),
     groups: groups.flatMap((g) =>
       (['giver', 'ender', 'objective', 'own'] as const).flatMap((role) => {
         const spawns = g.spawns
@@ -212,6 +212,7 @@ export function WorldWorkspace({
             ? (edit) => {
                 const made = values.current ? ownEdit(values.current, edit) : null;
                 if (made) change(made.field, made.value);
+                return made !== null;
               }
             : undefined
         }

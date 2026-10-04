@@ -114,8 +114,8 @@ interface ViewProps {
   own?: ViewSpawns;
   /** Told which NPC or object was clicked in the view, or null when the selection was cleared. */
   onSelect?(spawn: PickedSpawn | null): void;
-  /** Takes edits to the open quest's own spawns; without it, every edit goes to the world layer. */
-  onOwnEdit?(edit: SpawnEdit): void;
+  /** Takes edits to the open quest's own spawns, false when it could not; without it, every edit goes to the world layer. */
+  onOwnEdit?(edit: SpawnEdit): boolean | void;
   /** A spawn to bring into view: the camera goes close to it and it is selected. Its map is `map`. */
   focus?: FocusTarget;
   /** False while the view is hidden: the world stops drawing until it is shown again. True by default. */
@@ -276,8 +276,10 @@ function WorldStage({
   const mapRef = useRef(map);
   mapRef.current = map;
   // Edits as the view sends them, set by the world that is up; paths started here, which the database lacks
-  const sendRef = useRef<(change: SpawnEdit) => Promise<void>>(async () => {});
+  const sendRef = useRef<(change: SpawnEdit) => Promise<boolean>>(async () => false);
   const newPaths = useRef(new Set<number>());
+  /** A path the database does not have: started here, or found in the layer made from nothing (before a restart) */
+  const isNewPath = (pathId: number): boolean => newPaths.current.has(pathId) || layerRef.current.routes.some((r) => r.pathId === pathId && r.original.length === 0);
   /** The server's floor nearest a height at a place on this map, or null when it has none there */
   const floorAt = async (x: number, y: number, nearZ: number): Promise<number | null> => {
     const answer = await apiRef.current?.mapFloors(mapRef.current, x, y);
@@ -302,6 +304,7 @@ function WorldStage({
       return rect ? { x: rect.left + rect.width / 2, y: rect.top + rect.height / 2 } : { x: 0, y: 0 };
     },
     newPaths: newPaths.current,
+    isNewPath,
     quest,
     chainIds,
     onOwnEdit,
@@ -347,14 +350,15 @@ function WorldStage({
       setSelected((s) => (s && s.kind === kind && s.guid === guid ? { ...s, position: { x, y, z } } : s));
     };
     // Own spawns go to the quest; the rest to the world layer, and a refused edit is drawn back
-    const edit = async (change: SpawnEdit): Promise<void> => {
+    // Whether the edit was kept
+    const edit = async (change: SpawnEdit): Promise<boolean> => {
       if (change.spawn.own && onOwnEditRef.current) {
-        onOwnEditRef.current(change);
+        if (onOwnEditRef.current(change) === false) return false;
         placed(change);
-        return;
+        return true;
       }
       const current = apiRef.current;
-      if (!current) return;
+      if (!current) return false;
       const kind = change.spawn.kind === 'object' ? 'gameobject' : 'creature';
       const points = change.kind === 'route' ? change.points.map((p) => ({ x: p.x, y: p.y, z: p.z, rest: (p.carry as Record<string, string | null> | undefined) ?? {} })) : [];
       const result =
@@ -366,18 +370,19 @@ function WorldStage({
             ? await current.worldAddSpawn(kind, change.spawn.entry, change.map, change.at, change.spawn.guid).then((r) => (r.ok ? { ok: true as const, value: r.value.layer } : r))
             : await current.worldRevert({ kind: 'spawn', spawnKind: kind, guid: change.spawn.guid })
         // A path made in this view is not in the database
-        : newPaths.current.has(change.pathId) ? await current.worldSetRoute(change.pathId, points, { isNew: true })
+        : isNewPath(change.pathId) ? await current.worldSetRoute(change.pathId, points, { isNew: true })
         : await current.worldSetRoute(change.pathId, points);
-      if (!live) return;
-      if (result.ok) {
-        // Kept, and drawn once the gesture's last answer is in
-        layerRef.current = result.value;
-        setLayer(result.value);
-        placed(change);
-        setNote(null);
-      } else {
+      if (!live) return false;
+      if (!result.ok) {
         setNote(result.error.message);
+        return false;
       }
+      // Kept, and drawn once the gesture's last answer is in
+      layerRef.current = result.value;
+      setLayer(result.value);
+      placed(change);
+      setNote(null);
+      return true;
     };
     // A click while placing: the spawn goes into the world layer, and is selected so it can be turned or moved at once
     const place = async ({ target, at }: PlaceRequest): Promise<void> => {
@@ -406,20 +411,22 @@ function WorldStage({
     const floorZ = floorAt;
     // The quest's own edits are taken at once; world edits wait their turn. One that fails outright is
     // said, and the queue goes on
-    const send = (change: SpawnEdit): Promise<void> => {
+    const send = (change: SpawnEdit): Promise<boolean> => {
       if (change.spawn.own && onOwnEditRef.current) return edit(change);
       waiting += 1;
-      queue = queue
+      const kept = queue
         .then(() => edit(change))
         .catch((error: unknown) => {
           if (live) setNote(`The change could not be kept: ${error instanceof Error ? error.message : String(error)}`);
+          return false;
         })
         .finally(() => {
           waiting -= 1;
           // The last answer: the layer as the main process now has it (a refused edit is drawn back)
           if (waiting === 0 && live) created?.setWorldLayer(layerRef.current);
         });
-      return queue;
+      queue = kept.then(() => undefined);
+      return kept;
     };
     sendRef.current = send;
     const beforeRouteEdit = (spawn: SpawnRef, pathId: number): Promise<boolean> => {

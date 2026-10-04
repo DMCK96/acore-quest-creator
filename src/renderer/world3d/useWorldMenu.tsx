@@ -22,8 +22,8 @@ export interface WorldMenuDeps {
   api: Api | null;
   map: number;
   active: boolean;
-  /** Sends an edit as the view sends any: the quest's own to the quest, the rest to the world layer, in order */
-  send(edit: SpawnEdit): Promise<void>;
+  /** Sends an edit as the view sends any: the quest's own to the quest, the rest to the world layer, in order; whether it was kept */
+  send(edit: SpawnEdit): Promise<boolean>;
   takeLayer(layer: WorldLayer): void;
   setNote(note: string | null): void;
   /** The server's floor nearest a height at a place, or null when it has none there */
@@ -37,10 +37,12 @@ export interface WorldMenuDeps {
   viewCentre(): { x: number; y: number };
   /** Paths started in this view, which the database does not have */
   newPaths: Set<number>;
+  /** Whether a path is one the database does not have (started here, or before a restart) */
+  isNewPath(pathId: number): boolean;
   quest?: QuestMenuInfo;
   /** The quests of the open quest's chain, the open one among them */
   chainIds?: number[];
-  onOwnEdit?(edit: SpawnEdit): void;
+  onOwnEdit?(edit: SpawnEdit): boolean | void;
   /** Gives a spawn's NPC or object a part in the open quest, or takes it away; says why when it could not */
   onQuestRole?(role: Role, target: RoleTarget, on: boolean): string | null;
   onNewQuest?(giver: { entry: number }, after: boolean): void;
@@ -76,10 +78,11 @@ export function useWorldMenu(deps: WorldMenuDeps): {
 
   // A menu belongs to the world it was opened on
   useEffect(() => setMenu(null), [deps.map, deps.active]);
-  // A path being drawn belongs to its world: a new map's world starts without one
+  // A path being drawn, and quest marks, belong to their world: a new map's world starts without them
   useEffect(() => {
     setDrawing(null);
     drawingRef.current = null;
+    setMarked(false);
   }, [deps.map]);
   // Marks belong to the quest they were shown for
   const questId = deps.quest?.id ?? null;
@@ -123,8 +126,7 @@ export function useWorldMenu(deps: WorldMenuDeps): {
         return null;
       }
       const edit: SpawnEdit = { kind: 'presence', spawn: { kind: put.kind, guid: ids.value[0]!, entry: put.entry, own: true }, present: true, at: put.at, map };
-      onOwnEdit(edit);
-      return edit;
+      return onOwnEdit(edit) === false ? null : edit;
     }
     const result = await api.worldAddSpawn(put.kind === 'object' ? 'gameobject' : 'creature', put.entry, map, put.at);
     if (!result.ok) {
@@ -186,10 +188,11 @@ export function useWorldMenu(deps: WorldMenuDeps): {
     return false;
   };
 
-  /** Sends edits the menu made and remembers them as one undo step */
+  /** Sends edits the menu made and remembers them as one undo step, unless one was refused */
   const commit = async (before: SpawnEdit[], after: SpawnEdit[]): Promise<void> => {
-    for (const edit of after) await d.current.send(edit);
-    d.current.world.current?.record(before, after);
+    let kept = true;
+    for (const edit of after) kept = (await d.current.send(edit)) && kept;
+    if (kept) d.current.world.current?.record(before, after);
   };
 
   const run = async (action: MenuAction): Promise<void> => {
@@ -266,7 +269,7 @@ export function useWorldMenu(deps: WorldMenuDeps): {
           before.unshift({ kind: 'route', spawn: ref, pathId: spawn.pathId, points });
         }
         // A path made in this view is taken back with it; a database path is left for whoever else walks it
-        else if (d.current.newPaths.has(spawn.pathId)) {
+        else if (d.current.isNewPath(spawn.pathId)) {
           const points = world.routeOf(spawn.guid)?.points ?? [];
           before.unshift({ kind: 'route', spawn: ref, pathId: spawn.pathId, points });
           after.push({ kind: 'route', spawn: ref, pathId: spawn.pathId, points: [] });

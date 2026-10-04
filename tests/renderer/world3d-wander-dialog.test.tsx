@@ -39,4 +39,10 @@ describe('the wander distance dialog', () => {
     await userEvent.click(screen.getByRole('button', { name: 'Cancel' }));
     expect(onClose).toHaveBeenCalledTimes(2);
   });
+
+  it('starts a distance it cannot hold at the nearest it can, ready to apply', () => {
+    render(<WanderDialog name="Guard" initial={7.5} onPreview={vi.fn()} onApply={vi.fn()} onClose={vi.fn()} />);
+    expect(screen.getByRole('spinbutton', { name: 'Yards' })).toHaveValue(8);
+    expect(screen.getByRole('button', { name: 'Apply' })).toBeEnabled();
+  });
 });

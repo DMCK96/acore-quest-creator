@@ -109,4 +109,14 @@ describe('quest actions in the World workspace', () => {
     await userEvent.click(screen.getByRole('menuitem', { name: 'Hide quest spawns' }));
     expect(world.setMarked).toHaveBeenLastCalledWith(null);
   });
+
+  it('says how many NPCs or objects had more spawns than are listed', async () => {
+    const questSpawnList = vi.fn(async () => okv([{ questId: 60001, title: 'Wolves', capped: true, cut: 2, spawns: [
+      { kind: 'creature', guid: 80330, entry: 1423, name: 'Stormwind Guard', map: 0, x: 1, y: 2, z: 3, role: 'giver' },
+    ] }]));
+    const { world } = await workspace({ questSpawnList });
+    rightClick(world, { ground: at, hit: null, selection: [] });
+    await userEvent.click(screen.getByRole('menuitem', { name: 'Show quest spawns' }));
+    expect(await screen.findByText('2 NPCs or objects have more spawns than the first 200 listed here.')).toBeInTheDocument();
+  });
 });

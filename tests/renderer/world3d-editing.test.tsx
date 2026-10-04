@@ -243,4 +243,20 @@ describe('one gesture, one layer drawn', () => {
     await waitFor(() => expect(world.setWorldLayer).toHaveBeenLastCalledWith(layerA));
     expect(await screen.findByText(/the database said no/)).toBeTruthy();
   });
+
+  it('pastes a copy of the quest\u2019s own NPC as another spawn of it, in the quest map\u2019s 3D view too', async () => {
+    const api = makeMockApi({ worldLayer: vi.fn(async () => okv(EMPTY)), allocateIds: vi.fn(async () => okv([901])), mapFloors: vi.fn(async () => okv({ reason: 'none' })) });
+    const { onChange, world } = await questMap(api);
+    const hela = { kind: 'creature', guid: 900, entry: 12000001, name: 'Hela', own: true, added: false, pathId: 9000, wander: 0, map: 0, placement: { x: -8900, y: -160, z: 82, orientation: 0, rotation: null } };
+    world.selectedSpawns = vi.fn(() => [hela]);
+    world.groundAt = vi.fn(() => ({ x: 5, y: 6, z: 7 }));
+    world.lastPointer = vi.fn(() => null);
+    world.selectSpawns = vi.fn();
+    act(() => { world.options.onShortcut('KeyC'); });
+    act(() => { world.options.onShortcut('KeyV'); });
+    await waitFor(() => expect(onChange).toHaveBeenCalled());
+    const [field, value] = onChange.mock.calls.at(-1)!;
+    expect(field).toBe(ENTITIES_FIELD);
+    expect(readEntities({ [ENTITIES_FIELD]: value }).npcs[0]!.spawns.map((s) => s.guid)).toEqual([900, 901]);
+  });
 });

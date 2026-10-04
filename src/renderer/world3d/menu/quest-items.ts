@@ -16,11 +16,13 @@ export function questItems(target: MenuTarget, context: MenuContext): MenuGroup 
     if (!quest) items.push(item('Spawn quest NPC here', { disabledReason: OPEN_A_QUEST }));
     else if (!ground) items.push(item('Spawn quest NPC here', { disabledReason: NEEDS_GROUND }));
     else {
-      const children = quest.entities.map((entity) =>
-        !entity.own && !context.connected
+      // Keyed by what each is, as two may share a name
+      const children = quest.entities.map((entity) => ({
+        ...(!entity.own && !context.connected
           ? item(entity.name, { disabledReason: NEEDS_DATABASE })
-          : item(entity.name, { action: { kind: 'spawnQuestEntity', target: entity, at: ground } }),
-      );
+          : item(entity.name, { action: { kind: 'spawnQuestEntity', target: entity, at: ground } })),
+        id: `${entity.kind}-${entity.entry}`,
+      }));
       items.push(item('Spawn quest NPC here', { children }));
     }
     if (quest) {

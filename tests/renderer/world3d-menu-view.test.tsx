@@ -207,4 +207,47 @@ describe('the right-click menu in the 3D view', () => {
       [{ kind: 'route', spawn: ref, pathId: 9000, points: [{ x: 1, y: 1, z: 1 }, { x: 2, y: 2, z: 2 }] }, { kind: 'movement', spawn: ref, to: { type: 'path', wander: 0, pathId: 9000 } }],
       [{ kind: 'movement', spawn: ref, to: { type: 'idle', wander: 0, pathId: null } }]));
   });
+
+  it('knows a path made before a restart from the layer: its points go out as new, and Remove path takes them back', async () => {
+    const newRoute = { pathId: 803300, walkers: 1, original: [], current: [{ x: 1, y: 1, z: 1, rest: {} }, { x: 2, y: 2, z: 2, rest: {} }] };
+    const withRoute = { ...EMPTY, routes: [newRoute] };
+    const { api, world } = await view({ worldLayer: vi.fn(async () => okv(withRoute)), worldSetRoute: vi.fn(async () => okv(withRoute)), worldSetMovement: vi.fn(async () => okv(withRoute)) });
+    await waitFor(() => expect(world.setWorldLayer).toHaveBeenCalled());
+    act(() => world.options.onEdit({ kind: 'route', spawn: { kind: 'creature', guid: 80330, entry: 1423, own: false }, pathId: 803300, points: [{ x: 3, y: 3, z: 3 }] }));
+    await waitFor(() => expect(api.worldSetRoute).toHaveBeenCalledWith(803300, [{ x: 3, y: 3, z: 3, rest: {} }], { isNew: true }));
+    const walking = { ...guard, pathId: 803300 };
+    world.spawnMovement.mockReturnValue({ type: 'path', wander: 0, pathId: 803300 });
+    world.routeOf.mockReturnValue({ pathId: 803300, points: [{ x: 1, y: 1, z: 1 }] });
+    rightClick(world, { ground: at, hit: { type: 'spawn', spawn: walking }, selection: [walking] });
+    await userEvent.click(screen.getByRole('menuitem', { name: 'Remove path' }));
+    await waitFor(() => expect(world.record).toHaveBeenCalledWith(
+      expect.arrayContaining([expect.objectContaining({ kind: 'route', pathId: 803300, points: [{ x: 1, y: 1, z: 1 }] })]),
+      expect.arrayContaining([expect.objectContaining({ kind: 'route', pathId: 803300, points: [] })])));
+  });
+
+  it('does not keep a refused edit as an undo step', async () => {
+    const { world } = await view({ worldSetMovement: vi.fn(async () => ({ ok: false, error: { code: 'BAD_REQUEST', message: 'Spawn 80330 is no longer in the database.' } })) });
+    rightClick(world, { ground: at, hit: { type: 'spawn', spawn: guard }, selection: [guard] });
+    await userEvent.click(screen.getByRole('menuitem', { name: 'Change wander distance…' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Apply' }));
+    expect(await screen.findByText('Spawn 80330 is no longer in the database.')).toBeInTheDocument();
+    expect(world.record).not.toHaveBeenCalled();
+  });
+
+  it('forgets quest marks when the map changes, so Hide is not offered for nothing', async () => {
+    vi.stubGlobal('fetch', async () => new Response(new Uint8Array([1]), { status: 200 }));
+    const questSpawnList = vi.fn(async () => okv([{ questId: 60001, title: 'Wolves', capped: false, cut: 0, spawns: [{ kind: 'creature', guid: 80330, entry: 1423, name: 'G', map: 0, x: 1, y: 2, z: 3, role: 'giver' }] }]));
+    const api = makeMockApi({ worldLayer: vi.fn(async () => okv(EMPTY)), questSpawnList });
+    const quest = { id: 60001, title: 'Wolves', roles: { givers: [], enders: [], objectives: [null, null, null, null] }, entities: [], chained: false };
+    const shown = (map: number) => <NamesProvider api={api}><World3DView map={map} start={{ x: 0, y: 0, z: 0 }} hasClient quest={quest} /></NamesProvider>;
+    const { rerender } = render(shown(0));
+    await waitFor(() => expect(worlds).toHaveLength(1));
+    rightClick(worlds[0], { ground: at, hit: null, selection: [] });
+    await userEvent.click(screen.getByRole('menuitem', { name: 'Show quest spawns' }));
+    await waitFor(() => expect(worlds[0].setMarked).toHaveBeenCalledWith([{ kind: 'creature', guid: 80330 }]));
+    rerender(shown(1));
+    await waitFor(() => expect(worlds).toHaveLength(2));
+    rightClick(worlds[1], { ground: at, hit: null, selection: [] });
+    expect(screen.queryByRole('menuitem', { name: 'Hide quest spawns' })).toBeNull();
+  });
 });

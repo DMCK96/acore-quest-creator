@@ -15,6 +15,10 @@ import { usePatrolMode } from './usePatrolMode';
 import { World3DView } from '../world3d/World3DView';
 import { ownEdit } from './own-3d-edit';
 import { ownViewSpawns } from '@core/entities/view-spawns';
+import { toggleRole } from '@core/modules/quest-roles';
+import { useNameBook } from '../state/names';
+import { questMenuInfo } from '../world3d/quest-context';
+import { OBJECTIVES_FULL } from '../world3d/menu/quest-items';
 import { LeafletMap, type MapMarkerView, type MapView } from './LeafletMap';
 import './map.css';
 
@@ -90,6 +94,9 @@ export function QuestMapView({
   // while the first waited must not be undone by it.
   const valuesRef = useRef(values);
   valuesRef.current = values;
+  const names = useNameBook();
+  // The quest as the 3D view's right-click menu sees it: its own NPCs to paste and spawn, its givers and objectives
+  const questInfo = useMemo(() => questMenuInfo(open, [], names), [open, names]);
   const [maps, setMaps] = useState<MapInfo[]>(CONTINENTS);
   const [refs, setRefs] = useState<QuestMapRef[]>([]);
   const [dots, setDots] = useState<SpawnDot[]>([]);
@@ -469,6 +476,14 @@ export function QuestMapView({
             onOwnEdit={(edit) => {
               const change = ownEdit(valuesRef.current, edit);
               if (change) onChange(change.field, change.value);
+              return change !== null;
+            }}
+            quest={questInfo}
+            onQuestRole={(role, target, on) => {
+              const edits = toggleRole(valuesRef.current, role, target, on);
+              if (!edits) return OBJECTIVES_FULL;
+              for (const [fieldId, value] of Object.entries(edits)) onChange(fieldId, value);
+              return null;
             }}
             onSelect={(spawn) => {
               // A spawn the quest has a marker for is selected in the panel too

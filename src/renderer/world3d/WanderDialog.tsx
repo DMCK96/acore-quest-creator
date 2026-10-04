@@ -24,7 +24,8 @@ export function WanderDialog({
   onClose(): void;
 }): React.JSX.Element {
   const dialog = useRef<HTMLDivElement>(null);
-  const [text, setText] = useState(String(initial));
+  // A distance the dialog cannot hold (a fraction, more than it offers) starts at the nearest it can
+  const [text, setText] = useState(String(Math.min(MAX_YARDS, Math.max(0, Math.round(initial)))));
   const yards = yardsOf(text);
 
   return (

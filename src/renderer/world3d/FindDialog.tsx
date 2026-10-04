@@ -53,8 +53,8 @@ export function foundSpawns(dots: readonly SpawnDot[], layer: WorldLayer, entry:
 export interface FindPreset {
   title: string;
   groups: { label: string; spawns: FoundSpawn[] }[];
-  /** Some NPC or object had more spawns than were listed */
-  capped: boolean;
+  /** How many NPCs or objects had more spawns than were listed */
+  cut: number;
 }
 
 /**
@@ -128,7 +128,11 @@ export function FindDialog({
               </ul>
             </section>
           ))}
-          {preset.capped && <p className="place-dialog__note">Only the first spawns of each NPC or object are listed.</p>}
+          {preset.cut > 0 && (
+            <p className="place-dialog__note">
+              {preset.cut === 1 ? '1 NPC or object has' : `${preset.cut} NPCs or objects have`} more spawns than the first 200 listed here.
+            </p>
+          )}
         </div>
       </div>
     );

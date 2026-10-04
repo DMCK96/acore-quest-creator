@@ -35,6 +35,8 @@ export function WorldContextMenu({
   const menu = useRef<HTMLDivElement | null>(null);
   const [top, setTop] = useState(at.y);
   const [open, setOpen] = useState<string | null>(null);
+  const onCloseRef = useRef(onClose);
+  onCloseRef.current = onClose;
 
   useLayoutEffect(() => {
     const height = menu.current?.offsetHeight ?? 0;
@@ -45,11 +47,12 @@ export function WorldContextMenu({
     const first = itemsOf(menu.current).find((item) => item.getAttribute('aria-disabled') !== 'true');
     first?.focus();
     const outside = (e: MouseEvent): void => {
-      if (menu.current && !menu.current.contains(e.target as Node)) onClose();
+      if (menu.current && !menu.current.contains(e.target as Node)) onCloseRef.current();
     };
     document.addEventListener('mousedown', outside);
     return () => document.removeEventListener('mousedown', outside);
-  }, [onClose]);
+    // Once, when it opens: a render after that leaves the focus where the arrows put it
+  }, []);
 
   function onKeyDown(e: React.KeyboardEvent): void {
     if (e.key === 'Escape') {

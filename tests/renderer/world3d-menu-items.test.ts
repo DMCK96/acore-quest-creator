@@ -111,4 +111,17 @@ describe('the menu while busy', () => {
     expect(groups.map((g) => g.id)).toEqual(['state']);
     expect(groups[0]!.items.map((i) => i.label)).toEqual(['Finish path', 'Undo last point', 'Cancel path']);
   });
+
+  it('gives two quest NPCs of the same name items of their own', () => {
+    const twins = { ...quest, entities: [{ kind: 'creature' as const, entry: 1, name: 'Wolf', own: true }, { kind: 'creature' as const, entry: 2, name: 'Wolf', own: false }] };
+    const children = item(buildMenu(ground(), context({ quest: twins })), 'Spawn quest NPC here')!.children!;
+    expect(new Set(children.map((c) => c.id)).size).toBe(2);
+  });
+
+  it('without the world database, a world NPC\u2019s movement items say so; a quest\u2019s own NPC keeps them', () => {
+    const offline = context({ connected: false });
+    expect(item(buildMenu(onSpawn(npc()), offline), 'Change wander distance…')!.disabledReason).toBe('Needs the world database');
+    expect(item(buildMenu(ground([npc()]), offline), 'Start path here')!.disabledReason).toBe('Needs the world database');
+    expect(item(buildMenu(onSpawn(npc({ own: true })), offline), 'Change wander distance…')!.action).toBeDefined();
+  });
 });

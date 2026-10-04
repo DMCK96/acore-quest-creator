@@ -84,4 +84,11 @@ describe('the 3D view’s right-click menu', () => {
     render(<WorldContextMenu groups={groups} at={{ x: 290, y: 5 }} onPick={vi.fn()} onClose={vi.fn()} />);
     expect(parseFloat(screen.getByRole('menu', { name: 'World actions' }).style.left)).toBeLessThanOrEqual(40);
   });
+
+  it('keeps focus where the arrows put it when it renders again', async () => {
+    const { rerender } = render(<WorldContextMenu groups={groups} at={{ x: 10, y: 20 }} onPick={vi.fn()} onClose={() => {}} />);
+    await userEvent.keyboard('{ArrowDown}');
+    rerender(<WorldContextMenu groups={groups} at={{ x: 10, y: 20 }} onPick={vi.fn()} onClose={() => {}} />);
+    expect(screen.getByRole('menuitem', { name: /Paste here/ })).toHaveFocus();
+  });
 });
