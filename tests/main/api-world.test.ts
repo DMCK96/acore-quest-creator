@@ -326,4 +326,14 @@ describe('the spawns a quest uses', () => {
     const revert = [...written.entries()].find(([path]) => path.endsWith('_world_revert.sql'))![1];
     expect(revert).toMatch(/UPDATE `creature` SET `wander_distance` = 5, `MovementType` = 0 WHERE `guid` = 80331/);
   });
+
+  it('says how many NPCs or objects had more spawns than were listed', async () => {
+    const { api, db } = await setup(world);
+    for (let i = 0; i < 201; i++) db.insert('creature', { guid: String(500000 + i), id1: '1423', map: '0', position_x: '0', position_y: '0', position_z: '0', orientation: '0' });
+    const created: any = await api.newQuest();
+    await api.updateQuest({ ...created.value.aggregate, values: { ...created.value.aggregate.values, creature_queststarter: [{ id: 1423 }] } });
+    const out: any = await api.questSpawnList([created.value.questId]);
+    expect(out.value[0]).toMatchObject({ capped: true, cut: 1 });
+    expect(out.value[0].spawns).toHaveLength(200);
+  });
 });

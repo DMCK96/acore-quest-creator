@@ -249,3 +249,23 @@ describe('world layer: movement keeps what the database had', () => {
     expect(revert[0]).toEqual({ kind: 'update', table: 'creature', key: { guid: '80331' }, set: { wander_distance: '5', MovementType: '0' } });
   });
 });
+
+describe('world layer: a new path and the movement that walks it', () => {
+  const walksNew = (layer: ReturnType<typeof setMovement>) =>
+    setRoute(setMovement(layer, stander, { type: 'path', wander: 0, pathId: 803310 }), { pathId: 803310, walkers: 1, original: [] }, [point(1), point(2)]);
+
+  it('reverting the movement takes its new path with it', () => {
+    const reverted = revertMovement(walksNew(EMPTY_WORLD), 80331);
+    expect(reverted.routes).toEqual([]);
+  });
+
+  it('reverting the new path takes back the movement that walks it', () => {
+    const reverted = revertRoute(walksNew(EMPTY_WORLD), 803310);
+    expect(movementsOf(reverted)).toEqual([]);
+  });
+
+  it('reverting an existing route leaves movements alone', () => {
+    const layer = setRoute(setMovement(EMPTY_WORLD, walker, { type: 'wander', wander: 3, pathId: 801 }), route, [point(5), point(6)]);
+    expect(movementsOf(revertRoute(layer, 801))).toHaveLength(1);
+  });
+});

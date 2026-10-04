@@ -90,12 +90,13 @@ export interface QuestMapRef extends SpawnDot {
 /** A spawn a quest uses: an existing one it names by role, or one of its own */
 export type QuestSpawn = SpawnDot & { role: 'giver' | 'ender' | 'objective' | 'own' };
 
-/** One quest's spawns for the 3D view; `capped` when an NPC or object had more than were listed */
+/** One quest's spawns for the 3D view; `cut` NPCs or objects had more than were listed (`capped` when any did) */
 export interface QuestSpawnGroup {
   questId: number;
   title: string;
   spawns: QuestSpawn[];
   capped: boolean;
+  cut: number;
 }
 
 /** What `spellFacts` answers: the spells found, or why spell names are not available. */
@@ -507,7 +508,7 @@ const positionSchema = z.object({ x: z.number(), y: z.number() });
 const viewportSchema = z.object({ x: z.number(), y: z.number(), zoom: z.number().positive() });
 const finite = z.number().finite();
 const worldKindArg = z.enum(['creature', 'gameobject']);
-const movementArg = z.object({ type: z.enum(['idle', 'wander', 'path']), wander: z.number().min(0).max(100), pathId: z.number().int().min(1).nullable() });
+const movementArg = z.object({ type: z.enum(['idle', 'wander', 'path']), wander: z.number().min(0), pathId: z.number().int().min(1).nullable() });
 const placementArg = z.object({ x: finite, y: finite, z: finite, orientation: finite, rotation: z.tuple([finite, finite, finite, finite]).nullable() });
 const routePointArg = z.object({ x: finite, y: finite, z: finite, rest: z.record(z.string(), z.string().nullable()) });
 

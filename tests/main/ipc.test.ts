@@ -30,6 +30,9 @@ describe('parseRequest', () => {
     expect(parseRequest('worldSetMovement', [80330, { type: 'wander', wander: 5, pathId: null }]).ok).toBe(true);
     expect(parseRequest('worldSetMovement', [80330, { type: 'run', wander: 5, pathId: null }]).ok).toBe(false);
     expect(parseRequest('worldSetMovement', [80330, { type: 'wander', wander: -1, pathId: null }]).ok).toBe(false);
+    // The database may hold more than the dialog offers; putting it back must not be refused
+    expect(parseRequest('worldSetMovement', [80330, { type: 'wander', wander: 150, pathId: null }]).ok).toBe(true);
+    expect(parseRequest('worldSetMovement', [80330, { type: 'wander', wander: 7.5, pathId: null }]).ok).toBe(true);
     expect(parseRequest('worldNewPathId', [80330]).ok).toBe(true);
     expect(parseRequest('worldAddSpawn', ['creature', 1423, 0, at, 95000]).ok).toBe(true);
     expect(parseRequest('worldSetRoute', [5, [], { isNew: true }]).ok).toBe(true);

@@ -191,7 +191,7 @@ export class FakeWorldDb implements WorldDb {
       const entry = r[entryColumn] ?? null;
       const model = models.get(entry ?? '');
       const own = addons.get(r.guid);
-      const pathId = own && own !== '0' ? own : templateAddons.get(entry);
+      const pathId = addons.has(r.guid) ? own : templateAddons.get(entry);
       const points = pathId && pathId !== '0' ? waypoints.filter((w) => w.id === pathId) : [];
       const equip = r.equipment_id && r.equipment_id !== '0' ? equips.find((e) => e.CreatureID === entry && e.ID === r.equipment_id) : undefined;
       return toViewCreature(

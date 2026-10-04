@@ -1829,16 +1829,16 @@ export function createApi(deps: ApiDeps): Api {
             }
           }
           const own = new Set([...npcs.map((n) => `creature:${n.entry}`), ...objects.map((o) => `gameobject:${o.entry}`)]);
-          let capped = false;
+          let cut = 0;
           if (db.spawnsOfEntries) {
             for (const want of wantedOf(aggregate)) {
               if (own.has(`${want.kind}:${want.entry}`)) continue;
               const dots: SpawnDot[] = await db.spawnsOfEntries(want.kind, [want.entry], QUEST_SPAWNS_PER_ENTRY + 1);
-              if (dots.length > QUEST_SPAWNS_PER_ENTRY) capped = true;
+              if (dots.length > QUEST_SPAWNS_PER_ENTRY) cut += 1;
               for (const dot of dots.slice(0, QUEST_SPAWNS_PER_ENTRY)) add({ ...dot, role: want.role });
             }
           }
-          groups.push({ questId, title: typeof title === 'string' && title !== '' ? title : `Quest ${questId}`, spawns, capped });
+          groups.push({ questId, title: typeof title === 'string' && title !== '' ? title : `Quest ${questId}`, spawns, capped: cut > 0, cut });
         }
         return groups;
       }),

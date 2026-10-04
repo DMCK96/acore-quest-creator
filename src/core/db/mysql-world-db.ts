@@ -334,9 +334,10 @@ class MysqlWorldDb implements WorldDb {
     const entry = ident(spawnEntryColumn('creature', (await this.knownColumns('creature')).map((c) => c.name)));
     await this.knownColumns('creature_template_model');
     const creatureEvents = await eventOf('game_event_creature');
-    // A spawn walks its own addon's route, else its template's (a whole kind of NPC walking one route)
+    // A spawn with an addon row of its own walks that row's route (none when it is 0), else its
+    // template's (a whole kind of NPC walking one route), as the server reads them
     const templateRoutes = (await this.columns('creature_template_addon')).length > 0;
-    const pathColumn = templateRoutes ? 'COALESCE(NULLIF(ad.path_id, 0), ta.path_id)' : 'ad.path_id';
+    const pathColumn = templateRoutes ? 'CASE WHEN ad.guid IS NULL THEN ta.path_id ELSE ad.path_id END' : 'ad.path_id';
     const routeJoins =
       ' LEFT JOIN creature_addon ad ON ad.guid = s.guid' + (templateRoutes ? ` LEFT JOIN creature_template_addon ta ON ta.entry = s.${entry}` : '');
     const creatureRows = await query(

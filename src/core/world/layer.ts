@@ -213,12 +213,25 @@ export function setMovement(layer: WorldLayer, edit: Omit<WorldMovementEdit, 'cu
   return { ...layer, movements };
 }
 
+/** Takes back an NPC's movement, and the path made for it (one the database does not have) with it */
 export function revertMovement(layer: WorldLayer, guid: number): WorldLayer {
-  return { ...layer, movements: movementsOf(layer).filter((m) => m.guid !== guid) };
+  const gone = movementsOf(layer).find((m) => m.guid === guid);
+  const newPath = gone?.current.pathId ?? null;
+  return {
+    ...layer,
+    movements: movementsOf(layer).filter((m) => m.guid !== guid),
+    routes: newPath === null ? layer.routes : layer.routes.filter((r) => !(r.pathId === newPath && r.original.length === 0)),
+  };
 }
 
+/** Takes back a route; a path made in the view takes back the movement that walks it too */
 export function revertRoute(layer: WorldLayer, pathId: number): WorldLayer {
-  return { ...layer, routes: layer.routes.filter((r) => r.pathId !== pathId) };
+  const made = layer.routes.some((r) => r.pathId === pathId && r.original.length === 0);
+  return {
+    ...layer,
+    routes: layer.routes.filter((r) => r.pathId !== pathId),
+    ...(made ? { movements: movementsOf(layer).filter((m) => m.current.pathId !== pathId) } : {}),
+  };
 }
 
 const text = (n: number): string => String(n);
