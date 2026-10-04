@@ -5,6 +5,7 @@ import { createProjectSession } from '../../src/main/project/session';
 import { defaultProjectMeta } from '../../src/main/project/project-file';
 import type { ProjectController } from '../../src/main/project/controller';
 import { forkDb } from '../helpers/fixtures';
+import { newNpc, newSpawn, writeEntities } from '../../src/core/entities/model';
 
 const box = { encrypt: (s: string) => Uint8Array.from(Buffer.from(s)), decrypt: (b: Uint8Array) => Buffer.from(b).toString() };
 
@@ -289,5 +290,28 @@ describe('movement through the API', () => {
     expect(changes.value.find((c: any) => c.type === 'movement').drifted).toBe(true);
     const out: any = await api.worldRevert({ kind: 'movement', guid: 80332 });
     expect(out.value.movements ?? []).toEqual([]);
+  });
+});
+
+describe('the spawns a quest uses', () => {
+  it('lists each quest’s givers, enders, objectives and own spawns, by role, a spawn once', async () => {
+    const { api } = await setup(world);
+    const created: any = await api.newQuest();
+    const questId = created.value.questId;
+    const values = {
+      ...created.value.aggregate.values,
+      'quest_template.LogTitle': 'Guards',
+      creature_queststarter: [{ id: 1423 }],
+      creature_questender: [{ id: 1423 }],
+      'quest_template.RequiredNpcOrGo': [{ target: { target: 'gameobject', id: 143981 }, count: 1 }],
+      entities: writeEntities({ npcs: [{ ...newNpc(12000001), name: 'Hela', spawns: [{ ...newSpawn(900), map: 0, x: 1, y: 2, z: 3 }] }], objects: [], items: [] }),
+    };
+    await api.updateQuest({ ...created.value.aggregate, values });
+    const out: any = await api.questSpawnList([questId]);
+    const [group] = out.value;
+    expect(group).toMatchObject({ questId, title: 'Guards', capped: false });
+    const roles = group.spawns.map((s: any) => `${s.role}:${s.kind}:${s.guid}`).sort();
+    expect(roles).toEqual(['giver:creature:80330', 'giver:creature:80331', 'giver:creature:80332', 'objective:gameobject:5', 'own:creature:900'].sort());
+    expect(group.spawns.find((s: any) => s.role === 'own')).toMatchObject({ entry: 12000001, name: 'Hela', map: 0, x: 1, y: 2, z: 3 });
   });
 });

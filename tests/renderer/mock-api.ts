@@ -100,6 +100,7 @@ export function makeMockApi(overrides: Partial<Record<keyof Api, (...args: any[]
     worldRevert: vi.fn(async () => okv({ spawns: [], routes: [], added: [] })),
     worldSetMovement: vi.fn(async () => okv({ spawns: [], routes: [], added: [] })),
     worldNewPathId: vi.fn(async () => okv(1)),
+    questSpawnList: vi.fn(async () => okv([])),
     worldChanges: vi.fn(async () => okv([])),
     exportWorld: vi.fn(async () => okv({ applyPath: '', revertPath: '', sql: '' })),
     entitySpawns: vi.fn(async () => okv([])),

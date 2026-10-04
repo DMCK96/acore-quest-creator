@@ -87,6 +87,17 @@ export interface QuestMapRef extends SpawnDot {
   role: 'giver' | 'ender' | 'objective';
 }
 
+/** A spawn a quest uses: an existing one it names by role, or one of its own */
+export type QuestSpawn = SpawnDot & { role: 'giver' | 'ender' | 'objective' | 'own' };
+
+/** One quest's spawns for the 3D view; `capped` when an NPC or object had more than were listed */
+export interface QuestSpawnGroup {
+  questId: number;
+  title: string;
+  spawns: QuestSpawn[];
+  capped: boolean;
+}
+
 /** What `spellFacts` answers: the spells found, or why spell names are not available. */
 export interface SpellFactsResult {
   available: boolean;
@@ -417,6 +428,8 @@ export interface Api {
   findSpawns(kind: 'creature' | 'gameobject', entry: number): Promise<Result<{ spawns: SpawnDot[]; capped: boolean }>>;
   /** The existing spawns of the quest's givers, enders and objectives. */
   questMapRefs(questId: number): Promise<Result<QuestMapRef[]>>;
+  /** Every spawn each quest uses (its givers', enders' and objectives', and its own), for the 3D view to list and mark. */
+  questSpawnList(questIds: number[]): Promise<Result<QuestSpawnGroup[]>>;
   /** The GM commands to try the quest in game after applying it: reloads, restarts, travel and quest commands. */
   testCommands(questId: number): Promise<Result<TestCommands>>;
   /** The scripts around the quest that the Scripts module lists read-only. */
@@ -584,6 +597,7 @@ const REQUEST_SCHEMAS: Record<keyof Api, z.ZodType<unknown[]>> = {
   entitySpawns: z.tuple([z.enum(['creature', 'gameobject']), z.number().int()]),
   findSpawns: z.tuple([z.enum(['creature', 'gameobject']), z.number().int()]),
   questMapRefs: z.tuple([z.number()]),
+  questSpawnList: z.tuple([z.array(z.number().int().min(1)).max(50)]),
   allocateIds: z.tuple([z.enum(['creature', 'gameobject', 'creatureSpawn', 'gameobjectSpawn', 'page', 'item']), z.number().int().min(1).max(50)]),
   patrolPathId: z.tuple([z.number().int().min(1)]),
   entityTemplate: z.tuple([z.enum(['creature', 'gameobject', 'item']), z.number().int()]),

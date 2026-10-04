@@ -50,6 +50,7 @@ export const API_METHODS = [
   'exportWorld',
   'worldSetMovement',
   'worldNewPathId',
+  'questSpawnList',
   'entitySpawns',
   'findSpawns',
   'questMapRefs',

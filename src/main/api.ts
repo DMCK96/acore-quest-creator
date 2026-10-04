@@ -53,6 +53,8 @@ import type {
   Result,
   MapInfo,
   QuestMapRef,
+  QuestSpawn,
+  QuestSpawnGroup,
   SpawnDot,
   SpellFactsResult,
   StartBadge,
@@ -173,6 +175,8 @@ const SPAWN_DOT_CAP = 2000;
 const REF_SPAWNS_PER_ENTRY = 20;
 /** Spawns of one NPC or object listed for jumping to in the 3D view; more is said, not given. */
 const FIND_SPAWNS_LIMIT = 300;
+/** Spawns listed per NPC or object a quest names, when its spawns are shown in the 3D view */
+const QUEST_SPAWNS_PER_ENTRY = 200;
 
 const REGISTRY_TABLES = registry.tables.map((t) => t.table);
 const KEY_COLUMNS = keyColumnsByTable(registry);
@@ -570,6 +574,21 @@ export function createApi(deps: ApiDeps): Api {
       dbMax = 0;
     }
     return Math.max(dbMax, ...used, 0) + 1;
+  }
+
+  /** The existing NPCs and objects a quest names, by role: givers, enders, then objectives */
+  function wantedOf(aggregate: QuestAggregate): { role: QuestMapRef['role']; kind: 'creature' | 'gameobject'; entry: number }[] {
+    const wanted: { role: QuestMapRef['role']; kind: 'creature' | 'gameobject'; entry: number }[] = [];
+    for (const [role, relation] of [['giver', 'starter'], ['ender', 'ender']] as const) {
+      for (const owner of relationOwners(aggregate, relation)) {
+        if (owner.kind === 'creature' || owner.kind === 'gameobject') wanted.push({ role, kind: owner.kind, entry: owner.entry });
+      }
+    }
+    for (const entry of objectivesOf(aggregate)) {
+      if (entry > 0) wanted.push({ role: 'objective', kind: 'creature', entry });
+      else if (entry < 0) wanted.push({ role: 'objective', kind: 'gameobject', entry: -entry });
+    }
+    return wanted;
   }
 
   /** Every new NPC, object and item in the project, from every quest. */
@@ -1766,16 +1785,7 @@ export function createApi(deps: ApiDeps): Api {
         const { npcs, objects } = readEntities(aggregate.values);
         // The quest's own NPCs and objects are markers already.
         const own = new Set([...npcs.map((n) => `creature:${n.entry}`), ...objects.map((o) => `gameobject:${o.entry}`)]);
-        const wanted: { role: QuestMapRef['role']; kind: 'creature' | 'gameobject'; entry: number }[] = [];
-        for (const [role, relation] of [['giver', 'starter'], ['ender', 'ender']] as const) {
-          for (const owner of relationOwners(aggregate, relation)) {
-            if (owner.kind === 'creature' || owner.kind === 'gameobject') wanted.push({ role, kind: owner.kind, entry: owner.entry });
-          }
-        }
-        for (const entry of objectivesOf(aggregate)) {
-          if (entry > 0) wanted.push({ role: 'objective', kind: 'creature', entry });
-          else if (entry < 0) wanted.push({ role: 'objective', kind: 'gameobject', entry: -entry });
-        }
+        const wanted = wantedOf(aggregate);
         const refs: QuestMapRef[] = [];
         const seen = new Set<string>();
         for (const want of wanted) {
@@ -1789,6 +1799,43 @@ export function createApi(deps: ApiDeps): Api {
           }
         }
         return refs;
+      }),
+
+    questSpawnList: (questIds) =>
+      run(async () => {
+        const db = connected().db;
+        const groups: QuestSpawnGroup[] = [];
+        for (const questId of questIds) {
+          const aggregate = questOf(questId).aggregate;
+          const title = aggregate.values['quest_template.LogTitle'];
+          const { npcs, objects } = readEntities(aggregate.values);
+          const spawns: QuestSpawn[] = [];
+          const seen = new Set<string>();
+          const add = (spawn: QuestSpawn): void => {
+            const key = `${spawn.kind}:${spawn.guid}`;
+            if (seen.has(key)) return;
+            seen.add(key);
+            spawns.push(spawn);
+          };
+          // The quest's own NPCs and objects, where it puts them
+          for (const [kind, owners] of [['creature', npcs], ['gameobject', objects]] as const) {
+            for (const owner of owners) {
+              for (const s of owner.spawns) add({ kind, guid: s.guid, entry: owner.entry, name: owner.name, map: s.map, x: s.x, y: s.y, z: s.z, role: 'own' });
+            }
+          }
+          const own = new Set([...npcs.map((n) => `creature:${n.entry}`), ...objects.map((o) => `gameobject:${o.entry}`)]);
+          let capped = false;
+          if (db.spawnsOfEntries) {
+            for (const want of wantedOf(aggregate)) {
+              if (own.has(`${want.kind}:${want.entry}`)) continue;
+              const dots: SpawnDot[] = await db.spawnsOfEntries(want.kind, [want.entry], QUEST_SPAWNS_PER_ENTRY + 1);
+              if (dots.length > QUEST_SPAWNS_PER_ENTRY) capped = true;
+              for (const dot of dots.slice(0, QUEST_SPAWNS_PER_ENTRY)) add({ ...dot, role: want.role });
+            }
+          }
+          groups.push({ questId, title: typeof title === 'string' && title !== '' ? title : `Quest ${questId}`, spawns, capped });
+        }
+        return groups;
       }),
 
     testCommands: (questId) =>
