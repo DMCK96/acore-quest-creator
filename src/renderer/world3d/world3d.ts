@@ -9,6 +9,7 @@ import { clearProblems, onProblems } from './scene/diagnostics';
 import { ASSET_BASE_URL } from '@core/client/asset-url';
 import type { WorldLayer } from '@core/world/layer';
 import { Editor, NOT_SNAPPED } from './editing';
+import { combine, EMPTY_SELECTION } from './scene/edit/selection';
 import type { SpawnEdit, SpawnRef } from './edits';
 import { placementAt, type PlaceRequest, type PlaceTarget } from './placing';
 
@@ -172,8 +173,10 @@ export function createWorld3D(options: World3DOptions): World3D {
   let selected: { kind: 'creature' | 'object'; guid: number } | null = null;
   const choose = (spawn: { kind: 'creature' | 'object'; guid: number } | null): void => {
     selected = spawn ? { kind: spawn.kind, guid: spawn.guid } : null;
-    manager.setActiveRoutes(selected?.kind === 'creature' ? [selected.guid] : []);
-    editor.select(selected);
+    const selection = selected ? combine(EMPTY_SELECTION, { spawns: [selected] }, 'replace', (guid) => manager.spawnRoute(guid) !== null) : EMPTY_SELECTION;
+    manager.setActiveRoutes(selection.routes);
+    manager.markRoutePoints(selection.points);
+    editor.setSelection(selection);
     // Tells a screen round the view that Esc is the view's while something is selected
     refreshEscape();
   };
@@ -202,8 +205,18 @@ export function createWorld3D(options: World3DOptions): World3D {
       void place(x, y);
       return;
     }
-    if (editor.click(x, y, keys.shift)) return;
+    if (keys.shift && editor.insertPoint(x, y)) return;
     raycaster.setFromCamera(new THREE.Vector2(x, y), camera);
+    // A point of an active route under the cursor is picked in preference to a spawn
+    for (const guid of editor.selection.routes) {
+      const index = manager.pickRoutePoint(raycaster.ray, guid);
+      if (index === null) continue;
+      const selection = combine(editor.selection, { points: [{ guid, index }] }, 'replace', () => false);
+      editor.setSelection(selection);
+      manager.markRoutePoints(selection.points);
+      options.onNotice?.(null);
+      return;
+    }
     const ground = pick(x, y);
     const spawn = manager.pickSpawn(raycaster.ray, ground ? ground.distanceTo(camera.position) : Infinity);
     choose(spawn);
@@ -225,8 +238,8 @@ export function createWorld3D(options: World3DOptions): World3D {
       findSpawn: (kind, guid) => manager.findSpawn(kind, guid),
       spawnRoute: (guid) => manager.spawnRoute(guid),
       pickRoutePoint: (ray, guid) => manager.pickRoutePoint(ray, guid),
-      routeBall: (guid, point) => manager.routeBall(guid, point),
       setPendingRoute: (guid, points) => manager.setPendingRoute(guid, points),
+      previewRoute: (guid, points) => manager.previewRoute(guid, points),
     },
     options,
   );

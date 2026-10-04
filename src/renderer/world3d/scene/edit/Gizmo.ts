@@ -3,10 +3,11 @@ import { TransformControls } from 'three/examples/jsm/controls/TransformControls
 import type { Placement } from '@core/world/layer';
 
 /**
- * The move and rotate handles on whatever is being edited in the 3D view: a spawn, or one point of
- * a route. Three's own TransformControls drive a stand-in object, and every change is copied onto the
- * real one (the map's groups do not update their matrices by themselves). A move along the ground
- * keeps the thing on the drawn ground under it; only a drag of the Z arrow lifts it freely.
+ * The move and rotate handles of the 3D view's editing: one set, on the middle of what is selected
+ * (a spawn, several, or route points). Three's own TransformControls drive a stand-in object, and each
+ * change is reported as how far the stand-in has moved and turned since the drag began, for the editor
+ * to apply to everything selected. A move along the ground keeps the stand-in on the drawn ground;
+ * only a drag of the Z arrow lifts it freely.
  */
 
 const UP = new THREE.Vector3(0, 0, 1);
@@ -41,14 +42,19 @@ export function quaternionOf(placement: Placement): THREE.Quaternion {
 
 export type GizmoMode = 'move' | 'rotate';
 
-/** What the gizmo works on: a spawn turns, a route point only moves */
-export type GizmoTarget = { object: THREE.Object3D; turns: 'all' | 'z' | 'none' };
+/** How the handles may turn what they are on: every way (one object), about Z, or not at all (route points) */
+export type GizmoTurns = 'all' | 'z' | 'none';
+
+/** A drag so far: moved by `delta`, turned about Z by `angle`, and the stand-in's whole rotation */
+export type GizmoChange = { delta: THREE.Vector3; angle: number; quaternion: THREE.Quaternion; axis: string | null };
 
 export interface GizmoEvents {
-  /** A drag began, with the target as it stood */
+  /** A drag began */
   started(): void;
+  /** The drag moved on */
+  moved(change: GizmoChange): void;
   /** A drag ended; `lifted` when it was a Z-arrow move, which keeps its own height */
-  ended(lifted: boolean): void;
+  ended(lifted: boolean): void | Promise<void>;
 }
 
 export class Gizmo {
@@ -56,8 +62,9 @@ export class Gizmo {
   readonly #proxy = new THREE.Object3D();
   readonly #ground: () => THREE.Object3D[];
   readonly #down = new THREE.Raycaster();
-  #target: GizmoTarget | null = null;
+  #turns: GizmoTurns | null = null;
   #mode: GizmoMode = 'move';
+  #start = { position: new THREE.Vector3(), quaternion: new THREE.Quaternion() };
 
   constructor(camera: THREE.Camera, dom: HTMLElement, scene: THREE.Scene, ground: () => THREE.Object3D[], events: GizmoEvents) {
     this.#ground = ground;
@@ -69,10 +76,14 @@ export class Gizmo {
     let axis: string | null = null;
     this.#controls.addEventListener('mouseDown', () => {
       axis = this.#controls.axis;
+      this.#start = { position: this.#proxy.position.clone(), quaternion: this.#proxy.quaternion.clone() };
       events.started();
     });
-    this.#controls.addEventListener('objectChange', () => this.#follow(axis));
-    this.#controls.addEventListener('mouseUp', () => events.ended(this.#mode === 'move' && axis === 'Z'));
+    this.#controls.addEventListener('objectChange', () => {
+      this.#follow(axis);
+      events.moved({ delta: this.#proxy.position.clone().sub(this.#start.position), angle: this.#turned(), quaternion: this.#proxy.quaternion.clone(), axis });
+    });
+    this.#controls.addEventListener('mouseUp', () => void events.ended(this.#mode === 'move' && axis === 'Z'));
   }
 
   /** Whether the pointer is over a handle (a press there is the gizmo's, not the camera's) */
@@ -84,21 +95,22 @@ export class Gizmo {
     return this.#controls.dragging;
   }
 
-  get target(): GizmoTarget | null {
-    return this.#target;
+  get attached(): boolean {
+    return this.#turns !== null;
   }
 
-  attach(target: GizmoTarget): void {
-    this.#target = target;
-    this.#proxy.position.copy(target.object.position);
-    this.#proxy.quaternion.copy(target.object.quaternion);
+  /** Puts the handles at a place, turned as given, allowed to turn as `turns` says */
+  attach(at: THREE.Vector3, quaternion: THREE.Quaternion, turns: GizmoTurns): void {
+    this.#turns = turns;
+    this.#proxy.position.copy(at);
+    this.#proxy.quaternion.copy(quaternion);
     this.#proxy.updateMatrixWorld(true);
     this.#controls.attach(this.#proxy);
     this.#apply();
   }
 
   detach(): void {
-    this.#target = null;
+    this.#turns = null;
     this.#controls.detach();
   }
 
@@ -114,9 +126,9 @@ export class Gizmo {
     this.#proxy.removeFromParent();
   }
 
-  /** A route point only moves; an NPC only turns about Z; an object turns every way */
+  /** Route points only move; NPCs and groups turn about Z; one object turns every way */
   #apply(): void {
-    const turns = this.#target?.turns ?? 'none';
+    const turns = this.#turns ?? 'none';
     const rotate = this.#mode === 'rotate' && turns !== 'none';
     this.#controls.setMode(rotate ? 'rotate' : 'translate');
     this.#controls.showX = !rotate || turns === 'all';
@@ -124,17 +136,21 @@ export class Gizmo {
     this.#controls.showZ = true;
   }
 
-  /** Copies the stand-in onto the target; a move along the ground keeps it on the drawn ground */
+  /** A move along the ground keeps the stand-in on the drawn ground under it */
   #follow(axis: string | null): void {
-    const target = this.#target;
-    if (!target) return;
     if (this.#controls.mode === 'translate' && axis !== 'Z') {
       const ground = this.groundAt(this.#proxy.position.x, this.#proxy.position.y, this.#proxy.position.z);
       if (ground !== null) this.#proxy.position.z = ground;
     }
-    target.object.position.copy(this.#proxy.position);
-    if (this.#controls.mode === 'rotate') target.object.quaternion.copy(this.#proxy.quaternion);
-    target.object.updateMatrixWorld(true);
+    this.#proxy.updateMatrixWorld(true);
+  }
+
+  /** How far the stand-in has turned about Z since the drag began: the turn of its X axis across the ground, between -π and π */
+  #turned(): number {
+    const before = X.clone().applyQuaternion(this.#start.quaternion);
+    const now = X.clone().applyQuaternion(this.#proxy.quaternion);
+    const angle = Math.atan2(now.y, now.x) - Math.atan2(before.y, before.x);
+    return Math.atan2(Math.sin(angle), Math.cos(angle));
   }
 
   /** The drawn ground (terrain or a building's floor) under a point, or null over nothing */

@@ -221,11 +221,6 @@ class MapManager extends EventTarget {
     this.#spawnManager.setPendingRoute(guid, points).catch((error) => console.warn(`3D view: the route could not be drawn: ${describeError(error)}`));
   }
 
-  /** The ball of one point of an NPC's route, while it is drawn */
-  routeBall(guid: number, point: number) {
-    return this.#spawnManager.routeBall(guid, point);
-  }
-
   /** A drawn NPC's route as the view has it, or null */
   spawnRoute(guid: number) {
     return this.#spawnManager.route(guid);

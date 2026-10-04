@@ -344,18 +344,6 @@ class SpawnManager {
     await this.#redraw();
   }
 
-  /** The ball drawn for one point of an NPC's route, or null when it is not drawn */
-  routeBall(guid: number, point: number): THREE.Object3D | null {
-    for (const group of this.#areas.values()) {
-      for (const shown of group.getObjectByName('paths')?.children ?? []) {
-        if (shown.userData.guid !== guid) continue;
-        const ball = shown.children.find((child) => child.userData.point === point);
-        if (ball) return ball;
-      }
-    }
-    return null;
-  }
-
   /** A drawn NPC's route as the view has it (with the layer's edits), or null when it has none */
   route(guid: number): { pathId: number; own: boolean; entry: number; points: ViewPoint[]; home: { x: number; y: number; z: number } } | null {
     for (const group of this.#areas.values()) {

@@ -21,10 +21,10 @@ function legDistance(at: { x: number; y: number }, a: EditPoint, b: EditPoint): 
 }
 
 /**
- * Where a new point goes: on the nearest leg the click is close to (between that leg's ends; the
- * leg back to the first point puts it at the end), else after the selected point, else at the end
+ * Where a new point on a leg goes: between the ends of the nearest leg the click is within 2 yards of
+ * (the leg back to the first point puts it at the end), or null when it is near none
  */
-export function insertionIndex(points: readonly EditPoint[], at: { x: number; y: number }, selected: number | null): number {
+export function legIndex(points: readonly EditPoint[], at: { x: number; y: number }): number | null {
   let index: number | null = null;
   let nearest = ON_LEG;
   for (let i = 0; i < points.length; i++) {
@@ -34,8 +34,12 @@ export function insertionIndex(points: readonly EditPoint[], at: { x: number; y:
       nearest = distance;
     }
   }
-  if (index !== null) return index;
-  return selected !== null ? selected + 1 : points.length;
+  return index;
+}
+
+/** Where a new point goes: on the nearest leg the click is close to, else after the selected point, else at the end */
+export function insertionIndex(points: readonly EditPoint[], at: { x: number; y: number }, selected: number | null): number {
+  return legIndex(points, at) ?? (selected !== null ? selected + 1 : points.length);
 }
 
 /** The route without one point, or null when that would leave it too short to walk */
