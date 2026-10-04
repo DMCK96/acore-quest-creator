@@ -19,6 +19,8 @@ Open it with **Map** in the quest's header, or with **Place on map** on a giver'
 
 Existing spawns show as dots once you zoom in close enough. **Only quest-relevant** hides everything that is not part of your quest.
 
+**3D view** shows the same place in 3D, with your quest's NPCs and objects in it to move, turn and give paths, and the [World](/acore-quest-creator/guides/the-world/)'s right-click menu.
+
 ## Place a spawn
 
 When the map asks, for example *Click where Foreman Brask should stand.*, click the spot. Drag a placed marker to adjust it.

@@ -18,7 +18,7 @@ You never edit database tables by hand, and the app never writes to your live wo
 
 - **Your world database.** The app reads quests, NPCs, items and spells from your server's world database over MySQL (usually called `acore_world`). A read-only user is enough.
 - **The server data folder** (optional). The worldserver's data folder, the one holding `dbc/`. With it the app shows values the server reads from its DBC files, such as how much XP each reward tier gives, lets you search spells and models by name, and can snap spawns to the ground.
-- **Your game client folder** (optional). The folder with `Wow.exe`. With it the quest map shows the game's zone art and minimap.
+- **Your game client folder** (optional). The folder with `Wow.exe`. With it the app draws [the World](/acore-quest-creator/guides/the-world/) in 3D, and the quest map shows the game's zone art and minimap.
 - **A dev database** (optional). A separate world database on a test server, for **Apply to dev DB**.
 
 ## How a session goes
@@ -26,7 +26,7 @@ You never edit database tables by hand, and the app never writes to your live wo
 1. [Connect](/acore-quest-creator/getting-started/connect/) to your world database.
 2. Lay out quests on the canvas: make new ones, or bring in existing chains to build on.
 3. Open a quest and fill in its parts: givers, objectives, dialogue, rewards, scripts, NPCs and objects.
-4. Place NPCs and objects on the map and draw their patrols.
+4. Place NPCs and objects in [the World](/acore-quest-creator/guides/the-world/) or on the map, and draw the paths they walk.
 5. Review the changes, then export an SQL patch or apply it to your dev database, and [test it in game](/acore-quest-creator/guides/test-in-game/).
 
 Ready? [Install the app](/acore-quest-creator/getting-started/install/), then walk through [your first quest](/acore-quest-creator/getting-started/first-quest/).

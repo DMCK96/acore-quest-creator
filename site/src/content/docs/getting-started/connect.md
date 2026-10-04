@@ -22,7 +22,7 @@ The password is stored encrypted on your computer. Once one is saved, the field 
 ## Folders (optional)
 
 - **Server data folder**: the worldserver's data folder, the one holding `dbc/`. It lets the app show XP values for reward tiers, search spells and creature or object models by name, and snap spawns to the ground on the map. Everything works without it; those parts fall back to typing IDs.
-- **Game client folder**: the folder with `Wow.exe`. The quest map uses its zone art and minimap.
+- **Game client folder**: the folder with `Wow.exe`. [The World](/acore-quest-creator/guides/the-world/) is drawn from it in 3D, and the quest map uses its zone art and minimap.
 - **Export folder**: where **Export patch** writes SQL files, such as your server's `data/sql/custom/db_world`. Left empty, they go to `Documents/ACORE Quest Creator/sql`.
 
 Use **Browse…** to pick a folder instead of typing it.
