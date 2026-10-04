@@ -78,8 +78,8 @@ Looked at and **not** used: `wowserhq/client` (it is the game's UI layer), `vjeu
   - **Place…** in the layers panel opens a search of the database's NPCs or objects (by name or id). Picking one starts placing: each click on the ground (terrain or a building) puts one there, on the server's floor nearest the click (the height from the drawn ground, with a note, when the server has none), facing the camera, and selects it so the gizmo can move or turn it at once. **Esc** or **Done** stops placing; a click then selects again.
   - A placed spawn is an entry of the world layer's `added` list (project format version 3; a version 2 file opens with none): kind, spawn id, entry, name, map, placement, and the template's look as it was when placed (display, size, held items, preset), so it is drawn without asking the database again. It takes the next free spawn id (past the database's, the open project's NPCs' and objects' and earlier placements'; the quest spawn allocator keeps off placed ids too). Moving or turning it changes its entry; it has no original.
   - **World changes** lists it ("new spawn", with a **Remove** button, and a flag if the database has since taken its id), and so does its card. Export writes `DELETE` by guid then `INSERT` of a row with every column the database has (`creature` or `gameobject`; an NPC's entry in `id` and `id1`, whichever exists; respawn 300 seconds, an NPC holding its template's first equipment row, an object's whole rotation), and the revert deletes it.
-  - Placing does not go through the open quest: a placed spawn belongs to the world patch, not to a quest's. Undo (Ctrl+Z) covers moving and turning a placed spawn, not placing or removing it; **Remove** takes it back.
-  - Not yet: wander distance, a patrol route, a respawn time, or phase for a placed NPC; copying another spawn's settings; placing in a dungeon.
+  - Placing does not go through the open quest: a placed spawn belongs to the world patch, not to a quest's. Placing, moving, turning and removing are all undo steps (see the right-click menu below); **Remove** takes it back.
+  - Not yet: a respawn time or phase for a placed NPC; copying another spawn's settings; placing in a dungeon. (Wander distance and a patrol route come from the right-click menu.)
 - A browser test that runs the real 3D code against a fake game client (`npm run test:world3d`).
 
 - Dressed NPCs (`src/renderer/world3d/scene/character/`): humanoids that are not one baked texture are built as the game builds them, painting their skin, face, underwear and each item's pieces into the body texture's regions, and showing the shapes their items give (gloves, boots, sleeves, a robe's skirt, a belt, a tabard, a cape). Helmets and shoulder pads hang at their attachment points in the race and sex's own model. This covers the CoA fork's display presets (`creature_display_preset`, whose item columns are item display ids, as the server sends them to the game) and display extras with no baked texture. NPCs with a baked texture keep it and gain their items' shapes, cape and worn models. Each outfit's texture is built once and shared.
@@ -144,15 +144,15 @@ In order. Each is meant to be a step the user can try before the next begins.
 The maintainer's eight asked-for features are split into sub-projects A to E. A (camera), B (the spawn layer) and C (select and transform, and the world layer) are done. Edits not part of a quest go to a project-level world layer, exported as its own patch.
 
 1. **D: create from 3D.** Placing existing NPCs and objects is done (see Done). Still to do: create new objects (chests that can be looted, with a loot table) and new NPCs (loot, faction, level), opening the existing editors.
-2. **E: edit existing.** Change existing spawns and templates (loot, faction, level); a placed spawn's respawn; copy another spawn with its settings (a paste copies only what it is and how it faces).
+2. **E: edit existing.** Change existing spawns and templates (loot, faction, level, scale, with a warning first when the template has more than one spawn); a placed spawn's respawn; copy another spawn with its settings (a paste copies only what it is and how it faces). Also: opening a quest moves the World's camera to the quest's own spawns.
 3. **Reshape the quest grid** into a chain builder beside the 3D view. Needs a design conversation first: what "managing a chain" should mean day to day.
 4. **Fill the gaps** above as they get in the way: props inside buildings first, then the remaining building shaders.
 
-Open questions for the user:
+Decided with the user (2026-10-04):
 
-- Should the 3D view open on the quest's own spawns when launched from a quest, or always on the last place looked?
-- Is it acceptable for scale edits to change the template (and so every spawn of it)?
-- Which continent matters most after Eastern Kingdoms, so test data and checks lean that way?
+- **Launched from a quest, the 3D view opens on the quest's own spawns**, not the last place looked. The quest map's 3D view already does (the focused spawn, else the first on the map). The World workspace does not yet: opening a quest leaves its camera where it was.
+- **Scale edits change the template.** When the template has more than one spawn, the editor warns before the change, naming how many spawns it will affect.
+- **Kalimdor is the continent that matters most after Eastern Kingdoms**, so test data and checks lean that way.
 
 ## Testing
 
