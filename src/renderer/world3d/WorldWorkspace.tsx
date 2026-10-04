@@ -1,8 +1,17 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import type { CanvasNode, OpenResult, QuestSpawnGroup } from '@shared/ipc';
+import type { FieldValue } from '@core/registry/types';
+import { readEntities } from '@core/entities/model';
+import { ownViewSpawns } from '@core/entities/view-spawns';
+import { toggleRole } from '@core/modules/quest-roles';
+import { useNameBook } from '../state/names';
+import { ownEdit } from '../map/own-3d-edit';
+import { chainOf, questMenuInfo } from './quest-context';
+import { OBJECTIVES_FULL } from './menu/quest-items';
 import { WORLD_MAPS, worldMapById } from '@core/map/world-maps';
 import type { TeleportSpot } from '@core/map/teleports';
 import { World3DView, type FocusTarget } from './World3DView';
-import { FindDialog, type FoundSpawn } from './FindDialog';
+import { FindDialog, type FindPreset, type FoundSpawn } from './FindDialog';
 import { TeleportDialog } from './TeleportDialog';
 import { QuestOrb } from '../components/QuestOrb';
 import { readLastPlace, writeLastPlace } from './last-place';
@@ -21,6 +30,31 @@ export interface WorldWorkspaceProps {
   onOpenSettings(): void;
   onShowQuests(): void;
   onStartQuest(): void;
+  /** The open quest and the canvas it is on: its own spawns are drawn and edited here, and the menu offers it */
+  quest?: { open: OpenResult; nodes: CanvasNode[] };
+  /** Changes one of the open quest's fields */
+  onQuestField?(fieldId: string, value: FieldValue): void;
+  /** Starts a new quest given and taken back by an NPC, after `previous` in its chain when that is set */
+  onNewQuest?(giver: { entry: number }, previous: number | null): void;
+}
+
+const ROLE_LABELS: Record<QuestSpawnGroup['spawns'][number]['role'], string> = { giver: 'givers', ender: 'enders', objective: 'objectives', own: 'own' };
+
+/** A quest's spawns as the Find dialog lists them: by quest, then by role */
+function presetOf(groups: QuestSpawnGroup[], scope: 'quest' | 'chain'): FindPreset {
+  const title = scope === 'chain' ? 'Spawns of the chain' : `Spawns of ${groups[0]?.title ?? 'the quest'}`;
+  return {
+    title,
+    capped: groups.some((g) => g.capped),
+    groups: groups.flatMap((g) =>
+      (['giver', 'ender', 'objective', 'own'] as const).flatMap((role) => {
+        const spawns = g.spawns
+          .filter((s) => s.role === role)
+          .map((s): FoundSpawn => ({ kind: s.kind === 'gameobject' ? 'object' : 'creature', guid: s.guid, entry: s.entry, name: s.name, map: s.map, x: s.x, y: s.y, z: s.z, event: s.event ?? null, note: null }));
+        return spawns.length > 0 ? [{ label: `${g.title}: ${ROLE_LABELS[role]}`, spawns }] : [];
+      }),
+    ),
+  };
 }
 
 type Point = { x: number; y: number; z: number };
@@ -34,7 +68,22 @@ const WELCOME_FADE_MS = 500;
  * it says what is needed instead. The first time a project is shown here, a welcome over the orb offers
  * a place to start.
  */
-export function WorldWorkspace({ hasClient, active = true, projectKey, projectName, onOpenSettings, onShowQuests, onStartQuest }: WorldWorkspaceProps): React.JSX.Element {
+export function WorldWorkspace({
+  hasClient, active = true, projectKey, projectName, onOpenSettings, onShowQuests, onStartQuest, quest, onQuestField, onNewQuest,
+}: WorldWorkspaceProps): React.JSX.Element {
+  const names = useNameBook();
+  // The open quest's values as last changed here, so edits made one after another build on each other
+  const values = useRef(quest?.open.aggregate.values);
+  values.current = quest?.open.aggregate.values;
+  const change = (fieldId: string, value: FieldValue): void => {
+    if (values.current) values.current = { ...values.current, [fieldId]: value };
+    onQuestField?.(fieldId, value);
+  };
+  const info = useMemo(() => (quest ? questMenuInfo(quest.open, quest.nodes, names) : undefined), [quest, names]);
+  const chainIds = useMemo(() => (quest ? chainOf(quest.nodes, quest.open.questId) : undefined), [quest]);
+  const own = useMemo(() => (quest ? ownViewSpawns(readEntities(quest.open.aggregate.values)) : undefined), [quest]);
+  // The spawns of the open quest or its chain, listed after the menu showed them
+  const [preset, setPreset] = useState<FindPreset | null>(null);
   const [first] = useState(readLastPlace);
   const [mapId, setMapId] = useState(first.map);
   const [at, setAt] = useState<Point>({ x: first.x, y: first.y, z: first.z });
@@ -92,14 +141,15 @@ export function WorldWorkspace({ hasClient, active = true, projectKey, projectNa
 
   // Esc closes this workspace's own panels, the top one first; it never leaves the world. The view
   // clears its own selection.
-  const panels = useRef({ finding, teleporting, coordinates, welcoming, leaveWelcome });
-  panels.current = { finding, teleporting, coordinates, welcoming, leaveWelcome };
+  const panels = useRef({ finding, teleporting, coordinates, welcoming, leaveWelcome, preset });
+  panels.current = { finding, teleporting, coordinates, welcoming, leaveWelcome, preset };
   useEffect(() => {
     if (!active) return;
     const onKeyDown = (e: KeyboardEvent): void => {
       if (e.key !== 'Escape') return;
       const open = panels.current;
-      if (open.finding) setFinding(false);
+      if (open.preset) setPreset(null);
+      else if (open.finding) setFinding(false);
       else if (open.teleporting) setTeleporting(false);
       else if (open.coordinates) setCoordinates(false);
       else if (open.welcoming) open.leaveWelcome();
@@ -156,6 +206,25 @@ export function WorldWorkspace({ hasClient, active = true, projectKey, projectNa
         showArea={false}
         onArea={setArea}
         onPlaceChange={(place) => writeLastPlace({ map: mapRef.current, ...place })}
+        own={own}
+        onOwnEdit={
+          quest
+            ? (edit) => {
+                const made = values.current ? ownEdit(values.current, edit) : null;
+                if (made) change(made.field, made.value);
+              }
+            : undefined
+        }
+        quest={info}
+        chainIds={chainIds}
+        onQuestRole={(role, target, on) => {
+          const edits = values.current ? toggleRole(values.current, role, target, on) : null;
+          if (!edits) return OBJECTIVES_FULL;
+          for (const [fieldId, value] of Object.entries(edits)) change(fieldId, value);
+          return null;
+        }}
+        onNewQuest={onNewQuest ? (giver, after) => onNewQuest(giver, after && quest ? quest.open.questId : null) : undefined}
+        onShowSpawns={(groups, scope) => setPreset(presetOf(groups, scope))}
       />
       <section className="world-place glass" aria-label="Place">
         <h2 className="world-place__title">{area ?? mapName}</h2>
@@ -211,6 +280,17 @@ export function WorldWorkspace({ hasClient, active = true, projectKey, projectNa
         />
       )}
       {finding && <FindDialog from={{ map: mapId, ...at }} onGo={find} onClose={() => setFinding(false)} />}
+      {preset && (
+        <FindDialog
+          from={{ map: mapId, ...at }}
+          preset={preset}
+          onGo={(spawn) => {
+            setPreset(null);
+            find(spawn);
+          }}
+          onClose={() => setPreset(null)}
+        />
+      )}
       {teleporting && <TeleportDialog onPick={teleport} onClose={() => setTeleporting(false)} />}
     </section>
   );

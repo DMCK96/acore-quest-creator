@@ -49,11 +49,30 @@ export function foundSpawns(dots: readonly SpawnDot[], layer: WorldLayer, entry:
   return [...fromDatabase, ...placed].sort((a, b) => Number(here(b)) - Number(here(a)) || (here(a) ? distance(a, from) - distance(b, from) : a.map - b.map || a.guid - b.guid));
 }
 
+/** A list of spawns made elsewhere (a quest's), shown in groups instead of searching */
+export interface FindPreset {
+  title: string;
+  groups: { label: string; spawns: FoundSpawn[] }[];
+  /** Some NPC or object had more spawns than were listed */
+  capped: boolean;
+}
+
 /**
  * Finds an NPC or object by name or id, lists every spawn it has (those the database has, those moved
- * or placed in the 3D view), and jumps the view to one of them.
+ * or placed in the 3D view), and jumps the view to one of them. With a preset it lists those spawns
+ * instead, in their groups.
  */
-export function FindDialog({ from, onGo, onClose }: { from: { map: number; x: number; y: number; z: number }; onGo(spawn: FoundSpawn): void; onClose(): void }): React.JSX.Element {
+export function FindDialog({
+  from,
+  preset,
+  onGo,
+  onClose,
+}: {
+  from: { map: number; x: number; y: number; z: number };
+  preset?: FindPreset;
+  onGo(spawn: FoundSpawn): void;
+  onClose(): void;
+}): React.JSX.Element {
   const dialog = useRef<HTMLDivElement>(null);
   const api = useApi();
   const [kind, setKind] = useState<Kind>('creature');
@@ -87,6 +106,33 @@ export function FindDialog({ from, onGo, onClose }: { from: { map: number; x: nu
   }, [chosen, api, kind]);
 
   const word = kind === 'creature' ? 'NPC' : 'object';
+
+  if (preset) {
+    return (
+      <div className="modal-backdrop" onMouseDown={(e) => e.target === e.currentTarget && onClose()}>
+        <div ref={dialog} className="modal place-dialog find-dialog" role="dialog" aria-modal="true" aria-label={preset.title} onKeyDown={(e) => trapTab(e, dialog.current)}>
+          <header className="modal__header">
+            <h2>{preset.title}</h2>
+            <button type="button" className="btn btn--icon" aria-label="Close" onClick={onClose}>
+              ✕
+            </button>
+          </header>
+          {preset.groups.length === 0 && <p className="place-dialog__note">The quest names no NPC or object with a spawn.</p>}
+          {preset.groups.map((group) => (
+            <section key={group.label} aria-label={group.label}>
+              <h3 className="section-label">{group.label}</h3>
+              <ul className="place-dialog__list">
+                {group.spawns.map((spawn) => (
+                  <SpawnRow key={`${spawn.kind}:${spawn.guid}`} spawn={spawn} from={from} onGo={() => onGo(spawn)} />
+                ))}
+              </ul>
+            </section>
+          ))}
+          {preset.capped && <p className="place-dialog__note">Only the first spawns of each NPC or object are listed.</p>}
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="modal-backdrop" onMouseDown={(e) => e.target === e.currentTarget && onClose()}>

@@ -5,6 +5,7 @@ import { ErrorBanner } from '../components/ErrorBanner';
 import { CanvasHome } from './CanvasHome';
 import { WorldWorkspace } from '../world3d/WorldWorkspace';
 import { projectKey } from '../world3d/welcome-seen';
+import { toggleRole } from '@core/modules/quest-roles';
 import { ProjectDialog } from './ProjectDialog';
 import { SettingsDialog } from './SettingsDialog';
 import { RecoveryDialog } from './RecoveryDialog';
@@ -23,6 +24,8 @@ export function AppShell({ store }: { store: AppStore }): React.JSX.Element {
   const filePath = store((s) => s.project.filePath);
   const projectName = store((s) => s.project.name);
   const hasClient = store((s) => Boolean(s.summary?.clientDir));
+  const open = store((s) => s.open);
+  const nodes = store((s) => s.nodes);
 
   // A quest opened from anywhere is previewed on the graph, so the quests come forward
   useEffect(() => {
@@ -75,6 +78,23 @@ export function AppShell({ store }: { store: AppStore }): React.JSX.Element {
           onStartQuest={() => {
             setWorkspace('quests');
             void store.getState().newQuest();
+          }}
+          quest={open ? { open, nodes } : undefined}
+          onQuestField={(fieldId, value) => store.getState().setValue(fieldId, value)}
+          onNewQuest={(giver, previous) => {
+            void (async () => {
+              await store.getState().newQuest();
+              const made = store.getState().open;
+              if (!made) return;
+              // The NPC gives the new quest and takes it back; in a chain, it comes after the one that was open
+              const target = { kind: 'creature' as const, id: giver.entry };
+              for (const role of ['giver', 'ender'] as const) {
+                const edits = toggleRole(store.getState().open!.aggregate.values, role, target, true) ?? {};
+                for (const [fieldId, value] of Object.entries(edits)) store.getState().setValue(fieldId, value);
+              }
+              if (previous !== null) store.getState().setValue('quest_template_addon.PrevQuestID', previous);
+              setWorkspace('quests');
+            })();
           }}
         />
       </div>

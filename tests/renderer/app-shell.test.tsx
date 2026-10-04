@@ -1,12 +1,13 @@
 // @vitest-environment jsdom
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 
-const created = vi.hoisted(() => [] as { dispose: ReturnType<typeof vi.fn>; setActive: ReturnType<typeof vi.fn> }[]);
+const created = vi.hoisted(() => [] as { options: any; dispose: ReturnType<typeof vi.fn>; setActive: ReturnType<typeof vi.fn> }[]);
 vi.mock('../../src/renderer/world3d/world3d', () => ({
-  createWorld3D: () => {
+  createWorld3D: (options: any) => {
     const world = {
+      options, setOwnSpawns: vi.fn(), setWorldLayer: vi.fn(), setMarked: vi.fn(),
       dispose: vi.fn(), lookAt: vi.fn(), setSpawnVisibility: vi.fn(), setActive: vi.fn(), setScenery: vi.fn(), setTool: vi.fn(), setFalloff: vi.fn(), target: () => ({ x: 0, y: 0, z: 0 }),
       spawnStatus: () => ({ capped: { creatures: false, objects: false }, error: null, loading: 0 }),
     };
@@ -126,5 +127,22 @@ describe('the app shell', () => {
     await userEvent.click(tab('World'));
     await userEvent.click(screen.getByRole('button', { name: 'Open settings' }));
     expect(await screen.findByRole('dialog', { name: 'Settings' })).toBeInTheDocument();
+  });
+
+  it('starts the next quest of the chain from an NPC right-clicked in the world, with it as giver and ender, and shows it', async () => {
+    const { store } = await shell();
+    await store.getState().openQuest(60001);
+    // Opening a quest shows the quests; back to the world, where it stays open
+    await userEvent.click(tab('World'));
+    await waitFor(() => expect(created).toHaveLength(1));
+    const guard = { kind: 'creature', guid: 80330, entry: 1423, name: 'Guard', own: false, added: false, pathId: 0, wander: 0, map: 0, placement: { x: 1, y: 2, z: 3, orientation: 0, rotation: null } };
+    act(() => created[0]!.options.onContextMenu({ ground: { x: 1, y: 2, z: 3 }, hit: { type: 'spawn', spawn: guard }, selection: [guard] }, { x: 10, y: 10 }));
+    await userEvent.click(screen.getByRole('menuitem', { name: 'Start the next quest in this chain' }));
+    await waitFor(() => expect(store.getState().open?.questId).toBe(60003));
+    await waitFor(() => expect(store.getState().open!.aggregate.values['quest_template_addon.PrevQuestID']).toBe(60001));
+    const values = store.getState().open!.aggregate.values;
+    expect(values.creature_queststarter).toEqual([{ id: 1423 }]);
+    expect(values.creature_questender).toEqual([{ id: 1423 }]);
+    expect(tab('Quests')).toHaveAttribute('aria-selected', 'true');
   });
 });
