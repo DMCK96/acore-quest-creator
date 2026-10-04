@@ -249,3 +249,14 @@ describe('review findings: the session', () => {
     expect(heard).toHaveBeenCalled();
   });
 });
+
+describe('review minors: the session', () => {
+  it('keeps where a quest was exported when its removal is undone', () => {
+    const s = fresh();
+    s.quests.put(q(60001));
+    s.quests.markExported(60001, 'C:\out\a.sql');
+    s.quests.remove(60001);
+    s.applyStep(s.history.undo()!, 'undo');
+    expect(s.quests.get(60001)!.lastExportPath).toBe('C:\out\a.sql');
+  });
+});

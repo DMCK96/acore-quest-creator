@@ -48,6 +48,12 @@ afterEach(() => {
 const tab = (name: string) => screen.getByRole('tab', { name });
 
 describe('the app shell', () => {
+  it('Ctrl+Z on a keyboard whose letters are not Latin still undoes', async () => {
+    const { api } = await shell();
+    fireEvent.keyDown(document.body, { key: 'я', code: 'KeyZ', ctrlKey: true });
+    await waitFor(() => expect(api.historyUndo).toHaveBeenCalledTimes(1));
+  });
+
   it('Ctrl+Z and Ctrl+Y undo and redo outside text fields, and leave text fields alone', async () => {
     const { api } = await shell();
     fireEvent.keyDown(document.body, { key: 'z', ctrlKey: true });

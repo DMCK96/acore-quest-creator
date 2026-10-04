@@ -39,7 +39,7 @@ import { IDLE } from '../core/world/movement';
 import { describeStep } from './project/step-labels';
 import type { HistoryStep } from './project/history';
 import type { HistoryPart, HistoryResult, QuestEdit, StepSummary } from '../shared/history';
-import { addedDrifted, countWalkers, movementDrifted, readMovement, readPlacement, readRoute, readTemplateLook, routeDrifted, spawnDrifted, worldSchema } from './world/world-api';
+import { addedDrifted, countWalkers, routeWalkerName, movementDrifted, readMovement, readPlacement, readRoute, readTemplateLook, routeDrifted, spawnDrifted, worldSchema } from './world/world-api';
 import type {
   Api,
   ApiError,
@@ -614,11 +614,12 @@ export function createApi(deps: ApiDeps): Api {
 
   /** The schema exports render with: the registry's tables, plus the ones quest scripting writes. */
   /** A route as the database has it, with how many spawns walk it; refused when it is gone */
-  const routeFromDatabase = async (pathId: number): Promise<{ original: RoutePoint[]; walkers: number }> => {
+  const routeFromDatabase = async (pathId: number): Promise<{ original: RoutePoint[]; walkers: number; name?: string }> => {
     const db = connected().db;
     const original = await readRoute(db, pathId);
     if (original.length === 0) throw fail('BAD_REQUEST', `Route ${pathId} is no longer in the database.`);
-    return { original, walkers: await countWalkers(db, pathId) };
+    const name = await routeWalkerName(db, pathId);
+    return { original, walkers: await countWalkers(db, pathId), ...(name ? { name } : {}) };
   };
 
   const exportSchema = (live: Session): SchemaInfo => ({

@@ -72,3 +72,15 @@ describe('describeStep', () => {
     expect(describeStep(mixed).kind).toBe('quest');
   });
 });
+
+describe('route labels', () => {
+  const route = (over: Record<string, unknown> = {}) => ({ pathId: 801, walkers: 1, original: [], current: [{ x: 1, y: 1, z: 1, rest: {} }], ...over });
+  it('names a route by the NPC that walks it', () => {
+    expect(describeStep(step([{ kind: 'world', before: EMPTY_WORLD, after: { ...EMPTY_WORLD, routes: [route({ name: 'Stormwind Guard' })] } }])).label).toBe('Route of Stormwind Guard');
+  });
+  it('names a new path by the NPC whose movement walks it', () => {
+    const walking = { guid: 5, entry: 6, name: 'Kobold Vermin', map: 0, addonRow: true, original: { type: 'idle', wander: 0, pathId: null }, current: { type: 'path', wander: 0, pathId: 801 } } as any;
+    const both = describeStep(step([{ kind: 'world', before: { ...EMPTY_WORLD, movements: [walking] }, after: { ...EMPTY_WORLD, movements: [walking], routes: [route()] } }]));
+    expect(both.label).toBe('Route of Kobold Vermin');
+  });
+});

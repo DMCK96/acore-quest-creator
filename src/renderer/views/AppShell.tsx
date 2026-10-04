@@ -47,11 +47,14 @@ export function AppShell({ store }: { store: AppStore }): React.JSX.Element {
       if (!(e.ctrlKey || e.metaKey)) return;
       const key = e.key.toLowerCase();
       const { saveProject, saveProjectAs, openProject, undo, redo } = store.getState();
-      if ((key === 'z' || key === 'y') && !e.altKey) {
+      // By the key's place as well as its letter, so a keyboard whose letters are not Latin still undoes
+      const z = key === 'z' || e.code === 'KeyZ';
+      const y = key === 'y' || e.code === 'KeyY';
+      if ((z || y) && !e.altKey) {
         if (isTextField(e.target) || e.defaultPrevented) return;
         e.preventDefault();
         // Held down, it walks back step by step
-        void (key === 'y' || e.shiftKey ? redo() : undo());
+        void (y || e.shiftKey ? redo() : undo());
         return;
       }
       // A held-down shortcut repeats; one press is one save.

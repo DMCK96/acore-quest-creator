@@ -63,6 +63,12 @@ describe('the world layer through the API', () => {
     expect(out.error.message).toBe('Spawn 4242 is no longer in the database.');
   });
 
+  it('keeps the name of an NPC that walks a route, for naming the change', async () => {
+    const { api } = await setup(world);
+    const out: any = await api.worldSetRoute(801, [{ x: 1, y: 2, z: 3, rest: {} }, { x: 4, y: 5, z: 6, rest: {} }]);
+    expect(out.value.routes[0].name).toBe('Stormwind Guard');
+  });
+
   it('gives a route in point order with its other columns, and counts its walkers', async () => {
     const { api } = await setup(world);
     const own: any = await api.worldRoute(801);

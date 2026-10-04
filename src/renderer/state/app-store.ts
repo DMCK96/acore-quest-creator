@@ -202,6 +202,10 @@ export function createAppStore(api: Api, opts: { saveDelayMs?: number } = {}): A
   let layerSeq = 0;
   // Changes on their way to the project, which an undo waits for
   const holds = new Set<Promise<void>>();
+  // Steps run one after another, so two that overlap (a paste during a drag) stay two steps
+  let stepChain: Promise<void> = Promise.resolve();
+  // Edits to the open quest made while an undo is on its way: kept on top of what the undo hands back
+  let lateEdits: Map<string, FieldValue> | null = null;
   const hold = (): (() => void) => {
     let release!: () => void;
     const held = new Promise<void>((resolve) => {
@@ -446,6 +450,7 @@ export function createAppStore(api: Api, opts: { saveDelayMs?: number } = {}): A
     setValue(fieldId, value) {
       const { open } = get();
       if (!open) return;
+      lateEdits?.set(fieldId, value);
       set({
         open: { ...open, aggregate: { ...open.aggregate, values: { ...open.aggregate.values, [fieldId]: value } } },
         dirty: true,
@@ -752,7 +757,9 @@ export function createAppStore(api: Api, opts: { saveDelayMs?: number } = {}): A
 
     async historyStep(work, label, where) {
       const release = hold();
-      try {
+      const step = async (): Promise<void> => {
+        // A quest edit typed before the step began is a step of its own
+        await get().flushSave();
         const begun = await api.historyBegin(label, where);
         if (!begun.ok) {
           await work();
@@ -765,6 +772,11 @@ export function createAppStore(api: Api, opts: { saveDelayMs?: number } = {}): A
         } finally {
           await api.historyEnd(begun.value);
         }
+      };
+      const mine = stepChain.then(step, step);
+      stepChain = mine.catch(() => undefined);
+      try {
+        await mine;
       } finally {
         release();
       }
@@ -813,12 +825,18 @@ export function createAppStore(api: Api, opts: { saveDelayMs?: number } = {}): A
     while (holds.size > 0) await Promise.all([...holds]);
     await store.getState().flushAll();
     if (store.getState().dirty) return;
-    const result = await call();
-    if (!result.ok) {
-      store.setState({ error: result.error.message });
-      return;
+    lateEdits = new Map();
+    try {
+      const result = await call();
+      if (!result.ok) {
+        store.setState({ error: result.error.message });
+        return;
+      }
+      await applyHistory(result.value);
+    } finally {
+      // An undo that did not touch the open quest leaves its late edits where they are, already sent
+      lateEdits = null;
     }
-    await applyHistory(result.value);
   }
 
   /** Shows the project as the undo left it: the open quest, the graph, the world layer, the name */
@@ -831,7 +849,11 @@ export function createAppStore(api: Api, opts: { saveDelayMs?: number } = {}): A
       if (mine.aggregate === null) {
         store.setState({ screen: 'pick', open: null, dirty: false, links: null, openPanel: null });
       } else {
+        const late = lateEdits;
+        lateEdits = null;
         store.setState({ open: { ...open, aggregate: mine.aggregate }, dirty: false, exportResult: null });
+        // An edit made while the undo was on its way goes on top, and is sent as a change of its own
+        if (late) for (const [fieldId, value] of late) store.getState().setValue(fieldId, value);
         // The Changes panel compares the quest as it was; it is read again for the quest as it now is
         if (store.getState().preview !== null) await store.getState().loadPreview();
         const issues = await api.validate(open.questId);

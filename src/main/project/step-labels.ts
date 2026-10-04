@@ -2,7 +2,7 @@ import { isDeepStrictEqual } from 'node:util';
 import { fieldById } from '../../core/registry';
 import { moduleById, ownerOf } from '../../core/modules/catalog';
 import type { ModuleId } from '../../core/modules/model';
-import { movementsOf, type WorldLayer } from '../../core/world/layer';
+import { movementsOf, type WorldLayer, type WorldRouteEdit } from '../../core/world/layer';
 import type { HistoryPart, QuestEdit, StepPlace, StepSummary } from '../../shared/history';
 import type { HistoryStep } from './history';
 
@@ -90,11 +90,17 @@ function worldChanges(before: WorldLayer, after: WorldLayer): WorldChange[] {
 
   const routesBefore = keyed(before.routes, (r) => String(r.pathId));
   const routesAfter = keyed(after.routes, (r) => String(r.pathId));
+  // A route by the NPC that walks it: the one read at its first edit, else one whose movement walks it
+  const routeName = (r: WorldRouteEdit): string => {
+    const name = r.name ?? [...movementsOf(after), ...movementsOf(before)].find((m) => m.current.pathId === r.pathId)?.name;
+    return name ? `route of ${name}` : `route ${r.pathId}`;
+  };
+  const upper = (text: string): string => text.charAt(0).toUpperCase() + text.slice(1);
   for (const [key, r] of routesAfter) {
     if (isDeepStrictEqual(routesBefore.get(key), r)) continue;
-    out.push({ text: `Route ${r.pathId}`, where: null });
+    out.push({ text: upper(routeName(r)), where: null });
   }
-  for (const [key, r] of routesBefore) if (!routesAfter.has(key)) out.push({ text: `Reverted route ${r.pathId}`, where: null });
+  for (const [key, r] of routesBefore) if (!routesAfter.has(key)) out.push({ text: `Reverted ${routeName(r)}`, where: null });
 
   const movesBefore = keyed(movementsOf(before), (m) => String(m.guid));
   const movesAfter = keyed(movementsOf(after), (m) => String(m.guid));

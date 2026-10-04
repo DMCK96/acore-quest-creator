@@ -125,7 +125,7 @@ export function serializeProject(doc: ProjectDocument): string {
       spawns: doc.world.spawns.map((s) => ({
         kind: s.kind, guid: s.guid, entry: s.entry, name: s.name, map: s.map, original: placement(s.original), current: placement(s.current),
       })),
-      routes: doc.world.routes.map((r) => ({ pathId: r.pathId, walkers: r.walkers, original: r.original.map(point), current: r.current.map(point) })),
+      routes: doc.world.routes.map((r) => ({ pathId: r.pathId, walkers: r.walkers, ...(r.name ? { name: r.name } : {}), original: r.original.map(point), current: r.current.map(point) })),
       added: doc.world.added.map((a) => ({
         kind: a.kind, guid: a.guid, entry: a.entry, name: a.name, map: a.map, placement: placement(a.placement),
         look: { displayId: a.look.displayId, scale: a.look.scale, equipment: a.look.equipment, preset: a.look.preset },
@@ -186,7 +186,7 @@ const worldSchema = z.object({
       current: placementSchema,
     }),
   ),
-  routes: z.array(z.object({ pathId: z.number().int(), walkers: z.number().int(), original: z.array(pointSchema), current: z.array(pointSchema) })),
+  routes: z.array(z.object({ pathId: z.number().int(), walkers: z.number().int(), name: z.string().optional(), original: z.array(pointSchema), current: z.array(pointSchema) })),
   // Absent from a project saved before spawns could be placed
   added: z
     .array(

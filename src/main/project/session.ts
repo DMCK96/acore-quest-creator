@@ -73,6 +73,8 @@ export function createProjectSession(initial: ProjectMeta, newId: () => string =
   let extraDirty = false;
   let revision = 0;
   const history = createHistory({ now: opts.now });
+  // Where removed quests were last exported, so undoing a removal brings that back too
+  const removedExports = new Map<number, string | null>();
   const dirty = (): boolean => extraDirty || !history.atSaved();
   // A step closed later (the end of a gesture) can leave the project unsaved without a change of its own
   let toldDirty = false;
@@ -133,6 +135,7 @@ export function createProjectSession(initial: ProjectMeta, newId: () => string =
         if (!was) return;
         watched(() => {
           quests.delete(questId);
+          removedExports.set(questId, was.lastExportPath);
           history.record({ kind: 'quest', questId, before: editOf(was), after: null });
           change();
         });
@@ -200,6 +203,7 @@ export function createProjectSession(initial: ProjectMeta, newId: () => string =
         filePath = null;
         extraDirty = false;
         history.clear();
+        removedExports.clear();
         revision = 0;
       }, true);
     },
@@ -212,6 +216,7 @@ export function createProjectSession(initial: ProjectMeta, newId: () => string =
         quests = new Map(docQuests.map((q) => [q.questId, q]));
         filePath = path;
         history.clear();
+        removedExports.clear();
         extraDirty = loadOpts.dirty;
         revision = loadOpts.dirty ? 1 : 0;
       }, true);
@@ -237,7 +242,7 @@ export function createProjectSession(initial: ProjectMeta, newId: () => string =
           if (part.kind === 'quest') {
             const edit = undoing ? part.before : part.after;
             if (!edit) quests.delete(part.questId);
-            else quests.set(part.questId, { ...structuredClone(edit), lastExportPath: quests.get(part.questId)?.lastExportPath ?? null });
+            else quests.set(part.questId, { ...structuredClone(edit), lastExportPath: quests.get(part.questId)?.lastExportPath ?? removedExports.get(part.questId) ?? null });
           } else if (part.kind === 'positions') {
             for (const m of undoing ? part.before : part.after) {
               const q = quests.get(m.questId);

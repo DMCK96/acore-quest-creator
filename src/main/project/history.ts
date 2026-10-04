@@ -75,6 +75,27 @@ function mergePart(parts: HistoryPart[], part: HistoryPart): HistoryPart[] {
 
 const unchanged = (part: HistoryPart): boolean => isDeepStrictEqual(part.before, part.after);
 
+/** A value with its text blanked, so two values of the same shape compare equal */
+const shapeOf = (value: unknown): unknown =>
+  typeof value === 'string' ? '' : Array.isArray(value) ? value.map(shapeOf) : value && typeof value === 'object' ? Object.fromEntries(Object.entries(value).map(([k, v]) => [k, shapeOf(v)])) : value;
+
+/**
+ * Whether a quest edit is typing: plain fields always are; in a structured field (the quest's NPCs,
+ * its scripts) only text may change, so a click that adds a patrol point or changes a choice is a step
+ * of its own
+ */
+function typedOnly(part: HistoryPart, fields: string[]): boolean {
+  if (part.kind !== 'quest' || !part.before || !part.after) return false;
+  const a = part.before.aggregate.values;
+  const b = part.after.aggregate.values;
+  return fields.every((k) => {
+    const was = a[k];
+    const now = b[k];
+    if (!(was && typeof was === 'object') && !(now && typeof now === 'object')) return true;
+    return isDeepStrictEqual(shapeOf(was), shapeOf(now));
+  });
+}
+
 /** The fields of a quest edit whose values differ, sorted; null for a quest that came or went */
 function changedFields(part: HistoryPart): string[] | null {
   if (part.kind !== 'quest' || !part.before || !part.after) return null;
@@ -137,7 +158,7 @@ export function createHistory(opts: { now?: () => number; limit?: number } = {})
     if (now() - last.at >= TYPING_MERGE_MS) return false;
     const a = changedFields(was);
     const b = changedFields(part);
-    return a !== null && b !== null && isDeepStrictEqual(a, b);
+    return a !== null && b !== null && isDeepStrictEqual(a, b) && typedOnly(was, a) && typedOnly(part, b);
   };
 
   return {

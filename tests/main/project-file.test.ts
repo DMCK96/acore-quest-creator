@@ -85,7 +85,7 @@ describe('project file: the world layer', () => {
   const world = {
     spawns: [{ kind: 'creature' as const, guid: 80330, entry: 1423, name: 'Stormwind Guard', map: 0,
       original: { x: 1, y: 2, z: 3, orientation: 0, rotation: null }, current: { x: 4, y: 2, z: 3, orientation: 1, rotation: null } }],
-    routes: [{ pathId: 801, walkers: 2, original: [{ x: 1, y: 0, z: 0, rest: { delay: '0' } }], current: [{ x: 2, y: 0, z: 0, rest: {} }] }],
+    routes: [{ pathId: 801, walkers: 2, name: 'Stormwind Guard', original: [{ x: 1, y: 0, z: 0, rest: { delay: '0' } }], current: [{ x: 2, y: 0, z: 0, rest: {} }] }],
     added: [
       { kind: 'creature' as const, guid: 80331, entry: 1423, name: 'Stormwind Guard', map: 0,
         placement: { x: 5, y: 6, z: 7, orientation: 2, rotation: null },

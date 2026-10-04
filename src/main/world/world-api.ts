@@ -104,6 +104,25 @@ export async function countWalkers(db: WorldDb, pathId: number): Promise<number>
   return own + (await db.selectRows('creature', { [entryColumn]: entries })).length;
 }
 
+/** The name of an NPC that walks a route (its own spawn's, else its template's), or undefined */
+export async function routeWalkerName(db: WorldDb, pathId: number): Promise<string | undefined> {
+  if (await hasTable(db, 'creature_addon')) {
+    const [own] = await db.selectRows('creature_addon', { path_id: String(pathId) });
+    if (own?.guid) {
+      const spawn = await readPlacement(db, 'creature', Number(own.guid));
+      if (spawn?.name) return spawn.name;
+    }
+  }
+  if (await hasTable(db, 'creature_template_addon')) {
+    const [template] = await db.selectRows('creature_template_addon', { path_id: String(pathId) });
+    if (template?.entry) {
+      const [named] = await db.selectRows('creature_template', { entry: template.entry });
+      if (named?.name) return named.name;
+    }
+  }
+  return undefined;
+}
+
 /** Whether the database no longer holds a spawn's original placement */
 export async function spawnDrifted(db: WorldDb, edit: WorldSpawnEdit): Promise<boolean> {
   const now = await readPlacement(db, edit.kind, edit.guid);

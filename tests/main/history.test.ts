@@ -151,3 +151,29 @@ describe('the project history', () => {
     expect(heard).toHaveBeenCalledTimes(6);
   });
 });
+
+describe('typing merge on structured fields', () => {
+  const npcs = (names: string[]) => names.map((name, i) => ({ entry: i + 1, name }));
+  const part = (from: string[], to: string[]): HistoryPart => ({ kind: 'quest', questId: 1, before: quest(1, { entities: { npcs: npcs(from) } }), after: quest(1, { entities: { npcs: npcs(to) } }) });
+
+  it('merges typing inside a structured field (only its text changes)', () => {
+    const c = clock(); const h = createHistory({ now: c.now });
+    h.record(part(['H'], ['He'])); c.tick(500);
+    h.record(part(['He'], ['Hel']));
+    expect(h.list(plain).steps).toHaveLength(1);
+  });
+
+  it('keeps quick clicks that add to a structured field as steps of their own', () => {
+    const c = clock(); const h = createHistory({ now: c.now });
+    h.record(part(['A'], ['A', 'B'])); c.tick(500);
+    h.record(part(['A', 'B'], ['A', 'B', 'C']));
+    expect(h.list(plain).steps).toHaveLength(2);
+  });
+
+  it('does not merge typing into a step that added something', () => {
+    const c = clock(); const h = createHistory({ now: c.now });
+    h.record(part(['A'], ['A', ''])); c.tick(500);
+    h.record(part(['A', ''], ['A', 'B']));
+    expect(h.list(plain).steps).toHaveLength(2);
+  });
+});

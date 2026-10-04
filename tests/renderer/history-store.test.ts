@@ -211,3 +211,45 @@ describe('the unsaved marker', () => {
     expect(store.getState().project.dirty).toBe(false);
   });
 });
+
+describe('review minors: the store', () => {
+  it('keeps an edit made while an undo was on its way, and sends it after', async () => {
+    const base = sampleOpen();
+    const restored = { ...base.aggregate, values: { ...base.aggregate.values, 'quest_template.LogTitle': 'Before' } };
+    let answer!: () => void;
+    const { api, store } = await connected({
+      historyUndo: () => new Promise((r) => { answer = () => r(okv({ ...emptyHistoryResult, step: { id: 1, label: 'Quest title of X', kind: 'quest', where: null }, quests: [{ questId: base.questId, aggregate: restored }] })); }),
+    });
+    await store.getState().openQuest(base.questId);
+    const undo = store.getState().undo();
+    await vi.waitFor(() => expect(api.historyUndo).toHaveBeenCalled());
+    store.getState().setValue('quest_template.QuestLevel', 12);
+    answer();
+    await undo;
+    expect(store.getState().open!.aggregate.values).toMatchObject({ 'quest_template.LogTitle': 'Before', 'quest_template.QuestLevel': 12 });
+    await store.getState().flushSave();
+    expect(vi.mocked(api.updateQuest).mock.calls.at(-1)![0].values).toMatchObject({ 'quest_template.LogTitle': 'Before', 'quest_template.QuestLevel': 12 });
+  });
+
+  it('runs overlapping steps one after the other, so each is a step of its own', async () => {
+    const { api, store } = await connected();
+    let finishFirst!: () => void;
+    const first = store.getState().historyStep(() => new Promise<void>((r) => { finishFirst = r; }), 'First');
+    const second = store.getState().historyStep(async () => {}, 'Second');
+    await new Promise((r) => setTimeout(r, 20));
+    expect(api.historyBegin).toHaveBeenCalledTimes(1);
+    finishFirst();
+    await Promise.all([first, second]);
+    const begins = vi.mocked(api.historyBegin).mock.invocationCallOrder;
+    const ends = vi.mocked(api.historyEnd).mock.invocationCallOrder;
+    expect(ends[0]!).toBeLessThan(begins[1]!);
+  });
+
+  it('sends a quest edit typed before a step began on its own, not inside the step', async () => {
+    const { api, store } = await connected();
+    await store.getState().openQuest(60001);
+    store.getState().setValue('quest_template.LogTitle', 'Typed first');
+    await store.getState().historyStep(async () => {}, 'Paste');
+    expect(vi.mocked(api.updateQuest).mock.invocationCallOrder[0]!).toBeLessThan(vi.mocked(api.historyBegin).mock.invocationCallOrder[0]!);
+  });
+});

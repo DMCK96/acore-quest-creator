@@ -31,6 +31,8 @@ export interface WorldRouteEdit {
   pathId: number;
   /** Spawns that walk the route, counted at its first edit */
   walkers: number;
+  /** The name of an NPC that walks it, read at its first edit, for naming the change */
+  name?: string;
   original: RoutePoint[];
   current: RoutePoint[];
 }
