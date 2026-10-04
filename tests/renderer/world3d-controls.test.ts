@@ -132,14 +132,16 @@ const selectSetup = (extra: { onWheel?(deltaY: number): boolean } = {}) => {
   const boxes: unknown[] = [];
   const clicks: unknown[] = [];
   const modes: string[] = [];
+  const contexts: unknown[] = [];
   const controls = new WorldControls(camera, dom, {
+    onContextClick: (x, y, client) => contexts.push({ x, y, client }),
     onBox: (rect, keys) => boxes.push({ rect, keys }),
     onClick: (x, y, keys) => clicks.push({ x, y, keys }),
     onModeChange: (mode) => modes.push(mode),
     ...extra,
   });
   controls.setView(new THREE.Vector3(0, 0, 0), new THREE.Vector3(-30, -30, 30));
-  return { camera, host, dom, controls, boxes, clicks, modes };
+  return { camera, host, dom, controls, boxes, clicks, modes, contexts };
 };
 
 describe('Select mode', () => {
@@ -215,5 +217,45 @@ describe('Select mode', () => {
     const before = camera.position.clone();
     dom.dispatchEvent(new WheelEvent('wheel', { deltaY: -100, clientX: 100, clientY: 50, cancelable: true }));
     expect(camera.position.distanceTo(before)).toBe(0);
+  });
+});
+
+describe('the right-click menu', () => {
+  beforeEach(() => {
+    document.body.innerHTML = '';
+  });
+
+  it('a right press that does not move asks for the menu, where it was let go', () => {
+    const { dom, contexts } = selectSetup();
+    fire(dom, 'pointerdown', 49, 25, { button: 2 });
+    fire(dom, 'pointerup', 50, 25, { button: 2 });
+    expect(contexts).toEqual([{ x: -0.5, y: 0.5, client: { x: 50, y: 25 } }]);
+  });
+
+  it('a right-drag looks around and asks for nothing', () => {
+    const { dom, contexts, camera } = selectSetup();
+    const facing = camera.getWorldDirection(new THREE.Vector3());
+    fire(dom, 'pointerdown', 50, 25, { button: 2 });
+    fire(dom, 'pointermove', 120, 25, { button: 2 });
+    fire(dom, 'pointerup', 120, 25, { button: 2 });
+    expect(contexts).toEqual([]);
+    expect(camera.getWorldDirection(new THREE.Vector3()).angleTo(facing)).toBeGreaterThan(0.1);
+  });
+
+  it('the ContextMenu key and Shift+F10 ask for it at the last pointer position, else the middle', () => {
+    const { dom, contexts } = selectSetup();
+    dom.focus();
+    window.dispatchEvent(new KeyboardEvent('keydown', { code: 'ContextMenu', key: 'ContextMenu', cancelable: true }));
+    fire(dom, 'pointermove', 150, 75);
+    window.dispatchEvent(new KeyboardEvent('keydown', { code: 'F10', key: 'F10', shiftKey: true, cancelable: true }));
+    expect(contexts).toEqual([{ x: 0, y: 0, client: { x: 100, y: 50 } }, { x: 0.5, y: -0.5, client: { x: 150, y: 75 } }]);
+  });
+
+  it('a left click never asks for the menu', () => {
+    const { dom, contexts, clicks } = selectSetup();
+    fire(dom, 'pointerdown', 50, 25, { button: 0 });
+    fire(dom, 'pointerup', 50, 25, { button: 0 });
+    expect(contexts).toEqual([]);
+    expect(clicks).toHaveLength(1);
   });
 });

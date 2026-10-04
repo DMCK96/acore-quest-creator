@@ -51,6 +51,11 @@ type WorldControlsOptions = {
   onModeChange?(tool: Tool): void;
   /** True while a press belongs to something else on the view (the edit gizmo): no orbit, no click */
   blocked?(): boolean;
+  /**
+   * A right click without dragging, or the ContextMenu key (Shift+F10) at the last place the pointer
+   * was over the view: asks for the menu, at a place on screen and where it is in the window
+   */
+  onContextClick?(ndcX: number, ndcY: number, client: { x: number; y: number }): void;
 };
 
 const UP = new THREE.Vector3(0, 0, 1);
@@ -67,6 +72,9 @@ class WorldControls {
   readonly #onWheelClaim: (deltaY: number) => boolean;
   readonly #onModeChange: (tool: Tool) => void;
   readonly #blocked: () => boolean;
+  readonly #onContextClick: (ndcX: number, ndcY: number, client: { x: number; y: number }) => void;
+  /** Where the pointer last was over the view, for the menu key */
+  #lastPointer: { x: number; y: number } | null = null;
 
   #mode: Tool = 'camera';
   /** The rectangle drawn over the view while a selection box is dragged */
@@ -87,6 +95,7 @@ class WorldControls {
     this.#onWheelClaim = options.onWheel ?? (() => false);
     this.#onModeChange = options.onModeChange ?? (() => {});
     this.#blocked = options.blocked ?? (() => false);
+    this.#onContextClick = options.onContextClick ?? (() => {});
 
     // Focusable, so keys can be kept to the view
     if (!dom.hasAttribute('tabindex')) dom.tabIndex = 0;
@@ -252,7 +261,13 @@ class WorldControls {
     if (event.button === 1) event.preventDefault();
   };
 
+  /** Where the pointer last was over the view, or null when it has not been over it */
+  get lastPointer(): { x: number; y: number } | null {
+    return this.#lastPointer;
+  }
+
   #onPointerMove = (event: PointerEvent): void => {
+    this.#lastPointer = { x: event.clientX, y: event.clientY };
     const drag = this.#drag;
     if (!drag) return;
     const dx = event.clientX - drag.x;
@@ -270,6 +285,12 @@ class WorldControls {
     this.#drag = null;
     this.#dom.releasePointerCapture?.(event.pointerId);
     this.#endMarquee();
+    // A right press let go where it went down asks for the menu; one that moved was looking around
+    if (event.type === 'pointerup' && drag?.button === 2 && Math.hypot(event.clientX - drag.startX, event.clientY - drag.startY) < CLICK_SLOP) {
+      const [x, y] = this.#ndc(event);
+      this.#onContextClick(x, y, { x: event.clientX, y: event.clientY });
+      return;
+    }
     if (event.type !== 'pointerup' || drag?.button !== 0) return;
     const keys = { shift: event.shiftKey, ctrl: event.ctrlKey || event.metaKey, alt: event.altKey };
     const [x, y] = this.#ndc(event);
@@ -316,6 +337,14 @@ class WorldControls {
 
   #onKeyDown = (event: KeyboardEvent): void => {
     if (!this.#hasFocus()) return;
+    if (event.code === 'ContextMenu' || (event.code === 'F10' && event.shiftKey)) {
+      event.preventDefault();
+      const rect = this.#dom.getBoundingClientRect();
+      const at = this.#lastPointer ?? { x: rect.left + rect.width / 2, y: rect.top + rect.height / 2 };
+      const [x, y] = this.#ndc({ clientX: at.x, clientY: at.y });
+      this.#onContextClick(x, y, at);
+      return;
+    }
     if (event.code === 'Tab' && !event.ctrlKey && !event.altKey && !event.metaKey) {
       // Keeps focus on the view, and flips what a left-drag does
       event.preventDefault();
