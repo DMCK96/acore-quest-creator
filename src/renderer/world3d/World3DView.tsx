@@ -298,6 +298,7 @@ function WorldStage({ map, start, hasClient, own, onSelect, onOwnEdit, focus, ac
       }
       const current = apiRef.current;
       if (!current) return;
+      if (change.kind === 'presence' || change.kind === 'movement') return;
       const result =
         change.kind === 'place'
           ? await current.worldMoveSpawn(change.spawn.kind === 'object' ? 'gameobject' : 'creature', change.spawn.guid, change.to)

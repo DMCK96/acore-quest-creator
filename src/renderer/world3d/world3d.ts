@@ -298,6 +298,8 @@ export function createWorld3D(options: World3DOptions): World3D {
       setPendingRoute: (guid, points) => manager.setPendingRoute(guid, points),
       previewRoute: (guid, points) => manager.previewRoute(guid, points),
       previewHome: (guid, at) => manager.previewHome(guid, at),
+      setPendingMovement: (guid, movement) => manager.setPendingMovement(guid, movement),
+      spawnMovement: (guid) => manager.movement(guid),
     },
     {
       onEdit: options.onEdit,

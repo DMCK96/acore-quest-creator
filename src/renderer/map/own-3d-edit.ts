@@ -18,6 +18,7 @@ export function toPatrolPoints(points: readonly EditPoint[]): PatrolPoint[] {
 export function ownEdit(values: Values, edit: SpawnEdit): { field: string; value: FieldValue } | null {
   const { kind, entry, guid } = edit.spawn;
   if (edit.kind === 'place') return placeSpawn(values, `spawn:${kind === 'creature' ? 'npc' : 'obj'}:${entry}:${guid}`, edit.to);
+  if (edit.kind !== 'route') return null;
   const patrol = patrolOf(values, entry, guid);
   return patrol ? setPatrol(values, entry, guid, { ...patrol, points: toPatrolPoints(edit.points) }) : null;
 }

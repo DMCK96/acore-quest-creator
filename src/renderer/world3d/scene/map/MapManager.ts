@@ -19,6 +19,7 @@ import { CharacterTexture } from '../character/CharacterTexture.js';
 import { getAssetUrl } from '../asset.js';
 import DisplayResolver from '../spawn/DisplayResolver.js';
 import { areaBox, nearbyAreas } from '../spawn/placement.js';
+import type { Movement } from '../../../../core/world/movement.js';
 import { DISPLAY_RECORDS } from '../db/records.js';
 import { ViewSpawns } from '../../../../core/db/view-spawns.js';
 import { WorldLayer } from '../../../../core/world/layer.js';
@@ -224,6 +225,16 @@ class MapManager extends EventTarget {
   /** A drawn NPC's route as the view has it, or null */
   spawnRoute(guid: number) {
     return this.#spawnManager.route(guid);
+  }
+
+  /** Draws an NPC's movement as edited in the view until its host stores it; null draws it as stored */
+  setPendingMovement(guid: number, movement: Movement | null) {
+    this.#spawnManager.setPendingMovement(guid, movement).catch((error) => console.warn(`3D view: the movement could not be drawn: ${describeError(error)}`));
+  }
+
+  /** How a drawn NPC moves, as the view has it, or null */
+  movement(guid: number): Movement | null {
+    return this.#spawnManager.movement(guid);
   }
 
   /** The NPCs whose routes are worked on: only their routes and wander circles are drawn */

@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import type { Placement } from '@core/world/layer';
+import type { Movement } from '@core/world/movement';
 import type { EditPoint, SpawnEdit, SpawnRef } from './edits';
 import { Gizmo, placementOf, quaternionOf, type GizmoChange, type GizmoMode, type GizmoTurns } from './scene/edit/Gizmo';
 import { createHistory } from './scene/edit/history';
@@ -43,6 +44,10 @@ export interface EditingWorld {
   previewRoute(guid: number, points: EditPoint[]): void;
   /** Takes an NPC's route and wander circle to where it is being dragged */
   previewHome(guid: number, at: At): void;
+  /** Draws an NPC's movement as edited until the host stores it; null draws it as stored again */
+  setPendingMovement(guid: number, movement: Movement | null): void;
+  /** How a drawn NPC moves, as the view has it; null when it is not drawn */
+  spawnMovement(guid: number): Movement | null;
 }
 
 export interface EditingOptions {
@@ -217,6 +222,11 @@ export class Editor {
         return true;
     }
     return false;
+  }
+
+  /** One undo step for edits the host made itself (a placement, a movement): remembered, not sent again */
+  record(before: SpawnEdit[], after: SpawnEdit[]): void {
+    this.#history.push(before, after);
   }
 
   undo(): void {
@@ -468,7 +478,11 @@ export class Editor {
 
   /** An undone or redone edit: drawn at once, and sent on like any other */
   #apply(edit: SpawnEdit): void {
-    if (edit.kind === 'place') {
+    if (edit.kind === 'movement') {
+      this.#world.setPendingMovement(edit.spawn.guid, edit.to);
+    } else if (edit.kind === 'presence') {
+      // Put in or taken out by the host, which draws the layer it gets back
+    } else if (edit.kind === 'place') {
       const object = this.#world.findSpawn(edit.spawn.kind, edit.spawn.guid);
       if (object) {
         object.position.set(edit.to.x, edit.to.y, edit.to.z);

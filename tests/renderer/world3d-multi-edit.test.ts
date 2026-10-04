@@ -62,6 +62,7 @@ function setup(opts: { routes?: Record<number, Route>; floor?: number | null; an
   const pending: [number, EditPoint[]][] = [];
   const previews: [number, EditPoint[]][] = [];
   const homes: [number, { x: number; y: number; z: number }][] = [];
+  const movements: [number, unknown][] = [];
   const world: EditingWorld = {
     camera: new THREE.PerspectiveCamera(),
     dom: document.createElement('canvas'),
@@ -79,6 +80,8 @@ function setup(opts: { routes?: Record<number, Route>; floor?: number | null; an
     },
     previewRoute: (guid, points) => previews.push([guid, points]),
     previewHome: (guid, at) => homes.push([guid, at]),
+    setPendingMovement: (guid, m) => movements.push([guid, m]),
+    spawnMovement: () => null,
   };
   const edits: SpawnEdit[] = [];
   const notices: (string | null)[] = [];
@@ -105,7 +108,7 @@ function setup(opts: { routes?: Record<number, Route>; floor?: number | null; an
     gizmo.events.moved(change(delta, angle));
     await gizmo.events.ended(lifted);
   };
-  return { editor, world, edits, notices, asked, selections, falloffs, floorZ, gizmo, npc, drop, drag, change, pending, previews, homes };
+  return { editor, world, edits, notices, asked, selections, falloffs, floorZ, gizmo, npc, drop, drag, change, pending, previews, homes, movements };
 }
 
 const placed = (edits: SpawnEdit[]) => edits.map((e) => (e.kind === 'place' ? [e.spawn.guid, e.to.x, e.to.y, e.to.z] : null));
@@ -437,5 +440,31 @@ describe('an NPC dragged with its route', () => {
     t.gizmo.events.started();
     t.gizmo.events.moved(t.change([3, 4, 0]));
     expect(t.homes.at(-1)).toEqual([1, { x: 3, y: 4, z: 0 }]);
+  });
+});
+
+describe('steps the host made itself', () => {
+  const at = { x: 1, y: 2, z: 3, orientation: 0, rotation: null };
+  const added = (present: boolean): SpawnEdit => ({ kind: 'presence', spawn: { kind: 'creature', guid: 90001, entry: 1423, own: false }, present, at, map: 0 });
+
+  it('records a placement as one step without sending it again, and undo sends its absence', () => {
+    const t = setup();
+    t.editor.record([added(false)], [added(true)]);
+    expect(t.edits).toEqual([]);
+    t.editor.undo();
+    expect(t.edits).toEqual([added(false)]);
+    t.editor.redo();
+    expect(t.edits).toEqual([added(false), added(true)]);
+  });
+
+  it('draws an undone movement at once and sends it', () => {
+    const t = setup();
+    const spawn = { kind: 'creature' as const, guid: 7, entry: 1, own: false };
+    const before: SpawnEdit = { kind: 'movement', spawn, to: { type: 'idle', wander: 0, pathId: null } };
+    const after: SpawnEdit = { kind: 'movement', spawn, to: { type: 'wander', wander: 5, pathId: null } };
+    t.editor.record([before], [after]);
+    t.editor.undo();
+    expect(t.movements).toEqual([[7, { type: 'idle', wander: 0, pathId: null }]]);
+    expect(t.edits).toEqual([before]);
   });
 });

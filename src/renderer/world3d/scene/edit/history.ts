@@ -12,6 +12,8 @@ export interface EditHistory {
   /** The states to go forward to again, or null with nothing to redo */
   redo(): SpawnEdit[] | null;
   clear(): void;
+  /** Drops what could be redone, keeping what can be undone */
+  forgetRedo(): void;
 }
 
 export function createHistory(): EditHistory {
@@ -36,6 +38,9 @@ export function createHistory(): EditHistory {
     },
     clear() {
       done.length = 0;
+      undone.length = 0;
+    },
+    forgetRedo() {
       undone.length = 0;
     },
   };

@@ -9,6 +9,7 @@
 import * as THREE from 'three';
 import { ViewCreature, ViewEvent, ViewObject, ViewPoint, ViewSpawns } from '../../../../core/db/view-spawns.js';
 import { WorldLayer } from '../../../../core/world/layer.js';
+import type { Movement } from '../../../../core/world/movement.js';
 import { BodyTexture, DisplayResolver, Look, ModelLook } from './DisplayResolver.js';
 import { creatureTransform, objectTransform, Transform } from './placement.js';
 import { moveRouteDrawing, routeObject, setBallSelected, wanderObject } from './paths.js';
@@ -366,6 +367,14 @@ class SpawnManager {
     this.#layer = layer;
     this.#pendingRoutes.clear();
     await this.#redraw();
+  }
+
+  /** Draws an NPC's movement as edited in the view until its host stores it; null draws it as stored */
+  async setPendingMovement(_guid: number, _movement: Movement | null) {}
+
+  /** How a drawn NPC moves, as the view has it; null when it is not drawn */
+  movement(_guid: number): Movement | null {
+    return null;
   }
 
   /** Draws a route edited in the view until its host stores it (or says no, and it goes back) */

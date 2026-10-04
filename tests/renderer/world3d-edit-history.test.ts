@@ -39,4 +39,14 @@ describe('the 3D view\'s undo history', () => {
     h.clear();
     expect(h.undo()).toBeNull();
   });
+
+  it('forgets only what could be redone', () => {
+    const h = createHistory();
+    h.push([place(1, 1)], [place(1, 2)]);
+    h.push([place(1, 2)], [place(1, 3)]);
+    h.undo();
+    h.forgetRedo();
+    expect(h.redo()).toBeNull();
+    expect(h.undo()).toEqual([place(1, 1)]);
+  });
 });
