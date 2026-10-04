@@ -3,14 +3,15 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { act, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 
-type Fake = { setActive: ReturnType<typeof vi.fn>; setScenery: ReturnType<typeof vi.fn>; at: { x: number; y: number; z: number }; area: (name: string) => void };
+type Fake = { setActive: ReturnType<typeof vi.fn>; setScenery: ReturnType<typeof vi.fn>; setSpawnVisibility: ReturnType<typeof vi.fn>; at: { x: number; y: number; z: number }; area: (name: string) => void };
 const created = vi.hoisted(() => [] as Fake[]);
+const nearby = vi.hoisted(() => ({ list: [] as { id: number; name: string }[] }));
 
 vi.mock('../../src/renderer/world3d/world3d', () => ({
   createWorld3D: (options: { onArea?: (name: string) => void }) => {
     const world = {
       at: { x: 1, y: 2, z: 3 }, setActive: vi.fn(), setScenery: vi.fn(), dispose: vi.fn(), lookAt: vi.fn(), setSpawnVisibility: vi.fn(),
-      spawnStatus: () => ({ capped: { creatures: false, objects: false }, error: null, loading: 0 }),
+      spawnStatus: () => ({ capped: { creatures: false, objects: false }, error: null, loading: 0, events: nearby.list }),
       target() { return world.at; }, area: (name: string) => options.onArea?.(name),
     };
     created.push(world as unknown as Fake);
@@ -23,6 +24,7 @@ import { World3DView } from '../../src/renderer/world3d/World3DView';
 const start = { x: 0, y: 0, z: 0 };
 afterEach(() => {
   created.length = 0;
+  nearby.list = [];
   vi.useRealTimers();
   vi.unstubAllGlobals();
 });
@@ -104,6 +106,47 @@ describe('the 3D view in a workspace', () => {
     await waitFor(() => expect(created).toHaveLength(2));
     expect(within(screen.getByRole('group', { name: 'Layers' })).getByRole('checkbox', { name: 'Buildings' })).not.toBeChecked();
     expect(created[1]!.setScenery).toHaveBeenLastCalledWith({ buildings: false, doodads: false });
+    localStorage.removeItem('acqc.world3d.layers');
+  });
+
+  it('shows the world during one event at a time, from those with spawns nearby, with no event by default and all events last', async () => {
+    clientHasEverything();
+    localStorage.removeItem('acqc.world3d.layers');
+    nearby.list = [{ id: 3, name: 'Darkmoon Faire' }, { id: 12, name: "Hallow's End" }];
+    const first = render(<World3DView map={0} start={start} hasClient />);
+    await waitFor(() => expect(created).toHaveLength(1));
+    const event = within(screen.getByRole('group', { name: 'Layers' })).getByRole('combobox', { name: 'Event' });
+    expect(event).toHaveDisplayValue('No event');
+    expect(screen.queryByRole('checkbox', { name: 'Event spawns' })).toBeNull();
+    expect(created[0]!.setSpawnVisibility).toHaveBeenLastCalledWith(expect.objectContaining({ events: 'none' }));
+    // The events near the camera come in as the spawns do
+    await waitFor(() => expect(within(event).getAllByRole('option').map((o) => o.textContent)).toEqual(['No event', 'Darkmoon Faire', "Hallow's End", 'All events']));
+    await userEvent.selectOptions(event, "Hallow's End");
+    expect(created[0]!.setSpawnVisibility).toHaveBeenLastCalledWith(expect.objectContaining({ events: 12 }));
+    await userEvent.selectOptions(event, 'All events');
+    expect(created[0]!.setSpawnVisibility).toHaveBeenLastCalledWith(expect.objectContaining({ events: 'all' }));
+    await userEvent.selectOptions(event, "Hallow's End");
+    first.unmount();
+    // Remembered, and kept in the list while its spawns are out of range
+    nearby.list = [];
+    render(<World3DView map={0} start={start} hasClient />);
+    await waitFor(() => expect(created).toHaveLength(2));
+    const again = within(screen.getByRole('group', { name: 'Layers' })).getByRole('combobox', { name: 'Event' });
+    expect(again).toHaveDisplayValue("Hallow's End");
+    expect(created[1]!.setSpawnVisibility).toHaveBeenLastCalledWith(expect.objectContaining({ events: 12 }));
+    localStorage.removeItem('acqc.world3d.layers');
+  });
+
+  it('reads an event choice saved before the dropdown: the old box checked is all events, unchecked no event', async () => {
+    clientHasEverything();
+    localStorage.setItem('acqc.world3d.layers', JSON.stringify({ events: true }));
+    const first = render(<World3DView map={0} start={start} hasClient />);
+    await waitFor(() => expect(created).toHaveLength(1));
+    expect(screen.getByRole('combobox', { name: 'Event' })).toHaveDisplayValue('All events');
+    first.unmount();
+    localStorage.setItem('acqc.world3d.layers', JSON.stringify({ events: false }));
+    render(<World3DView map={0} start={start} hasClient />);
+    expect(screen.getByRole('combobox', { name: 'Event' })).toHaveDisplayValue('No event');
     localStorage.removeItem('acqc.world3d.layers');
   });
 });

@@ -99,10 +99,11 @@ describe('the find panel in the 3D screen', () => {
     expect(worlds).toHaveLength(1);
   });
 
-  it('shows event spawns when it goes to one that appears only during an event', async () => {
+  it('draws the world during its event when it goes to a spawn that appears only then', async () => {
     await open();
     await userEvent.click(await screen.findByRole('button', { name: 'Go to spawn 5' }));
-    await waitFor(() => expect(worlds[0].setSpawnVisibility).toHaveBeenLastCalledWith(expect.objectContaining({ events: true, creatures: true })));
+    await waitFor(() => expect(worlds[0].setSpawnVisibility).toHaveBeenLastCalledWith(expect.objectContaining({ events: 12, creatures: true })));
+    expect(screen.getByRole('combobox', { name: 'Event' })).toHaveDisplayValue("Hallow's End");
     expect(await screen.findByText(/Only during event 12: Hallow's End/)).toBeTruthy();
   });
 

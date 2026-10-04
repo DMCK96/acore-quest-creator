@@ -252,10 +252,10 @@ test('a click selects the NPC under it, and event spawns only once they are show
   expect(await click(0.05, 0.9)).toBeNull();
 
   // The event NPC stands between the camera and the first: hidden by default, so the click reaches the first
-  await page.evaluate('window.__setVisibility({ creatures: true, objects: true, paths: true, events: true })');
+  await page.evaluate('window.__setVisibility({ creatures: true, objects: true, paths: true, events: "all" })');
   await page.waitForTimeout(500);
   expect(await click(0.5, 0.5)).toMatchObject({ guid: 6, event: { id: 12 } });
-  await page.evaluate('window.__setVisibility({ creatures: true, objects: true, paths: true, events: false })');
+  await page.evaluate('window.__setVisibility({ creatures: true, objects: true, paths: true, events: "none" })');
   await page.waitForTimeout(500);
   expect(await click(0.5, 0.5)).toMatchObject({ guid: 5 });
   expect((await state(page)).errors).toEqual([]);

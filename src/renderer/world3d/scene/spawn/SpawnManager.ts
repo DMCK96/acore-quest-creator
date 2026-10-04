@@ -7,7 +7,7 @@
  * leaves the world drawn without them.
  */
 import * as THREE from 'three';
-import { ViewCreature, ViewObject, ViewPoint, ViewSpawns } from '../../../../core/db/view-spawns.js';
+import { ViewCreature, ViewEvent, ViewObject, ViewPoint, ViewSpawns } from '../../../../core/db/view-spawns.js';
 import { WorldLayer } from '../../../../core/world/layer.js';
 import { BodyTexture, DisplayResolver, Look, ModelLook } from './DisplayResolver.js';
 import { creatureTransform, objectTransform, Transform } from './placement.js';
@@ -17,8 +17,34 @@ type Box = { minX: number; maxX: number; minY: number; maxY: number };
 
 type SpawnSource = (map: number, box: Box) => Promise<ViewSpawns | { error: string }>;
 
-/** Which spawns are drawn; `events` takes in those that appear only while a game event runs */
-type SpawnVisibility = { creatures: boolean; objects: boolean; paths: boolean; events: boolean };
+/**
+ * Which game event the world is drawn during: none (the everyday world), one event by id (its spawns
+ * join the everyday ones, and those it takes away go), or all (every spawn the database has)
+ */
+type EventFilter = 'none' | 'all' | number;
+
+/** Which spawns are drawn */
+type SpawnVisibility = { creatures: boolean; objects: boolean; paths: boolean; events: EventFilter };
+
+/** Whether a spawn is in the world while the filter's event runs */
+const inEvent = (s: { event?: unknown; events?: { id: number }[]; removedBy?: { id: number }[] }, filter: EventFilter): boolean => {
+  if (filter === 'all') return true;
+  // A spawn read before events were listed has its one event only
+  const brought = s.events ?? (s.event ? [s.event as { id: number }] : []);
+  if (filter === 'none') return brought.length === 0;
+  return (brought.length === 0 || brought.some((e) => e.id === filter)) && !(s.removedBy ?? []).some((e) => e.id === filter);
+};
+
+/** The events with spawns in these answers, those that bring spawns and those that take them away, by name */
+const eventsIn = (answers: Iterable<{ spawns: ViewSpawns }>): ViewEvent[] => {
+  const found = new globalThis.Map<number, ViewEvent>();
+  for (const { spawns } of answers) {
+    for (const s of [...spawns.creatures, ...spawns.objects]) {
+      for (const e of [...(s.events ?? []), ...(s.removedBy ?? [])]) if (!found.has(e.id)) found.set(e.id, e);
+    }
+  }
+  return [...found.values()].sort((a, b) => a.name.localeCompare(b.name) || a.id - b.id);
+};
 
 /** What a spawn is, as picking one says */
 type PickedSpawn = {
@@ -52,7 +78,7 @@ type SpawnManagerOptions = {
 };
 
 /** Whether a kind was capped, why none could be read, and how many areas are still loading */
-type SpawnStatus = { capped: { creatures: boolean; objects: boolean }; error: string | null; loading?: number };
+type SpawnStatus = { capped: { creatures: boolean; objects: boolean }; error: string | null; loading?: number; events: ViewEvent[] };
 
 /** A marker: a small upright box standing on the spawn point */
 const MARKER_SIZE = { width: 0.6, height: 1.8 };
@@ -117,7 +143,7 @@ function spawnBounds(spawn: THREE.Object3D, target: THREE.Box3): THREE.Box3 {
 }
 
 /** Event spawns are left out until asked for: a town would otherwise show every holiday at once */
-const DEFAULT_VISIBILITY: SpawnVisibility = { creatures: true, objects: true, paths: true, events: false };
+const DEFAULT_VISIBILITY: SpawnVisibility = { creatures: true, objects: true, paths: true, events: 'none' };
 
 class SpawnManager {
   #resolver: DisplayResolver;
@@ -149,7 +175,7 @@ class SpawnManager {
   /** The selected spawn, whose paths are the ones drawn */
   #selected: { kind: 'creature' | 'object'; guid: number } | null = null;
 
-  status: SpawnStatus = { capped: { creatures: false, objects: false }, error: null };
+  status: SpawnStatus = { capped: { creatures: false, objects: false }, error: null, events: [] };
 
   constructor(options: SpawnManagerOptions) {
     this.#resolver = options.resolver;
@@ -213,8 +239,8 @@ class SpawnManager {
     }
     this.#failed.delete(areaId);
 
-    this.status = { capped: { ...answer.capped }, error: null };
     this.#responses.set(areaId, { map, box, spawns: answer });
+    this.status = { capped: { ...answer.capped }, error: null, events: eventsIn(this.#responses.values()) };
 
     const group = await this.#draw(this.#overlay(answer, box, map));
     if (this.#wanted.get(areaId) !== request) {
@@ -236,6 +262,7 @@ class SpawnManager {
     this.#wanted.delete(areaId);
     this.#responses.delete(areaId);
     this.#areas.delete(areaId);
+    this.status = { ...this.status, events: eventsIn(this.#responses.values()) };
   }
 
   /**
@@ -255,7 +282,7 @@ class SpawnManager {
    */
   #overlay(spawns: ViewSpawns, box: Box, map: number): ViewSpawns {
     const inBox = (s: { map: number; x: number; y: number }) => s.map === map && s.x >= box.minX && s.x <= box.maxX && s.y >= box.minY && s.y <= box.maxY;
-    const shown = (s: { event?: unknown }) => this.#visibility.events || !s.event;
+    const shown = (s: Parameters<typeof inEvent>[0]) => inEvent(s, this.#visibility.events);
     const ownCreatures = new Set(this.#own.creatures.map((c) => c.guid));
     const ownObjects = new Set(this.#own.objects.map((o) => o.guid));
     const placed = (kind: 'creature' | 'gameobject', guid: number) => this.#layer.spawns.find((s) => s.kind === kind && s.guid === guid)?.current;
@@ -281,7 +308,7 @@ class SpawnManager {
     const placedCreatures = this.#layer.added.filter((a) => a.kind === 'creature').map(
       (a): ViewCreature => ({
         guid: a.guid, entry: a.entry, name: a.name, map: a.map, x: a.placement.x, y: a.placement.y, z: a.placement.z, orientation: a.placement.orientation,
-        displayId: a.look.displayId, scale: a.look.scale, wander: 0, path: null, pathId: 0, equipment: a.look.equipment, own: false, added: true, event: null, preset: a.look.preset,
+        displayId: a.look.displayId, scale: a.look.scale, wander: 0, path: null, pathId: 0, equipment: a.look.equipment, own: false, added: true, event: null, events: [], removedBy: [], preset: a.look.preset,
       }),
     );
     const placedObjects = this.#layer.added.filter((a) => a.kind === 'gameobject').map(
@@ -289,7 +316,7 @@ class SpawnManager {
         guid: a.guid, entry: a.entry, name: a.name, map: a.map, x: a.placement.x, y: a.placement.y, z: a.placement.z,
         // Turned about Z by its facing unless it was tilted
         rotation: a.placement.rotation ?? [0, 0, Math.sin(a.placement.orientation / 2), Math.cos(a.placement.orientation / 2)],
-        displayId: a.look.displayId, scale: a.look.scale, own: false, added: true, event: null,
+        displayId: a.look.displayId, scale: a.look.scale, own: false, added: true, event: null, events: [], removedBy: [],
       }),
     );
     return {
@@ -671,4 +698,4 @@ class SpawnManager {
 
 export default SpawnManager;
 export { SpawnManager, spawnBounds };
-export type { PickedSpawn, SpawnSource, SpawnStatus, SpawnVisibility };
+export type { EventFilter, PickedSpawn, SpawnSource, SpawnStatus, SpawnVisibility };

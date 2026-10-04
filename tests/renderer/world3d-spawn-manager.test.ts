@@ -5,10 +5,10 @@ import type { WorldLayer } from '../../src/core/world/layer';
 import SpawnManager from '../../src/renderer/world3d/scene/spawn/SpawnManager';
 
 const creature = (guid: number, displayId: number, extra: object = {}) => ({
-  guid, entry: 1, name: 'n', map: 0, x: 0, y: 0, z: 0, orientation: 0, displayId, scale: 1, wander: 0, path: null, equipment: [0, 0, 0] as [number, number, number], own: false, event: null, pathId: 0, preset: null, ...extra,
+  guid, entry: 1, name: 'n', map: 0, x: 0, y: 0, z: 0, orientation: 0, displayId, scale: 1, wander: 0, path: null, equipment: [0, 0, 0] as [number, number, number], own: false, event: null, events: [], removedBy: [], pathId: 0, preset: null, ...extra,
 });
 const object = (guid: number, displayId: number, extra: object = {}) => ({
-  guid, entry: 2, name: 'o', map: 0, x: 0, y: 0, z: 0, rotation: [0, 0, 0, 1] as [number, number, number, number], displayId, scale: 1, own: false, event: null, ...extra,
+  guid, entry: 2, name: 'o', map: 0, x: 0, y: 0, z: 0, rotation: [0, 0, 0, 1] as [number, number, number, number], displayId, scale: 1, own: false, event: null, events: [], removedBy: [], ...extra,
 });
 const box = { minX: 0, maxX: 1, minY: 0, maxY: 1 };
 
@@ -71,7 +71,7 @@ describe('the spawn layer', () => {
   it('hides and shows each kind without unloading it', async () => {
     const m = manager({ creatures: [creature(1, 1)], objects: [object(3, 2)], capped: { creatures: false, objects: false } });
     const group = (await m.loadArea(1, 0, box))!;
-    m.setVisibility({ creatures: false, objects: true, paths: false, events: false });
+    m.setVisibility({ creatures: false, objects: true, paths: false, events: 'none' });
     expect(group.getObjectByName('creatures')!.visible).toBe(false);
     expect(group.getObjectByName('objects')!.visible).toBe(true);
     expect(group.getObjectByName('paths')!.visible).toBe(false);
@@ -272,16 +272,46 @@ describe('the final review\'s findings', () => {
 
 describe('event spawns', () => {
   const holiday = { id: 12, name: "Hallow's End" };
+  const fair = { id: 3, name: 'Darkmoon Faire' };
+  const spawns = () => ({
+    creatures: [
+      creature(1, 1),
+      creature(2, 1, { event: holiday, events: [holiday] }),
+      creature(4, 1, { event: fair, events: [fair] }),
+      // Always there, except while Hallow's End runs
+      creature(5, 1, { removedBy: [holiday] }),
+      // Brought by either event
+      creature(6, 1, { event: fair, events: [fair, holiday] }),
+    ],
+    objects: [object(3, 2, { event: holiday, events: [holiday] })],
+    capped: { creatures: false, objects: false },
+  });
+  const visibility = (events: 'none' | 'all' | number) => ({ creatures: true, objects: true, paths: true, events });
 
-  it('leaves out spawns that appear only during a game event, and draws them once asked for', async () => {
-    const m = manager({ creatures: [creature(1, 1), creature(2, 1, { event: holiday })], objects: [object(3, 2, { event: holiday })], capped: { creatures: false, objects: false } });
+  it('draws the everyday world with no event: none of the event spawns, and those an event would take away', async () => {
+    const m = manager(spawns());
     const group = (await m.loadArea(1, 0, box))!;
-    const guids = () => [...group.getObjectByName('creatures')!.children, ...group.getObjectByName('objects')!.children].map((c) => c.userData.spawn.guid);
-    expect(guids()).toEqual([1]);
-    await m.setVisibility({ creatures: true, objects: true, paths: true, events: true });
-    expect(guids()).toEqual([1, 2, 3]);
-    await m.setVisibility({ creatures: true, objects: true, paths: true, events: false });
-    expect(guids()).toEqual([1]);
+    const guids = () => [...group.getObjectByName('creatures')!.children, ...group.getObjectByName('objects')!.children].map((c) => c.userData.spawn.guid).sort((a, b) => a - b);
+    expect(guids()).toEqual([1, 5]);
+
+    // One event: its own spawns join the everyday ones, and the spawns it takes away go
+    await m.setVisibility(visibility(12));
+    expect(guids()).toEqual([1, 2, 3, 6]);
+    await m.setVisibility(visibility(3));
+    expect(guids()).toEqual([1, 4, 5, 6]);
+
+    // All events: every spawn the database has here, as before
+    await m.setVisibility(visibility('all'));
+    expect(guids()).toEqual([1, 2, 3, 4, 5, 6]);
+    await m.setVisibility(visibility('none'));
+    expect(guids()).toEqual([1, 5]);
+  });
+
+  it('lists the events that have spawns in the loaded areas, by name, whether they bring spawns or take them away', async () => {
+    const m = manager({ creatures: [creature(1, 1), creature(5, 1, { removedBy: [{ id: 26, name: "Children's Week" }] }), creature(6, 1, { event: fair, events: [fair, holiday] })], objects: [], capped: { creatures: false, objects: false } });
+    expect(m.status.events).toEqual([]);
+    await m.loadArea(1, 0, box);
+    expect(m.status.events).toEqual([{ id: 26, name: "Children's Week" }, fair, holiday]);
   });
 });
 
@@ -302,7 +332,7 @@ describe('picking a spawn', () => {
   it('gives nothing when something solid is nearer, or the spawn is hidden', async () => {
     const m = await marker([creature(1, 0, { x: 10 })]);
     expect(m.pick(ray(), 15)).toBeNull();
-    m.setVisibility({ creatures: false, objects: true, paths: true, events: false });
+    m.setVisibility({ creatures: false, objects: true, paths: true, events: 'none' });
     expect(m.pick(ray())).toBeNull();
   });
 

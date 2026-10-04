@@ -596,3 +596,21 @@
   justify-content: center;
   gap: 0.6rem;
 }
+
+/* The event the world is drawn during: under the layer checkboxes, the width of the card. */
+.world3d__event {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  margin-top: 0.3rem;
+  font-size: 12px;
+  text-align: left;
+  color: var(--text-muted);
+}
+
+.world3d__event select {
+  width: 100%;
+  max-width: 13rem;
+  font-size: 12px;
+  padding: 0.3em 2em 0.3em 0.5em;
+}

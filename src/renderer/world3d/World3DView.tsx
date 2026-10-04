@@ -3,7 +3,7 @@ import { assetUrl } from '@core/client/asset-url';
 import { worldMapDirectory } from '@core/map/world-maps';
 import { createWorld3D, type Scenery, type World3D } from './world3d';
 import { useApi } from '../state/names';
-import type { PickedSpawn, SpawnStatus, SpawnVisibility } from './scene/spawn/SpawnManager';
+import type { EventFilter, PickedSpawn, SpawnStatus, SpawnVisibility } from './scene/spawn/SpawnManager';
 import type { ViewSpawns } from '@core/db/view-spawns';
 import { chooseZ, floorCandidates } from '@core/map/floors';
 import { EMPTY_WORLD, type WorldLayer } from '@core/world/layer';
@@ -37,26 +37,33 @@ const CONTROLS: [string, string][] = [
 
 /** Where the layer checkboxes are remembered, per viewer. */
 const LAYERS_KEY = 'acqc.world3d.layers';
-/** What the layer checkboxes show: the world's scenery, and its NPCs, objects and their paths */
-type Layers = SpawnVisibility & Scenery;
-/** Event spawns (holidays, fairs) are off until asked for: they are only in the world while their event runs. */
-const DEFAULT_LAYERS: Layers = { buildings: true, doodads: true, creatures: true, objects: true, paths: true, events: false };
-const LAYER_LABELS: [keyof Layers, string, string?][] = [
+/**
+ * What the layers card shows: the world's scenery, its NPCs, objects and their paths, and the game
+ * event it is drawn during (with that event's name, kept so the choice reads right out of its range)
+ */
+type Layers = SpawnVisibility & Scenery & { eventName?: string };
+/** No event: the everyday world. Event spawns are only in the world while their event runs. */
+const DEFAULT_LAYERS: Layers = { buildings: true, doodads: true, creatures: true, objects: true, paths: true, events: 'none' };
+type Toggle = 'buildings' | 'doodads' | 'creatures' | 'objects' | 'paths';
+const LAYER_LABELS: [Toggle, string, string?][] = [
   ['buildings', 'Buildings', 'Houses, towers and what is inside them. Hidden, clicks land on the ground under them'],
   ['doodads', 'Trees & props', 'Trees, bushes, fences, carts and the rest of the small scenery'],
   ['creatures', 'NPCs'],
   ['objects', 'Objects'],
   ['paths', 'Paths'],
-  ['events', 'Event spawns', 'NPCs and objects that appear only while a game event (a holiday, a fair) runs'],
 ];
 
 const spawnsOf = ({ creatures, objects, paths, events }: Layers): SpawnVisibility => ({ creatures, objects, paths, events });
 const sceneryOf = ({ buildings, doodads }: Layers): Scenery => ({ buildings, doodads });
 
+/** An event filter as saved: the old checkbox's true is all events, its false no event; anything unknown is no event */
+const eventFilterOf = (saved: unknown): EventFilter =>
+  saved === true || saved === 'all' ? 'all' : typeof saved === 'number' && Number.isInteger(saved) && saved > 0 ? saved : 'none';
+
 function readLayers(): Layers {
   try {
-    const saved = JSON.parse(localStorage.getItem(LAYERS_KEY) ?? 'null') as Partial<Layers> | null;
-    return { ...DEFAULT_LAYERS, ...(saved ?? {}) };
+    const saved = JSON.parse(localStorage.getItem(LAYERS_KEY) ?? 'null') as (Partial<Omit<Layers, 'events'>> & { events?: unknown }) | null;
+    return { ...DEFAULT_LAYERS, ...(saved ?? {}), events: eventFilterOf(saved?.events) };
   } catch {
     return { ...DEFAULT_LAYERS };
   }
@@ -200,7 +207,12 @@ function WorldStage({ map, start, hasClient, own, onSelect, onOwnEdit, focus, ac
     const current = world.current;
     if (!target || !current) return;
     pendingFocus.current = null;
-    setLayers((l) => ({ ...l, [target.kind === 'creature' ? 'creatures' : 'objects']: true, events: l.events || target.event !== null }));
+    // An event spawn is shown by drawing the world during its event (all events already show it)
+    setLayers((l) => ({
+      ...l,
+      [target.kind === 'creature' ? 'creatures' : 'objects']: true,
+      ...(target.event && l.events !== 'all' && l.events !== target.event.id ? { events: target.event.id, eventName: target.event.name } : {}),
+    }));
     current.lookAt(target.x, target.y, target.z + 1, true);
     current.select({ kind: target.kind, guid: target.guid });
     setSelected({
@@ -457,6 +469,11 @@ function WorldStage({ map, start, hasClient, own, onSelect, onOwnEdit, focus, ac
     bringIntoViewRef.current();
   }, [focus]);
 
+  // The events with spawns near the camera, and the one chosen even when its spawns are out of range
+  const nearbyEvents = spawns?.events ?? [];
+  const chosen = typeof layers.events === 'number' && !nearbyEvents.some((e) => e.id === layers.events) ? [{ id: layers.events, name: layers.eventName ?? '' }] : [];
+  const eventChoices = [...nearbyEvents, ...chosen];
+
   const unavailable = !hasClient
     ? 'Choose the game client folder in the connection settings to see the world in 3D.'
     : !directory
@@ -486,6 +503,26 @@ function WorldStage({ map, start, hasClient, own, onSelect, onOwnEdit, focus, ac
               {label}
             </label>
           ))}
+          <label className="world3d__event" title="The game event the world is drawn during: its NPCs and objects appear, and those it takes away go">
+            <span>Event</span>
+            <select
+              value={String(layers.events)}
+              onChange={(e) => {
+                const value = e.target.value;
+                const events: EventFilter = value === 'none' || value === 'all' ? value : Number(value);
+                const name = typeof events === 'number' ? eventChoices.find((c) => c.id === events)?.name : undefined;
+                setLayers((l) => ({ ...l, events, eventName: name }));
+              }}
+            >
+              <option value="none">No event</option>
+              {eventChoices.map((choice) => (
+                <option key={choice.id} value={choice.id}>
+                  {choice.name || `Event ${choice.id}`}
+                </option>
+              ))}
+              <option value="all">All events</option>
+            </select>
+          </label>
           <div className="world3d__layers-actions">
             <button type="button" className="btn" disabled={!api} title="Choose an existing NPC or object, then click the ground to place it" onClick={() => setChoosing(true)}>
               Place…

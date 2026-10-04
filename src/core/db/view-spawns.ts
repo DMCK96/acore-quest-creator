@@ -69,7 +69,12 @@ export interface ViewCreature {
   own: boolean;
   /** One placed in the 3D view, kept in the world layer until it is exported */
   added?: boolean;
+  /** The first event it appears for (the lowest id), or null when it is always in the world */
   event: ViewEvent | null;
+  /** Every event it appears for, by id: it is in the world only while one of them runs */
+  events: ViewEvent[];
+  /** Every event that takes it away while it runs (a negative `eventEntry`), by id */
+  removedBy: ViewEvent[];
   /** The display preset that dresses it, when the database has one for it */
   preset: ViewPreset | null;
 }
@@ -89,7 +94,12 @@ export interface ViewObject {
   own: boolean;
   /** One placed in the 3D view, kept in the world layer until it is exported */
   added?: boolean;
+  /** The first event it appears for (the lowest id), or null when it is always in the world */
   event: ViewEvent | null;
+  /** Every event it appears for, by id */
+  events: ViewEvent[];
+  /** Every event that takes it away while it runs, by id */
+  removedBy: ViewEvent[];
 }
 
 export interface ViewSpawns {
@@ -111,6 +121,30 @@ type Row = Readonly<Record<string, string | null>>;
 const eventOf = (row: Row): ViewEvent | null => {
   const id = num(row.event_entry);
   return id > 0 ? { id, name: row.event_name ?? '' } : null;
+};
+
+/** How `event_list` joins a spawn's event rows: each row's entry and name, split by this */
+export const EVENT_FIELD = '\u001e';
+/** ... and the rows, split by this (neither appears in a name) */
+export const EVENT_ROW = '\u001f';
+
+/**
+ * A spawn's events from its `event_list` column (every `game_event_creature` / `_gameobject` row
+ * for it): those it appears for, and those that take it away (a negative entry), each by id
+ */
+const eventListOf = (row: Row): { events: ViewEvent[]; removedBy: ViewEvent[] } => {
+  const events: ViewEvent[] = [];
+  const removedBy: ViewEvent[] = [];
+  for (const part of (row.event_list ?? '').split(EVENT_ROW)) {
+    if (!part) continue;
+    const cut = part.indexOf(EVENT_FIELD);
+    const entry = num(cut < 0 ? part : part.slice(0, cut));
+    const name = cut < 0 ? '' : part.slice(cut + 1);
+    if (entry > 0) events.push({ id: entry, name });
+    else if (entry < 0) removedBy.push({ id: -entry, name });
+  }
+  const byId = (a: ViewEvent, b: ViewEvent) => a.id - b.id;
+  return { events: events.sort(byId), removedBy: removedBy.sort(byId) };
 };
 
 const num = (value: string | null | undefined, fallback = 0): number => {
@@ -137,6 +171,7 @@ export function toViewCreature(row: Row, path: ViewPoint[] | null, equipment: [n
     equipment,
     own: false,
     event: eventOf(row),
+    ...eventListOf(row),
     preset,
   };
 }
@@ -155,6 +190,7 @@ export function toViewObject(row: Row): ViewObject {
     scale: num(row.size, 1),
     own: false,
     event: eventOf(row),
+    ...eventListOf(row),
   };
 }
 

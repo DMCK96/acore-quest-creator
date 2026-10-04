@@ -5,7 +5,7 @@ import type { ColumnInfo, RawRow, RawValue, RefKind, Where } from './types';
 import { isNumericColumn } from './types';
 import { ENTITY_TABLES, ID_TEXT, toHit, type DbSearchKind, type EntityHit } from './entity-search';
 import { SPAWN_TABLES, spawnEntryColumn, toSpawnDot, type MapBox, type SpawnDot, type SpawnKind } from './spawns';
-import { orderPath, toViewCreature, toViewObject, type ViewCreature, type ViewObject, pickPreset } from './view-spawns';
+import { EVENT_FIELD, EVENT_ROW, orderPath, toViewCreature, toViewObject, type ViewCreature, type ViewObject, pickPreset } from './view-spawns';
 import { LOOKUP_KINDS, UnknownColumnError, UnknownTableError, type QuestSummary, type WorldDb } from './world-db';
 
 export interface MysqlWorldDbOptions {
@@ -328,7 +328,7 @@ class MysqlWorldDb implements WorldDb {
     const query = (context: string, sql: string, params: unknown[]) =>
       this.run(context, async () => text((await this.pool.query(sql, params))[0] as Record<string, unknown>[]));
 
-    const eventOf = (table: string) => this.eventJoin(table);
+    const eventOf = (table: string) => this.viewEventJoin(table);
 
     // Creatures, each with its template's first model (the lowest Idx)
     const entry = ident(spawnEntryColumn('creature', (await this.knownColumns('creature')).map((c) => c.name)));
@@ -422,6 +422,22 @@ class MysqlWorldDb implements WorldDb {
             ` LEFT JOIN game_event ge ON ge.eventEntry = ev.eventEntry`,
         }
       : { columns: '', joins: '' };
+  }
+
+  /**
+   * As `eventJoin`, plus `event_list`: every event row of the spawn (the entry, negative for an event
+   * that takes it away, and the event's name), for the 3D view's event filter. See `EVENT_FIELD`.
+   */
+  private async viewEventJoin(table: string): Promise<{ columns: string; joins: string }> {
+    const base = await this.eventJoin(table);
+    if (!base.columns) return base;
+    return {
+      columns: `${base.columns}, el.event_list`,
+      joins:
+        base.joins +
+        ` LEFT JOIN (SELECT e.guid, GROUP_CONCAT(CONCAT(e.eventEntry, '${EVENT_FIELD}', IFNULL(gl.description, '')) ORDER BY ABS(e.eventEntry) SEPARATOR '${EVENT_ROW}') AS event_list` +
+        ` FROM ${table} e LEFT JOIN game_event gl ON gl.eventEntry = ABS(e.eventEntry) GROUP BY e.guid) el ON el.guid = s.guid`,
+    };
   }
 
   /** Spawns with their template's name, filtered by `where` (its `?` bound to `params`, `{entry}` the entry column). */

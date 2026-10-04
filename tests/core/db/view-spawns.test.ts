@@ -13,7 +13,7 @@ describe('a creature spawn for the 3D view', () => {
     expect(c).toEqual({
       guid: 79970, entry: 197, name: 'Marshal McBride', map: 0,
       x: -8902.59, y: -162.606, z: 82.0223, orientation: 1.5,
-      displayId: 1953, scale: 1.25, wander: 5, path: null, equipment: [0, 0, 0], own: false, event: null, pathId: 0, preset: null,
+      displayId: 1953, scale: 1.25, wander: 5, path: null, equipment: [0, 0, 0], own: false, event: null, events: [], removedBy: [], pathId: 0, preset: null,
     });
   });
 
@@ -34,11 +34,36 @@ describe('a creature spawn for the 3D view', () => {
   });
 });
 
+/** How a spawn's event rows come from the database: fields split by \u001e, rows by \u001f */
+const FIELD = '\u001e';
+const ROW = '\u001f';
+
 describe('a spawn that belongs to a game event', () => {
   it('carries the event it appears for', () => {
     const row = { ...creatureRow, event_entry: '12', event_name: "Hallow's End" };
     expect(toViewCreature(row, null, [0, 0, 0]).event).toEqual({ id: 12, name: "Hallow's End" });
     expect(toViewObject(row).event).toEqual({ id: 12, name: "Hallow's End" });
+  });
+
+  it('carries every event it appears for, and every event that takes it away', () => {
+    // Each of the spawn's game_event rows: the entry (negative for an event that removes it), then its name
+    const list = [`12${FIELD}Hallow's End`, `-26${FIELD}Children's Week`, `7${FIELD}Lunar Festival`].join(ROW);
+    const row = { ...creatureRow, event_entry: '7', event_name: 'Lunar Festival', event_list: list };
+    for (const spawn of [toViewCreature(row, null, [0, 0, 0]), toViewObject(row)]) {
+      expect(spawn.events).toEqual([{ id: 7, name: 'Lunar Festival' }, { id: 12, name: "Hallow's End" }]);
+      expect(spawn.removedBy).toEqual([{ id: 26, name: "Children's Week" }]);
+      expect(spawn.event).toEqual({ id: 7, name: 'Lunar Festival' });
+    }
+  });
+
+  it('keeps a name with commas or colons whole', () => {
+    const row = { ...creatureRow, event_list: `3${FIELD}Darkmoon Faire: Elwynn, Goldshire` };
+    expect(toViewCreature(row, null, [0, 0, 0]).events).toEqual([{ id: 3, name: 'Darkmoon Faire: Elwynn, Goldshire' }]);
+  });
+
+  it('has no events and is taken away by none when it has no event rows', () => {
+    const c = toViewCreature({ ...creatureRow, event_list: null }, null, [0, 0, 0]);
+    expect([c.events, c.removedBy]).toEqual([[], []]);
   });
 
   it('has none when it has no event row', () => {
@@ -67,7 +92,7 @@ describe('an object spawn for the 3D view', () => {
     });
     expect(o).toEqual({
       guid: 5, entry: 143981, name: 'Mailbox', map: 0, x: -9000, y: -100, z: 80,
-      rotation: [0, 0, 0.5, 0.8660254], displayId: 1949, scale: 1.5, own: false, event: null,
+      rotation: [0, 0, 0.5, 0.8660254], displayId: 1949, scale: 1.5, own: false, event: null, events: [], removedBy: [],
     });
   });
 

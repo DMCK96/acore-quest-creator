@@ -81,6 +81,16 @@ describe('MysqlWorldDb', () => {
     for (const s of evented) expect(s.event!.id).toBeGreaterThan(0);
     expect([...creatures, ...objects].some((s) => s.event === null)).toBe(true);
   });
+  it("tells the 3D view which Goldshire spawns an event takes away while it runs (Hallow's End, 12)", async () => {
+    const { creatures } = await db.spawnsForView!(0, { minX: -9600, maxX: -9300, minY: -100, maxY: 200 }, 2000);
+    const removed = creatures.filter((c) => c.removedBy.some((e) => e.id === 12));
+    expect(removed.map((c) => c.guid)).toEqual(expect.arrayContaining([79648, 80341]));
+    expect(removed[0]!.removedBy).toContainEqual({ id: 12, name: "Hallow's End" });
+    // Taken away by an event, not brought by one: always in the world otherwise
+    expect(removed.every((c) => c.events.length === 0 && c.event === null)).toBe(true);
+    // A spawn an event brings lists it among its events
+    for (const c of creatures.filter((s) => s.event)) expect(c.events).toContainEqual(c.event);
+  });
   it('gives each patrolling Goldshire creature its route id and point data', async () => {
     const { creatures } = await db.spawnsForView!(0, { minX: -9600, maxX: -9300, minY: -100, maxY: 200 }, 2000);
     const walkers = creatures.filter((c) => c.path);
