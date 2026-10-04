@@ -17,6 +17,36 @@ import type { SelectedPoint } from '../edit/selection.js';
 
 type Box = { minX: number; maxX: number; minY: number; maxY: number };
 
+/** What a drawn spawn says of itself: what a click picks, the card shows and an edit names */
+const spawnDataOf = (kind: 'creature' | 'object', spawn: ViewCreature | ViewObject) => ({
+  kind,
+  guid: spawn.guid,
+  entry: spawn.entry,
+  name: spawn.name,
+  own: spawn.own,
+  added: spawn.added ?? false,
+  pathId: kind === 'creature' ? ((spawn as ViewCreature).pathId ?? 0) : 0,
+  event: spawn.event ?? null,
+  position: { x: spawn.x, y: spawn.y, z: spawn.z },
+});
+
+/** What a spawn's model is made from; two spawns with the same key look the same */
+const lookKeyOf = (kind: 'creature' | 'object', spawn: ViewCreature | ViewObject): string =>
+  kind === 'creature'
+    ? JSON.stringify([spawn.displayId, spawn.scale, (spawn as ViewCreature).equipment ?? null, (spawn as ViewCreature).preset ?? null])
+    : JSON.stringify([spawn.displayId, spawn.scale]);
+
+/** What an NPC's route and wander circle are drawn from */
+const movesKeyOf = (c: ViewCreature): string => JSON.stringify([c.x, c.y, c.z, c.wander, c.own, c.path]);
+
+/** An NPC's route and wander circle, each knowing whose it is, hidden until its NPC's route is active */
+const movesOf = (creature: ViewCreature): THREE.Object3D[] =>
+  [routeObject(creature), wanderObject(creature)].filter(Boolean).map((shown) => {
+    shown.userData.guid = creature.guid;
+    shown.visible = false;
+    return shown;
+  });
+
 type SpawnSource = (map: number, box: Box) => Promise<ViewSpawns | { error: string }>;
 
 /**
@@ -394,7 +424,7 @@ class SpawnManager {
     await Promise.all(
       [...this.#areas.entries()].map(([areaId, group]) => {
         const response = this.#responses.get(areaId);
-        return response ? this.#fill(group, this.#overlay(response.spawns, response.box, response.map)) : null;
+        return response ? this.#patch(group, this.#overlay(response.spawns, response.box, response.map)) : null;
       }),
     );
   }
@@ -599,16 +629,7 @@ class SpawnManager {
     for (const drawn of drawnCreatures) creatures.add(drawn);
 
     // How they move: patrol routes and wander circles, in world coordinates
-    for (const creature of spawns.creatures) {
-      // Each remembers whose it is, so it is drawn only while its NPC is selected
-      for (const shown of [routeObject(creature), wanderObject(creature)]) {
-        if (shown) {
-          shown.userData.guid = creature.guid;
-          shown.visible = false;
-          paths.add(shown);
-        }
-      }
-    }
+    for (const creature of spawns.creatures) paths.add(...movesOf(creature));
 
     const drawnObjects = await Promise.all(
       spawns.objects.map((object) =>
@@ -629,6 +650,97 @@ class SpawnManager {
     group.userData.creatures = new globalThis.Map(spawns.creatures.map((c) => [c.guid, c]));
     this.#applyVisibility(group);
     group.updateMatrixWorld(true);
+  }
+
+  /**
+   * Brings an area's drawn spawns up to date with what it should show, changing only what differs, so
+   * an edit shows at once and costs only itself: a spawn that moved or turned is moved; one that is new,
+   * or whose look changed, is drawn and swapped in once ready (until then the old one stands in, already
+   * moved); one no longer there is taken out; only the routes and wander circles that changed are drawn
+   * again. An area not yet filled is filled whole.
+   */
+  async #patch(group: THREE.Group, spawns: ViewSpawns) {
+    const containers = { creature: group.getObjectByName('creatures'), object: group.getObjectByName('objects') };
+    const paths = group.getObjectByName('paths');
+    if (!containers.creature || !containers.object || !paths) {
+      await this.#fill(group, spawns);
+      return;
+    }
+    const fill = (group.userData.fill ?? 0) + 1;
+    group.userData.fill = fill;
+
+    const drawing: Promise<{ container: THREE.Object3D; made: THREE.Object3D; old: THREE.Object3D | undefined }>[] = [];
+    const sync = (kind: 'creature' | 'object', list: (ViewCreature | ViewObject)[]) => {
+      const container = containers[kind];
+      const drawn = new globalThis.Map(container.children.map((c) => [c.userData.spawn.guid, c]));
+      const wanted = new globalThis.Set<number>();
+      for (const spawn of list) {
+        wanted.add(spawn.guid);
+        const transform = kind === 'creature' ? creatureTransform(spawn) : objectTransform(spawn);
+        const old = drawn.get(spawn.guid);
+        if (old) this.#place(old, kind, spawn, transform);
+        if (old && old.userData.lookKey === lookKeyOf(kind, spawn)) continue;
+        const resolve = kind === 'creature' ? () => this.#resolver.creature(spawn.displayId, spawn.preset ?? null) : () => this.#resolver.object(spawn.displayId);
+        drawing.push(this.#drawSpawn(kind, spawn, resolve, transform).then((made) => ({ container, made, old })));
+      }
+      for (const [guid, object] of drawn) {
+        if (!wanted.has(guid)) this.#remove(object);
+      }
+    };
+    sync('creature', spawns.creatures);
+    sync('object', spawns.objects);
+
+    // Routes and wander circles: drawn again only for NPCs whose route, place or wander changed
+    const before: globalThis.Map<number, ViewCreature> = group.userData.creatures ?? new globalThis.Map();
+    const now = new globalThis.Map(spawns.creatures.map((c) => [c.guid, c]));
+    const changed = new globalThis.Set<number>();
+    for (const [guid, creature] of now) if (movesKeyOf(creature) !== (before.has(guid) ? movesKeyOf(before.get(guid)!) : null)) changed.add(guid);
+    for (const guid of before.keys()) if (!now.has(guid)) changed.add(guid);
+    for (const shown of [...paths.children]) if (changed.has(shown.userData.guid)) this.#remove(shown);
+    for (const guid of changed) {
+      const creature = now.get(guid);
+      if (creature) paths.add(...movesOf(creature));
+    }
+    // The creatures as drawn, so a route can be read back as the view has it
+    group.userData.creatures = now;
+    this.#applyVisibility(group);
+    group.updateMatrixWorld(true);
+
+    const made = await Promise.all(drawing);
+    if (group.userData.fill !== fill) {
+      for (const { made: object } of made) this.#remove(object);
+      return;
+    }
+    for (const { container, made: object, old } of made) {
+      if (old) this.#remove(old);
+      container.add(object);
+    }
+    group.updateMatrixWorld(true);
+  }
+
+  /** A drawn spawn put where it now stands, and turned; one that moved is stood on the ground again from there */
+  #place(object: THREE.Object3D, kind: 'creature' | 'object', spawn: ViewCreature | ViewObject, transform: Transform) {
+    const data = object.userData;
+    const was = data.spawn.position;
+    const moved = was.x !== spawn.x || was.y !== spawn.y || was.z !== spawn.z;
+    data.spawn = spawnDataOf(kind, spawn);
+    if (moved) {
+      data.lift = 0;
+      data.grounded = false;
+      data.tries = 0;
+      data.groundAfter = undefined;
+    }
+    object.position.set(transform.position[0], transform.position[1], transform.position[2] + (data.lift ?? 0));
+    object.quaternion.set(...transform.quaternion);
+    object.updateMatrixWorld(true);
+  }
+
+  /** Takes one drawn thing out of its group and frees what it holds of its own */
+  #remove(object: THREE.Object3D) {
+    object.removeFromParent();
+    const holder = new THREE.Group();
+    holder.add(object);
+    this.#release(holder);
   }
 
   /**
@@ -694,17 +806,9 @@ class SpawnManager {
     object.position.set(...transform.position);
     object.quaternion.set(...transform.quaternion);
     object.scale.setScalar(transform.scale * (drawn ? lookScale : 1));
-    object.userData.spawn = {
-      kind,
-      guid: spawn.guid,
-      entry: spawn.entry,
-      name: spawn.name,
-      own: spawn.own,
-      added: spawn.added ?? false,
-      pathId: kind === 'creature' ? ((spawn as ViewCreature).pathId ?? 0) : 0,
-      event: spawn.event ?? null,
-      position: { x: spawn.x, y: spawn.y, z: spawn.z },
-    };
+    object.userData.spawn = spawnDataOf(kind, spawn);
+    // What it was drawn from: a change to any of it means drawing it again, not just moving it
+    object.userData.lookKey = lookKeyOf(kind, spawn);
     return object;
   }
 

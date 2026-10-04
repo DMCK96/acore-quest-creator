@@ -266,18 +266,22 @@ describe('the final review\'s findings', () => {
     return model;
   };
 
-  it('frees the models of an area it drops, and of an area it redraws', async () => {
+  it('frees the models of an area it drops, and of a spawn a redraw draws again or takes out', async () => {
     const made: ReturnType<typeof disposable>[] = [];
-    const m = manager({ creatures: [creature(1, 1), creature(2, 1)], objects: [], capped: { creatures: false, objects: false } }, {
+    const m = manager({ creatures: [creature(1, 1), creature(2, 1), creature(3, 1)], objects: [], capped: { creatures: false, objects: false } }, {
       createModel: async () => { const d = disposable(); made.push(d); return d; },
     });
     await m.loadArea(1, 0, box);
+    // A redraw that changes nothing keeps every model
     await m.setOwnSpawns({ creatures: [], objects: [], capped: { creatures: false, objects: false } });
-    // The redraw freed the first two models and made two more
+    expect(made).toHaveLength(3);
+    expect(made.every((d) => d.dispose.mock.calls.length === 0)).toBe(true);
+    // The quest's own NPC 1, larger, in place of the database's: drawn again, the old model freed
+    await m.setOwnSpawns({ creatures: [{ ...creature(1, 1), own: true, scale: 3 }], objects: [], capped: { creatures: false, objects: false } });
     expect(made).toHaveLength(4);
-    expect(made.slice(0, 2).every((d) => d.dispose.mock.calls.length === 1)).toBe(true);
+    expect(made.map((d) => d.dispose.mock.calls.length)).toEqual([1, 0, 0, 0]);
     m.removeArea(1);
-    expect(made.slice(2).every((d) => d.dispose.mock.calls.length === 1)).toBe(true);
+    expect(made.slice(1).every((d) => d.dispose.mock.calls.length === 1)).toBe(true);
   });
 
   it('keeps an area loading while its newer request is out, whatever the stale one does', async () => {
@@ -572,5 +576,81 @@ describe('a route edited in the view', () => {
     const drawing = m.setPendingRoute(2, [{ x: 10, y: 5, z: 0 }, { x: 20, y: 0, z: 0 }]);
     expect(m.route(2)!.points[0]).toEqual({ x: 10, y: 5, z: 0 });
     await drawing;
+  });
+});
+
+describe('a changed world layer, drawn in place', () => {
+  const moved = (x: number): WorldLayer => ({
+    spawns: [{ kind: 'creature', guid: 1, entry: 1, name: 'n', map: 0, original: { x: 0, y: 0, z: 0, orientation: 0, rotation: null }, current: { x, y: 0, z: 0, orientation: 1, rotation: null } }],
+    routes: [],
+    added: [],
+  });
+  const byGuid = (group: THREE.Object3D, name: string, guid: number) => group.getObjectByName(name)!.children.find((c) => c.userData.spawn.guid === guid);
+
+  it('moves and turns the drawn spawn itself, at once, without making it again', async () => {
+    let made = 0;
+    const m = manager({ creatures: [creature(1, 1), creature(2, 1)], objects: [object(3, 2)], capped: { creatures: false, objects: false } }, {
+      createModel: async () => { made += 1; return new THREE.Object3D(); },
+    });
+    const group = (await m.loadArea(1, 0, box))!;
+    const [one, two, three] = [byGuid(group, 'creatures', 1), byGuid(group, 'creatures', 2), byGuid(group, 'objects', 3)];
+    made = 0;
+    void m.setWorldLayer(moved(30));
+    // Without waiting: the move is drawn in the same moment
+    expect(byGuid(group, 'creatures', 1)).toBe(one);
+    expect(one!.position.x).toBe(30);
+    expect(one!.userData.spawn.position.x).toBe(30);
+    expect(new THREE.Vector3(1, 0, 0).applyQuaternion(one!.quaternion).y).toBeCloseTo(Math.sin(1), 6);
+    expect(byGuid(group, 'creatures', 2)).toBe(two);
+    expect(byGuid(group, 'objects', 3)).toBe(three);
+    expect(made).toBe(0);
+  });
+
+  it('takes a moved NPC\'s route and wander circle with it', async () => {
+    const m = manager({ creatures: [creature(1, 1, { wander: 5, path: [{ x: 10, y: 0, z: 0 }] })], objects: [], capped: { creatures: false, objects: false } });
+    const group = (await m.loadArea(1, 0, box))!;
+    await m.setWorldLayer(moved(30));
+    const route = group.getObjectByName('route') as THREE.Group;
+    const line = route.children.find((c) => c instanceof THREE.Line) as THREE.Line;
+    expect(Array.from(line.geometry.getAttribute('position').array).slice(0, 3)).toEqual([30, 0, 0]);
+    const wander = group.getObjectByName('wander') as THREE.LineLoop;
+    expect(wander.geometry.getAttribute('position').getX(0)).toBeCloseTo(35, 6);
+  });
+
+  it('stands a moved NPC on the drawn ground again, from where it now is', async () => {
+    const asked: number[] = [];
+    const m = manager({ creatures: [creature(1, 1, { z: 10 })], objects: [], capped: { creatures: false, objects: false } }, {
+      groundBelow: (x: number) => { asked.push(x); return 10.5; },
+    });
+    const group = (await m.loadArea(1, 0, box))!;
+    m.cull(new THREE.Vector3(0, 0, 0));
+    expect(asked).toEqual([0]);
+    void m.setWorldLayer({ ...moved(30), spawns: [{ ...moved(30).spawns[0]!, current: { x: 30, y: 0, z: 10, orientation: 0, rotation: null } }] });
+    m.cull(new THREE.Vector3(30, 0, 0));
+    expect(asked).toEqual([0, 30]);
+    expect(byGuid(group, 'creatures', 1)!.position.z).toBeCloseTo(10.5);
+  });
+
+  it('draws again only a spawn whose look changed', async () => {
+    let made = 0;
+    const spawns = { creatures: [creature(1, 1), creature(2, 1)], objects: [], capped: { creatures: false, objects: false } };
+    const m = manager(spawns, { createModel: async () => { made += 1; return new THREE.Object3D(); } });
+    const group = (await m.loadArea(1, 0, box))!;
+    const two = byGuid(group, 'creatures', 2);
+    made = 0;
+    await m.setOwnSpawns({ creatures: [{ ...creature(1, 1), own: true, scale: 3 }], objects: [], capped: { creatures: false, objects: false } });
+    expect(byGuid(group, 'creatures', 2)).toBe(two);
+    expect(byGuid(group, 'creatures', 1)!.scale.x).toBe(3);
+    expect(made).toBe(1);
+  });
+
+  it('keeps the drawn spawns when a route edited in the view is drawn', async () => {
+    const m = manager({ creatures: [creature(2, 1, { pathId: 77, path: [{ x: 10, y: 0, z: 0 }, { x: 20, y: 0, z: 0 }] })], objects: [], capped: { creatures: false, objects: false } });
+    const group = (await m.loadArea(1, 0, box))!;
+    const npc = byGuid(group, 'creatures', 2);
+    await m.setPendingRoute(2, [{ x: 10, y: 5, z: 0 }, { x: 20, y: 0, z: 0 }]);
+    expect(byGuid(group, 'creatures', 2)).toBe(npc);
+    const ball = group.getObjectByName('route')!.children.find((c) => c.userData.point === 0)!;
+    expect(ball.position.y).toBe(5);
   });
 });
