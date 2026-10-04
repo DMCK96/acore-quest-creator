@@ -16,41 +16,48 @@
 
 .world3d__area {
   position: absolute;
-  top: 10px;
+  top: 14px;
   left: 14px;
   margin: 0;
-  padding: 4px 10px;
-  border-radius: 4px;
-  background: rgba(21, 17, 13, 0.7);
+  padding: 0.35rem 0.8rem;
+  border-radius: var(--radius);
+  background: var(--glass-bg-strong);
+  backdrop-filter: blur(var(--glass-blur));
+  border: 1px solid var(--glass-border);
+  font-family: var(--font-display);
+  color: #fff6e4;
+  text-shadow: var(--title-glow);
   pointer-events: none;
 }
 
 .world3d__note {
   position: absolute;
   inset: auto 14px 14px 14px;
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
   margin: 0;
-  padding: 10px 14px;
-  border-radius: 4px;
-  background: rgba(21, 17, 13, 0.85);
+  padding: 0.65rem 0.9rem;
+  border-radius: var(--radius);
+  background: var(--glass-bg-strong);
+  backdrop-filter: blur(var(--glass-blur));
+  border: 1px solid var(--glass-border);
 }
-
-
-
-
-
-
-
 
 .world3d__missing {
   position: absolute;
-  top: 10px;
-  right: 14px;
-  max-width: 60%;
+  top: 14px;
+  left: 50%;
+  transform: translateX(-50%);
+  max-width: min(40rem, 50%);
   margin: 0;
-  padding: 6px 10px;
-  border-radius: 4px;
+  padding: 0.4rem 0.75rem;
+  border-radius: var(--radius);
   font-size: 12px;
-  background: rgba(21, 17, 13, 0.85);
+  color: var(--text-muted);
+  background: var(--glass-bg-strong);
+  backdrop-filter: blur(var(--glass-blur));
+  border: 1px solid var(--glass-border);
 }
 
 .world3d__help {
@@ -64,22 +71,31 @@
 }
 
 .world3d__help-toggle {
-  width: 28px;
-  height: 28px;
-  border: 1px solid rgba(255, 255, 255, 0.25);
+  width: 30px;
+  height: 30px;
   border-radius: 50%;
-  background: rgba(21, 17, 13, 0.85);
-  color: inherit;
+  background: var(--glass-bg-strong);
+  backdrop-filter: blur(var(--glass-blur));
+  border: 1px solid var(--glass-border);
+  color: var(--accent-strong);
+  font-family: var(--font-display);
   font-weight: 600;
   cursor: pointer;
 }
 
+.world3d__help-toggle:hover,
+.world3d__help-toggle[aria-expanded='true'] {
+  border-color: var(--accent);
+}
+
 .world3d__help-list {
   margin: 0;
-  padding: 10px 14px;
-  border-radius: 4px;
+  padding: 0.7rem 0.9rem;
+  border-radius: var(--radius-lg);
   font-size: 12px;
-  background: rgba(21, 17, 13, 0.9);
+  background: var(--glass-bg-strong);
+  backdrop-filter: blur(var(--glass-blur));
+  border: 1px solid var(--glass-border);
 }
 
 .world3d__help-list div {
@@ -103,16 +119,36 @@
 
 .world3d__layers {
   position: absolute;
-  top: 48px;
+  top: 14px;
   right: 14px;
   display: flex;
-  gap: 10px;
+  flex-direction: column;
+  gap: 0.35rem;
+  min-width: 11rem;
   margin: 0;
-  padding: 5px 10px;
-  border: 0;
-  border-radius: 4px;
+  padding: 0.7rem 0.85rem 0.8rem;
+  font-size: 13px;
+}
+
+.world3d__layers legend {
+  float: left;
+  width: 100%;
+  padding: 0;
+  margin-bottom: 0.15rem;
+}
+
+.world3d__layers .btn {
   font-size: 12px;
-  background: rgba(21, 17, 13, 0.85);
+  padding: 0.35em 0.7em;
+}
+
+.world3d__layers-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  margin-top: 0.35rem;
+  padding-top: 0.55rem;
+  border-top: 1px solid var(--border-soft);
 }
 
 .world3d__layers label {
@@ -124,25 +160,30 @@
 
 .world3d__spawn-note {
   position: absolute;
-  top: 82px;
   right: 14px;
+  bottom: 94px;
   margin: 0;
-  padding: 5px 10px;
-  border-radius: 4px;
+  padding: 0.35rem 0.75rem;
+  border-radius: var(--radius);
   font-size: 12px;
-  background: rgba(21, 17, 13, 0.85);
+  color: var(--text-muted);
+  background: var(--glass-bg-strong);
+  backdrop-filter: blur(var(--glass-blur));
+  border: 1px solid var(--glass-border);
 }
 
 .world3d__selected {
   position: absolute;
-  top: 48px;
   left: 14px;
-  max-width: min(320px, calc(100% - 28px));
-  padding: 8px 12px;
-  border: 1px solid rgba(255, 211, 77, 0.6);
-  border-radius: 4px;
+  bottom: 14px;
+  max-width: min(340px, calc(100% - 28px));
+  padding: 0.65rem 0.85rem;
+  border-radius: var(--radius-lg);
   font-size: 12px;
-  background: rgba(21, 17, 13, 0.9);
+  background: var(--glass-bg-strong);
+  backdrop-filter: blur(var(--glass-blur));
+  border: 1px solid var(--accent);
+  box-shadow: var(--glass-shadow), 0 0 18px rgba(207, 159, 63, 0.18);
 }
 
 .world3d__selected header {
@@ -154,7 +195,11 @@
 
 .world3d__selected h3 {
   margin: 0 0 4px;
-  font-size: 14px;
+  font-family: var(--font-display);
+  font-size: 15px;
+  font-weight: normal;
+  color: #fff6e4;
+  text-shadow: var(--title-glow);
 }
 
 .world3d__selected p {
@@ -176,36 +221,22 @@
   cursor: pointer;
 }
 
-.world3d__changes {
-  margin-left: 6px;
-  padding: 0 8px;
-  border: 1px solid rgba(255, 255, 255, 0.25);
-  border-radius: 4px;
-  background: none;
-  color: inherit;
-  font: inherit;
-  cursor: pointer;
-}
-
-.world3d__changes:disabled {
-  opacity: 0.5;
-  cursor: default;
-}
-
 .world3d__selected-note,
 .world3d__edit-note {
-  color: var(--accent, #cf9f3f);
+  color: var(--accent-strong);
 }
 
 .world3d__edit-note {
   position: absolute;
-  top: 48px;
   left: 14px;
+  bottom: 14px;
   margin: 0;
-  padding: 5px 10px;
-  border-radius: 4px;
+  padding: 0.4rem 0.8rem;
+  border-radius: var(--radius);
   font-size: 12px;
-  background: rgba(21, 17, 13, 0.85);
+  background: var(--glass-bg-strong);
+  backdrop-filter: blur(var(--glass-blur));
+  border: 1px solid var(--glass-border);
 }
 
 .world3d__dialog-actions {
@@ -251,35 +282,18 @@
 .world3d__loading {
   position: absolute;
   right: 14px;
-  bottom: 52px;
+  bottom: 54px;
   display: flex;
   align-items: center;
   gap: 8px;
   margin: 0;
-  padding: 5px 12px;
+  padding: 0.35rem 0.85rem 0.35rem 0.55rem;
   border-radius: 999px;
   font-size: 12px;
-  background: rgba(21, 17, 13, 0.85);
+  background: var(--glass-bg-strong);
+  backdrop-filter: blur(var(--glass-blur));
+  border: 1px solid var(--glass-border);
   pointer-events: none;
-}
-
-.world3d__loading-dot {
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
-  background: var(--accent, #cf9f3f);
-  animation: world3d-pulse 1s ease-in-out infinite alternate;
-}
-
-@keyframes world3d-pulse {
-  from { opacity: 0.3; }
-  to { opacity: 1; }
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .world3d__loading-dot {
-    animation: none;
-  }
 }
 
 .teleport {
@@ -433,17 +447,19 @@
 
 .world3d__placing {
   position: absolute;
-  top: 10px;
+  top: 14px;
   left: 50%;
   transform: translateX(-50%);
   display: flex;
   gap: 10px;
   align-items: center;
   margin: 0;
-  padding: 6px 12px;
-  border-radius: 4px;
-  background: rgba(21, 17, 13, 0.9);
-  border: 1px solid var(--accent, #d9a441);
+  padding: 0.45rem 0.6rem 0.45rem 0.9rem;
+  border-radius: var(--radius-lg);
+  background: var(--glass-bg-strong);
+  backdrop-filter: blur(var(--glass-blur));
+  border: 1px solid var(--accent);
+  box-shadow: var(--glass-shadow);
 }
 
 .world3d__selected-actions {

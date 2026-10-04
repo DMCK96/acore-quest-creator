@@ -10,6 +10,7 @@ import { EMPTY_WORLD, type WorldLayer } from '@core/world/layer';
 import type { SpawnEdit, SpawnRef } from './edits';
 import { WorldChanges } from './WorldChanges';
 import { PlaceDialog, type Chosen } from './PlaceDialog';
+import { OrbMark } from '../components/OrbMark';
 import type { PlaceRequest } from './placing';
 import '../views/ProjectDialog.css';
 import './world3d.css';
@@ -468,19 +469,22 @@ function WorldStage({ map, start, hasClient, own, onSelect, onOwnEdit, focus, ac
         </p>
       )}
       {!unavailable && (
-        <fieldset className="world3d__layers" aria-label="Layers">
+        <fieldset className="world3d__layers glass" aria-label="Layers">
+          <legend className="section-label">Layers</legend>
           {LAYER_LABELS.map(([key, label, title]) => (
             <label key={key} title={title}>
               <input type="checkbox" checked={layers[key]} onChange={(e) => setLayers((l) => ({ ...l, [key]: e.target.checked }))} />
               {label}
             </label>
           ))}
-          <button type="button" className="world3d__changes" disabled={!api} title="Choose an existing NPC or object, then click the ground to place it" onClick={() => setChoosing(true)}>
-            Place…
-          </button>
-          <button type="button" className="world3d__changes" disabled={changes === 0} onClick={() => setChangesOpen(true)}>
-            World changes ({changes})
-          </button>
+          <div className="world3d__layers-actions">
+            <button type="button" className="btn" disabled={!api} title="Choose an existing NPC or object, then click the ground to place it" onClick={() => setChoosing(true)}>
+              Place…
+            </button>
+            <button type="button" className="btn" disabled={changes === 0} onClick={() => setChangesOpen(true)}>
+              World changes ({changes})
+            </button>
+          </div>
         </fieldset>
       )}
       {!unavailable && placing && (
@@ -521,7 +525,7 @@ function WorldStage({ map, start, hasClient, own, onSelect, onOwnEdit, focus, ac
       {!unavailable && spawnNote(spawns) && <p className="world3d__spawn-note">{spawnNote(spawns)}</p>}
       {!unavailable && (spawns?.loading ?? 0) > 0 && (
         <p role="status" className="world3d__loading">
-          <span className="world3d__loading-dot" aria-hidden="true" />
+          <OrbMark size={16} spinning />
           Loading NPCs and objects… ({spawns!.loading} {spawns!.loading === 1 ? 'area' : 'areas'})
         </p>
       )}
@@ -545,6 +549,7 @@ function WorldStage({ map, start, hasClient, own, onSelect, onOwnEdit, focus, ac
       )}
       {(unavailable ?? problem ?? progress) && (
         <p role="status" className="world3d__note">
+          {!unavailable && !problem && <OrbMark size={18} spinning />}
           {unavailable ?? problem ?? progress}
         </p>
       )}

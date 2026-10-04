@@ -71,4 +71,14 @@ describe('the 3D view in a workspace', () => {
     await act(async () => vi.advanceTimersByTime(2000));
     expect(onPlaceChange).toHaveBeenLastCalledWith({ x: 10, y: 2, z: 3 });
   });
+
+  it('draws its panels on the shared surface, with the orb while it loads', async () => {
+    clientHasEverything();
+    render(<World3DView map={0} start={start} hasClient />);
+    await waitFor(() => expect(created).toHaveLength(1));
+    const layers = screen.getByRole('group', { name: 'Layers' });
+    expect(layers).toHaveClass('glass');
+    expect(within(layers).getByText('Layers')).toHaveClass('section-label');
+    expect(screen.getByRole('status').querySelector('.orb-mark--spinning')).not.toBeNull();
+  });
 });
