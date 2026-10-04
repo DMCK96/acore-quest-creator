@@ -10,8 +10,8 @@ export function fightIssues(
   fight: Fight,
   label: string,
   knownSpell: ((id: number) => boolean) | null,
-  /** `RequiredNpcOrGo` of the quest, to check credit steps against; null when not known. */
-  objectives: readonly number[] | null = null,
+  /** Each project quest's `RequiredNpcOrGo` by quest id, to check credit steps against; null when not known. */
+  objectives: ReadonlyMap<number, readonly number[]> | null = null,
 ): Issue[] {
   const issues: Issue[] = [];
   const seen = new Set<string>();
@@ -47,9 +47,11 @@ export function fightIssues(
   }
   if (objectives) {
     for (const step of steps) {
-      if (step.kind === 'credit' && !((objectives[step.objective - 1] ?? 0) > 0)) {
-        add('error', 'FIGHT_CREDIT_EMPTY', `objective ${step.objective} is not an NPC objective of this quest.`);
-      }
+      if (step.kind !== 'credit') continue;
+      const list = objectives.get(step.quest);
+      if (step.quest === 0) add('error', 'FIGHT_CREDIT_NO_QUEST', 'a credit step names no quest; pick the quest it gives credit for.');
+      else if (!list) add('error', 'FIGHT_CREDIT_QUEST_MISSING', `a credit step names quest ${step.quest}, which is not in the project.`);
+      else if (!((list[step.objective - 1] ?? 0) > 0)) add('error', 'FIGHT_CREDIT_EMPTY', `objective ${step.objective} of quest ${step.quest} is not an NPC objective.`);
     }
   }
   if (steps.some((s) => s.kind === 'summonAdds' && s.entry <= 0)) add('error', 'FIGHT_NO_ADD', 'a summon step has no NPC; pick the add.');

@@ -3,7 +3,7 @@ import type { CustomNpc, Patrol, PointAction } from '../entities/model';
 import type { CompiledScripts } from '../scripts/compile';
 import type { ScriptContext } from '../scripts/context';
 import { createAllocator, emitTrigger, textComment, type Row, type SmartAction } from '../scripts/rows';
-import { patrolEntryOf, patrolTag } from '../scripts/tag';
+import { entityPatrolTag, npcRowOwner } from '../scripts/tag';
 import { ACTION, EVENT, SOURCE, TARGET, TEXT_TYPE } from '../smartai/ids';
 
 /**
@@ -57,17 +57,16 @@ export function hasPointActions(npc: CustomNpc): boolean {
 }
 
 export function compilePatrols(input: {
-  questId: number;
   npcs: readonly CustomNpc[];
   context: ScriptContext;
   /** What scenes and fights wrote in this export: their rows are as good as taken. */
   taken: CompiledScripts;
 }): CompiledScripts {
-  const { questId, npcs, context, taken } = input;
+  const { npcs, context, taken } = input;
   const out: CompiledScripts = { inserts: {}, deletes: {}, updates: [], flags: [], warnings: [] };
   const entries = new Set(npcs.map((n) => n.entry));
   const own = (comment: string | null | undefined): boolean => {
-    const entry = patrolEntryOf(comment, questId);
+    const entry = npcRowOwner(comment, 'patrol');
     return entry !== null && entries.has(entry);
   };
 
@@ -94,7 +93,7 @@ export function compilePatrols(input: {
 
   for (const npc of npcs) {
     const entry = npc.entry;
-    const tag = patrolTag(questId, entry);
+    const tag = entityPatrolTag(entry);
     const self = (type: number, params: number[], describe: string, extra: Partial<SmartAction> = {}): SmartAction => ({
       type, params, target: TARGET.self, targetParams: [], waitMs: 0, describe, ...extra,
     });

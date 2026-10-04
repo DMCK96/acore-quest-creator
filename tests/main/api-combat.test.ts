@@ -37,7 +37,7 @@ describe('fights through the API', () => {
     expect(out.ok).toBe(true);
     const sql: string = out.value.sql;
     expect(sql).toMatch(/INSERT INTO `creature_template` \(.*\) VALUES \(11000240,.*'SmartAI'/);
-    expect(sql).toContain(`'AQC q${q} fight11000240: Casts spell 116 on its current target every 8–12 s (first after 2–4 s)'`);
+    expect(sql).toContain(`'AQC npc11000240 fight: Casts spell 116 on its current target every 8–12 s (first after 2–4 s)'`);
     const smartInserts = sql.split('\n').filter((l) => l.startsWith('INSERT INTO `smart_scripts`'));
     const ids = smartInserts.map((l) => /VALUES \(11000240, 0, (\d+),/.exec(l)?.[1]).filter(Boolean);
     expect(new Set(ids).size).toBe(ids.length);

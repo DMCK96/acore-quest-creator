@@ -104,3 +104,15 @@ export function entityOf(comment: string | null | undefined): { kind: 'npc' | 'o
 export function legacyEntityTags(kind: 'npc' | 'obj', entry: number, questIds: readonly number[]): string[] {
   return questIds.map((q) => `${questTagPrefix(q)}${kind}${entry}`);
 }
+
+/**
+ * The NPC a fight (`'fight'`) or patrol (`'patrol'`) row belongs to: by its NPC tag, or by the quest tag
+ * exports before version 4 wrote. Null for any other row.
+ */
+export function npcRowOwner(comment: string | null | undefined, kind: 'fight' | 'patrol'): number | null {
+  if (typeof comment !== 'string') return null;
+  const tagged = entityOf(comment);
+  if (tagged && tagged.kind === 'npc' && new RegExp(`^${kind}(?::|$)`).test(tagged.rest)) return tagged.entry;
+  const legacy = new RegExp(`^AQC q\\d+ ${kind}(\\d+)(?::|$)`).exec(comment);
+  return legacy ? Number(legacy[1]) : null;
+}

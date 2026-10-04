@@ -9,14 +9,14 @@ import { EMPTY_SCRIPT_CONTEXT, type ScriptContext } from '../../src/core/scripts
 
 const Q = 60001;
 const E = 12000001;
-const TAG = 'AQC q60001 fight12000001';
+const TAG = 'AQC npc12000001 fight';
 const none = (): CompiledScripts => ({ inserts: {}, deletes: {}, updates: [], flags: [], warnings: [] });
 const fight = (over: Partial<Fight> = {}): Fight => ({ ...emptyFight(), ...over });
 const ability = (over: Partial<Ability> = {}): Ability => ({ ...newAbility(emptyFight()), id: 'a1', spellId: 116, ...over });
 const reaction = (when: ReactionWhen, steps: FightStep[], over: Partial<Reaction> = {}): Reaction => ({ id: 'r1', when, phases: [], steps, ...over });
 const npc = (f: Fight | null, entry = E): CustomNpc => ({ ...newNpc(entry), name: 'Hela', displayId: 1, fight: f });
 const compile = (npcs: CustomNpc[], context: ScriptContext = EMPTY_SCRIPT_CONTEXT, taken = none()) =>
-  compileFights({ questId: Q, npcs, objectives: [E, 0, 0, 0], context, taken });
+  compileFights({ npcs, objectives: new Map([[Q, [E, 0, 0, 0]]]), context, taken });
 const smart = (out: CompiledScripts) => out.inserts.smart_scripts ?? [];
 const yell = (text: string, waitMs = 0): FightStep => ({ kind: 'say', text, style: 'yell', waitMs });
 
@@ -71,7 +71,7 @@ describe('compileFights: reactions', () => {
   });
 
   it('chains death steps with links, because a dead NPC runs no lists', () => {
-    const out = compile([npc(fight({ reactions: [reaction({ kind: 'death' }, [yell('No...'), { kind: 'credit', objective: 1, group: false, quest: 0, waitMs: 500 }])] }))]);
+    const out = compile([npc(fight({ reactions: [reaction({ kind: 'death' }, [yell('No...'), { kind: 'credit', objective: 1, group: false, quest: Q, waitMs: 500 }])] }))]);
     expect(smart(out).map((r) => [r.source_type, r.id, r.link, r.event_type, r.action_type, r.action_param1, r.target_type])).toEqual([
       ['0', '0', '1', '6', '1', '0', '7'],
       ['0', '1', '0', '61', '33', '12000001', '1'],

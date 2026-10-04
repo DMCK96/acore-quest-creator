@@ -22,7 +22,7 @@ export function entityIssues(input: {
   /** Whether a spell is in the server's spell list; null when the list is not loaded. */
   knownSpell?: ((id: number) => boolean) | null;
   /** `RequiredNpcOrGo`, for fights that give quest credit. */
-  objectives?: readonly number[];
+  objectives?: ReadonlyMap<number, readonly number[]>;
   /** `item_template.InventoryType` of the items NPCs hold, when read; null skips the weapon check. */
   itemInventoryTypes?: ReadonlyMap<number, number> | null;
   /** Whether a quest is in the world or the project; null skips the check of items that start one. */

@@ -3,7 +3,7 @@ import type { CustomNpc } from '../entities/model';
 import type { CompiledScripts } from '../scripts/compile';
 import type { ScriptContext } from '../scripts/context';
 import { createAllocator, emitTrigger, textComment, type Row, type SmartAction, type SmartAllocator } from '../scripts/rows';
-import { fightEntryOf, fightTag } from '../scripts/tag';
+import { entityFightTag, npcRowOwner } from '../scripts/tag';
 import { ACTION, EVENT, SOURCE, TARGET, TEXT_TYPE } from '../smartai/ids';
 import { AUTO_LINES, describeAbility, describeFightStep, describeReaction } from './describe';
 import {
@@ -15,7 +15,8 @@ import {
  * New NPCs' fights to SmartAI rows. Runs after the scene compiler, taking the rows it just wrote as
  * `taken`, so scenes and fights on the same NPC never share an id, list or text group. Pure and
  * deterministic, like the scene compiler: the same fights against the same context give the same
- * rows. Old fight rows are found by their `AQC q<quest> fight<entry>` tag and deleted.
+ * rows. Old fight rows are found by their `AQC npc<entry> fight` tag (or the `AQC q<quest> fight<entry>`
+ * tag exports before version 4 wrote) and deleted.
  */
 
 const SMART_KEY = ['entryorguid', 'source_type', 'id', 'link'] as const;
@@ -52,19 +53,18 @@ const text = (n: number): string => String(n);
 const keyOf = (row: RawRow, columns: readonly string[]): Row => Object.fromEntries(columns.map((c) => [c, row[c] ?? '0']));
 
 export function compileFights(input: {
-  questId: number;
   npcs: readonly CustomNpc[];
-  /** `quest_template.RequiredNpcOrGo`; index 0 is objective 1. */
-  objectives: readonly number[];
+  /** Each project quest's `quest_template.RequiredNpcOrGo`, by quest id; index 0 is objective 1. */
+  objectives: ReadonlyMap<number, readonly number[]>;
   context: ScriptContext;
   /** What the scene compiler wrote in this export: its rows are as good as taken. */
   taken: CompiledScripts;
 }): CompiledScripts {
-  const { questId, npcs, objectives, context, taken } = input;
+  const { npcs, objectives, context, taken } = input;
   const out: CompiledScripts = { inserts: {}, deletes: {}, updates: [], flags: [], warnings: [] };
   const entries = new Set(npcs.map((n) => n.entry));
   const own = (comment: string | null | undefined): boolean => {
-    const entry = fightEntryOf(comment, questId);
+    const entry = npcRowOwner(comment, 'fight');
     return entry !== null && entries.has(entry);
   };
 
@@ -91,14 +91,13 @@ export function compileFights(input: {
 
   for (const npc of npcs) {
     if (fightIsEmpty(npc.fight)) continue;
-    compileOne(npc.entry, npc.fight!, { questId, objectives, alloc, insert, warn: (w) => out.warnings.push(w) });
+    compileOne(npc.entry, npc.fight!, { objectives, alloc, insert, warn: (w) => out.warnings.push(w) });
   }
   return out;
 }
 
 interface Sink {
-  questId: number;
-  objectives: readonly number[];
+  objectives: ReadonlyMap<number, readonly number[]>;
   alloc: SmartAllocator;
   insert(table: string, row: Row): void;
   warn(message: string): void;
@@ -106,7 +105,7 @@ interface Sink {
 
 function compileOne(entry: number, fight: Fight, sink: Sink): void {
   const { alloc, insert } = sink;
-  const tag = fightTag(sink.questId, entry);
+  const tag = entityFightTag(entry);
   const source = SOURCE.creature;
   type Extra = { shape?: 'list' | 'link'; phaseMask?: number; eventFlags?: number; allowSingle?: boolean };
   const emit = (eventType: number, eventParams: readonly number[], actions: SmartAction[], header: string, extra: Extra = {}): void => {
@@ -187,7 +186,7 @@ function compileOne(entry: number, fight: Fight, sink: Sink): void {
       case 'credit':
         // Whoever tagged the NPC and their group: a health threshold has no player behind it, and
         // `KILLEDMONSTER` on itself credits the loot recipient.
-        return first([action(ACTION.killedMonster, [sink.objectives[step.objective - 1] ?? 0], TARGET.self)]);
+        return first([action(ACTION.killedMonster, [sink.objectives.get(step.quest)?.[step.objective - 1] ?? 0], TARGET.self)]);
       case 'cast':
         return first([action(ACTION.cast, [step.spellId, 0], TARGET_OF[step.target])]);
       case 'summonAdds': {

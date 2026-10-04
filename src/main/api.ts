@@ -757,7 +757,7 @@ export function createApi(deps: ApiDeps): Api {
     const items = held.length > 0 ? await rowsOrNone(live.db, 'item_template', { entry: held.map(String) }) : [];
     const itemInventoryTypes = new Map(items.map((r) => [Number(r.entry), Number(r.InventoryType ?? 0)]));
     return entityIssues({
-      entities, dbNames, questItems: questItemsOf(aggregate), objectives: objectivesOf(aggregate),
+      entities, dbNames, questItems: questItemsOf(aggregate), objectives: new Map([[aggregate.questId, objectivesOf(aggregate)]]),
       knownSpell: spells ? (id) => spells.get(id) !== undefined : null, itemInventoryTypes,
       knownQuest: (id) => knownQuests.has(id), itemColumnTypes: itemColumnTypes.size > 0 ? itemColumnTypes : null,
     });
@@ -1002,10 +1002,10 @@ export function createApi(deps: ApiDeps): Api {
     const context = await readScriptContext(live.db, aggregate.questId, scenes, fighters);
     const objectives = objectivesOf(aggregate);
     const sceneRows = compileScenes({ questId: aggregate.questId, scenes, objectives, context });
-    const fightRows = compileFights({ questId: aggregate.questId, npcs, objectives, context, taken: sceneRows });
+    const fightRows = compileFights({ npcs, objectives: new Map([[aggregate.questId, objectives]]), context, taken: sceneRows });
     const before = mergeCompiled(sceneRows, fightRows);
     // Every project NPC goes in, so the rows of point actions since removed are deleted.
-    const patrolRows = compilePatrols({ questId: aggregate.questId, npcs, context, taken: before });
+    const patrolRows = compilePatrols({ npcs, context, taken: before });
     return { context, compiled: mergeCompiled(before, patrolRows) };
   }
 
