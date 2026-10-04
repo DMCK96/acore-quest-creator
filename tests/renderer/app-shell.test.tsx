@@ -7,7 +7,7 @@ const created = vi.hoisted(() => [] as { dispose: ReturnType<typeof vi.fn>; setA
 vi.mock('../../src/renderer/world3d/world3d', () => ({
   createWorld3D: () => {
     const world = {
-      dispose: vi.fn(), lookAt: vi.fn(), setSpawnVisibility: vi.fn(), setActive: vi.fn(), setScenery: vi.fn(), target: () => ({ x: 0, y: 0, z: 0 }),
+      dispose: vi.fn(), lookAt: vi.fn(), setSpawnVisibility: vi.fn(), setActive: vi.fn(), setScenery: vi.fn(), setTool: vi.fn(), setFalloff: vi.fn(), target: () => ({ x: 0, y: 0, z: 0 }),
       spawnStatus: () => ({ capped: { creatures: false, objects: false }, error: null, loading: 0 }),
     };
     created.push(world);

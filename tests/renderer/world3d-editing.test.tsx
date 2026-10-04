@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
-import { afterEach, describe, expect, it, vi } from 'vitest';
-import { render, screen, waitFor } from '@testing-library/react';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { act, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { NamesProvider } from '../../src/renderer/state/names';
 import { makeMockApi, okv, errv, sampleOpen } from './mock-api';
@@ -12,7 +12,7 @@ vi.mock('../../src/renderer/world3d/world3d', () => ({
   createWorld3D: (options: any) => {
     const world = { options, dispose: vi.fn(), lookAt: vi.fn(), setSpawnVisibility: vi.fn(), setOwnSpawns: vi.fn(), select: vi.fn(),
       setWorldLayer: vi.fn(), setMode: vi.fn(), undo: vi.fn(), redo: vi.fn(),
-      setActive: vi.fn(), setScenery: vi.fn(), target: () => ({ x: 0, y: 0, z: 0 }), spawnStatus: () => ({ capped: { creatures: false, objects: false }, error: null }) };
+      setActive: vi.fn(), setScenery: vi.fn(), setTool: vi.fn(), setFalloff: vi.fn(), target: () => ({ x: 0, y: 0, z: 0 }), spawnStatus: () => ({ capped: { creatures: false, objects: false }, error: null }) };
     worlds.push(world);
     return world;
   },
@@ -141,5 +141,60 @@ describe('editing in the World workspace', () => {
     await waitFor(() => expect(worlds).toHaveLength(1));
     worlds[0].options.onEdit({ ...place(false, 5, 143981), spawn: { kind: 'object', guid: 5, entry: 143981, own: false } });
     await waitFor(() => expect(worldMoveSpawn).toHaveBeenCalledWith('gameobject', 5, expect.anything()));
+  });
+});
+
+describe('Select mode and the selection in the 3D view', () => {
+  beforeEach(() => localStorage.clear());
+
+  it('switches between Camera and Select from the toolbar, tells the world, and remembers it', async () => {
+    const { world } = await questMap();
+    await userEvent.click(screen.getByRole('button', { name: 'Select' }));
+    expect(world.setTool).toHaveBeenLastCalledWith('select');
+    expect(screen.getByRole('button', { name: 'Select' }).getAttribute('aria-pressed')).toBe('true');
+    expect(screen.getByRole('button', { name: 'Camera' }).getAttribute('aria-pressed')).toBe('false');
+    expect(JSON.parse(localStorage.getItem('acqc.world3d.layers')!)).toMatchObject({ tool: 'select' });
+  });
+
+  it('follows Tab pressed in the view', async () => {
+    const { world } = await questMap();
+    act(() => world.options.onTool('select'));
+    expect(screen.getByRole('button', { name: 'Select' }).getAttribute('aria-pressed')).toBe('true');
+  });
+
+  it('turns falloff on from its button and shows the radius the view reports', async () => {
+    const { world } = await questMap();
+    await userEvent.click(screen.getByRole('button', { name: 'Select' }));
+    await userEvent.click(screen.getByRole('button', { name: /^Falloff/ }));
+    expect(world.setFalloff).toHaveBeenLastCalledWith({ on: true, radius: 10 });
+    act(() => world.options.onFalloff({ on: true, radius: 12.1 }));
+    expect(screen.getByRole('button', { name: /^Falloff/ }).textContent).toBe('Falloff 12 yd');
+  });
+
+  it('summarises a selection of more than one thing, and Clear clears it', async () => {
+    const { world } = await questMap();
+    act(() => world.options.onSelection({ creatures: 3, objects: 1, points: 12, routes: 2 }));
+    expect(screen.getByText('3 NPCs, 1 object, 12 route points on 2 routes')).toBeTruthy();
+    await userEvent.click(screen.getByRole('button', { name: 'Clear' }));
+    expect(world.select).toHaveBeenLastCalledWith(null);
+    expect(screen.queryByText('3 NPCs, 1 object, 12 route points on 2 routes')).toBeNull();
+  });
+
+  it('sends one gesture\'s world edits one after another, so the last layer drawn is the last edit\'s', async () => {
+    let first!: (value: unknown) => void;
+    const layerA = { ...EMPTY, spawns: [{ ...moved.spawns[0], guid: 1 }] };
+    const layerB = { ...EMPTY, spawns: [{ ...moved.spawns[0], guid: 1 }, { ...moved.spawns[0], guid: 2 }] };
+    const worldMoveSpawn = vi.fn()
+      .mockImplementationOnce(() => new Promise((resolve) => (first = resolve)))
+      .mockImplementationOnce(async () => okv(layerB));
+    const { world } = await questMap(makeMockApi({ worldLayer: vi.fn(async () => okv(EMPTY)), worldMoveSpawn }));
+    world.options.onEdit(place(false, 1, 1423));
+    world.options.onEdit(place(false, 2, 1423));
+    await waitFor(() => expect(worldMoveSpawn).toHaveBeenCalledTimes(1));
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    expect(worldMoveSpawn).toHaveBeenCalledTimes(1);
+    first(okv(layerA));
+    await waitFor(() => expect(world.setWorldLayer).toHaveBeenLastCalledWith(layerB));
+    expect(worldMoveSpawn).toHaveBeenCalledTimes(2);
   });
 });

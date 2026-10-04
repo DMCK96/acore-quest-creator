@@ -1,7 +1,10 @@
 import { Component, useEffect, useRef, useState, type ReactNode } from 'react';
 import { assetUrl } from '@core/client/asset-url';
 import { worldMapDirectory } from '@core/map/world-maps';
-import { createWorld3D, type Scenery, type World3D } from './world3d';
+import { createWorld3D, type Scenery, type SelectionSummary, type World3D } from './world3d';
+import type { Tool } from './controls';
+import { FALLOFF_DEFAULT, FALLOFF_MAX, FALLOFF_MIN } from './scene/edit/falloff';
+import { summaryText } from './summary';
 import { useApi } from '../state/names';
 import type { EventFilter, PickedSpawn, SpawnStatus, SpawnVisibility } from './scene/spawn/SpawnManager';
 import type { ViewSpawns } from '@core/db/view-spawns';
@@ -18,14 +21,20 @@ import './world3d.css';
 /** The camera's controls, as the help in the corner lists them. */
 const CONTROLS: [string, string][] = [
   ['Right-drag', 'Look around'],
-  ['Left-click', 'Select an NPC or object'],
-  ['G / R', 'Move or rotate the selected spawn'],
+  ['Tab', 'Switch between Camera and Select'],
+  ['Left-click', 'Select an NPC, an object or a point of a shown route'],
+  ['Left-drag', 'Camera: orbit round the point under the cursor. Select: select with a box'],
+  ['Shift-click', 'Camera: add a point to the selected NPC’s route. Select: add to the selection'],
+  ['Ctrl-click', 'Select: take from the selection'],
+  ['Alt+drag', 'Select: orbit'],
+  ['Alt+click', 'Select: add a route point'],
+  ['G / R', 'Move or rotate the selection'],
+  ['O', 'Falloff: nearby route points follow a move'],
+  ['[ / ]', 'Falloff radius'],
   ['Place…', 'Choose an existing NPC or object, then click the ground'],
-  ['Shift-click', 'Add a point to the selected NPC’s route'],
-  ['Delete', 'Remove the selected route point'],
+  ['Delete', 'Remove the selected route points'],
   ['Ctrl+Z / Ctrl+Y', 'Undo and redo'],
   ['Esc', 'Stop placing, or clear the selection'],
-  ['Left-drag', 'Orbit round the point under the cursor'],
   ['Middle-drag', 'Pan'],
   ['Wheel', 'Move forward and back'],
   ['W / S', 'Fly forward and back'],
@@ -41,9 +50,11 @@ const LAYERS_KEY = 'acqc.world3d.layers';
  * What the layers card shows: the world's scenery, its NPCs, objects and their paths, and the game
  * event it is drawn during (with that event's name, kept so the choice reads right out of its range)
  */
-type Layers = SpawnVisibility & Scenery & { eventName?: string };
+type Layers = SpawnVisibility & Scenery & { eventName?: string; tool: Tool; falloff: boolean; falloffRadius: number };
 /** No event: the everyday world. Event spawns are only in the world while their event runs. */
-const DEFAULT_LAYERS: Layers = { buildings: true, doodads: true, creatures: true, objects: true, paths: true, events: 'none' };
+const DEFAULT_LAYERS: Layers = {
+  buildings: true, doodads: true, creatures: true, objects: true, paths: true, events: 'none', tool: 'camera', falloff: false, falloffRadius: FALLOFF_DEFAULT,
+};
 type Toggle = 'buildings' | 'doodads' | 'creatures' | 'objects' | 'paths';
 const LAYER_LABELS: [Toggle, string, string?][] = [
   ['buildings', 'Buildings', 'Houses, towers and what is inside them. Hidden, clicks land on the ground under them'],
@@ -63,7 +74,15 @@ const eventFilterOf = (saved: unknown): EventFilter =>
 function readLayers(): Layers {
   try {
     const saved = JSON.parse(localStorage.getItem(LAYERS_KEY) ?? 'null') as (Partial<Omit<Layers, 'events'>> & { events?: unknown }) | null;
-    return { ...DEFAULT_LAYERS, ...(saved ?? {}), events: eventFilterOf(saved?.events) };
+    const radius = saved?.falloffRadius;
+    return {
+      ...DEFAULT_LAYERS,
+      ...(saved ?? {}),
+      events: eventFilterOf(saved?.events),
+      tool: saved?.tool === 'select' ? 'select' : 'camera',
+      falloff: saved?.falloff === true,
+      falloffRadius: typeof radius === 'number' && Number.isFinite(radius) && radius >= FALLOFF_MIN && radius <= FALLOFF_MAX ? radius : FALLOFF_DEFAULT,
+    };
   } catch {
     return { ...DEFAULT_LAYERS };
   }
@@ -172,6 +191,8 @@ function WorldStage({ map, start, hasClient, own, onSelect, onOwnEdit, focus, ac
   const [layers, setLayers] = useState<Layers>(readLayers);
   const [spawns, setSpawns] = useState<SpawnStatus | null>(null);
   const [selected, setSelected] = useState<PickedSpawn | null>(null);
+  // How much is selected, as the world last said
+  const [summary, setSummary] = useState<SelectionSummary | null>(null);
   const onSelectRef = useRef(onSelect);
   onSelectRef.current = onSelect;
   const onOwnEditRef = useRef(onOwnEdit);
@@ -243,9 +264,13 @@ function WorldStage({ map, start, hasClient, own, onSelect, onOwnEdit, focus, ac
     setMissing([]);
     setStatus('loading');
     setSelected(null);
+    setSummary(null);
     setNote(null);
     setPlacing(null);
     let live = true;
+    // One gesture's edits go to the main process one after another: each answer is a whole new
+    // layer, so an earlier, slower answer must never replace a later one
+    let queue: Promise<void> = Promise.resolve();
     let created: World3D | null = null;
     // Each route's answer to "change it for everyone who walks it?", for as long as this world lives
     const answers = new Map<number, Promise<boolean>>();
@@ -358,7 +383,14 @@ function WorldStage({ map, start, hasClient, own, onSelect, onOwnEdit, focus, ac
               setNote(null);
               onSelectRef.current?.(spawn);
             },
-            onEdit: (change) => void edit(change),
+            onEdit: (change) => {
+              // The quest's own edits are taken at once; world edits wait their turn
+              if (change.spawn.own && onOwnEditRef.current) void edit(change);
+              else queue = queue.then(() => edit(change));
+            },
+            onSelection: (next) => live && setSummary(next),
+            onTool: (tool) => live && setLayers((l) => ({ ...l, tool })),
+            onFalloff: (falloff) => live && setLayers((l) => ({ ...l, falloff: falloff.on, falloffRadius: falloff.radius })),
             floorZ,
             beforeRouteEdit,
             onNotice: (message) => live && setNote(message),
@@ -373,6 +405,8 @@ function WorldStage({ map, start, hasClient, own, onSelect, onOwnEdit, focus, ac
           });
           created.setSpawnVisibility(spawnsOf(layersRef.current));
           created.setScenery(sceneryOf(layersRef.current));
+          created.setTool(layersRef.current.tool);
+          created.setFalloff({ on: layersRef.current.falloff, radius: layersRef.current.falloffRadius });
           if (!activeRef.current) created.setActive(false);
           if (ownRef.current) created.setOwnSpawns(ownRef.current);
           world.current = created;
@@ -400,6 +434,8 @@ function WorldStage({ map, start, hasClient, own, onSelect, onOwnEdit, focus, ac
   useEffect(() => {
     world.current?.setSpawnVisibility(spawnsOf(layers));
     world.current?.setScenery(sceneryOf(layers));
+    world.current?.setTool(layers.tool);
+    world.current?.setFalloff({ on: layers.falloff, radius: layers.falloffRadius });
     try {
       localStorage.setItem(LAYERS_KEY, JSON.stringify(layers));
     } catch {
@@ -427,6 +463,7 @@ function WorldStage({ map, start, hasClient, own, onSelect, onOwnEdit, focus, ac
   function clearSelection(): void {
     world.current?.select(null);
     setSelected(null);
+    setSummary(null);
     onSelectRef.current?.(null);
   }
 
@@ -473,6 +510,9 @@ function WorldStage({ map, start, hasClient, own, onSelect, onOwnEdit, focus, ac
   const nearbyEvents = spawns?.events ?? [];
   const chosen = typeof layers.events === 'number' && !nearbyEvents.some((e) => e.id === layers.events) ? [{ id: layers.events, name: layers.eventName ?? '' }] : [];
   const eventChoices = [...nearbyEvents, ...chosen];
+
+  // More than one spawn, or any route points: the card sums them up instead of showing one spawn
+  const several = summary !== null && summary.creatures + summary.objects + summary.points > 0 && !(summary.creatures + summary.objects === 1 && summary.points === 0);
 
   const unavailable = !hasClient
     ? 'Choose the game client folder in the connection settings to see the world in 3D.'
@@ -533,6 +573,27 @@ function WorldStage({ map, start, hasClient, own, onSelect, onOwnEdit, focus, ac
           </div>
         </fieldset>
       )}
+      {!unavailable && (
+        <div className="world3d__tools glass" role="toolbar" aria-label="Tools">
+          <button type="button" className="world3d__tool" aria-pressed={layers.tool === 'camera'} title="Camera: left-drag orbits (Tab)" onClick={() => setLayers((l) => ({ ...l, tool: 'camera' }))}>
+            Camera
+          </button>
+          <button type="button" className="world3d__tool" aria-pressed={layers.tool === 'select'} title="Select: left-drag draws a box, Alt+drag orbits (Tab)" onClick={() => setLayers((l) => ({ ...l, tool: 'select' }))}>
+            Select
+          </button>
+          {layers.tool === 'select' && (
+            <button
+              type="button"
+              className="world3d__tool"
+              aria-pressed={layers.falloff}
+              title="Nearby route points follow a move (O; [ and ] change the radius)"
+              onClick={() => setLayers((l) => ({ ...l, falloff: !l.falloff }))}
+            >
+              Falloff {Math.round(layers.falloffRadius)} yd
+            </button>
+          )}
+        </div>
+      )}
       {!unavailable && placing && (
         <p role="status" className="world3d__placing">
           Placing {placing.name || `${placing.kind === 'creature' ? 'NPC' : 'object'} ${placing.entry}`} (#{placing.entry}): click the ground to put one down. Esc stops.
@@ -552,8 +613,21 @@ function WorldStage({ map, start, hasClient, own, onSelect, onOwnEdit, focus, ac
           onClose={() => setChoosing(false)}
         />
       )}
-      {!unavailable && selected && <SelectedSpawn spawn={selected} note={note} onClose={clearSelection} onRemove={selected.added ? () => void removePlaced(selected) : undefined} />}
-      {!unavailable && !selected && note && (
+      {!unavailable && selected && !several && <SelectedSpawn spawn={selected} note={note} onClose={clearSelection} onRemove={selected.added ? () => void removePlaced(selected) : undefined} />}
+      {!unavailable && several && summary && (
+        <section className="world3d__selected" aria-label="Selection">
+          <header>
+            <h3>{summaryText(summary)}</h3>
+          </header>
+          {note && <p className="world3d__selected-note">{note}</p>}
+          <p className="world3d__selected-actions">
+            <button type="button" className="btn" onClick={clearSelection}>
+              Clear
+            </button>
+          </p>
+        </section>
+      )}
+      {!unavailable && !selected && !several && note && (
         <p role="status" className="world3d__edit-note">
           {note}
         </p>
