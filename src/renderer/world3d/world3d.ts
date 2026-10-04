@@ -188,7 +188,6 @@ export function createWorld3D(options: World3DOptions): World3D {
   };
   // What is selected: spawns, points of active routes, and the routes being worked on
   let selection: Selection = EMPTY_SELECTION;
-  const hasRoute = (guid: number): boolean => manager.spawnRoute(guid) !== null;
   /**
    * A new selection, drawn and told about. `tell` also tells the host which one spawn is selected
    * (or none); a selection the host made itself (`select`) is not told back.
@@ -262,13 +261,13 @@ export function createWorld3D(options: World3DOptions): World3D {
     if ((tool === 'camera' ? keys.shift : keys.alt) && editor.insertPoint(x, y)) return;
     const hit = hitAt(x, y);
     if ('points' in hit) options.onNotice?.(null);
-    setSelection(combine(selection, hit, tool === 'select' ? modifierOf(keys) : 'replace', hasRoute));
+    setSelection(combine(selection, hit, tool === 'select' ? modifierOf(keys) : 'replace'));
   };
   // A box drawn in Select mode: the route points or spawns inside it, by where they land on screen
   const box = (rect: Rect, keys: ClickKeys): void => {
     if (placing) return;
     const project = (at: { x: number; y: number; z: number }) => new THREE.Vector3(at.x, at.y, at.z).project(camera);
-    setSelection(combine(selection, boxHits(manager.selectionCandidates(camera.position), project, rect), modifierOf(keys), hasRoute));
+    setSelection(combine(selection, boxHits(manager.selectionCandidates(camera.position), project, rect), modifierOf(keys)));
   };
   const controls = new WorldControls(camera, renderer.domElement, {
     pick,
@@ -451,7 +450,7 @@ export function createWorld3D(options: World3DOptions): World3D {
     },
     spawnStatus: () => manager.spawnStatus,
     setOwnSpawns: (spawns) => manager.setOwnSpawns(spawns),
-    select: (spawn) => setSelection(spawn ? combine(EMPTY_SELECTION, { spawns: [spawn] }, 'replace', hasRoute) : EMPTY_SELECTION, false),
+    select: (spawn) => setSelection(spawn ? combine(EMPTY_SELECTION, { spawns: [spawn] }, 'replace') : EMPTY_SELECTION, false),
     setTool: (next) => applyTool(next),
     setFalloff: (falloff) => editor.setFalloff(falloff),
     setWorldLayer: (layer) => manager.setWorldLayer(layer),

@@ -1,7 +1,8 @@
 /**
  * What is selected in the 3D view, apart from drawing it: NPCs and objects, points of NPCs' routes,
  * and the routes being worked on (shown, and open to a box or a click). Picking an NPC makes its
- * route active; picking points of a route keeps it active, so its NPC need not stay selected.
+ * route (or wander circle) active, whether or not it is drawn yet; picking points of a route keeps it
+ * active, so its NPC need not stay selected.
  */
 
 export type SelectedSpawn = { kind: 'creature' | 'object'; guid: number };
@@ -44,12 +45,12 @@ function without<T>(a: readonly T[], b: readonly T[], key: (item: T) => string):
 
 const withRoutes = (routes: readonly number[], guids: readonly number[]): number[] => [...new Set([...routes, ...guids])];
 
-export function combine(current: Selection, hit: Hit, modifier: Modifier, hasRoute: (guid: number) => boolean): Selection {
+export function combine(current: Selection, hit: Hit, modifier: Modifier): Selection {
   const caught = 'spawns' in hit ? hit.spawns : hit.points;
   if (caught.length === 0) return modifier === 'replace' ? EMPTY_SELECTION : current;
 
   if ('spawns' in hit) {
-    const routed = hit.spawns.filter((s) => s.kind === 'creature' && hasRoute(s.guid)).map((s) => s.guid);
+    const routed = hit.spawns.filter((s) => s.kind === 'creature').map((s) => s.guid);
     if (modifier === 'replace') return { spawns: union([], hit.spawns, spawnKey), points: [], routes: withRoutes([], routed) };
     if (modifier === 'add') return { spawns: union(current.spawns, hit.spawns, spawnKey), points: current.points, routes: withRoutes(current.routes, routed) };
     // A removed NPC's route stays active while any of its points is picked
