@@ -135,13 +135,11 @@ export class Editor {
   }
 
   undo(): void {
-    const edit = this.#history.undo();
-    if (edit) this.#apply(edit);
+    for (const edit of this.#history.undo() ?? []) this.#apply(edit);
   }
 
   redo(): void {
-    const edit = this.#history.redo();
-    if (edit) this.#apply(edit);
+    for (const edit of this.#history.redo() ?? []) this.#apply(edit);
   }
 
   /** Every frame: keeps the gizmo on what is selected, which a redraw replaces with a new object */
@@ -221,7 +219,7 @@ export class Editor {
     const spawn = this.#ref();
     if (!spawn) return;
     const after: SpawnEdit = { kind: 'place', spawn, to: placementOf(target, selected.kind) };
-    this.#history.push({ kind: 'place', spawn, to: before }, after);
+    this.#history.push([{ kind: 'place', spawn, to: before }], [after]);
     this.#options.onEdit?.(after);
   }
 
@@ -259,7 +257,7 @@ export class Editor {
       }
     }
     const edit: SpawnEdit = { kind: 'route', spawn, pathId: route.pathId, points: after };
-    this.#history.push({ ...edit, points: before }, edit);
+    this.#history.push([{ ...edit, points: before }], [edit]);
     this.#world.setPendingRoute(selected.guid, after);
     this.#options.onEdit?.(edit);
   }
