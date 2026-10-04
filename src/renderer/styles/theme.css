@@ -26,6 +26,14 @@
   --radius: 8px;
   --radius-lg: 14px;
   --shadow: 0 4px 16px rgba(0, 0, 0, 0.4);
+  /* The login card's frosted surface: every card, modal and floating panel is drawn on it. The strong
+     one is for over the 3D world, where the lighter one is hard to read. */
+  --glass-bg: rgba(34, 27, 21, 0.78);
+  --glass-bg-strong: rgba(34, 27, 21, 0.9);
+  --glass-border: rgba(207, 159, 63, 0.28);
+  --glass-blur: 14px;
+  --glass-shadow: 0 24px 60px rgba(0, 0, 0, 0.55), 0 0 0 1px rgba(0, 0, 0, 0.3);
+  --title-glow: 0 1px 10px rgba(207, 159, 63, 0.35);
   /* Native parts the CSS cannot reach (scrollbars, number spinners, date pickers) draw dark too. */
   color-scheme: dark;
 }
@@ -221,6 +229,24 @@ button {
 .btn--icon {
   padding: 0.45em 0.55em;
   line-height: 1;
+}
+
+/* A card on the frosted surface, as the login card is. */
+.glass {
+  background: var(--glass-bg-strong);
+  backdrop-filter: blur(var(--glass-blur));
+  border: 1px solid var(--glass-border);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--glass-shadow);
+}
+
+/* The small gold capitals that head a card's sections ("World database" on the login card). */
+.section-label {
+  font-size: 0.72rem;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--accent);
 }
 
 .chip {

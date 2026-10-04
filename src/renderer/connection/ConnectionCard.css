@@ -9,13 +9,11 @@
   box-sizing: border-box;
   padding: 1.6rem 1.7rem 1.5rem;
   /* Translucent, so the orb's glow shows through the frosted card. */
-  background: rgba(34, 27, 21, 0.78);
-  backdrop-filter: blur(14px);
-  border: 1px solid rgba(207, 159, 63, 0.28);
+  background: var(--glass-bg);
+  backdrop-filter: blur(var(--glass-blur));
+  border: 1px solid var(--glass-border);
   border-radius: var(--radius-lg);
-  box-shadow:
-    0 24px 60px rgba(0, 0, 0, 0.55),
-    0 0 0 1px rgba(0, 0, 0, 0.3);
+  box-shadow: var(--glass-shadow);
 }
 
 .conn-card__header {
@@ -29,7 +27,7 @@
   font-size: 1.7rem;
   font-weight: normal;
   color: #fff6e4;
-  text-shadow: 0 1px 10px rgba(207, 159, 63, 0.35);
+  text-shadow: var(--title-glow);
 }
 
 .conn-card__subtitle {
