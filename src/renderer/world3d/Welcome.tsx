@@ -14,8 +14,10 @@ const PICKS = quickPicks(spots as TeleportSpot[]);
  * start (a well-known one, or any found by name), finding an NPC or object, starting a quest, or just
  * looking around.
  */
-export function Welcome({ projectName, onPick, onFind, onStartQuest, onClose }: {
+export function Welcome({ projectName, leaving = false, onPick, onFind, onStartQuest, onClose }: {
   projectName: string;
+  /** Fading out after a choice: still drawn, but no longer a dialog or in the way of the world */
+  leaving?: boolean;
   onPick(spot: TeleportSpot): void;
   onFind(): void;
   onStartQuest(): void;
@@ -24,7 +26,12 @@ export function Welcome({ projectName, onPick, onFind, onStartQuest, onClose }: 
   const card = useRef<HTMLDivElement>(null);
   const name = projectName.trim();
   return (
-    <div className="welcome" onMouseDown={(e) => e.target === e.currentTarget && onClose()}>
+    <div
+      className={leaving ? 'welcome welcome--leaving' : 'welcome'}
+      aria-hidden={leaving || undefined}
+      inert={leaving || undefined}
+      onMouseDown={(e) => !leaving && e.target === e.currentTarget && onClose()}
+    >
       <div className="welcome__orb" data-orb-target="">
         <QuestOrb />
       </div>

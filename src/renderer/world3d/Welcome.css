@@ -7,7 +7,21 @@
   place-items: center;
   padding: 1rem;
   overflow: hidden;
-  background: radial-gradient(ellipse at 50% 50%, rgba(23, 19, 16, 0.55) 0%, rgba(23, 19, 16, 0.92) 70%);
+  /* Dark like the login screen's, so the orb glows against night rather than the world */
+  background: radial-gradient(ellipse at 50% 45%, rgba(35, 26, 18, 0.96) 0%, rgba(23, 19, 16, 0.985) 70%);
+  transition: opacity 0.5s ease-out;
+}
+
+/* A choice made: the world shows through as the welcome fades, and takes the clicks at once. */
+.welcome--leaving {
+  opacity: 0;
+  pointer-events: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .welcome {
+    transition: none;
+  }
 }
 
 .welcome__orb {

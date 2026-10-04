@@ -25,6 +25,9 @@ export interface WorldWorkspaceProps {
 
 type Point = { x: number; y: number; z: number };
 
+/** How long the welcome takes to fade from the world once something is chosen (matches Welcome.css) */
+const WELCOME_FADE_MS = 500;
+
 /**
  * The world, as the app's main workspace: the 3D view of a continent with a place card (where the
  * camera is, Teleport, Find and typed coordinates). It opens where it was left. Without a game client
@@ -49,10 +52,18 @@ export function WorldWorkspace({ hasClient, active = true, projectKey, projectNa
   // elsewhere, or opened while this was hidden, is handled when the world is next shown
   const [closed, setClosed] = useState<ReadonlySet<string>>(new Set());
   const welcoming = active && hasClient && !closed.has(projectKey) && !welcomeSeen(projectKey);
+  // The welcome fading out over the world after a choice (the choice itself happens at once)
+  const [fading, setFading] = useState(false);
+  useEffect(() => {
+    if (!fading) return;
+    const timer = setTimeout(() => setFading(false), WELCOME_FADE_MS);
+    return () => clearTimeout(timer);
+  }, [fading]);
   /** Closes the welcome for this project for good, then does what was chosen */
   const leaveWelcome = (then?: () => void): void => {
     markWelcomeSeen(projectKey);
     setClosed((keys) => new Set(keys).add(projectKey));
+    setFading(true);
     then?.();
   };
 
@@ -189,9 +200,10 @@ export function WorldWorkspace({ hasClient, active = true, projectKey, projectNa
           </form>
         )}
       </section>
-      {welcoming && (
+      {(welcoming || (fading && active)) && (
         <Welcome
           projectName={projectName}
+          leaving={!welcoming}
           onPick={(spot) => leaveWelcome(() => teleport(spot))}
           onFind={() => leaveWelcome(() => setFinding(true))}
           onStartQuest={() => leaveWelcome(onStartQuest)}

@@ -88,6 +88,20 @@ describe('the welcome', () => {
     expect(seen()).toEqual(['a', 'b', 'c']);
   }, 15000);
 
+  it('darkens the world behind the orb, and fades away once something is chosen', async () => {
+    clientHasEverything();
+    render(<WorldWorkspace {...props()} />);
+    await screen.findByRole('dialog', { name: 'Welcome' });
+    const overlay = document.querySelector('.welcome')!;
+    expect(overlay).not.toHaveClass('welcome--leaving');
+    await userEvent.click(screen.getByRole('button', { name: 'Just look around' }));
+    // Still there while it fades, but out of reach: no longer a dialog, and clicks go to the world
+    expect(overlay).toHaveClass('welcome--leaving');
+    expect(overlay).toHaveAttribute('aria-hidden', 'true');
+    expect(screen.queryByRole('dialog', { name: 'Welcome' })).toBeNull();
+    await waitFor(() => expect(document.querySelector('.welcome')).toBeNull());
+  });
+
   it('closes on Esc', async () => {
     clientHasEverything();
     render(<WorldWorkspace {...props()} />);
