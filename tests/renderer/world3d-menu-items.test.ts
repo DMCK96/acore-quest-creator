@@ -5,7 +5,7 @@ const at = { x: 1, y: 2, z: 3 };
 const npc = (over: Partial<MenuSpawn> = {}): MenuSpawn => ({ kind: 'creature', guid: 80330, entry: 1423, name: 'Guard', own: false, added: false, pathId: 0, wander: 0, map: 0,
   placement: { x: 1, y: 2, z: 3, orientation: 0, rotation: null }, ...over });
 const crate = (over: Partial<MenuSpawn> = {}): MenuSpawn => npc({ kind: 'object', guid: 5, entry: 143981, name: 'Crate', ...over });
-const context = (over: Partial<MenuContext> = {}): MenuContext => ({ map: 0, connected: true, clipboard: { count: 0, blocked: null }, placing: false, drawing: null, quest: null, project: true, marked: false, ...over });
+const context = (over: Partial<MenuContext> = {}): MenuContext => ({ map: 0, connected: true, clipboard: { count: 0, blocked: null }, placing: false, drawing: null, quest: null, project: true, marked: false, lootable: () => null, ...over });
 const ground = (selection: MenuSpawn[] = []): MenuTarget => ({ ground: at, hit: null, selection });
 const onSpawn = (spawn: MenuSpawn): MenuTarget => ({ ground: at, hit: { type: 'spawn', spawn }, selection: [spawn] });
 const quest = { id: 60001, title: 'Wolves', roles: { givers: [{ kind: 'creature' as const, id: 1423 }], enders: [], objectives: [null, null, null, null] },
@@ -18,7 +18,7 @@ const labels = (groups: ReturnType<typeof buildMenu>) => groups.map((g) => [g.id
 describe('the menu on the ground', () => {
   it('offers placing, paste and coordinates; a quest group only says to open a quest', () => {
     expect(labels(buildMenu(ground(), context()))).toEqual([
-      ['world', ['Place NPC here…', 'Place object here…', 'Paste here', 'Copy coordinates']],
+      ['world', ['Place NPC here…', 'Place object here…', 'New NPC here…', 'New object here…', 'Paste here', 'Copy coordinates']],
       ['quest', ['Spawn quest NPC here']],
     ]);
     expect(item(buildMenu(ground(), context()), 'Paste here')!.disabledReason).toBe('Copy something first');

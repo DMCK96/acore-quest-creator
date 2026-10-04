@@ -27,13 +27,11 @@ describe('the 3D view’s clipboard', () => {
     expect(laid[0]!.at.orientation).toBe(0.5);
   });
 
-  it('pastes the quest’s own spawns only while that quest is open, and says so', () => {
+  it('pastes the project’s own spawns whichever quest is open, or none', () => {
     const entries = copySpawns([spawn(1, 0, 0, { own: true }), spawn(2, 0, 0)], 60001);
     expect(pasteable(entries, { id: 60001, title: 'Wolves' }, () => 'Wolves')).toEqual({ entries, blocked: null });
-    const other = pasteable(entries, { id: 60002, title: 'Bears' }, () => 'Wolves');
-    expect(other.entries).toEqual([entries[1]]);
-    expect(other.blocked).toBe('Open Wolves to paste its NPC');
-    expect(pasteable([entries[0]!], null, () => 'Wolves')).toEqual({ entries: [], blocked: 'Open Wolves to paste its NPC' });
+    expect(pasteable(entries, { id: 60002, title: 'Bears' }, () => 'Wolves')).toEqual({ entries, blocked: null });
+    expect(pasteable([entries[0]!], null, () => 'Wolves')).toEqual({ entries: [entries[0]], blocked: null });
   });
 
   it('a duplicate goes two yards to the camera’s right', () => {

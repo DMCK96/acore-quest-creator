@@ -73,15 +73,16 @@ export function layoutAt(list: readonly ClipEntry[], at: { x: number; y: number;
   }));
 }
 
-/** Which entries can be pasted with this quest open (own ones only when it is theirs), and why any were left out */
+/**
+ * Which entries can be pasted, and why any were left out. Every one can: the project's own NPCs and
+ * objects belong to the project, not to a quest, so they paste whichever quest is open, or none.
+ */
 export function pasteable(
   list: readonly ClipEntry[],
-  openQuest: { id: number; title: string } | null,
-  titles: (questId: number) => string,
+  _openQuest: { id: number; title: string } | null,
+  _titles: (questId: number) => string,
 ): { entries: ClipEntry[]; blocked: string | null } {
-  const kept = list.filter((e) => !e.own || (openQuest !== null && e.questId === openQuest.id));
-  const left = list.find((e) => !kept.includes(e));
-  return { entries: kept, blocked: left ? `Open ${titles(left.questId ?? 0)} to paste its NPC` : null };
+  return { entries: [...list], blocked: null };
 }
 
 /** Where a duplicate goes: two yards to the right of a camera looking along `direction` (X north, Y west) */

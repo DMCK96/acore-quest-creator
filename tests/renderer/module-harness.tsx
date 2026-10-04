@@ -43,7 +43,7 @@ export async function mountBody(
   const entities = opts.entities ?? {
     npcs: old.npcs.map((e) => ({ ...e, madeFor: 60001 })), objects: old.objects.map((e) => ({ ...e, madeFor: 60001 })), items: old.items.map((e) => ({ ...e, madeFor: 60001 })),
   };
-  const project = { entities, setEntities: opts.setEntities ?? vi.fn(), quests: opts.quests ?? [], create: vi.fn(async () => ({ error: 'not here' })) };
+  const project = { entities, setEntities: opts.setEntities ?? vi.fn(), quests: opts.quests ?? [], create: vi.fn(async () => ({ error: 'not here' })), remove: vi.fn(async () => null) };
   render(
     <ProjectEntitiesProvider value={project}>
     <NamesProvider api={api}>

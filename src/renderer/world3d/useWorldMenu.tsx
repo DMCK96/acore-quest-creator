@@ -48,6 +48,14 @@ export interface WorldMenuDeps {
   onQuestRole?(role: Role, target: RoleTarget, on: boolean): string | null;
   onNewQuest?(giver: { entry: number; name: string }, after: boolean): void;
   onShowSpawns?(groups: QuestSpawnGroup[], scope: 'quest' | 'chain'): void;
+  /** Makes a new project NPC or object with one spawn at `at` (made for the open quest with `forQuest`), as one step */
+  onCreateEntity?(what: 'creature' | 'object', at: Placement, forQuest: boolean): Promise<void>;
+  /** Opens the editor on one of the project's NPCs or objects */
+  onEditEntity?(kind: 'creature' | 'object', entry: number): void;
+  /** Makes a project object lootable, or no longer */
+  onSetLootable?(entry: number, on: boolean): Promise<void>;
+  /** Whether a project object can be looted; null for one that is not the project's */
+  lootable?(entry: number): boolean | null;
 }
 
 type Put = { kind: 'creature' | 'object'; entry: number; own: boolean; at: Placement };
@@ -111,6 +119,7 @@ export function useWorldMenu(deps: WorldMenuDeps): {
       quest: quest ?? null,
       project: onNewQuest !== undefined,
       marked,
+      lootable: (entry) => d.current.lootable?.(entry) ?? null,
     });
     if (groups.length > 0) setMenu({ groups, at: client });
   };
@@ -219,6 +228,15 @@ export function useWorldMenu(deps: WorldMenuDeps): {
         return;
       case 'placeHere':
         setPlace({ what: action.what, at: action.at });
+        return;
+      case 'newEntity':
+        await d.current.onCreateEntity?.(action.what, await floored(facingCamera(action.at, action.what)), action.forQuest);
+        return;
+      case 'editEntity':
+        d.current.onEditEntity?.(action.spawn.kind, action.spawn.entry);
+        return;
+      case 'setLootable':
+        await d.current.onSetLootable?.(action.spawn.entry, action.on);
         return;
       case 'copy':
         copy();

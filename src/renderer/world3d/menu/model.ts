@@ -45,6 +45,8 @@ export interface MenuContext {
   project: boolean;
   /** Quest spawns are marked in the view */
   marked: boolean;
+  /** Whether a project object can be looted; null for an entry that is not one of the project's objects */
+  lootable(entry: number): boolean | null;
 }
 
 export type MenuAction =
@@ -53,6 +55,10 @@ export type MenuAction =
   | { kind: 'undoPoint' }
   | { kind: 'cancelPath' }
   | { kind: 'placeHere'; what: 'creature' | 'object'; at: At }
+  /** A new project NPC or object standing here; `forQuest` makes it for the open quest */
+  | { kind: 'newEntity'; what: 'creature' | 'object'; at: At; forQuest: boolean }
+  | { kind: 'editEntity'; spawn: MenuSpawn }
+  | { kind: 'setLootable'; spawn: MenuSpawn; on: boolean }
   | { kind: 'copy' }
   | { kind: 'paste'; at: At }
   | { kind: 'duplicate' }

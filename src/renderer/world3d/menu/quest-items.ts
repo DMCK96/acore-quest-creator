@@ -1,6 +1,6 @@
 import { hasRole, type RoleTarget } from '@core/modules/quest-roles';
 import { item, type MenuContext, type MenuGroup, type MenuItem, type MenuTarget } from './model';
-import { NEEDS_DATABASE, NEEDS_GROUND } from './world-items';
+import { NEEDS_DATABASE, NEEDS_GROUND, newHere } from './world-items';
 
 /** The open quest's items: spawn its NPCs here, give a spawn a part in it, start a new quest, show its spawns */
 
@@ -25,6 +25,7 @@ export function questItems(target: MenuTarget, context: MenuContext): MenuGroup 
       }));
       items.push(item('Spawn quest NPC here', { children }));
     }
+    if (quest) items.push(...newHere(target, context, true));
     if (quest) {
       items.push(item('Show quest spawns', { action: { kind: 'showSpawns', scope: 'quest' } }));
       if (quest.chained) items.push(item('Show chain spawns', { action: { kind: 'showSpawns', scope: 'chain' } }));

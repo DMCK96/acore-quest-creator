@@ -1,12 +1,14 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import type { CanvasNode, OpenResult, QuestSpawnGroup } from '@shared/ipc';
 import type { FieldValue } from '@core/registry/types';
-import { EMPTY_ENTITIES } from '@core/entities/model';
-import { narrowTo, questUses } from '@core/entities/links';
+import { EMPTY_ENTITIES, newSpawn } from '@core/entities/model';
+import type { Placement } from '@core/world/layer';
+import { EntityEditorHost, type EditorState } from '../entities/EntityEditorHost';
+import { useHistorySteps } from '../state/history-context';
 import { useProjectEntities } from '../state/project-entities';
 import { ownViewSpawns } from '@core/entities/view-spawns';
 import { toggleRole } from '@core/modules/quest-roles';
-import { useNameBook } from '../state/names';
+import { useApi, useNameBook } from '../state/names';
 import { ownEdit } from '../map/own-3d-edit';
 import { chainOf, questMenuInfo } from './quest-context';
 import { OBJECTIVES_FULL } from './menu/quest-items';
@@ -90,10 +92,53 @@ export function WorldWorkspace({
   // The project's NPCs and objects; edits to their spawns go to the whole store
   const storeRef = useRef(store);
   storeRef.current = store;
-  const own = useMemo(
-    () => (quest ? ownViewSpawns(narrowTo(store, questUses({ questId: quest.open.questId, aggregate: quest.open.aggregate }, store))) : undefined),
-    [quest, store],
-  );
+  // Every project spawn is drawn and edited here, whether or not a quest is open
+  const own = useMemo(() => ownViewSpawns(store), [store]);
+  const { runStep } = useHistorySteps();
+  const api = useApi();
+  // The NPC or object editor, opened from the right-click menu
+  const [editor, setEditor] = useState<EditorState | null>(null);
+  const [note, setNote] = useState<string | null>(null);
+
+  /** New NPC here… / New object here…: one project NPC or object with a spawn where it was asked for, as one step */
+  const createEntity = async (what: 'creature' | 'object', at: Placement, forQuest: boolean): Promise<void> => {
+    if (!project || !api) return;
+    let made: { kind: 'npc' | 'object'; entry: number } | null = null;
+    await runStep(async () => {
+      const guid = await api.allocateIds(what === 'creature' ? 'creatureSpawn' : 'gameobjectSpawn', 1);
+      if (!guid.ok || guid.value.length === 0) {
+        setNote(guid.ok ? 'No free spawn ID could be found.' : guid.error.message);
+        return;
+      }
+      const spawn = { ...newSpawn(guid.value[0]!), map: mapRef.current, x: at.x, y: at.y, z: at.z, o: at.orientation, rotation: what === 'object' ? at.rotation : null };
+      const kind = what === 'creature' ? 'npc' : 'object';
+      const result = await project.create(kind, { spawns: [spawn] }, forQuest && quest ? quest.open.questId : null);
+      if ('error' in result) setNote(result.error);
+      else made = { kind, entry: result.entry };
+    }, what === 'creature' ? 'New NPC' : 'New object');
+    const opened = made as { kind: 'npc' | 'object'; entry: number } | null;
+    if (opened) setEditor({ kind: opened.kind, entry: opened.entry, isNew: true, tab: 'basics' });
+  };
+
+  /** Make lootable… / Stop being lootable on a project object, asking first when it would stop doing something else */
+  const setLootable = async (entry: number, on: boolean): Promise<void> => {
+    const object = storeRef.current.objects.find((o) => o.entry === entry);
+    if (!project || !object) return;
+    const name = object.name.trim() || 'this object';
+    if (on && object.pages.length > 0 && !window.confirm(`Make ${name} lootable? Its pages are not shown once it can be looted.`)) return;
+    if (on && object.pages.length === 0 && object.onlyDuringQuest !== null && object.type === 'goober'
+      && !window.confirm(`Make ${name} lootable? Its quest-only use stops; only its loot can be quest-only.`)) return;
+    const next = { ...storeRef.current, objects: storeRef.current.objects.map((o) => (o.entry === entry ? { ...o, type: on ? 'chest' as const : 'goober' as const } : o)) };
+    await runStep(async () => {
+      storeRef.current = next;
+      project.setEntities(next);
+    }, on ? `Made ${name} lootable` : `Stopped ${name} being lootable`);
+    if (on) setEditor({ kind: 'object', entry, isNew: false, tab: 'contents' });
+  };
+  const lootable = (entry: number): boolean | null => {
+    const object = storeRef.current.objects.find((o) => o.entry === entry);
+    return object ? object.type === 'chest' : null;
+  };
   // The spawns of the open quest or its chain, listed after the menu showed them
   const [preset, setPreset] = useState<FindPreset | null>(null);
   const [first] = useState(readLastPlace);
@@ -227,7 +272,7 @@ export function WorldWorkspace({
         onPlaceChange={(place) => writeLastPlace({ map: mapRef.current, ...place })}
         own={own}
         onOwnEdit={
-          quest
+          project
             ? (edit) => {
                 const next = ownEdit(storeRef.current, edit);
                 if (next) {
@@ -248,7 +293,26 @@ export function WorldWorkspace({
         }}
         onNewQuest={onNewQuest ? (giver, after) => onNewQuest(giver, after && quest ? quest.open.questId : null) : undefined}
         onShowSpawns={(groups, scope) => setPreset(presetOf(groups, scope))}
+        onCreateEntity={createEntity}
+        onEditEntity={(kind, entry) => setEditor({ kind: kind === 'creature' ? 'npc' : 'object', entry, isNew: false })}
+        onSetLootable={setLootable}
+        lootable={lootable}
       />
+      {note && (
+        <p className="world3d__note" role="status">
+          {note}
+          <button type="button" className="btn btn--icon" aria-label="Dismiss" onClick={() => setNote(null)}>
+            ✕
+          </button>
+        </p>
+      )}
+      {editor && project && (
+        <div className="modal-backdrop">
+          <EntityEditorHost entities={project.entities} onChange={(next) => project.setEntities(next)} quests={project.quests}
+            state={editor} onTab={(tab) => setEditor((was) => (was ? { ...was, tab } : was))} onClose={() => setEditor(null)}
+            onDelete={(kind, entry) => project.remove(kind, entry)} />
+        </div>
+      )}
       <section className="world-place glass" aria-label="Place">
         <h2 className="world-place__title">{area ?? mapName}</h2>
         {area && <p className="world-place__map section-label">{mapName}</p>}

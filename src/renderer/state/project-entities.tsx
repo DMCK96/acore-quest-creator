@@ -19,6 +19,8 @@ export interface ProjectEntitiesValue {
   setEntities(next: ProjectEntities): void;
   quests: ProjectQuestUse[];
   create: ReturnType<AppStore['getState']>['createEntity'];
+  /** Deletes one, emptying the giver cards that named it, as one step; the error to show, or null */
+  remove(kind: 'npc' | 'object' | 'item', entry: number): Promise<string | null>;
 }
 
 const ProjectEntitiesContext = createContext<ProjectEntitiesValue | null>(null);
@@ -54,8 +56,8 @@ export function ProjectEntitiesFromStore({ store, children }: { store: AppStore;
       if (at >= 0) quests[at] = mine;
       else quests.push(mine);
     }
-    const { setEntities, createEntity } = store.getState();
-    return { entities, setEntities, quests, create: createEntity };
+    const { setEntities, createEntity, deleteEntity } = store.getState();
+    return { entities, setEntities, quests, create: createEntity, remove: deleteEntity };
   }, [store, nodes, open, entities]);
   return <ProjectEntitiesProvider value={value}>{children}</ProjectEntitiesProvider>;
 }

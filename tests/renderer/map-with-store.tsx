@@ -17,7 +17,7 @@ export function MapWithStore(props: ComponentProps<typeof QuestMapView>): React.
     objects: read.objects.map((e) => ({ ...e, madeFor: questId })),
     items: read.items.map((e) => ({ ...e, madeFor: questId })),
   };
-  const value = { entities, setEntities: (next: ProjectEntities) => onChange(ENTITIES_FIELD, writeEntities(next)), quests: [], create: async () => ({ error: 'not here' }) };
+  const value = { entities, setEntities: (next: ProjectEntities) => onChange(ENTITIES_FIELD, writeEntities(next)), quests: [], create: async () => ({ error: 'not here' }), remove: async () => null };
   return (
     <ProjectEntitiesProvider value={value}>
       <QuestMapView {...props} />
@@ -27,5 +27,5 @@ export function MapWithStore(props: ComponentProps<typeof QuestMapView>): React.
 
 /** A provider value over a fixed store, its changes going to `setEntities` */
 export function storeOf(entities: ProjectEntities, setEntities: (next: ProjectEntities) => void = () => {}) {
-  return { entities, setEntities, quests: [], create: async () => ({ error: 'not here' }) };
+  return { entities, setEntities, quests: [], create: async () => ({ error: 'not here' }), remove: async () => null };
 }

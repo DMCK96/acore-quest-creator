@@ -10,7 +10,7 @@ import { useHistorySteps } from '../state/history-context';
 import type { EventFilter, PickedSpawn, SpawnStatus, SpawnVisibility } from './scene/spawn/SpawnManager';
 import type { ViewSpawns } from '@core/db/view-spawns';
 import { chooseZ, floorCandidates } from '@core/map/floors';
-import { EMPTY_WORLD, movementsOf, type WorldLayer } from '@core/world/layer';
+import { EMPTY_WORLD, movementsOf, type Placement, type WorldLayer } from '@core/world/layer';
 import type { SpawnEdit, SpawnRef } from './edits';
 import { WorldChanges } from './WorldChanges';
 import { PlaceDialog, type Chosen } from './PlaceDialog';
@@ -111,11 +111,11 @@ interface ViewProps {
   map: number;
   start: { x: number; y: number; z: number };
   hasClient: boolean;
-  /** The open quest's own NPCs and objects, drawn with the world's. */
+  /** The project's own NPCs and objects, drawn with the world's. */
   own?: ViewSpawns;
   /** Told which NPC or object was clicked in the view, or null when the selection was cleared. */
   onSelect?(spawn: PickedSpawn | null): void;
-  /** Takes edits to the open quest's own spawns, false when it could not; without it, every edit goes to the world layer. */
+  /** Takes edits to the project's own spawns, false when it could not; without it, every edit goes to the world layer. */
   onOwnEdit?(edit: SpawnEdit): boolean | void;
   /** A spawn to bring into view: the camera goes close to it and it is selected. Its map is `map`. */
   focus?: FocusTarget;
@@ -133,6 +133,14 @@ interface ViewProps {
   chainIds?: number[];
   /** Gives an NPC or object a part in the open quest, or takes it away; says why when it could not. */
   onQuestRole?(role: Role, target: RoleTarget, on: boolean): string | null;
+  /** The right-click menu's New … here: one project NPC or object with a spawn at `at`, as one step */
+  onCreateEntity?(what: 'creature' | 'object', at: Placement, forQuest: boolean): Promise<void>;
+  /** The right-click menu's Edit NPC… / Edit object… */
+  onEditEntity?(kind: 'creature' | 'object', entry: number): void;
+  /** The right-click menu's Make lootable… / Stop being lootable */
+  onSetLootable?(entry: number, on: boolean): Promise<void>;
+  /** Whether a project object can be looted; null for one that is not the project's */
+  lootable?(entry: number): boolean | null;
   /** Starts a new quest given and taken back by an NPC; `after` puts it after the open quest in its chain. */
   onNewQuest?(giver: { entry: number; name: string }, after: boolean): void;
   /** Told the spawns of the open quest or its chain, when they are shown, to list them. */
@@ -198,6 +206,7 @@ class Contained extends Component<{ children: ReactNode }, { failure: string | n
 
 function WorldStage({
   map, start, hasClient, own, onSelect, onOwnEdit, focus, active = true, showArea = true, onArea, onPlaceChange, quest, chainIds, onQuestRole, onNewQuest, onShowSpawns,
+  onCreateEntity, onEditEntity, onSetLootable, lootable,
 }: ViewProps): React.JSX.Element {
   const container = useRef<HTMLDivElement>(null);
   const world = useRef<World3D | null>(null);
@@ -327,6 +336,10 @@ function WorldStage({
     onQuestRole,
     onNewQuest,
     onShowSpawns,
+    onCreateEntity,
+    onEditEntity,
+    onSetLootable,
+    lootable,
   });
   const menuRef = useRef(menu);
   menuRef.current = menu;
