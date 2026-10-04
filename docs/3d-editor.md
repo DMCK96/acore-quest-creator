@@ -143,10 +143,11 @@ In order. Each is meant to be a step the user can try before the next begins.
 
 The maintainer's eight asked-for features are split into sub-projects A to E. A (camera), B (the spawn layer) and C (select and transform, and the world layer) are done. Edits not part of a quest go to a project-level world layer, exported as its own patch.
 
-1. **D: create from 3D.** Placing existing NPCs and objects is done (see Done). Still to do: create new objects (chests that can be looted, with a loot table) and new NPCs (loot, faction, level), opening the existing editors.
-2. **E: edit existing.** Change existing spawns and templates (loot, faction, level, scale, with a warning first when the template has more than one spawn); a placed spawn's respawn; copy another spawn with its settings (a paste copies only what it is and how it faces). Also: opening a quest moves the World's camera to the quest's own spawns.
-3. **Reshape the quest grid** into a chain builder beside the 3D view. Needs a design conversation first: what "managing a chain" should mean day to day.
-4. **Fill the gaps** above as they get in the way: props inside buildings first, then the remaining building shaders.
+1. **Undo for every project change** (the user, 2026-10-04: an action that cannot be undone is a bad experience). One history for the whole project, so Ctrl+Z and Ctrl+Y work the same in every tab and modal: the quest editor (fields, objectives, rewards, scripts, combat, NPC, object and item editors, loot), the 2D quest map, the quest graph, the 3D view, and World changes' Revert. Today only the 3D view's own edits undo, and only while it is open. Done before D and E so their actions join it from the start.
+2. **D: create from 3D.** Placing existing NPCs and objects is done (see Done). Still to do: create new objects (chests that can be looted, with a loot table) and new NPCs (loot, faction, level), opening the existing editors.
+3. **E: edit existing.** Change existing spawns and templates (loot, faction, level, scale, with a warning first when the template has more than one spawn); a placed spawn's respawn; copy another spawn with its settings (a paste copies only what it is and how it faces). Also: opening a quest moves the World's camera to the quest's own spawns.
+4. **Reshape the quest grid** into a chain builder beside the 3D view. Needs a design conversation first: what "managing a chain" should mean day to day.
+5. **Fill the gaps** above as they get in the way: props inside buildings first, then the remaining building shaders.
 
 Decided with the user (2026-10-04):
 
