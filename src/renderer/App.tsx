@@ -4,6 +4,7 @@ import { LoginScreen } from './views/LoginScreen';
 import { AppShell } from './views/AppShell';
 import { NamesProvider, localNamesOf } from './state/names';
 import { RewardTablesProvider } from './state/reward-tables';
+import { HistoryProvider } from './state/history-context';
 import './App.css';
 
 const inApp = (screen: AppState['screen']): boolean => screen === 'pick' || screen === 'preview' || screen === 'edit';
@@ -29,6 +30,8 @@ export function App(): React.JSX.Element {
     void store.getState().start();
     // Closing the window asks for pending edits first, so the unsaved-changes check sees them.
     window.appEvents?.onFlushRequest(() => store.getState().flushAll());
+    // The Undo buttons follow every step the main process records, whatever made it
+    window.appEvents?.onHistory?.((list) => store.getState().setHistory(list));
   }, [store]);
 
   // Both stay in the same slots, so the login screen is not remounted when the canvas appears.
@@ -38,7 +41,9 @@ export function App(): React.JSX.Element {
         <div className={leaving ? 'app-arriving' : undefined} style={{ display: 'contents' }}>
           <NamesProvider api={window.api} epoch={connection} local={local}>
             <RewardTablesProvider api={window.api} epoch={connection}>
-              <AppShell store={store} />
+              <HistoryProvider store={store}>
+                <AppShell store={store} />
+              </HistoryProvider>
             </RewardTablesProvider>
           </NamesProvider>
         </div>

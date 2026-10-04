@@ -1,0 +1,27 @@
+import { createContext, useContext, useMemo } from 'react';
+import type { StepPlace } from '@shared/ipc';
+import type { WorldLayer } from '@core/world/layer';
+import type { AppStore } from './app-store';
+
+/** What views below the app need of the undo history: making one step of several changes, and the world an undo left */
+export interface HistorySteps {
+  /** Runs `work` as one step of the project's history */
+  runStep(work: () => Promise<void>, label?: string, where?: StepPlace): Promise<void>;
+  /** The world layer as the last undo or redo left it; its count moves each time */
+  worldLayer: { layer: WorldLayer; seq: number } | null;
+}
+
+// Outside the app (a view rendered on its own, as in tests) a step is just the work
+const standalone: HistorySteps = { runStep: (work) => work(), worldLayer: null };
+const HistoryContext = createContext<HistorySteps>(standalone);
+
+export function HistoryProvider({ store, children }: { store: AppStore; children: React.ReactNode }): React.JSX.Element {
+  const worldLayer = store((s) => s.worldLayer);
+  const value = useMemo<HistorySteps>(
+    () => ({ runStep: (work, label, where) => store.getState().historyStep(work, label, where), worldLayer }),
+    [store, worldLayer],
+  );
+  return <HistoryContext.Provider value={value}>{children}</HistoryContext.Provider>;
+}
+
+export const useHistorySteps = (): HistorySteps => useContext(HistoryContext);

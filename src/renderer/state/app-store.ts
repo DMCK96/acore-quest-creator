@@ -9,6 +9,8 @@ import type {
   CanvasNode,
   ConnectSummary,
   ExportResult,
+  HistoryList,
+  HistoryResult,
   NodePosition,
   OpenResult,
   ProfileRecord,
@@ -18,8 +20,10 @@ import type {
   RecentProject,
   RecoveryEntry,
   Result,
+  StepPlace,
   Viewport,
 } from '@shared/ipc';
+import type { WorldLayer } from '@core/world/layer';
 import type { ModuleId } from '@core/modules/model';
 import { resetModule } from '@core/modules/catalog';
 import { draftToSaves, savedDraft, type ConnectionDraft } from '../connection/draft';
@@ -56,6 +60,12 @@ export interface AppState {
   pendingApply: { sql: string } | null;
   appliedCount: number | null;
   links: QuestLinks | null;
+  /** The project's undo history, as the main process last told it */
+  history: HistoryList;
+  /** What the last undo or redo did, for the note; null once dismissed */
+  historyNote: { text: string; where: StepPlace | null; skipped: string[] } | null;
+  /** The world layer as an undo or redo left it, with a count that moves each time, for the views to take */
+  worldLayer: { layer: WorldLayer; seq: number } | null;
 
   loadProfiles(): Promise<void>;
   /** Launch: lists the saved profiles and which one to offer. Connecting is always the user's click. */
@@ -126,6 +136,15 @@ export interface AppState {
   /** Restores one crash copy and discards every other one listed: only one project can be open. */
   restoreRecovery(id: string): Promise<void>;
   discardRecovery(id: string): Promise<void>;
+  /** Sends what is pending, then puts the last change anywhere in the project back */
+  undo(): Promise<void>;
+  redo(): Promise<void>;
+  /** Undoes or redoes to stand just after a step of the history (0: before every step) */
+  jumpTo(stepId: number): Promise<void>;
+  /** Runs `work` as one step of the history: everything it changes, and the quest edit it leaves pending, is undone together */
+  historyStep(work: () => Promise<void>, label?: string, where?: StepPlace): Promise<void>;
+  setHistory(list: HistoryList): void;
+  dismissHistoryNote(): void;
 }
 
 export type AppStore = UseBoundStore<StoreApi<AppState>>;
@@ -195,6 +214,9 @@ export function createAppStore(api: Api, opts: { saveDelayMs?: number } = {}): A
     pendingApply: null,
     appliedCount: null,
     links: null,
+    history: { steps: [], current: 0, saved: 0 },
+    historyNote: null,
+    worldLayer: null,
 
     async loadProfiles() {
       const result = await api.listProfiles();
@@ -240,6 +262,7 @@ export function createAppStore(api: Api, opts: { saveDelayMs?: number } = {}): A
         return;
       }
       set((s) => ({ summary, error: null, screen: 'pick', connection: s.connection + 1 }));
+      await loadHistory();
     },
 
     async saveConnection(draft, original) {
@@ -305,6 +328,7 @@ export function createAppStore(api: Api, opts: { saveDelayMs?: number } = {}): A
       set((s) => ({ summary, error: null, screen: 'pick', connection: s.connection + 1, ...closed }));
       // The canvas's links, starts and issue counts are read from the database just connected.
       await get().loadNodes();
+      await loadHistory();
       return null;
     },
 
@@ -686,7 +710,83 @@ export function createAppStore(api: Api, opts: { saveDelayMs?: number } = {}): A
       }
       set((s) => ({ recoveries: s.recoveries.filter((r) => r.id !== id) }));
     },
+
+    undo: () => travel(() => api.historyUndo()),
+    redo: () => travel(() => api.historyRedo()),
+    jumpTo: (stepId) => travel(() => api.historyJump(stepId)),
+
+    async historyStep(work, label, where) {
+      const begun = await api.historyBegin(label, where);
+      if (!begun.ok) {
+        await work();
+        return;
+      }
+      try {
+        await work();
+        // A quest edit the work made is still on the debounce: it belongs to this step
+        await get().flushSave();
+      } finally {
+        await api.historyEnd(begun.value);
+      }
+    },
+
+    setHistory(list) {
+      set({ history: list });
+    },
+
+    dismissHistoryNote() {
+      set({ historyNote: null });
+    },
   }));
+
+  async function loadHistory(): Promise<void> {
+    const list = await api.historyList();
+    if (list.ok) store.setState({ history: list.value });
+  }
+
+  /**
+   * An undo, redo or jump. What is pending goes first, so the undo takes back the newest change and
+   * not the one before it; if that could not be saved, nothing is undone.
+   */
+  async function travel(call: () => Promise<Result<HistoryResult>>): Promise<void> {
+    await store.getState().flushAll();
+    if (store.getState().dirty) return;
+    const result = await call();
+    if (!result.ok) {
+      store.setState({ error: result.error.message });
+      return;
+    }
+    await applyHistory(result.value);
+  }
+
+  /** Shows the project as the undo left it: the open quest, the graph, the world layer, the name */
+  async function applyHistory(result: HistoryResult): Promise<void> {
+    const state = store.getState();
+    store.setState({ history: result.history });
+    const open = state.open;
+    const mine = open ? result.quests.find((q) => q.questId === open.questId) : undefined;
+    if (open && mine) {
+      if (mine.aggregate === null) {
+        store.setState({ screen: 'pick', open: null, dirty: false, links: null, openPanel: null });
+      } else {
+        store.setState({ open: { ...open, aggregate: mine.aggregate }, dirty: false });
+        const issues = await api.validate(open.questId);
+        if (issues.ok) store.setState({ issues: issues.value });
+        await store.getState().loadLinks();
+      }
+    }
+    if (result.world) {
+      const world = result.world;
+      store.setState((s) => ({ worldLayer: { layer: world, seq: (s.worldLayer?.seq ?? 0) + 1 } }));
+    }
+    if (result.step) {
+      store.setState({
+        historyNote: { text: `${result.direction === 'undo' ? 'Undid' : 'Redid'}: ${result.step.label}`, where: result.step.where, skipped: result.skipped },
+      });
+    }
+    if (result.positions || result.quests.length > 0) await store.getState().loadNodes();
+    else await store.getState().loadProjectState();
+  }
 
   /**
    * A different project is open: nothing the editor or the canvas holds belongs to it any more.
@@ -707,6 +807,8 @@ export function createAppStore(api: Api, opts: { saveDelayMs?: number } = {}): A
       preview: null,
       exportResult: null,
       exportError: null,
+      historyNote: null,
+      worldLayer: null,
     });
     await store.getState().loadNodes();
     // Last, so the canvas applies the new project's viewport rather than the old one's.
