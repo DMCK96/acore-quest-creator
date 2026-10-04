@@ -15,6 +15,10 @@ import { WorldChanges } from './WorldChanges';
 import { PlaceDialog, type Chosen } from './PlaceDialog';
 import { OrbMark } from '../components/OrbMark';
 import type { PlaceRequest } from './placing';
+import { useWorldMenu } from './useWorldMenu';
+import type { QuestMenuInfo } from './menu/model';
+import type { Role, RoleTarget } from '@core/modules/quest-roles';
+import type { QuestSpawnGroup } from '@shared/ipc';
 import '../views/ProjectDialog.css';
 import './world3d.css';
 
@@ -34,6 +38,9 @@ const CONTROLS: [string, string][] = [
   ['Place…', 'Choose an existing NPC or object, then click the ground'],
   ['Delete', 'Remove the selected route points'],
   ['Ctrl+Z / Ctrl+Y', 'Undo and redo'],
+  ['Right-click', 'Menu: place, copy, paste, paths, quest'],
+  ['Ctrl+C / Ctrl+V / Ctrl+D', 'Copy, paste under the cursor, duplicate'],
+  ['Enter / Esc', 'While drawing a path: finish it'],
   ['Esc', 'Stop placing, or clear the selection'],
   ['Middle-drag', 'Pan'],
   ['Wheel', 'Move forward and back'],
@@ -119,6 +126,16 @@ interface ViewProps {
   onArea?(name: string | null): void;
   /** Told where the camera rests (the point it looks at) once it has moved more than a yard. */
   onPlaceChange?(place: { x: number; y: number; z: number }): void;
+  /** The open quest, for the right-click menu's quest items; none leaves them out. */
+  quest?: QuestMenuInfo;
+  /** The quests of the open quest's chain, for showing the chain's spawns. */
+  chainIds?: number[];
+  /** Gives an NPC or object a part in the open quest, or takes it away; says why when it could not. */
+  onQuestRole?(role: Role, target: RoleTarget, on: boolean): string | null;
+  /** Starts a new quest given and taken back by an NPC; `after` puts it after the open quest in its chain. */
+  onNewQuest?(giver: { entry: number }, after: boolean): void;
+  /** Told the spawns of the open quest or its chain, when they are shown, to list them. */
+  onShowSpawns?(groups: QuestSpawnGroup[], scope: 'quest' | 'chain'): void;
 }
 
 /** How often the view checks where the camera rests, and how far it must move to count */
@@ -178,7 +195,9 @@ class Contained extends Component<{ children: ReactNode }, { failure: string | n
   }
 }
 
-function WorldStage({ map, start, hasClient, own, onSelect, onOwnEdit, focus, active = true, showArea = true, onArea, onPlaceChange }: ViewProps): React.JSX.Element {
+function WorldStage({
+  map, start, hasClient, own, onSelect, onOwnEdit, focus, active = true, showArea = true, onArea, onPlaceChange, quest, chainIds, onQuestRole, onNewQuest, onShowSpawns,
+}: ViewProps): React.JSX.Element {
   const container = useRef<HTMLDivElement>(null);
   const world = useRef<World3D | null>(null);
   const startRef = useRef(start);
@@ -254,6 +273,44 @@ function WorldStage({ map, start, hasClient, own, onSelect, onOwnEdit, focus, ac
   // A stable key, so the world is told only when the quest's spawns really change
   const ownKey = JSON.stringify(own ?? null);
   const directory = worldMapDirectory(map);
+  const mapRef = useRef(map);
+  mapRef.current = map;
+  // Edits as the view sends them, set by the world that is up; paths started here, which the database lacks
+  const sendRef = useRef<(change: SpawnEdit) => Promise<void>>(async () => {});
+  const newPaths = useRef(new Set<number>());
+  /** The server's floor nearest a height at a place on this map, or null when it has none there */
+  const floorAt = async (x: number, y: number, nearZ: number): Promise<number | null> => {
+    const answer = await apiRef.current?.mapFloors(mapRef.current, x, y);
+    if (!answer?.ok || 'reason' in answer.value) return null;
+    return chooseZ(floorCandidates(answer.value), nearZ);
+  };
+  const menu = useWorldMenu({
+    world,
+    api,
+    map,
+    active,
+    send: (change) => sendRef.current(change),
+    takeLayer: (next) => takeLayer(next),
+    setNote,
+    floorZ: floorAt,
+    placing: placing !== null,
+    stopPlacing: () => setPlacing(null),
+    clearSelection: () => clearSelection(),
+    focusView: () => container.current?.querySelector('canvas')?.focus(),
+    viewCentre: () => {
+      const rect = container.current?.getBoundingClientRect();
+      return rect ? { x: rect.left + rect.width / 2, y: rect.top + rect.height / 2 } : { x: 0, y: 0 };
+    },
+    newPaths: newPaths.current,
+    quest,
+    chainIds,
+    onOwnEdit,
+    onQuestRole,
+    onNewQuest,
+    onShowSpawns,
+  });
+  const menuRef = useRef(menu);
+  menuRef.current = menu;
 
   useEffect(() => {
     const element = container.current;
@@ -298,14 +355,19 @@ function WorldStage({ map, start, hasClient, own, onSelect, onOwnEdit, focus, ac
       }
       const current = apiRef.current;
       if (!current) return;
-      if (change.kind === 'presence' || change.kind === 'movement') return;
+      const kind = change.spawn.kind === 'object' ? 'gameobject' : 'creature';
+      const points = change.kind === 'route' ? change.points.map((p) => ({ x: p.x, y: p.y, z: p.z, rest: (p.carry as Record<string, string | null> | undefined) ?? {} })) : [];
       const result =
-        change.kind === 'place'
-          ? await current.worldMoveSpawn(change.spawn.kind === 'object' ? 'gameobject' : 'creature', change.spawn.guid, change.to)
-          : await current.worldSetRoute(
-              change.pathId,
-              change.points.map((p) => ({ x: p.x, y: p.y, z: p.z, rest: (p.carry as Record<string, string | null> | undefined) ?? {} })),
-            );
+        change.kind === 'place' ? await current.worldMoveSpawn(kind, change.spawn.guid, change.to)
+        : change.kind === 'movement' ? await current.worldSetMovement(change.spawn.guid, change.to)
+        // A spawn put back by a redo keeps its guid; one taken away by an undo leaves the layer
+        : change.kind === 'presence'
+          ? change.present
+            ? await current.worldAddSpawn(kind, change.spawn.entry, change.map, change.at, change.spawn.guid).then((r) => (r.ok ? { ok: true as const, value: r.value.layer } : r))
+            : await current.worldRevert({ kind: 'spawn', spawnKind: kind, guid: change.spawn.guid })
+        // A path made in this view is not in the database
+        : newPaths.current.has(change.pathId) ? await current.worldSetRoute(change.pathId, points, { isNew: true })
+        : await current.worldSetRoute(change.pathId, points);
       if (!live) return;
       if (result.ok) {
         // Kept, and drawn once the gesture's last answer is in
@@ -338,11 +400,25 @@ function WorldStage({ map, start, hasClient, own, onSelect, onOwnEdit, focus, ac
       });
       setNote(null);
     };
-    const floorZ = async (x: number, y: number, nearZ: number): Promise<number | null> => {
-      const answer = await apiRef.current?.mapFloors(map, x, y);
-      if (!answer?.ok || 'reason' in answer.value) return null;
-      return chooseZ(floorCandidates(answer.value), nearZ);
+    const floorZ = floorAt;
+    // The quest's own edits are taken at once; world edits wait their turn. One that fails outright is
+    // said, and the queue goes on
+    const send = (change: SpawnEdit): Promise<void> => {
+      if (change.spawn.own && onOwnEditRef.current) return edit(change);
+      waiting += 1;
+      queue = queue
+        .then(() => edit(change))
+        .catch((error: unknown) => {
+          if (live) setNote(`The change could not be kept: ${error instanceof Error ? error.message : String(error)}`);
+        })
+        .finally(() => {
+          waiting -= 1;
+          // The last answer: the layer as the main process now has it (a refused edit is drawn back)
+          if (waiting === 0 && live) created?.setWorldLayer(layerRef.current);
+        });
+      return queue;
     };
+    sendRef.current = send;
     const beforeRouteEdit = (spawn: SpawnRef, pathId: number): Promise<boolean> => {
       if (spawn.own) return Promise.resolve(true);
       let answer = answers.get(pathId);
@@ -388,24 +464,10 @@ function WorldStage({ map, start, hasClient, own, onSelect, onOwnEdit, focus, ac
               setNote(null);
               onSelectRef.current?.(spawn);
             },
-            onEdit: (change) => {
-              // The quest's own edits are taken at once; world edits wait their turn
-              if (change.spawn.own && onOwnEditRef.current) void edit(change);
-              // One that fails outright is said, and the queue goes on
-              else {
-                waiting += 1;
-                queue = queue
-                  .then(() => edit(change))
-                  .catch((error: unknown) => {
-                    if (live) setNote(`The change could not be kept: ${error instanceof Error ? error.message : String(error)}`);
-                  })
-                  .finally(() => {
-                    waiting -= 1;
-                    // The last answer: the layer as the main process now has it (a refused edit is drawn back)
-                    if (waiting === 0 && live) created?.setWorldLayer(layerRef.current);
-                  });
-              }
-            },
+            onEdit: (change) => void send(change),
+            onContextMenu: (target, client) => live && menuRef.current.open(target, client),
+            onDrawing: (drawing) => live && menuRef.current.onDrawing(drawing),
+            onShortcut: (code) => live && menuRef.current.shortcut(code),
             onSelection: (next) => live && setSummary(next),
             onTool: (tool) => live && setLayers((l) => ({ ...l, tool })),
             onFalloff: (falloff) => live && setLayers((l) => ({ ...l, falloff: falloff.on, falloffRadius: falloff.radius })),
@@ -655,6 +717,7 @@ function WorldStage({ map, start, hasClient, own, onSelect, onOwnEdit, focus, ac
         </p>
       )}
       {changesOpen && api && <WorldChanges api={api} onLayer={takeLayer} onClose={() => setChangesOpen(false)} />}
+      {!unavailable && menu.elements}
       {shared && (
         <SharedRouteDialog
           shared={shared}

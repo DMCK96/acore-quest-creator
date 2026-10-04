@@ -64,6 +64,8 @@ export interface World3DOptions {
   onDrawing?(drawing: { guid: number; points: number } | null): void;
   /** Asked for the right-click menu: what was right-clicked (selected first), and where in the window. */
   onContextMenu?(target: MenuTarget, client: { x: number; y: number }): void;
+  /** Ctrl+C, Ctrl+V or Ctrl+D pressed on the view: copy, paste, duplicate; true when it was used. */
+  onShortcut?(code: 'KeyC' | 'KeyV' | 'KeyD'): boolean;
 }
 
 /** How much is selected: NPCs, objects, and route points with how many routes they are on */
@@ -123,6 +125,10 @@ export interface World3D {
   groundAt(client: { x: number; y: number }): { x: number; y: number; z: number } | null;
   /** Where the pointer last was over the view, or null. */
   lastPointer(): { x: number; y: number } | null;
+  /** Whether a spawn is still in the view (loaded, though perhaps too far to be drawn). */
+  hasSpawn(kind: 'creature' | 'object', guid: number): boolean;
+  /** A drawn NPC's route as the view has it, or null when it has none. */
+  routeOf(guid: number): { pathId: number; points: { x: number; y: number; z: number; carry?: unknown }[] } | null;
   /** Stops drawing (while the world is hidden) or starts again; a hidden world costs nothing. */
   setActive(active: boolean): void;
   /** The point the camera looks at and turns round. */
@@ -374,6 +380,13 @@ export function createWorld3D(options: World3DOptions): World3D {
   // The editing keys, on the view itself so they only act while it has focus; a key used here goes
   // no further (Esc that clears a selection must not also close the screen or the quest editor)
   const onKeyDown = (event: KeyboardEvent): void => {
+    // Copy, paste and duplicate belong to the view's host; only while the view has the keys
+    const ctrl = event.ctrlKey || event.metaKey;
+    if (ctrl && !event.shiftKey && !event.altKey && (event.code === 'KeyC' || event.code === 'KeyV' || event.code === 'KeyD') && options.onShortcut?.(event.code)) {
+      event.preventDefault();
+      event.stopPropagation();
+      return;
+    }
     // Esc finishes a path being drawn first
     if (event.code === 'Escape' && editor.drawing) {
       editor.finishPath();
@@ -571,6 +584,11 @@ export function createWorld3D(options: World3DOptions): World3D {
       return point ? { x: point.x, y: point.y, z: point.z } : null;
     },
     lastPointer: () => controls.lastPointer,
+    hasSpawn: (kind, guid) => manager.spawnInfo(kind, guid) !== null,
+    routeOf(guid) {
+      const route = manager.spawnRoute(guid);
+      return route ? { pathId: route.pathId, points: route.points } : null;
+    },
     setActive(active) {
       if (active === running || disposed) return;
       running = active;

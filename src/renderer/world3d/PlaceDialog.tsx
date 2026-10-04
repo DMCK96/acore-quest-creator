@@ -10,10 +10,22 @@ export type Chosen = PlaceTarget & { name: string };
  * Chooses an existing NPC or object to place in the world: search the database by name or ID, pick a
  * result, then click the ground in the view for each one to put down.
  */
-export function PlaceDialog({ onPick, onClose }: { onPick(chosen: Chosen): void; onClose(): void }): React.JSX.Element {
+export function PlaceDialog({
+  kind: startKind = 'creature',
+  once = false,
+  onPick,
+  onClose,
+}: {
+  /** What the dialog starts on */
+  kind?: PlaceTarget['kind'];
+  /** Picking one places it once, where the view was right-clicked, instead of clicking the ground for each */
+  once?: boolean;
+  onPick(chosen: Chosen): void;
+  onClose(): void;
+}): React.JSX.Element {
   const dialog = useRef<HTMLDivElement>(null);
   const name = useId();
-  const [kind, setKind] = useState<PlaceTarget['kind']>('creature');
+  const [kind, setKind] = useState<PlaceTarget['kind']>(startKind);
   const [text, setText] = useState('');
   const { hits, error, searched } = useEntityHits(kind === 'creature' ? 'creature' : 'gameobject', text);
 
@@ -69,7 +81,9 @@ export function PlaceDialog({ onPick, onClose }: { onPick(chosen: Chosen): void;
         </ul>
         {searched && !error && hits.length === 0 && <p className="place-dialog__note">Nothing in the database matches.</p>}
         {error && <p className="place-dialog__note">{error}</p>}
-        <p className="place-dialog__note">Pick one, then click the ground in the view to place it. Each click places another; Esc stops.</p>
+        <p className="place-dialog__note">
+          {once ? 'Pick one to place it where you right-clicked.' : 'Pick one, then click the ground in the view to place it. Each click places another; Esc stops.'}
+        </p>
       </div>
     </div>
   );

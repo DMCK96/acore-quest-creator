@@ -27,15 +27,15 @@ let entries: ClipEntry[] = [];
 
 const mean = (values: number[]): number => values.reduce((sum, v) => sum + v, 0) / values.length;
 
-/** Copies spawns, replacing what was copied before; `questId` is the open quest, which own spawns belong to */
-export function copySpawns(spawns: readonly SpawnInfo[], questId: number | null): ClipEntry[] {
-  if (spawns.length === 0) return entries;
+/** Spawns as clipboard entries, without copying them (a duplicate leaves what was copied alone) */
+export function entriesOf(spawns: readonly SpawnInfo[], questId: number | null): ClipEntry[] {
+  if (spawns.length === 0) return [];
   const anchor = {
     x: mean(spawns.map((s) => s.placement.x)),
     y: mean(spawns.map((s) => s.placement.y)),
     z: mean(spawns.map((s) => s.placement.z)),
   };
-  entries = spawns.map((s) => ({
+  return spawns.map((s) => ({
     kind: s.kind,
     entry: s.entry,
     name: s.name,
@@ -47,6 +47,11 @@ export function copySpawns(spawns: readonly SpawnInfo[], questId: number | null)
     orientation: s.placement.orientation,
     rotation: s.placement.rotation,
   }));
+}
+
+/** Copies spawns, replacing what was copied before; `questId` is the open quest, which own spawns belong to */
+export function copySpawns(spawns: readonly SpawnInfo[], questId: number | null): ClipEntry[] {
+  if (spawns.length > 0) entries = entriesOf(spawns, questId);
   return entries;
 }
 
