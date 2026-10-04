@@ -614,3 +614,12 @@
   font-size: 12px;
   padding: 0.3em 2em 0.3em 0.5em;
 }
+
+/* The selection box dragged over the view in Select mode */
+.world3d__marquee {
+  position: absolute;
+  z-index: 1;
+  pointer-events: none;
+  border: 1px solid #ffd34d;
+  background: rgb(255 211 77 / 12%);
+}

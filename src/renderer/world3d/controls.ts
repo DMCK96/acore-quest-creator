@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import type { Rect } from './scene/edit/box';
 
 /**
  * The 3D view's camera, driven as in the game and in Noggit. Right-drag looks around in place;
@@ -6,6 +7,9 @@ import * as THREE from 'three';
  * along the view. W/S fly forward and back the way the camera looks, A/D strafe, Q/E turn, Space/X
  * rise and sink, Shift goes faster. Keys act only while the view itself has focus, so typing in a
  * field never moves the camera. Z is up; angles are radians.
+ *
+ * In Select mode (Tab flips it) a left-drag draws a selection box instead of orbiting, and
+ * Alt+left-drag orbits. Everything else is the same in both modes.
  */
 
 /** Radians turned per pixel dragged, looking around and orbiting */
@@ -29,11 +33,22 @@ const CLICK_SLOP = 4;
 
 type Pick = (ndcX: number, ndcY: number) => THREE.Vector3 | null;
 
+/** What a left-drag does: orbit (Camera) or draw a selection box (Select) */
+export type Tool = 'camera' | 'select';
+/** The keys held as a click or a box was let go */
+export type ClickKeys = { shift: boolean; ctrl: boolean; alt: boolean };
+
 type WorldControlsOptions = {
   /** The world point under a place on screen (normalised device coordinates), or null for sky */
   pick?: Pick;
   /** A left click, without dragging, at a place on screen (normalised device coordinates) */
-  onClick?(ndcX: number, ndcY: number, shift: boolean): void;
+  onClick?(ndcX: number, ndcY: number, keys: ClickKeys): void;
+  /** A selection box drawn in Select mode, from where it started to where it was let go */
+  onBox?(rect: Rect, keys: ClickKeys): void;
+  /** Offered each wheel turn first; true when it was used (a falloff drag), so the camera does not move */
+  onWheel?(deltaY: number): boolean;
+  /** Told when Tab flipped the tool */
+  onModeChange?(tool: Tool): void;
   /** True while a press belongs to something else on the view (the edit gizmo): no orbit, no click */
   blocked?(): boolean;
 };
@@ -47,20 +62,30 @@ class WorldControls {
   readonly #camera: THREE.PerspectiveCamera;
   readonly #dom: HTMLElement;
   readonly #pick: Pick;
-  readonly #onClick: (ndcX: number, ndcY: number, shift: boolean) => void;
+  readonly #onClick: (ndcX: number, ndcY: number, keys: ClickKeys) => void;
+  readonly #onBox: (rect: Rect, keys: ClickKeys) => void;
+  readonly #onWheelClaim: (deltaY: number) => boolean;
+  readonly #onModeChange: (tool: Tool) => void;
   readonly #blocked: () => boolean;
+
+  #mode: Tool = 'camera';
+  /** The rectangle drawn over the view while a selection box is dragged */
+  #marquee: HTMLDivElement | null = null;
 
   #yaw = 0;
   #pitch = 0;
   #pivot = new THREE.Vector3();
   #keys = new Set<string>();
-  #drag: { button: number; x: number; y: number; startX: number; startY: number; panScale: number } | null = null;
+  #drag: { button: number; x: number; y: number; startX: number; startY: number; panScale: number; box: boolean } | null = null;
 
   constructor(camera: THREE.PerspectiveCamera, dom: HTMLElement, options: WorldControlsOptions = {}) {
     this.#camera = camera;
     this.#dom = dom;
     this.#pick = options.pick ?? (() => null);
     this.#onClick = options.onClick ?? (() => {});
+    this.#onBox = options.onBox ?? (() => {});
+    this.#onWheelClaim = options.onWheel ?? (() => false);
+    this.#onModeChange = options.onModeChange ?? (() => {});
     this.#blocked = options.blocked ?? (() => false);
 
     // Focusable, so keys can be kept to the view
@@ -76,6 +101,14 @@ class WorldControls {
     window.addEventListener('keyup', this.#onKeyUp);
 
     this.#apply();
+  }
+
+  get mode(): Tool {
+    return this.#mode;
+  }
+
+  setMode(tool: Tool): void {
+    this.#mode = tool;
   }
 
   /** Puts the camera at `target + offset`, looking at `target` */
@@ -166,6 +199,7 @@ class WorldControls {
     dom.removeEventListener('blur', this.#onBlur);
     window.removeEventListener('keydown', this.#onKeyDown);
     window.removeEventListener('keyup', this.#onKeyUp);
+    this.#endMarquee();
   }
 
   #forward(): THREE.Vector3 {
@@ -191,7 +225,7 @@ class WorldControls {
     return document.activeElement === this.#dom;
   }
 
-  #ndc(event: PointerEvent | WheelEvent): [number, number] {
+  #ndc(event: { clientX: number; clientY: number }): [number, number] {
     const rect = this.#dom.getBoundingClientRect();
     return [((event.clientX - rect.left) / Math.max(1, rect.width)) * 2 - 1, -((event.clientY - rect.top) / Math.max(1, rect.height)) * 2 + 1];
   }
@@ -209,9 +243,11 @@ class WorldControls {
       return;
     }
     const [x, y] = this.#ndc(event);
-    if (event.button === 0) this.startOrbit(x, y);
+    // In Select mode a left-drag draws a box; Alt still orbits
+    const box = event.button === 0 && this.#mode === 'select' && !event.altKey;
+    if (event.button === 0 && !box) this.startOrbit(x, y);
     const panScale = event.button === 1 ? Math.max(0.02, this.#distanceAt(x, y) * PAN_SCALE) : 0;
-    this.#drag = { button: event.button, x: event.clientX, y: event.clientY, startX: event.clientX, startY: event.clientY, panScale };
+    this.#drag = { button: event.button, x: event.clientX, y: event.clientY, startX: event.clientX, startY: event.clientY, panScale, box };
     this.#dom.setPointerCapture?.(event.pointerId);
     if (event.button === 1) event.preventDefault();
   };
@@ -223,7 +259,8 @@ class WorldControls {
     const dy = event.clientY - drag.y;
     drag.x = event.clientX;
     drag.y = event.clientY;
-    if (drag.button === 2) this.look(dx, dy);
+    if (drag.box) this.#showMarquee(drag.startX, drag.startY, event.clientX, event.clientY);
+    else if (drag.button === 2) this.look(dx, dy);
     else if (drag.button === 0) this.orbit(dx, dy);
     else if (drag.button === 1) this.pan(dx, dy, drag.panScale);
   };
@@ -232,14 +269,42 @@ class WorldControls {
     const drag = this.#drag;
     this.#drag = null;
     this.#dom.releasePointerCapture?.(event.pointerId);
-    if (event.type === 'pointerup' && drag?.button === 0 && Math.hypot(event.clientX - drag.startX, event.clientY - drag.startY) < CLICK_SLOP) {
-      const [x, y] = this.#ndc(event);
-      this.#onClick(x, y, event.shiftKey);
+    this.#endMarquee();
+    if (event.type !== 'pointerup' || drag?.button !== 0) return;
+    const keys = { shift: event.shiftKey, ctrl: event.ctrlKey || event.metaKey, alt: event.altKey };
+    const [x, y] = this.#ndc(event);
+    if (Math.hypot(event.clientX - drag.startX, event.clientY - drag.startY) < CLICK_SLOP) {
+      this.#onClick(x, y, keys);
+    } else if (drag.box) {
+      const [x0, y0] = this.#ndc({ clientX: drag.startX, clientY: drag.startY });
+      this.#onBox({ x0, y0, x1: x, y1: y }, keys);
     }
   };
 
+  /** The selection box's rectangle over the view, from where the drag started to where it is */
+  #showMarquee(startX: number, startY: number, x: number, y: number): void {
+    if (Math.hypot(x - startX, y - startY) < CLICK_SLOP && !this.#marquee) return;
+    const host = this.#dom.parentElement;
+    if (!host) return;
+    if (!this.#marquee) {
+      this.#marquee = document.createElement('div');
+      this.#marquee.className = 'world3d__marquee';
+      host.appendChild(this.#marquee);
+    }
+    const rect = this.#dom.getBoundingClientRect();
+    const left = Math.min(startX, x) - rect.left + this.#dom.offsetLeft;
+    const top = Math.min(startY, y) - rect.top + this.#dom.offsetTop;
+    Object.assign(this.#marquee.style, { left: `${left}px`, top: `${top}px`, width: `${Math.abs(x - startX)}px`, height: `${Math.abs(y - startY)}px` });
+  }
+
+  #endMarquee(): void {
+    this.#marquee?.remove();
+    this.#marquee = null;
+  }
+
   #onWheel = (event: WheelEvent): void => {
     event.preventDefault();
+    if (this.#onWheelClaim(event.deltaY)) return;
     const [x, y] = this.#ndc(event);
     const step = Math.max(MIN_STEP, this.#distanceAt(x, y) * WHEEL_SHARE) * (event.shiftKey ? FAST : 1);
     this.dolly((-event.deltaY / 100) * step);
@@ -251,6 +316,13 @@ class WorldControls {
 
   #onKeyDown = (event: KeyboardEvent): void => {
     if (!this.#hasFocus()) return;
+    if (event.code === 'Tab' && !event.ctrlKey && !event.altKey && !event.metaKey) {
+      // Keeps focus on the view, and flips what a left-drag does
+      event.preventDefault();
+      this.#mode = this.#mode === 'camera' ? 'select' : 'camera';
+      this.#onModeChange(this.#mode);
+      return;
+    }
     this.keyDown(event.code);
     // Space would scroll the page and the arrows would move a focused list
     if (['Space', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(event.code)) event.preventDefault();

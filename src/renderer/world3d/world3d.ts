@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { DbManager, MapManager, TextureManager, type SoundManager } from './scene';
-import { WorldControls } from './controls';
+import { WorldControls, type ClickKeys } from './controls';
 import { CharacterTexture } from './scene/character/CharacterTexture';
 import { getAssetUrl } from './scene/asset';
 import { spawnBounds, type PickedSpawn, type SpawnSource, type SpawnStatus, type SpawnVisibility } from './scene/spawn/SpawnManager';
@@ -197,12 +197,12 @@ export function createWorld3D(options: World3DOptions): World3D {
     options.onNotice?.(floor === null ? NOT_SNAPPED : null);
     if (placing === target) options.onPlace?.({ target, at: { ...at, z: floor ?? at.z } });
   };
-  const click = (x: number, y: number, shift: boolean): void => {
+  const click = (x: number, y: number, keys: ClickKeys): void => {
     if (placing) {
       void place(x, y);
       return;
     }
-    if (editor.click(x, y, shift)) return;
+    if (editor.click(x, y, keys.shift)) return;
     raycaster.setFromCamera(new THREE.Vector2(x, y), camera);
     const ground = pick(x, y);
     const spawn = manager.pickSpawn(raycaster.ray, ground ? ground.distanceTo(camera.position) : Infinity);

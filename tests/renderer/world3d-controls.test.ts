@@ -113,3 +113,107 @@ describe('the 3D view’s camera', () => {
     expect([controls.target.x, controls.target.y]).toEqual([camera.position.x, camera.position.y]);
   });
 });
+
+const fire = (target: EventTarget, type: string, x: number, y: number, init: MouseEventInit = {}) => {
+  const event = new MouseEvent(type, { clientX: x, clientY: y, bubbles: true, cancelable: true, ...init });
+  Object.defineProperty(event, 'pointerId', { value: 1 });
+  target.dispatchEvent(event);
+  return event;
+};
+
+const selectSetup = (extra: { onWheel?(deltaY: number): boolean } = {}) => {
+  const camera = new THREE.PerspectiveCamera(60, 2, 0.5, 1000);
+  camera.up.set(0, 0, 1);
+  const host = document.createElement('div');
+  const dom = document.createElement('canvas');
+  host.appendChild(dom);
+  document.body.appendChild(host);
+  dom.getBoundingClientRect = () => ({ left: 0, top: 0, width: 200, height: 100, right: 200, bottom: 100, x: 0, y: 0, toJSON() {} }) as DOMRect;
+  const boxes: unknown[] = [];
+  const clicks: unknown[] = [];
+  const modes: string[] = [];
+  const controls = new WorldControls(camera, dom, {
+    onBox: (rect, keys) => boxes.push({ rect, keys }),
+    onClick: (x, y, keys) => clicks.push({ x, y, keys }),
+    onModeChange: (mode) => modes.push(mode),
+    ...extra,
+  });
+  controls.setView(new THREE.Vector3(0, 0, 0), new THREE.Vector3(-30, -30, 30));
+  return { camera, host, dom, controls, boxes, clicks, modes };
+};
+
+describe('Select mode', () => {
+  beforeEach(() => {
+    document.body.innerHTML = '';
+  });
+
+  it('starts in Camera mode', () => {
+    expect(selectSetup().controls.mode).toBe('camera');
+  });
+
+  it('draws a box on a left-drag instead of orbiting, and hands over its corners and keys on release', () => {
+    const { camera, host, dom, controls, boxes } = selectSetup();
+    controls.setMode('select');
+    const before = camera.position.clone();
+    fire(dom, 'pointerdown', 50, 25, { button: 0 });
+    fire(dom, 'pointermove', 150, 75, { button: 0 });
+    expect(host.querySelector('.world3d__marquee')).not.toBeNull();
+    fire(dom, 'pointerup', 150, 75, { button: 0, shiftKey: true });
+    expect(camera.position.distanceTo(before)).toBe(0);
+    expect(host.querySelector('.world3d__marquee')).toBeNull();
+    expect(boxes).toEqual([{ rect: { x0: -0.5, y0: 0.5, x1: 0.5, y1: -0.5 }, keys: { shift: true, ctrl: false, alt: false } }]);
+  });
+
+  it('orbits on Alt+left-drag in Select mode, and draws no box', () => {
+    const { camera, host, dom, controls, boxes } = selectSetup();
+    controls.setMode('select');
+    const before = camera.position.clone();
+    fire(dom, 'pointerdown', 50, 25, { button: 0, altKey: true });
+    fire(dom, 'pointermove', 150, 25, { button: 0, altKey: true });
+    fire(dom, 'pointerup', 150, 25, { button: 0, altKey: true });
+    expect(camera.position.distanceTo(before)).toBeGreaterThan(1);
+    expect(host.querySelector('.world3d__marquee')).toBeNull();
+    expect(boxes).toEqual([]);
+  });
+
+  it('a press that does not move is a click with its keys, not a box', () => {
+    const { dom, controls, boxes, clicks } = selectSetup();
+    controls.setMode('select');
+    fire(dom, 'pointerdown', 100, 50, { button: 0 });
+    fire(dom, 'pointerup', 100, 50, { button: 0, ctrlKey: true });
+    expect(boxes).toEqual([]);
+    expect(clicks).toEqual([{ x: 0, y: 0, keys: { shift: false, ctrl: true, alt: false } }]);
+  });
+
+  it('in Camera mode a left-drag still orbits and draws no box', () => {
+    const { camera, dom, boxes } = selectSetup();
+    const before = camera.position.clone();
+    fire(dom, 'pointerdown', 50, 25, { button: 0 });
+    fire(dom, 'pointermove', 150, 25, { button: 0 });
+    fire(dom, 'pointerup', 150, 25, { button: 0 });
+    expect(camera.position.distanceTo(before)).toBeGreaterThan(1);
+    expect(boxes).toEqual([]);
+  });
+
+  it('Tab flips the mode while the view has focus, and only then', () => {
+    const { dom, controls, modes } = selectSetup();
+    dom.focus();
+    const tab = new KeyboardEvent('keydown', { code: 'Tab', key: 'Tab', cancelable: true });
+    window.dispatchEvent(tab);
+    expect(controls.mode).toBe('select');
+    expect(modes).toEqual(['select']);
+    expect(tab.defaultPrevented).toBe(true);
+    const input = document.createElement('input');
+    document.body.appendChild(input);
+    input.focus();
+    window.dispatchEvent(new KeyboardEvent('keydown', { code: 'Tab', key: 'Tab', cancelable: true }));
+    expect(controls.mode).toBe('select');
+  });
+
+  it('gives the wheel to whoever claims it, and then does not move', () => {
+    const { camera, dom } = selectSetup({ onWheel: () => true });
+    const before = camera.position.clone();
+    dom.dispatchEvent(new WheelEvent('wheel', { deltaY: -100, clientX: 100, clientY: 50, cancelable: true }));
+    expect(camera.position.distanceTo(before)).toBe(0);
+  });
+});
