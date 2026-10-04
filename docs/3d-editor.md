@@ -68,7 +68,7 @@ Looked at and **not** used: `wowserhq/client` (it is the game's UI layer), `vjeu
 - Editing in 3D (sub-project C, `src/renderer/world3d/editing.ts`, `scene/edit/`):
   - **G** moves the selected spawn and **R** rotates it, with Three's own transform gizmo. NPCs turn about Z only; objects turn every way. A move along the ground keeps the spawn on the drawn ground while dragging, and on release drops it on the server's floor nearest where it was (the same floor heights the quest map uses). Only the Z arrow lifts it freely.
   - The selected NPC's route can be edited: click a point (or box several, see Select mode below) and drag them, **Shift-click** on a leg to insert a point there (or on the ground to add one after the selected point; **Alt-click** in Select mode), **Delete** to remove the picked points. A route keeps at least two points. Each point keeps its other data: an existing point's `waypoint_data` columns (delay, action), or an own NPC's wait, facing and actions.
-  - **Ctrl+Z** and **Ctrl+Y** (or Ctrl+Shift+Z) undo and redo, for as long as the view is open. Each step is a whole placement or route, so an undo still works after a revert.
+  - **Ctrl+Z** and **Ctrl+Y** (or Ctrl+Shift+Z) undo and redo through the project's history (see "Undo for every project change" below). Each gesture is one step.
   - The open quest's own spawns are edited through the quest, as the 2D map does, so its Changes panel and export pick them up. A tilted own object is exported with its full rotation.
   - Everything else goes into the project's **world layer** (saved in the project file, version 2). It keeps what the database had at the first edit. **World changes** lists each edit with before and after, flags any the database has moved off since, reverts them one by one, and exports `<date>_<nn>_world.sql` (UPDATE by guid; routes deleted and written again by path id) with a matching `_world_revert.sql`.
   - The first change to a route other spawns walk (a shared `path_id`, or a `creature_template_addon` route) asks first, saying how many walk it.
@@ -116,6 +116,14 @@ Looked at and **not** used: `wowserhq/client` (it is the game's UI layer), `vjeu
   - **Movement:** *Start path here* (one NPC selected, no route) gives it a new path: each click adds a point, **Enter** or **Esc** finishes, **Ctrl+Z** takes a point back, *Cancel path* puts everything back; a path needs two points. *Change wander distance…* (0 to 100 yards, its circle following what is typed) and *Remove path*. For database NPCs this is the world layer's new **movements** section: `creature.wander_distance` and `MovementType`, and the spawn's own `creature_addon.path_id` (a row is written when it has none, and deleted by the revert). A database path's points are never deleted. Movements are listed and reverted in World changes.
   - **Quest** (the open quest's own spawns are now drawn and edited in the World workspace too): *Spawn quest NPC here ▸* lists its own NPCs and objects and the existing ones it names; *Quest giver*, *Quest ender* and *Kill/Use objective* toggle a right-clicked spawn's part in it; *Start a new quest from this NPC* and *Start the next quest in this chain* make a quest it gives and takes back (the second after the open one); *Show quest spawns* / *Show chain spawns* ring them in gold and list them in the Find dialog, *Hide quest spawns* takes the rings away.
 
+- **Undo for every project change** (2026-10-04; spec `internal_docs/superpowers/specs/2026-10-04-undo-history-design.md`; `src/main/project/history.ts`, `step-labels.ts`, `session.ts`, `HistoryButtons.tsx`, `HistoryNote.tsx`, `history-context.tsx`):
+  - One history per open project, kept by the main process: the session records every change it takes (a quest, the graph's positions, the world layer, the project name) as a step with each part whole before and after. It lasts until the project closes (saving keeps it), up to 300 steps. Undoing back to the saved step makes the project clean again.
+  - **Ctrl+Z** undoes the last change anywhere and **Ctrl+Y** / **Ctrl+Shift+Z** redoes, in every tab and modal, except inside a text field (whose own undo they are). Undo and Redo in the app bar name the step; the arrow beside them opens **History**, where a click goes back or forward to any step. A note says what was undone, with **Show** to go to it.
+  - Steps are named from what changed ("Quest title of Kobold Camp Cleanup", "Moved Stormwind Guard", "Placed Mailbox"). A 3D gesture, a paste, adding a quest chain and *Start a new quest from this NPC* are one step each. Typing in one field is one step.
+  - The 3D view keeps no history of its own: its gestures are sent as steps, an undo hands it a new layer, and a drag under way is dropped first. A path being drawn stays in the view until **Finish** (Ctrl+Z there takes back a point; *Cancel path* sends nothing).
+  - A redo that would bring back a placed spawn or a new quest whose id the database has taken since leaves that part out and says why.
+  - Not in the history: saving, exporting, applying to the dev database, the camera, layers and selection.
+
 ### Known gaps
 
 Things that are missing or approximate. Roughly in order of how much they matter.
@@ -143,11 +151,12 @@ In order. Each is meant to be a step the user can try before the next begins.
 
 The maintainer's eight asked-for features are split into sub-projects A to E. A (camera), B (the spawn layer) and C (select and transform, and the world layer) are done. Edits not part of a quest go to a project-level world layer, exported as its own patch.
 
-1. **Undo for every project change** (the user, 2026-10-04: an action that cannot be undone is a bad experience). One history for the whole project, so Ctrl+Z and Ctrl+Y work the same in every tab and modal: the quest editor (fields, objectives, rewards, scripts, combat, NPC, object and item editors, loot), the 2D quest map, the quest graph, the 3D view, and World changes' Revert. Today only the 3D view's own edits undo, and only while it is open. Done before D and E so their actions join it from the start.
-2. **D: create from 3D.** Placing existing NPCs and objects is done (see Done). Still to do: create new objects (chests that can be looted, with a loot table) and new NPCs (loot, faction, level), opening the existing editors.
-3. **E: edit existing.** Change existing spawns and templates (loot, faction, level, scale, with a warning first when the template has more than one spawn); a placed spawn's respawn; copy another spawn with its settings (a paste copies only what it is and how it faces). Also: opening a quest moves the World's camera to the quest's own spawns.
-4. **Reshape the quest grid** into a chain builder beside the 3D view. Needs a design conversation first: what "managing a chain" should mean day to day.
-5. **Fill the gaps** above as they get in the way: props inside buildings first, then the remaining building shaders.
+Every action the steps below add is a step of the project's undo history (the user, 2026-10-04: an action that cannot be undone is a bad experience).
+
+1. **D: create from 3D.** Placing existing NPCs and objects is done (see Done). Still to do: create new objects (chests that can be looted, with a loot table) and new NPCs (loot, faction, level), opening the existing editors.
+2. **E: edit existing.** Change existing spawns and templates (loot, faction, level, scale, with a warning first when the template has more than one spawn); a placed spawn's respawn; copy another spawn with its settings (a paste copies only what it is and how it faces). Also: opening a quest moves the World's camera to the quest's own spawns.
+3. **Reshape the quest grid** into a chain builder beside the 3D view. Needs a design conversation first: what "managing a chain" should mean day to day.
+4. **Fill the gaps** above as they get in the way: props inside buildings first, then the remaining building shaders.
 
 Decided with the user (2026-10-04):
 

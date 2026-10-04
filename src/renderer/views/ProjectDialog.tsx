@@ -25,8 +25,15 @@ export function ProjectDialog({ store, onClose }: { store: AppStore; onClose: ()
     void loadRecent();
   }, [loadRecent]);
 
-  // Keep the field in step when the name changes underneath it (a rename landing, a project switch).
-  useEffect(() => setName(project.name), [project.name]);
+  // The name last sent, so leaving the field after Enter does not send it again: a second rename landing
+  // after an undo would quietly redo it
+  const sent = useRef<string | null>(null);
+  // Keep the field in step when the name changes underneath it (a rename landing, a project switch, an
+  // undo); a name other than the one sent means the project moved on, so the same name may be sent again
+  useEffect(() => {
+    setName(project.name);
+    if (project.name !== sent.current) sent.current = null;
+  }, [project.name]);
 
   useEffect(() => {
     if (creating) newNameRef.current?.select();
@@ -46,7 +53,9 @@ export function ProjectDialog({ store, onClose }: { store: AppStore; onClose: ()
       setName(project.name);
       return;
     }
-    if (trimmed !== project.name) void renameProject(trimmed);
+    if (trimmed === project.name || trimmed === sent.current) return;
+    sent.current = trimmed;
+    void renameProject(trimmed);
   };
 
   /** Runs an action that may switch projects, closing the modal only if it actually happened. */

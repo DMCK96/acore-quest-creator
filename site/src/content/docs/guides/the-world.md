@@ -49,7 +49,7 @@ With something selected:
 - **G** moves it and **R** turns it, with the handles on the selection. A moved spawn drops onto the server's floor where you let go.
 - On a shown route, click a point to pick it, **Shift**-click (Alt-click in Select mode) to add one, and **Delete** to remove the picked points. A route keeps at least two points.
 - **O** turns on **Falloff**: nearby route points follow a move, less the further they are. **[** and **]** change its radius.
-- **Ctrl+Z** and **Ctrl+Y** undo and redo, one whole move or turn at a time.
+- **Ctrl+Z** and **Ctrl+Y** undo and redo, one whole move or turn at a time. They're the project's undo, so they also reach changes made elsewhere; see [Undo and redo](/acore-quest-creator/guides/undo/).
 
 When a route is walked by more than one spawn, the app asks before it changes it for all of them.
 
