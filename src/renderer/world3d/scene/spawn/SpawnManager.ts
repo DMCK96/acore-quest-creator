@@ -10,6 +10,7 @@ import * as THREE from 'three';
 import { ViewCreature, ViewEvent, ViewObject, ViewPoint, ViewSpawns } from '../../../../core/db/view-spawns.js';
 import { WorldLayer } from '../../../../core/world/layer.js';
 import type { Movement } from '../../../../core/world/movement.js';
+import type { Placement } from '../../../../core/world/layer.js';
 import { BodyTexture, DisplayResolver, Look, ModelLook } from './DisplayResolver.js';
 import { creatureTransform, objectTransform, Transform } from './placement.js';
 import { moveRouteDrawing, routeObject, setBallSelected, wanderObject } from './paths.js';
@@ -30,6 +31,29 @@ const spawnDataOf = (kind: 'creature' | 'object', spawn: ViewCreature | ViewObje
   event: spawn.event ?? null,
   position: { x: spawn.x, y: spawn.y, z: spawn.z },
 });
+
+/** A drawn spawn as the right-click menu sees it: what it is, how it moves, and where it stands as stored */
+export type SpawnInfo = {
+  kind: 'creature' | 'object';
+  guid: number;
+  entry: number;
+  name: string;
+  own: boolean;
+  added: boolean;
+  pathId: number;
+  wander: number;
+  map: number;
+  placement: Placement;
+};
+
+/** An object's facing: its turn about Z, from 0 to a whole turn */
+const facingOf = ([, , z, w]: [number, number, number, number]): number => {
+  const angle = 2 * Math.atan2(z, w);
+  return angle < 0 ? angle + Math.PI * 2 : angle;
+};
+
+/** A creature as a movement moves it: its wander circle and which path it walks (the route is found by that path) */
+const moved = (c: ViewCreature, m: Movement): ViewCreature => ({ ...c, wander: m.type === 'wander' ? m.wander : 0, pathId: m.pathId ?? 0, path: m.type === 'path' ? c.path : null });
 
 /** What a spawn's model is made from; two spawns with the same key look the same */
 const lookKeyOf = (kind: 'creature' | 'object', spawn: ViewCreature | ViewObject): string =>
@@ -204,6 +228,8 @@ class SpawnManager {
 
   /** Routes edited in the view and not yet stored by its host, drawn in place of what it has */
   #pendingRoutes = new globalThis.Map<number, ViewPoint[]>();
+  /** NPCs' movement as edited in the view, drawn until the host stores it */
+  #pendingMovements = new globalThis.Map<number, Movement>();
 
   /** The NPCs whose routes and wander circles are drawn: those being worked on */
   #activeRoutes = new globalThis.Set<number>();
@@ -323,18 +349,23 @@ class SpawnManager {
     const ownObjects = new Set(this.#own.objects.map((o) => o.guid));
     const placed = (kind: 'creature' | 'gameobject', guid: number) => this.#layer.spawns.find((s) => s.kind === kind && s.guid === guid)?.current;
     const routes = new globalThis.Map(this.#layer.routes.map((r) => [r.pathId, r.current]));
+    const movements = new globalThis.Map((this.#layer.movements ?? []).map((m) => [m.guid, m.current]));
+    // The layer's movement first, so a new path is found by its id among the layer's routes
+    const routed = (c: ViewCreature): ViewCreature => {
+      const movement = movements.get(c.guid);
+      const walks = movement ? moved(c, movement) : c;
+      const route = walks.pathId > 0 ? routes.get(walks.pathId) : undefined;
+      return route ? { ...walks, path: route.map((p): ViewPoint => ({ x: p.x, y: p.y, z: p.z, carry: p.rest })) } : walks;
+    };
     const creature = (c: ViewCreature): ViewCreature => {
       const at = placed('creature', c.guid);
-      const route = c.pathId > 0 ? routes.get(c.pathId) : undefined;
-      return {
-        ...c,
-        ...(at ? { x: at.x, y: at.y, z: at.z, orientation: at.orientation } : {}),
-        ...(route ? { path: route.map((p): ViewPoint => ({ x: p.x, y: p.y, z: p.z, carry: p.rest })) } : {}),
-      };
+      return routed(at ? { ...c, x: at.x, y: at.y, z: at.z, orientation: at.orientation } : c);
     };
     const pending = (c: ViewCreature): ViewCreature => {
+      const movement = this.#pendingMovements.get(c.guid);
+      const walks = movement ? moved(c, movement) : c;
       const route = this.#pendingRoutes.get(c.guid);
-      return route ? { ...c, path: route } : c;
+      return route ? { ...walks, path: route } : walks;
     };
     const object = (o: ViewObject): ViewObject => {
       const at = placed('gameobject', o.guid);
@@ -356,7 +387,7 @@ class SpawnManager {
       }),
     );
     return {
-      creatures: [...spawns.creatures.filter((c) => !ownCreatures.has(c.guid) && shown(c)).map(creature), ...this.#own.creatures.filter(inBox), ...placedCreatures.filter(inBox)].map(pending),
+      creatures: [...spawns.creatures.filter((c) => !ownCreatures.has(c.guid) && shown(c)).map(creature), ...this.#own.creatures.filter(inBox), ...placedCreatures.filter(inBox).map(routed)].map(pending),
       objects: [...spawns.objects.filter((o) => !ownObjects.has(o.guid) && shown(o)).map(object), ...this.#own.objects.filter(inBox), ...placedObjects.filter(inBox)],
       capped: spawns.capped,
     };
@@ -366,14 +397,48 @@ class SpawnManager {
   async setWorldLayer(layer: WorldLayer) {
     this.#layer = layer;
     this.#pendingRoutes.clear();
+    this.#pendingMovements.clear();
     await this.#redraw();
   }
 
   /** Draws an NPC's movement as edited in the view until its host stores it; null draws it as stored */
-  async setPendingMovement(_guid: number, _movement: Movement | null) {}
+  async setPendingMovement(guid: number, movement: Movement | null) {
+    if (movement) this.#pendingMovements.set(guid, movement);
+    else this.#pendingMovements.delete(guid);
+    await this.#redraw();
+  }
+
+  /** A drawn NPC as the view has it (with the layer's and pending edits), or undefined */
+  #creature(guid: number): ViewCreature | undefined {
+    for (const group of this.#areas.values()) {
+      const creature: ViewCreature | undefined = group.userData.creatures?.get(guid);
+      if (creature) return creature;
+    }
+    return undefined;
+  }
 
   /** How a drawn NPC moves, as the view has it; null when it is not drawn */
-  movement(_guid: number): Movement | null {
+  movement(guid: number): Movement | null {
+    const creature = this.#creature(guid);
+    if (!creature) return null;
+    const pathId = creature.pathId > 0 ? creature.pathId : null;
+    if (creature.path && creature.path.length > 0) return { type: 'path', wander: 0, pathId };
+    return creature.wander > 0 ? { type: 'wander', wander: creature.wander, pathId } : { type: 'idle', wander: 0, pathId };
+  }
+
+  /** A drawn spawn as the right-click menu describes it, or null when it is not drawn */
+  info(kind: 'creature' | 'object', guid: number): SpawnInfo | null {
+    for (const group of this.#areas.values()) {
+      const data: ViewCreature | ViewObject | undefined = (kind === 'creature' ? group.userData.creatures : group.userData.objects)?.get(guid);
+      if (!data) continue;
+      const base = { kind, guid, entry: data.entry, name: data.name, own: data.own, added: data.added ?? false, map: data.map };
+      if (kind === 'creature') {
+        const c = data as ViewCreature;
+        return { ...base, pathId: c.pathId ?? 0, wander: c.wander, placement: { x: c.x, y: c.y, z: c.z, orientation: c.orientation, rotation: null } };
+      }
+      const o = data as ViewObject;
+      return { ...base, pathId: 0, wander: 0, placement: { x: o.x, y: o.y, z: o.z, orientation: facingOf(o.rotation), rotation: o.rotation } };
+    }
     return null;
   }
 
@@ -679,8 +744,9 @@ class SpawnManager {
     this.#release(group);
     group.clear();
     group.add(...made);
-    // The creatures as drawn, so a route can be read back as the view has it
+    // The creatures as drawn, so a route can be read back as the view has it, and the objects for the menu
     group.userData.creatures = new globalThis.Map(spawns.creatures.map((c) => [c.guid, c]));
+    group.userData.objects = new globalThis.Map(spawns.objects.map((o) => [o.guid, o]));
     this.#applyVisibility(group);
     group.updateMatrixWorld(true);
   }
@@ -736,8 +802,9 @@ class SpawnManager {
       const creature = now.get(guid);
       if (creature) paths.add(...movesOf(creature));
     }
-    // The creatures as drawn, so a route can be read back as the view has it
+    // The creatures as drawn, so a route can be read back as the view has it, and the objects for the menu
     group.userData.creatures = now;
+    group.userData.objects = new globalThis.Map(spawns.objects.map((o) => [o.guid, o]));
     this.#applyVisibility(group);
     group.updateMatrixWorld(true);
 

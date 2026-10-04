@@ -485,6 +485,38 @@ describe('the world layer in the view', () => {
     });
   });
 
+  it('draws a layer movement: the wander circle’s radius, and a new path from the layer’s route', async () => {
+    const m = manager({ creatures: [creature(1, 1), creature(2, 1)], objects: [], capped: { creatures: false, objects: false } });
+    await m.loadArea(1, 0, box);
+    await m.setWorldLayer({ spawns: [], added: [],
+      routes: [{ pathId: 900, walkers: 1, original: [], current: [{ x: 5, y: 0, z: 0, rest: {} }, { x: 6, y: 0, z: 0, rest: {} }] }],
+      movements: [
+        { guid: 1, entry: 1, name: 'n', map: 0, addonRow: false, original: { type: 'idle', wander: 0, pathId: null }, current: { type: 'wander', wander: 7, pathId: null } },
+        { guid: 2, entry: 1, name: 'n', map: 0, addonRow: false, original: { type: 'idle', wander: 0, pathId: null }, current: { type: 'path', wander: 0, pathId: 900 } },
+      ] });
+    expect(m.movement(1)).toEqual({ type: 'wander', wander: 7, pathId: null });
+    expect(m.route(2)).toMatchObject({ pathId: 900, points: [{ x: 5 }, { x: 6 }] });
+  });
+
+  it('draws a pending movement until the layer comes back', async () => {
+    const m = manager({ creatures: [creature(1, 1)], objects: [], capped: { creatures: false, objects: false } });
+    await m.loadArea(1, 0, box);
+    await m.setPendingMovement(1, { type: 'path', wander: 0, pathId: 10 });
+    await m.setPendingRoute(1, [{ x: 3, y: 0, z: 0 }]);
+    expect(m.route(1)).toMatchObject({ pathId: 10, points: [{ x: 3 }] });
+    await m.setWorldLayer({ spawns: [], routes: [], added: [] });
+    expect(m.route(1)).toBeNull();
+    expect(m.movement(1)).toEqual({ type: 'idle', wander: 0, pathId: null });
+  });
+
+  it('describes a drawn spawn for the menu', async () => {
+    const m = manager({ creatures: [creature(1, 1, { x: 0.5, y: 0.5, orientation: 2, wander: 4 })], objects: [], capped: { creatures: false, objects: false } });
+    await m.loadArea(1, 0, box);
+    expect(m.info('creature', 1)).toEqual({ kind: 'creature', guid: 1, entry: 1, name: 'n', own: false, added: false, pathId: 0, wander: 4, map: 0,
+      placement: { x: 0.5, y: 0.5, z: 0, orientation: 2, rotation: null } });
+    expect(m.info('creature', 99)).toBeNull();
+  });
+
   it('picks a route point of the selected NPC by its ball', async () => {
     const m = manager({ creatures: [creature(2, 0, { pathId: 77, path: [{ x: 10, y: 0, z: 1 }, { x: 20, y: 0, z: 1 }] })], objects: [], capped: { creatures: false, objects: false } });
     await m.loadArea(1, 0, box);
