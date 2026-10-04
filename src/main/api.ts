@@ -36,6 +36,9 @@ import { refCheckerFor, validateQuest, type Issue, type RefChecker } from '../co
 import { TOOL_VERSION } from '../core/version';
 import { addSpawn, hasWorldChanges, isAdded, moveSpawn, movementsOf, revertMovement, revertRoute, revertSpawn, setMovement, setRoute, worldStatements, type RoutePoint, type SpawnDefaults, type WorldLayer } from '../core/world/layer';
 import { IDLE } from '../core/world/movement';
+import { describeStep } from './project/step-labels';
+import type { HistoryStep } from './project/history';
+import type { HistoryResult, StepSummary } from '../shared/history';
 import { addedDrifted, countWalkers, movementDrifted, readMovement, readPlacement, readRoute, readTemplateLook, routeDrifted, spawnDrifted, worldSchema } from './world/world-api';
 import type {
   Api,
@@ -355,6 +358,78 @@ export function createApi(deps: ApiDeps): Api {
   };
 
   const quests = deps.session.quests;
+  const history = deps.session.history;
+  /** Runs work as one step of the history, however many changes it makes */
+  const asOneStep = async <T,>(work: () => Promise<T>): Promise<T> => {
+    const token = history.begin();
+    try {
+      return await work();
+    } finally {
+      history.end(token);
+    }
+  };
+  const historyList = () => history.list(describeStep);
+  /**
+   * Applies steps in order and says what they changed. A part that would bring back a placed spawn or a
+   * new quest whose id the database has taken since is left out, with why.
+   */
+  const applySteps = async (steps: HistoryStep[], direction: 'undo' | 'redo'): Promise<HistoryResult> => {
+    const db = session?.db ?? null;
+    const verb = direction === 'undo' ? 'undo' : 'redo';
+    const skipped: string[] = [];
+    const touched: number[] = [];
+    let positions = false;
+    let world = false;
+    let name = false;
+    let last: StepSummary | null = null;
+    for (const step of steps) {
+      const skip = new Set<number>();
+      const parts = await Promise.all(step.parts.map(async (part, i) => {
+        if (part.kind === 'world' && db) {
+          const from = direction === 'undo' ? part.after : part.before;
+          const to = direction === 'undo' ? part.before : part.after;
+          const coming = to.added.filter((a) => !from.added.some((b) => b.kind === a.kind && b.guid === a.guid));
+          const taken: typeof coming = [];
+          for (const a of coming) if ((await readPlacement(db, a.kind, a.guid)) !== null) taken.push(a);
+          if (taken.length === 0) return part;
+          for (const a of taken) skipped.push(`Could not ${verb}: spawn ${a.guid} is now in the database`);
+          const kept = { ...to, added: to.added.filter((a) => !taken.includes(a)) };
+          return direction === 'undo' ? { ...part, before: kept } : { ...part, after: kept };
+        }
+        if (part.kind === 'quest' && db) {
+          const to = direction === 'undo' ? part.before : part.after;
+          const from = direction === 'undo' ? part.after : part.before;
+          if (to && !from && to.isNew && (await db.existingIds('quest', [part.questId])).has(part.questId)) {
+            skipped.push(`Could not ${verb}: quest ${part.questId} is now in the database`);
+            skip.add(i);
+          }
+        }
+        return part;
+      }));
+      deps.session.applyStep({ ...step, parts }, direction, skip);
+      step.parts.forEach((part, i) => {
+        if (skip.has(i)) return;
+        if (part.kind === 'quest') {
+          if (!touched.includes(part.questId)) touched.push(part.questId);
+          if (part.before === null || part.after === null) positions = true;
+        } else if (part.kind === 'positions') positions = true;
+        else if (part.kind === 'world') world = true;
+        else name = true;
+      });
+      last = { id: step.id, ...describeStep(step) };
+    }
+    const layer = deps.session.world.get();
+    return {
+      step: last,
+      direction,
+      quests: touched.map((questId) => ({ questId, aggregate: quests.get(questId)?.aggregate ?? null })),
+      positions,
+      world: world ? { ...layer, movements: movementsOf(layer) } : null,
+      name,
+      skipped,
+      history: historyList(),
+    };
+  };
 
   const questOf = (questId: number): ProjectQuest => {
     const quest = quests.get(questId);
@@ -1172,7 +1247,8 @@ export function createApi(deps: ApiDeps): Api {
     openQuest: (questId, position) => run(async () => openOne(questId, position)),
 
     addQuestChain: (questId, position) =>
-      run(async () => {
+      // The picked quest and every quest chained to it are one step
+      run(() => asOneStep(async () => {
         const live = usable();
         const chain = await findQuestChain(live.db, questId, MAX_CHAIN_QUESTS, undefined, withProjectStarters(live.itemStarters));
         const slots = layoutChain(chain.questIds, chain.links);
@@ -1207,7 +1283,7 @@ export function createApi(deps: ApiDeps): Api {
           });
         }
         return { open, questIds: chain.questIds, truncated: chain.truncated };
-      }),
+      })),
 
     newQuest: (position) =>
       run(async () => {
@@ -1740,6 +1816,34 @@ export function createApi(deps: ApiDeps): Api {
             movementsOf(layer).map(async (m) => ({ ...m, type: 'movement' as const, drifted: await movementDrifted(db, m, isAdded(layer, 'creature', m.guid)) })),
           )),
         ];
+      }),
+
+    historyList: () => run(async () => historyList()),
+
+    historyUndo: () =>
+      run(async () => {
+        const step = history.undo();
+        return applySteps(step ? [step] : [], 'undo');
+      }),
+
+    historyRedo: () =>
+      run(async () => {
+        const step = history.redo();
+        return applySteps(step ? [step] : [], 'redo');
+      }),
+
+    historyJump: (stepId) =>
+      run(async () => {
+        const { direction, steps } = history.jump(stepId);
+        return applySteps(steps, direction);
+      }),
+
+    historyBegin: (label, where) => run(async () => history.begin(label, where)),
+
+    historyEnd: (token) =>
+      run(async () => {
+        history.end(token);
+        return true as const;
       }),
 
     exportWorld: () =>

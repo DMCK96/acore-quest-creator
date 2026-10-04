@@ -47,6 +47,12 @@ export const API_METHODS = [
   'worldSetRoute',
   'worldRevert',
   'worldChanges',
+  'historyList',
+  'historyUndo',
+  'historyRedo',
+  'historyJump',
+  'historyBegin',
+  'historyEnd',
   'exportWorld',
   'worldSetMovement',
   'worldNewPathId',
@@ -87,3 +93,6 @@ export const channelFor = (method: keyof Api): string => `api:${method}`;
  */
 export const FLUSH_REQUEST_CHANNEL = 'app:flush';
 export const FLUSH_DONE_CHANNEL = 'app:flushed';
+
+/** Main tells the window the undo history after every step, undo, redo, save or clear. */
+export const HISTORY_CHANNEL = 'app:history';

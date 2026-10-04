@@ -35,6 +35,7 @@ import type { CustomItem, CustomNpc, CustomObject } from '@core/entities/model';
 import type { ColumnInfo } from '@core/db/types';
 import type { TestCommands } from '@core/testing/gm';
 import type { FidelityReport } from '@core/roundtrip/verify';
+import type { HistoryList, HistoryResult, StepPlace } from './history';
 import type { SchemaDiff } from '@core/schema/diff';
 import type { Issue } from '@core/validate/validate';
 
@@ -421,6 +422,17 @@ export interface Api {
   worldRevert(target: WorldRevertTarget): Promise<Result<WorldLayer>>;
   /** Every world layer entry, with whether the database has moved off its original. */
   worldChanges(): Promise<Result<WorldChange[]>>;
+  /** The project's undo history: its steps, the last one applied, and the saved one. */
+  historyList(): Promise<Result<HistoryList>>;
+  /** Puts the last step back as it was before it, and says what changed. */
+  historyUndo(): Promise<Result<HistoryResult>>;
+  /** Does the last undone step again, and says what changed. */
+  historyRedo(): Promise<Result<HistoryResult>>;
+  /** Undoes or redoes to stand just after a step (0: before every step), and says what changed. */
+  historyJump(stepId: number): Promise<Result<HistoryResult>>;
+  /** Opens a step: every change until its end is one undo step, with this name and place when given. */
+  historyBegin(label?: string, where?: StepPlace): Promise<Result<number>>;
+  historyEnd(token: number): Promise<Result<true>>;
   /** Writes the world patch and its revert to the export folder. */
   exportWorld(): Promise<Result<{ applyPath: string; revertPath: string; sql: string }>>;
   /** Where an NPC or object stands in the world, for jumping to it on the map. */
@@ -465,7 +477,8 @@ export interface Api {
  */
 
 // The method and channel names live in a zod-free module so the sandboxed preload can import them.
-export { API_METHODS, channelFor } from './api-methods';
+export { API_METHODS, channelFor, HISTORY_CHANNEL } from './api-methods';
+export type { HistoryList, HistoryPart, HistoryResult, QuestEdit, StepPlace, StepSummary } from './history';
 
 const REF_KINDS = [
   'item',
@@ -509,6 +522,10 @@ const viewportSchema = z.object({ x: z.number(), y: z.number(), zoom: z.number()
 const finite = z.number().finite();
 const worldKindArg = z.enum(['creature', 'gameobject']);
 const movementArg = z.object({ type: z.enum(['idle', 'wander', 'path']), wander: z.number().min(0), pathId: z.number().int().min(1).nullable() });
+const stepPlaceArg = z.union([
+  z.object({ questId: z.number().int(), module: z.string().max(64).optional() }),
+  z.object({ map: z.number().int(), x: finite, y: finite, z: finite, spawn: z.object({ kind: worldKindArg, guid: z.number().int() }).optional() }),
+]);
 const placementArg = z.object({ x: finite, y: finite, z: finite, orientation: finite, rotation: z.tuple([finite, finite, finite, finite]).nullable() });
 const routePointArg = z.object({ x: finite, y: finite, z: finite, rest: z.record(z.string(), z.string().nullable()) });
 
@@ -594,6 +611,12 @@ const REQUEST_SCHEMAS: Record<keyof Api, z.ZodType<unknown[]>> = {
     z.object({ kind: z.literal('movement'), guid: z.number().int() }),
   ])]),
   worldChanges: z.tuple([]),
+  historyList: z.tuple([]),
+  historyUndo: z.tuple([]),
+  historyRedo: z.tuple([]),
+  historyJump: z.tuple([z.number().int().min(0)]),
+  historyBegin: z.tuple([z.string().max(200).optional(), stepPlaceArg.optional()]),
+  historyEnd: z.tuple([z.number().int().min(1)]),
   exportWorld: z.tuple([]),
   entitySpawns: z.tuple([z.enum(['creature', 'gameobject']), z.number().int()]),
   findSpawns: z.tuple([z.enum(['creature', 'gameobject']), z.number().int()]),

@@ -4,7 +4,8 @@ import { mkdir, readdir, readFile, writeFile } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
 import { openMysqlDevDb } from '../core/db/mysql-dev-db';
 import { openMysqlWorldDb } from '../core/db/mysql-world-db';
-import { FLUSH_DONE_CHANNEL, FLUSH_REQUEST_CHANNEL } from '../shared/api-methods';
+import { FLUSH_DONE_CHANNEL, FLUSH_REQUEST_CHANNEL, HISTORY_CHANNEL } from '../shared/api-methods';
+import { describeStep } from './project/step-labels';
 import { API_METHODS, channelFor, parseRequest, type Api, type ApiError } from '../shared/ipc';
 import { createApi, type ApiDeps } from './api';
 import { seedEnvProfiles } from './env-profiles';
@@ -219,6 +220,10 @@ function createWindow(session: ProjectSession, recovery: Recovery, projects: Pro
   win.on('page-title-updated', (event) => event.preventDefault());
   showTitle();
   const stopTitle = session.onChange(showTitle);
+  // The window's Undo buttons and History list follow every step, whatever made it
+  const stopHistory = session.history.onChange(() => {
+    if (!win.isDestroyed()) win.webContents.send(HISTORY_CHANNEL, session.history.list(describeStep));
+  });
 
   const tick = (): void => {
     recovery.tick(session).catch((error: unknown) => console.error('Could not write the recovery copy:', error));
@@ -249,6 +254,7 @@ function createWindow(session: ProjectSession, recovery: Recovery, projects: Pro
   win.on('closed', () => {
     clearInterval(timer);
     stopTitle();
+    stopHistory();
   });
 
   if (process.env['ELECTRON_RENDERER_URL']) {

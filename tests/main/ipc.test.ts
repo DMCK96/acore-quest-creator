@@ -12,6 +12,7 @@ describe('parseRequest', () => {
       'testConnection', 'validate', 'questScripts', 'testCommands', 'groundHeight', 'spellFacts', 'mapList', 'mapFloors', 'mapSpawns', 'viewSpawns', 'entitySpawns', 'findSpawns', 'questMapRefs', 'allocateIds', 'entityTemplate', 'itemColumns',
       'patrolPathId', 'renameProject', 'newProject', 'openProject', 'saveProject', 'saveProjectAs', 'recentProjects', 'forgetRecent', 'recoveries', 'restoreRecovery', 'discardRecovery',
       'worldLayer', 'worldMoveSpawn', 'worldAddSpawn', 'worldRoute', 'worldSetRoute', 'worldRevert', 'worldChanges', 'exportWorld', 'worldSetMovement', 'worldNewPathId', 'questSpawnList',
+      'historyList', 'historyUndo', 'historyRedo', 'historyJump', 'historyBegin', 'historyEnd',
     ].sort());
   });
   it('refuses world edits with a bad kind, a missing rotation or a point without its columns', () => {
@@ -24,6 +25,15 @@ describe('parseRequest', () => {
     expect(parseRequest('worldMoveSpawn', ['creature', 5, { x: 1, y: 2, z: 3, orientation: 0 }]).ok).toBe(false);
     expect(parseRequest('worldSetRoute', [801, [{ x: 1, y: 2, z: 3 }]]).ok).toBe(false);
     expect(parseRequest('worldRevert', [{ kind: 'route', pathId: 801 }]).ok).toBe(true);
+  });
+  it('checks history requests', () => {
+    expect(parseRequest('historyJump', [3]).ok).toBe(true);
+    expect(parseRequest('historyJump', [-1]).ok).toBe(false);
+    expect(parseRequest('historyBegin', []).ok).toBe(true);
+    expect(parseRequest('historyBegin', ['Paste 3 spawns', { map: 0, x: 1, y: 2, z: 3 }]).ok).toBe(true);
+    expect(parseRequest('historyBegin', ['x'.repeat(201)]).ok).toBe(false);
+    expect(parseRequest('historyEnd', [1]).ok).toBe(true);
+    expect(parseRequest('historyUndo', []).ok).toBe(true);
   });
   it('checks movement and new-path requests', () => {
     const at = { x: 1, y: 2, z: 3, orientation: 0, rotation: null };

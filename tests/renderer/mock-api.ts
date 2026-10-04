@@ -56,6 +56,12 @@ export function nodeOf(overrides: Partial<CanvasNode> = {}): CanvasNode {
  * Builds a mock `Api` where every method not overridden is a `vi.fn` answering with a sensible
  * empty success, so tests can assert on calls without wiring every method by hand.
  */
+/** An undo or redo that found nothing to do */
+export const emptyHistoryResult = {
+  step: null, direction: 'undo' as const, quests: [], positions: false, world: null, name: false, skipped: [] as string[],
+  history: { steps: [], current: 0, saved: 0 as number | null },
+};
+
 export function makeMockApi(overrides: Partial<Record<keyof Api, (...args: any[]) => any>> = {}): Api {
   const defaults: Record<keyof Api, (...args: any[]) => any> = {
     testConnection: vi.fn(async () => okv({ ok: true as const })),
@@ -102,6 +108,12 @@ export function makeMockApi(overrides: Partial<Record<keyof Api, (...args: any[]
     worldNewPathId: vi.fn(async () => okv(1)),
     questSpawnList: vi.fn(async () => okv([])),
     worldChanges: vi.fn(async () => okv([])),
+    historyList: vi.fn(async () => okv(emptyHistoryResult.history)),
+    historyUndo: vi.fn(async () => okv(emptyHistoryResult)),
+    historyRedo: vi.fn(async () => okv({ ...emptyHistoryResult, direction: 'redo' })),
+    historyJump: vi.fn(async () => okv(emptyHistoryResult)),
+    historyBegin: vi.fn(async () => okv(1)),
+    historyEnd: vi.fn(async () => okv(true)),
     exportWorld: vi.fn(async () => okv({ applyPath: '', revertPath: '', sql: '' })),
     entitySpawns: vi.fn(async () => okv([])),
     findSpawns: vi.fn(async () => okv({ spawns: [], capped: false })),
