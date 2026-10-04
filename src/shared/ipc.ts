@@ -272,6 +272,10 @@ export interface ExportResult {
   sql: string;
   warnings: PatchWarning[];
   issues: Issue[];
+  /** How many of the project's new NPCs, objects and items the quest uses: they are in the project patch */
+  usesProject: number;
+  /** The project patch Apply to dev runs before the quest; null when the project has nothing of its own */
+  projectSql: string | null;
 }
 
 /** One quest as the canvas draws it. */
@@ -441,7 +445,8 @@ export interface Api {
   historyBegin(label?: string, where?: StepPlace): Promise<Result<number>>;
   historyEnd(token: number): Promise<Result<true>>;
   /** Writes the world patch and its revert to the export folder. */
-  exportWorld(): Promise<Result<{ applyPath: string; revertPath: string; sql: string }>>;
+  /** Writes the project patch (new NPCs, objects, items and world changes) and its revert. */
+  exportProject(): Promise<Result<{ applyPath: string; revertPath: string; sql: string }>>;
   /** Where an NPC or object stands in the world, for jumping to it on the map. */
   entitySpawns(kind: 'creature' | 'gameobject', entry: number): Promise<Result<SpawnDot[]>>;
   /** Every spawn of one NPC or object (up to a few hundred, `capped` when there are more), for jumping to them in the 3D view. */
@@ -627,7 +632,7 @@ const REQUEST_SCHEMAS: Record<keyof Api, z.ZodType<unknown[]>> = {
   historyJump: z.tuple([z.number().int().min(0)]),
   historyBegin: z.tuple([z.string().max(200).optional(), stepPlaceArg.optional()]),
   historyEnd: z.tuple([z.number().int().min(1)]),
-  exportWorld: z.tuple([]),
+  exportProject: z.tuple([]),
   entitySpawns: z.tuple([z.enum(['creature', 'gameobject']), z.number().int()]),
   findSpawns: z.tuple([z.enum(['creature', 'gameobject']), z.number().int()]),
   questMapRefs: z.tuple([z.number()]),

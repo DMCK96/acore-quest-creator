@@ -39,8 +39,8 @@ describe('the World changes modal', () => {
   });
 
   it('exports and shows where the two files went', async () => {
-    const exportWorld = vi.fn(async () => okv({ applyPath: 'C:\\out\\2026-10-03_00_world.sql', revertPath: 'C:\\out\\2026-10-03_00_world_revert.sql', sql: '' }));
-    render(<WorldChanges api={makeMockApi({ worldChanges: vi.fn(async () => okv([spawn])), exportWorld })} onLayer={vi.fn()} onClose={vi.fn()} />);
+    const exportProject = vi.fn(async () => okv({ applyPath: 'C:\\out\\2026-10-03_00_world.sql', revertPath: 'C:\\out\\2026-10-03_00_world_revert.sql', sql: '' }));
+    render(<WorldChanges api={makeMockApi({ worldChanges: vi.fn(async () => okv([spawn])), exportProject })} onLayer={vi.fn()} onClose={vi.fn()} />);
     await userEvent.click(await screen.findByRole('button', { name: 'Export world patch' }));
     expect(await screen.findByText('C:\\out\\2026-10-03_00_world.sql')).toBeTruthy();
     expect(screen.getByText('C:\\out\\2026-10-03_00_world_revert.sql')).toBeTruthy();

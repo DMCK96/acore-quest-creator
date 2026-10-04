@@ -574,7 +574,7 @@ export function createApi(deps: ApiDeps): Api {
     return [
       ...own,
       ...(await scriptIssues(live, aggregate)),
-      ...(await newEntityIssues(live, aggregate)),
+      ...(await newEntityIssues(live, questEntities(aggregate))),
       ...linkIssues(questId, await linksFor(live, [questId])),
     ];
   }
@@ -776,8 +776,10 @@ export function createApi(deps: ApiDeps): Api {
     };
   }
 
-  async function newEntityIssues(live: Session, aggregate: QuestAggregate): Promise<Issue[]> {
-    const entities = questEntities(aggregate);
+  /** Each project quest's NPC-or-object objectives, by quest id, for fights that give credit */
+  const objectivesByQuest = (): Map<number, readonly number[]> => new Map(quests.list().map((q) => [q.questId, objectivesOf(q.aggregate)]));
+
+  async function newEntityIssues(live: Session, entities: ProjectEntities): Promise<Issue[]> {
     if (entities.npcs.length + entities.objects.length + entities.items.length === 0) return [];
     const startedQuests = [...new Set(entities.items.map((i) => i.startsQuest).filter((q) => q > 0))];
     const [creatures, objects, itemRows, questRows] = await Promise.all([
@@ -799,7 +801,7 @@ export function createApi(deps: ApiDeps): Api {
     const items = held.length > 0 ? await rowsOrNone(live.db, 'item_template', { entry: held.map(String) }) : [];
     const itemInventoryTypes = new Map(items.map((r) => [Number(r.entry), Number(r.InventoryType ?? 0)]));
     return entityIssues({
-      entities, dbNames, questItems: questItemsOf(aggregate), objectives: new Map([[aggregate.questId, objectivesOf(aggregate)]]),
+      entities, dbNames, questItems: [...new Set(quests.list().flatMap((q) => questItemsOf(q.aggregate)))], objectives: objectivesByQuest(),
       knownSpell: spells ? (id) => spells.get(id) !== undefined : null, itemInventoryTypes,
       knownQuest: (id) => knownQuests.has(id), itemColumnTypes: itemColumnTypes.size > 0 ? itemColumnTypes : null,
     });
@@ -1039,16 +1041,90 @@ export function createApi(deps: ApiDeps): Api {
    */
   async function compileFor(live: Session, aggregate: QuestAggregate): Promise<{ context: ScriptContext; compiled: CompiledScripts }> {
     const scenes = readScenes(aggregate.values);
-    const { npcs } = questEntities(aggregate);
-    const fighters = npcs.filter((n) => !fightIsEmpty(n.fight) || hasPointActions(n)).map((n) => n.entry);
-    const context = await readScriptContext(live.db, aggregate.questId, scenes, fighters);
-    const objectives = objectivesOf(aggregate);
-    const sceneRows = compileScenes({ questId: aggregate.questId, scenes, objectives, context });
-    const fightRows = compileFights({ npcs, objectives: new Map([[aggregate.questId, objectives]]), context, taken: sceneRows });
-    const before = mergeCompiled(sceneRows, fightRows);
-    // Every project NPC goes in, so the rows of point actions since removed are deleted.
-    const patrolRows = compilePatrols({ npcs, context, taken: before });
-    return { context, compiled: mergeCompiled(before, patrolRows) };
+    const context = await readScriptContext(live.db, aggregate.questId, scenes);
+    // The project patch's fight and patrol rows go in first (Apply to dev runs it first): scenes keep off them
+    const project = await projectScripts(live);
+    const compiled = compileScenes({ questId: aggregate.questId, scenes, objectives: objectivesOf(aggregate), context, taken: project.compiled });
+    return { context, compiled };
+  }
+
+  /**
+   * The SmartAI rows of the project's NPCs: their fights, then what they do at patrol points. Every
+   * project NPC goes in, so the rows of a fight or point action since removed are deleted.
+   */
+  async function projectScripts(live: Session): Promise<{ context: ScriptContext; compiled: CompiledScripts }> {
+    const { npcs } = projectEntities();
+    const context = await readScriptContext(live.db, 0, [], npcs.map((n) => n.entry));
+    const none: CompiledScripts = { inserts: {}, deletes: {}, updates: [], flags: [], warnings: [] };
+    const fights = compileFights({ npcs, objectives: objectivesByQuest(), context, taken: none });
+    const patrols = compilePatrols({ npcs, context, taken: fights });
+    return { context, compiled: mergeCompiled(fights, patrols) };
+  }
+
+  /**
+   * The project patch: every new NPC, object and item and their SmartAI rows, then the world layer's
+   * edits, with a revert that deletes what the first part writes and puts the world back.
+   */
+  async function projectPatch(live: Session): Promise<{ apply: PatchStatement[]; revert: PatchStatement[]; schema: SchemaInfo; warnings: string[] }> {
+    const store = projectEntities();
+    const layer: WorldLayer = deps.session.world.get();
+    const all = quests.list();
+    const ws = await worldSchema(live.db, live.schema.hash);
+    const base = exportSchema(live);
+    const schema: SchemaInfo = { ...base, tables: { ...ws.tables, ...base.tables } };
+    const givers = all.flatMap((q) => [...relationOwners(q.aggregate, 'starter'), ...relationOwners(q.aggregate, 'ender')]).flatMap((o) => (o.kind === 'creature' ? [o.entry] : []));
+    const questItems = all.flatMap((q) => questItemsOf(q.aggregate).map((item) => ({ item, questId: q.questId })));
+    const entityContext = await readEntityContext(live.db, store, all.map((q) => q.questId));
+    const compiledEntities = compileEntities({
+      entities: store, givers, questItems, context: entityContext,
+      itemColumns: live.scriptSchema.tables.item_template ? new Set(live.scriptSchema.tables.item_template.map((c) => c.name)) : null,
+    });
+    const scripts = await projectScripts(live);
+    const entityStatements = scriptStatements(compiledEntities, schema).statements;
+    const scriptRows = scriptStatements(scripts.compiled, schema).statements;
+    let world: { apply: PatchStatement[]; revert: PatchStatement[] } = { apply: [], revert: [] };
+    if (hasWorldChanges(layer)) {
+      // The rows of placed spawns are made of the database's own columns, so a fork's extra ones are filled
+      const spawnDefaults: SpawnDefaults = {};
+      for (const kind of ['creature', 'gameobject'] as const) {
+        if (layer.added.some((a) => a.kind === kind)) spawnDefaults[kind] = defaultColumnValues(kind, ws);
+      }
+      // A spawn given a path without an addon row of its own gets one, made of the table's own columns
+      const writesAddon = movementsOf(layer).some((m) => !m.addonRow && m.current.pathId !== m.original.pathId);
+      const addonDefaults = writesAddon ? defaultColumnValues('creature_addon', ws) : undefined;
+      world = worldStatements(layer, defaultColumnValues('waypoint_data', ws), spawnDefaults, addonDefaults);
+    }
+    const of = (list: readonly PatchStatement[], kind: PatchStatement['kind']) => list.filter((st) => st.kind === kind);
+    // Deletes first; the entities before the SmartAI rows that act on them; the world's edits last
+    const apply = [
+      ...of(entityStatements, 'delete'), ...of(scriptRows, 'delete'),
+      ...of(entityStatements, 'insert'),
+      ...of(scriptRows, 'set-flag'), ...of(entityStatements, 'update'), ...of(scriptRows, 'update'), ...of(scriptRows, 'insert'),
+      ...world.apply,
+    ];
+    // The revert takes away every row the entities part wrote, the last written first
+    const keysOf = (table: string): readonly string[] => ENTITY_KEYS[table] ?? SCRIPT_KEYS[table] ?? [];
+    const written = [...of(entityStatements, 'insert'), ...of(scriptRows, 'insert')].reverse();
+    const revert: PatchStatement[] = [];
+    const seen = new Set<string>();
+    for (const st of written) {
+      if (st.kind !== 'insert') continue;
+      const key = Object.fromEntries(keysOf(st.table).map((c) => [c, String(st.row[c] ?? '')]));
+      const text = `${st.table}:${JSON.stringify(key)}`;
+      if (Object.keys(key).length === 0 || seen.has(text)) continue;
+      seen.add(text);
+      revert.push({ kind: 'delete', table: st.table, key });
+    }
+    revert.push(...world.revert);
+    return { apply, revert, schema, warnings: [...compiledEntities.warnings, ...scripts.compiled.warnings] };
+  }
+
+  /** The project's NPCs, objects and items checked; throws when they have errors */
+  async function guardProject(live: Session): Promise<void> {
+    const issues = await newEntityIssues(live, projectEntities());
+    if (issues.some((i) => i.severity === 'error')) {
+      throw fail('VALIDATION', "Fix the errors on the project's NPCs, objects and items first.", { issues });
+    }
   }
 
   /**
@@ -1075,7 +1151,6 @@ export function createApi(deps: ApiDeps): Api {
     const issues = [
       ...(await validateQuest(quest.aggregate, refsFor(live))),
       ...(await scriptIssues(live, quest.aggregate)),
-      ...(await newEntityIssues(live, quest.aggregate)),
     ];
     if (issues.some((i) => i.severity === 'error')) {
       throw fail('VALIDATION', 'Fix the errors on this quest before exporting it.', { issues });
@@ -1109,23 +1184,13 @@ export function createApi(deps: ApiDeps): Api {
     });
     const { context: scriptContext, compiled } = await compileFor(live, quest.aggregate);
     const scripts = scriptStatements(compiled, exportSchema(live));
-    const entities = questEntities(quest.aggregate);
-    const givers = [...relationOwners(quest.aggregate, 'starter'), ...relationOwners(quest.aggregate, 'ender')]
-      .flatMap((o) => (o.kind === 'creature' ? [o.entry] : []));
-    const entityContext = await readEntityContext(live.db, entities, [quest.questId]);
-    const newEntities = scriptStatements(
-      compileEntities({
-        entities, givers, questItems: questItemsOf(quest.aggregate).map((item) => ({ item, questId: quest.questId })), context: entityContext,
-        itemColumns: live.scriptSchema.tables.item_template ? new Set(live.scriptSchema.tables.item_template.map((c) => c.name)) : null,
-      }),
-      exportSchema(live),
-    );
+    // The project's new NPCs, objects and items are the project patch's; a quest patch writes none
+    const newEntities = { statements: [] as PatchStatement[] };
     const of = (list: readonly PatchStatement[], kind: PatchStatement['kind']) => list.filter((s) => s.kind === kind);
-    // Deletes before anything is written; new NPCs and objects before the flags and updates quest
-    // scripting puts on them; the quest's and the scenes' rows last.
+    // Deletes before anything is written; the flags and updates quest scripting puts on NPCs, then
+    // the quest's and the scenes' rows.
     const merged = [
-      ...of(statements, 'delete'), ...of(scripts.statements, 'delete'), ...of(newEntities.statements, 'delete'),
-      ...of(newEntities.statements, 'insert'),
+      ...of(statements, 'delete'), ...of(scripts.statements, 'delete'),
       ...of(statements, 'set-flag'), ...of(scripts.statements, 'set-flag'),
       ...of(statements, 'update'), ...of(scripts.statements, 'update'),
       ...of(statements, 'insert'), ...of(scripts.statements, 'insert'),
@@ -1940,32 +2005,27 @@ export function createApi(deps: ApiDeps): Api {
         return true as const;
       }),
 
-    exportWorld: () =>
+    exportProject: () =>
       run(async () => {
         const live = connected();
+        const store = projectEntities();
         const layer: WorldLayer = deps.session.world.get();
-        if (!hasWorldChanges(layer)) throw fail('BAD_REQUEST', 'There are no world changes to export.');
-        const schema = await worldSchema(live.db, live.schema.hash);
-        // The rows of placed spawns are made of the database's own columns, so a fork's extra ones are filled
-        const spawnDefaults: SpawnDefaults = {};
-        for (const kind of ['creature', 'gameobject'] as const) {
-          if (layer.added.some((a) => a.kind === kind)) spawnDefaults[kind] = defaultColumnValues(kind, schema);
+        if (store.npcs.length + store.objects.length + store.items.length === 0 && !hasWorldChanges(layer)) {
+          throw fail('BAD_REQUEST', 'There are no NPCs, objects, items or world changes to export.');
         }
-        // A spawn given a path without an addon row of its own gets one, made of the table's own columns
-        const writesAddon = movementsOf(layer).some((m) => !m.addonRow && m.current.pathId !== m.original.pathId);
-        const addonDefaults = writesAddon ? defaultColumnValues('creature_addon', schema) : undefined;
-        const { apply, revert } = worldStatements(layer, defaultColumnValues('waypoint_data', schema), spawnDefaults, addonDefaults);
+        await guardProject(live);
+        const { apply, revert, schema } = await projectPatch(live);
         const date = patchDate(deps.now());
-        const sql = renderPatch(apply, schema, { toolVersion: TOOL_VERSION, date, label: 'World changes' });
-        const revertSql = renderPatch(revert, schema, { toolVersion: TOOL_VERSION, date, label: 'World changes: revert' });
+        const sql = renderPatch(apply, schema, { toolVersion: TOOL_VERSION, date, label: 'Project changes' });
+        const revertSql = renderPatch(revert, schema, { toolVersion: TOOL_VERSION, date, label: 'Project changes: revert' });
 
         // The same folder a quest's patch goes to, numbered per day like quest exports
         const outputDir = deps.exportDirOverride || live.exportDir || deps.defaultExportDir || deps.session.meta().outputDir;
         await deps.fs.ensureDir(outputDir);
         const existing = await deps.fs.listDir(outputDir);
-        const sequence = String(existing.filter((name) => name.startsWith(`${date}_`) && name.endsWith('_world.sql')).length).padStart(2, '0');
-        const applyPath = join(outputDir, `${date}_${sequence}_world.sql`);
-        const revertPath = join(outputDir, `${date}_${sequence}_world_revert.sql`);
+        const sequence = String(existing.filter((name) => name.startsWith(`${date}_`) && name.endsWith('_project.sql')).length).padStart(2, '0');
+        const applyPath = join(outputDir, `${date}_${sequence}_project.sql`);
+        const revertPath = join(outputDir, `${date}_${sequence}_project_revert.sql`);
         await deps.fs.writeFile(applyPath, sql);
         await deps.fs.writeFile(revertPath, revertSql);
         return { applyPath, revertPath, sql };
@@ -2045,7 +2105,9 @@ export function createApi(deps: ApiDeps): Api {
       run(async () => {
         const live = connected();
         const quest = questOf(questId);
-        const { statements } = await patchFor(live, quest);
+        // What Apply to dev writes: the project patch, then the quest's
+        const project = await projectPatch(live);
+        const statements = [...project.apply, ...(await patchFor(live, quest)).statements];
         const tables = new Set(statements.map((s) => s.table));
         const creatureTemplates = statements.flatMap((s) => {
           if (s.table !== 'creature_template') return [];
@@ -2110,6 +2172,8 @@ export function createApi(deps: ApiDeps): Api {
         const quest = questOf(questId);
         const issues = await guardWrite(live, quest);
         const { statements, warnings } = await patchFor(live, quest);
+        const used = questEntities(quest.aggregate);
+        const usesProject = used.npcs.length + used.objects.length + used.items.length;
 
         const date = patchDate(deps.now());
         const sql = renderPatch(statements, exportSchema(live), { toolVersion: TOOL_VERSION, questId, date });
@@ -2129,7 +2193,15 @@ export function createApi(deps: ApiDeps): Api {
         await deps.fs.writeFile(path, sql);
         quests.markExported(questId, path);
 
-        return { path, sql, warnings, issues: issues.filter((i) => i.severity !== 'error') };
+        // What Apply to dev runs before this quest; none when the project has nothing of its own
+        const store = projectEntities();
+        const hasProject = store.npcs.length + store.objects.length + store.items.length > 0 || hasWorldChanges(deps.session.world.get());
+        let projectSql: string | null = null;
+        if (hasProject) {
+          const project = await projectPatch(live);
+          projectSql = renderPatch(project.apply, project.schema, { toolVersion: TOOL_VERSION, date, label: 'Project changes' });
+        }
+        return { path, sql, warnings, issues: issues.filter((i) => i.severity !== 'error'), usesProject, projectSql };
       }),
 
     applyToDev: (questId, confirm) =>
@@ -2145,8 +2217,14 @@ export function createApi(deps: ApiDeps): Api {
           throw fail('NO_DEV_PROFILE', 'Add a dev database profile before applying a patch to it.');
         }
         await guardWrite(live, quest);
+        await guardProject(live);
         const { statements } = await patchFor(live, quest);
-        const rendered = statements.map((s) => renderStatement(s, exportSchema(live)));
+        // The project patch first, so the quest's new NPCs, objects and items are there to test
+        const project = await projectPatch(live);
+        const rendered = [
+          ...project.apply.map((s) => renderStatement(s, project.schema)),
+          ...statements.map((s) => renderStatement(s, exportSchema(live))),
+        ];
 
         const dev = await deps.openDevDb(deps.store.profiles.getWithPassword(devProfile.id));
         try {

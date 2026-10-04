@@ -32,13 +32,14 @@ describe('patrols through the API', () => {
     await api.putProjectEntities(madeFor({ npcs: [{ ...newNpc(11000240), name: 'Walker', displayId: 1, spawns: [{ ...newSpawn(5300701), patrol }] }], objects: [], items: [] }, aggregate.questId));
     await api.updateQuest(aggregate);
     const out: any = await api.exportQuest(aggregate.questId);
+    const applied: string = `${out.value.projectSql}\n${out.value.sql}`;
     expect(out.ok).toBe(true);
-    expect(out.value.sql).toMatch(/INSERT INTO `creature_addon` .*VALUES \(5300701, 53007010/);
-    expect(out.value.sql).toMatch(/INSERT INTO `waypoint_data`/);
-    expect(out.value.sql.indexOf('INSERT INTO `creature`')).toBeLessThan(out.value.sql.indexOf('INSERT INTO `creature_addon`'));
+    expect(applied).toMatch(/INSERT INTO `creature_addon` .*VALUES \(5300701, 53007010/);
+    expect(applied).toMatch(/INSERT INTO `waypoint_data`/);
+    expect(applied.indexOf('INSERT INTO `creature`')).toBeLessThan(applied.indexOf('INSERT INTO `creature_addon`'));
+    // The route is the project's: a quest's Changes list shows only the quest's own rows
     const preview: any = await api.previewChanges(aggregate.questId);
-    expect(preview.value.some((d: any) => d.table === 'waypoint_data')).toBe(true);
-    expect(preview.value.some((d: any) => d.table === 'creature_addon')).toBe(true);
+    expect(preview.value.some((d: any) => d.table === 'waypoint_data')).toBe(false);
   });
 });
 describe('patrol path ids', () => {
@@ -71,9 +72,10 @@ describe('patrol point actions through the API', () => {
     await api.putProjectEntities(madeFor({ npcs: [{ ...newNpc(11000240), name: 'Walker', displayId: 1, spawns: [{ ...newSpawn(5300701), patrol }] }], objects: [], items: [] }, aggregate.questId));
     await api.updateQuest(aggregate);
     const out: any = await api.exportQuest(aggregate.questId);
+    const applied: string = `${out.value.projectSql}\n${out.value.sql}`;
     expect(out.ok).toBe(true);
-    expect(out.value.sql).toContain('All quiet.');
-    expect(out.value.sql).toMatch(/INSERT INTO `smart_scripts` .*VALUES \(11000240, 0, 0, 0, 34,/);
-    expect(out.value.sql).toMatch(/'SmartAI'/);
+    expect(applied).toContain('All quiet.');
+    expect(applied).toMatch(/INSERT INTO `smart_scripts` .*VALUES \(11000240, 0, 0, 0, 34,/);
+    expect(applied).toMatch(/'SmartAI'/);
   });
 });

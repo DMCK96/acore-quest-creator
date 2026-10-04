@@ -4,7 +4,7 @@ import { defaultProjectMeta, parseProject, serializeProject, PROJECT_VERSION, ty
 import { EMPTY_WORLD } from '../../src/core/world/layer';
 import { EMPTY_ENTITIES, ENTITIES_FIELD, newNpc } from '../../src/core/entities/model';
 
-const fresh = () => { let n = 0; let t = 0; return createProjectSession(defaultProjectMeta('P', 'C:\out'), () => `s${++n}`, { now: () => (t += 10_000) }); };
+const fresh = () => { let n = 0; let t = 0; return createProjectSession(defaultProjectMeta('P', 'C:\\out'), () => `s${++n}`, { now: () => (t += 10_000) }); };
 const store = (name: string) => ({ ...EMPTY_ENTITIES, npcs: [{ ...newNpc(12000001), name }] });
 
 describe('the project store in the session', () => {
@@ -40,13 +40,13 @@ describe('the project store in the session', () => {
     const t = fresh();
     t.load(s.toDocument(), null, { dirty: false });
     expect(t.entities.get()).toEqual(store('Hela'));
-    t.reset(defaultProjectMeta('Q', 'C:\out'));
+    t.reset(defaultProjectMeta('Q', 'C:\\out'));
     expect(t.entities.get()).toEqual(EMPTY_ENTITIES);
   });
 });
 
 describe('project file version 4', () => {
-  const doc = (over: Partial<ProjectDocument> = {}): ProjectDocument => ({ ...defaultProjectMeta('P', 'C:\out'), quests: [], world: EMPTY_WORLD, entities: store('Hela'), ...over });
+  const doc = (over: Partial<ProjectDocument> = {}): ProjectDocument => ({ ...defaultProjectMeta('P', 'C:\\out'), quests: [], world: EMPTY_WORLD, entities: store('Hela'), ...over });
 
   it('is version 4 and round-trips the store', () => {
     expect(PROJECT_VERSION).toBe(4);

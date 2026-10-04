@@ -36,7 +36,7 @@ describe('fights through the API', () => {
 
     const out: any = await api.exportQuest(q);
     expect(out.ok).toBe(true);
-    const sql: string = out.value.sql;
+    const sql: string = `${out.value.projectSql}\n${out.value.sql}`;
     expect(sql).toMatch(/INSERT INTO `creature_template` \(.*\) VALUES \(11000240,.*'SmartAI'/);
     expect(sql).toContain(`'AQC npc11000240 fight: Casts spell 116 on its current target every 8–12 s (first after 2–4 s)'`);
     const smartInserts = sql.split('\n').filter((l) => l.startsWith('INSERT INTO `smart_scripts`'));
@@ -55,7 +55,9 @@ describe('fights through the API', () => {
     await api.updateQuest(aggregate);
     const issues: any = await api.validate(aggregate.questId);
     expect(issues.value.map((i: any) => i.code)).toContain('FIGHT_NO_SPELL');
-    const out: any = await api.exportQuest(aggregate.questId);
+    // The NPC is the project's: its errors block the project patch and Apply to dev, not the quest's own patch
+    const out: any = await api.exportProject();
     expect(out.ok).toBe(false);
+    expect(out.error.message).toBe("Fix the errors on the project's NPCs, objects and items first.");
   });
 });

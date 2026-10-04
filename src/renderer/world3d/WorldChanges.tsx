@@ -52,7 +52,7 @@ export function WorldChanges({
 
   const exportAll = async (): Promise<void> => {
     setError(null);
-    const result = await api.exportWorld();
+    const result = await api.exportProject();
     if (result.ok) setExported({ applyPath: result.value.applyPath, revertPath: result.value.revertPath });
     else setError(result.error.message);
   };

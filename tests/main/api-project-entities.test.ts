@@ -12,7 +12,7 @@ async function setup() {
   const db = forkDb();
   db.insert('creature_template', { entry: '11000230', name: 'Amalgam' });
   db.insert('creature', { guid: '5300681', id1: '11000230' });
-  const session = createProjectSession(defaultProjectMeta('P', 'C:\out'));
+  const session = createProjectSession(defaultProjectMeta('P', 'C:\\out'));
   const api = createApi({ store: openStore(':memory:', box), openWorldDb: async () => db, openDevDb: async () => { throw new Error('x'); },
     fs: { writeFile: async () => {}, ensureDir: async () => {}, listDir: async () => [] }, now: () => new Date('2026-10-04T00:00:00Z'), session, projects: {} as ProjectController });
   const rec: any = await api.saveProfile({ name: 'w', role: 'world', host: 'h', port: 1, user: 'u', database: 'd', password: 'p' });

@@ -68,9 +68,12 @@ describe('new NPCs through the API', () => {
 
     const out: any = await api.exportQuest(aggregate.questId);
     expect(out.ok).toBe(true);
-    expect(out.value.sql).toMatch(/INSERT INTO `creature_template` \(.*\) VALUES \(11000240,/);
-    expect(out.value.sql).toMatch(/INSERT INTO `creature` .*'AQC npc11000240 '/);
-    expect(out.value.sql.indexOf('INSERT INTO `creature_template`')).toBeLessThan(out.value.sql.indexOf('INSERT INTO `creature_queststarter`'));
+    // The NPC is the project patch's, which Apply to dev runs before the quest
+    expect(out.value.usesProject).toBe(1);
+    const applied = `${out.value.projectSql}\n${out.value.sql}`;
+    expect(applied).toMatch(/INSERT INTO `creature_template` \(.*\) VALUES \(11000240,/);
+    expect(applied).toMatch(/INSERT INTO `creature` .*'AQC npc11000240 '/);
+    expect(applied.indexOf('INSERT INTO `creature_template`')).toBeLessThan(applied.indexOf('INSERT INTO `creature_queststarter`'));
   });
   it('copies an NPC\'s weapons with its look', async () => {
     const { api, db } = await setup();

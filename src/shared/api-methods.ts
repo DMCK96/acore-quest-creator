@@ -55,7 +55,7 @@ export const API_METHODS = [
   'historyJump',
   'historyBegin',
   'historyEnd',
-  'exportWorld',
+  'exportProject',
   'worldSetMovement',
   'worldNewPathId',
   'questSpawnList',

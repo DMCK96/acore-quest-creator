@@ -44,7 +44,7 @@ describe('custom items through the API', () => {
     const issues: any = await api.validate(aggregate.questId);
     expect(issues.value.filter((i: any) => i.severity === 'error')).toEqual([]);
     const out: any = await api.exportQuest(aggregate.questId);
-    expect(out.value.sql).toMatch(/INSERT INTO `item_template` \(.*\) VALUES \(990110,/);
+    expect(out.value.projectSql).toMatch(/INSERT INTO `item_template` \(.*\) VALUES \(990110,/);
   });
   it('copies a look from an existing item and lists the columns for the advanced tab', async () => {
     const { api, db } = await setup();
