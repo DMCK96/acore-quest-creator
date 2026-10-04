@@ -57,9 +57,11 @@ type Look = ModelLook | BuildingLook;
 
 /**
  * A humanoid's body as it shows bare: the body (0), default facial geosets (101, 201, 301), bare
- * hands (401), feet (501), ears (702) and legs (1301). Its hair and beard replace some of these.
+ * hands (401), boots (501), ears (702), legs (1301) and the feet themselves (group 20: 2001, or
+ * 2002 on the dwarf male, as no body has both; without them its legs end at the ankle and it looks
+ * sunk into the ground). Its hair and beard replace some of these; no item changes the feet in 3.3.5.
  */
-const DEFAULT_CHARACTER_GEOSETS = [0, 101, 201, 301, 401, 501, 702, 1301];
+const DEFAULT_CHARACTER_GEOSETS = [0, 101, 201, 301, 401, 501, 702, 1301, 2001, 2002];
 
 /** Replaceable slots a humanoid fills: its baked body texture, and its hair */
 const BODY_SLOT = 1;

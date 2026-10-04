@@ -38,7 +38,7 @@ describe('a humanoid NPC\'s look', () => {
       kind: 'model',
       path: 'Character\\Human\\Male\\HumanMale.m2',
       textures: { 1: 'Textures\\BakedNpcTextures\\CreatureDisplayExtra-00500.blp', 6: 'Character\\Human\\Hair04_02.blp' },
-      geosets: [0, 5, 102, 201, 303, 401, 501, 702, 1301],
+      geosets: [0, 5, 102, 201, 303, 401, 501, 702, 1301, 2001, 2002],
       scale: 1,
     });
   });
@@ -46,6 +46,11 @@ describe('a humanoid NPC\'s look', () => {
   it('shows the bare body when it has no hair or beard rows', async () => {
     const look = (await resolver({ ...tables, CharHairGeosets: () => db(CharHairGeosetsRecord, [], 6), CharacterFacialHairStyles: () => db(CharacterFacialHairStylesRecord, [], 8) }).creature(3167)) as any;
     expect(look.geosets).toEqual(DEFAULT_CHARACTER_GEOSETS);
+  });
+
+  it('stands on its feet: the feet geoset shows (2001, or 2002 on the bodies that have that one), or its legs end at the ankle', async () => {
+    const look = (await resolver().creature(3167)) as any;
+    expect(look.geosets).toEqual(expect.arrayContaining([2001, 2002]));
   });
 
   it('cannot be drawn when its race has no body', async () => {
@@ -91,7 +96,7 @@ describe('a humanoid NPC\'s look', () => {
       kind: 'model',
       path: 'Character\\Human\\Male\\HumanMale.m2',
       textures: { 1: 'Character\\Human\\Male\\HumanMaleSkin00_03.blp', 6: 'Character\\Human\\Hair04_02.blp' },
-      geosets: [0, 5, 102, 201, 303, 401, 501, 702, 1301],
+      geosets: [0, 5, 102, 201, 303, 401, 501, 702, 1301, 2001, 2002],
       scale: 1,
       // Built over the skin; this fixture has no face or underwear sections, and the preset wears nothing
       body: { base: 'Character\\Human\\Male\\HumanMaleSkin00_03.blp', layers: [] },
