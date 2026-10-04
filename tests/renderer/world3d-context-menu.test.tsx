@@ -1,0 +1,87 @@
+// @vitest-environment jsdom
+import { describe, expect, it, vi } from 'vitest';
+import { render, screen } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
+import { WorldContextMenu } from '../../src/renderer/world3d/WorldContextMenu';
+import type { MenuGroup } from '../../src/renderer/world3d/menu/model';
+
+const at = { x: 1, y: 2, z: 3 };
+const groups: MenuGroup[] = [
+  { id: 'world', items: [
+    { id: 'place-npc-here', label: 'Place NPC here…', action: { kind: 'placeHere', what: 'creature', at } },
+    { id: 'paste-here', label: 'Paste here', disabledReason: 'Copy something first' },
+  ] },
+  { id: 'quest', items: [
+    { id: 'spawn-quest-npc-here', label: 'Spawn quest NPC here', children: [{ id: 'hela', label: 'Hela', action: { kind: 'spawnQuestEntity', target: { kind: 'creature', entry: 1, name: 'Hela', own: true }, at } }] },
+    { id: 'quest-giver', label: 'Quest giver', checked: true, action: { kind: 'hideSpawns' } },
+  ] },
+];
+
+function open() {
+  const onPick = vi.fn();
+  const onClose = vi.fn();
+  render(<WorldContextMenu groups={groups} at={{ x: 10, y: 20 }} onPick={onPick} onClose={onClose} />);
+  return { onPick, onClose };
+}
+
+describe('the 3D view’s right-click menu', () => {
+  it('focuses the first item and moves round with the arrows', async () => {
+    open();
+    expect(screen.getByRole('menuitem', { name: 'Place NPC here…' })).toHaveFocus();
+    await userEvent.keyboard('{ArrowDown}');
+    expect(screen.getByRole('menuitem', { name: /Paste here/ })).toHaveFocus();
+    await userEvent.keyboard('{ArrowUp}{ArrowUp}');
+    expect(screen.getByRole('menuitemcheckbox', { name: 'Quest giver' })).toHaveFocus();
+  });
+
+  it('runs an item on Enter or click', async () => {
+    const { onPick } = open();
+    await userEvent.keyboard('{Enter}');
+    expect(onPick).toHaveBeenCalledWith({ kind: 'placeHere', what: 'creature', at });
+  });
+
+  it('shows why an item cannot run, and does nothing when it is clicked', async () => {
+    const { onPick } = open();
+    const paste = screen.getByRole('menuitem', { name: /Paste here/ });
+    expect(paste).toHaveAttribute('aria-disabled', 'true');
+    expect(paste).toHaveAccessibleDescription('Copy something first');
+    await userEvent.click(paste);
+    expect(onPick).not.toHaveBeenCalled();
+  });
+
+  it('opens a submenu with the right arrow, and the left arrow closes only it', async () => {
+    const { onPick, onClose } = open();
+    screen.getByRole('menuitem', { name: 'Spawn quest NPC here' }).focus();
+    await userEvent.keyboard('{ArrowRight}');
+    expect(screen.getByRole('menuitem', { name: 'Hela' })).toHaveFocus();
+    await userEvent.keyboard('{ArrowLeft}');
+    expect(screen.queryByRole('menuitem', { name: 'Hela' })).toBeNull();
+    expect(screen.getByRole('menuitem', { name: 'Spawn quest NPC here' })).toHaveFocus();
+    expect(onClose).not.toHaveBeenCalled();
+    await userEvent.keyboard('{ArrowRight}{Enter}');
+    expect(onPick).toHaveBeenCalledWith(expect.objectContaining({ kind: 'spawnQuestEntity' }));
+  });
+
+  it('shows a check on a checked item', () => {
+    open();
+    expect(screen.getByRole('menuitemcheckbox', { name: 'Quest giver' })).toHaveAttribute('aria-checked', 'true');
+  });
+
+  it('Esc closes it and goes no further; a click outside closes it', async () => {
+    const outer = vi.fn();
+    document.addEventListener('keydown', outer);
+    const { onClose } = open();
+    await userEvent.keyboard('{Escape}');
+    expect(onClose).toHaveBeenCalledTimes(1);
+    expect(outer).not.toHaveBeenCalled();
+    document.removeEventListener('keydown', outer);
+    await userEvent.click(document.body);
+    expect(onClose).toHaveBeenCalledTimes(2);
+  });
+
+  it('stays inside the window', () => {
+    Object.defineProperty(window, 'innerWidth', { value: 300, configurable: true });
+    render(<WorldContextMenu groups={groups} at={{ x: 290, y: 5 }} onPick={vi.fn()} onClose={vi.fn()} />);
+    expect(parseFloat(screen.getByRole('menu', { name: 'World actions' }).style.left)).toBeLessThanOrEqual(40);
+  });
+});
