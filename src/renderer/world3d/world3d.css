@@ -501,3 +501,118 @@
 .find-dialog__row:hover {
   background: var(--bg-inset);
 }
+
+/* The World workspace: the 3D view filling the space under the app bar, with its place card. */
+.world-workspace {
+  position: relative;
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  overflow: hidden;
+}
+
+/* Where the camera is, and the ways to go elsewhere: the top left, on the frosted surface. */
+.world-place {
+  position: absolute;
+  top: 14px;
+  left: 14px;
+  z-index: 2;
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  max-width: min(26rem, calc(100% - 28px));
+  padding: 0.75rem 0.9rem 0.8rem;
+}
+
+.world-place__title {
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: 1.25rem;
+  font-weight: normal;
+  color: #fff6e4;
+  text-shadow: var(--title-glow);
+}
+
+.world-place__map {
+  margin: 0;
+}
+
+.world-place__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  margin-top: 0.3rem;
+}
+
+.world-place__actions .btn[aria-expanded='true'] {
+  border-color: var(--accent);
+  color: var(--accent-strong);
+}
+
+.world-place__coordinates {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 0.5rem;
+  margin-top: 0.4rem;
+  padding-top: 0.6rem;
+  border-top: 1px solid var(--border-soft);
+}
+
+.world-place__coordinate input {
+  width: 6.5rem;
+}
+
+.world-place__map-field {
+  flex-basis: 100%;
+}
+
+/* No game client: the orb, and a card saying what is needed. */
+.world-empty {
+  position: relative;
+  flex: 1;
+  display: grid;
+  place-items: center;
+  overflow: hidden;
+  background: radial-gradient(ellipse at 50% 45%, #231a12 0%, var(--bg) 70%);
+}
+
+.world-empty__orb {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: min(60vmin, 34rem);
+  aspect-ratio: 1;
+  transform: translate(-50%, -50%);
+  pointer-events: none;
+}
+
+.world-empty__card {
+  position: relative;
+  z-index: 1;
+  width: min(26rem, calc(100% - 32px));
+  padding: 1.5rem 1.6rem;
+  text-align: center;
+  background: var(--glass-bg);
+}
+
+.world-empty__title {
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: 1.5rem;
+  font-weight: normal;
+  color: #fff6e4;
+  text-shadow: var(--title-glow);
+}
+
+.world-empty__text {
+  margin: 0.6rem 0 1.1rem;
+  line-height: 1.5;
+  color: var(--text-muted);
+}
+
+.world-empty__actions {
+  display: flex;
+  justify-content: center;
+  gap: 0.6rem;
+}

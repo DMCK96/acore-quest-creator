@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { NamesProvider } from '../../src/renderer/state/names';
@@ -16,9 +16,14 @@ vi.mock('../../src/renderer/world3d/world3d', () => ({
   },
 }));
 
-import { World3DScreen } from '../../src/renderer/world3d/World3DScreen';
+import { WorldWorkspace } from '../../src/renderer/world3d/WorldWorkspace';
 
-afterEach(() => { worlds.length = 0; vi.unstubAllGlobals(); });
+const workspace = () => (
+  <WorldWorkspace hasClient projectKey="seen" projectName="" onOpenSettings={vi.fn()} onShowQuests={vi.fn()} onStartQuest={vi.fn()} />
+);
+
+beforeEach(() => localStorage.setItem('acqc.welcome.seen', JSON.stringify(['seen'])));
+afterEach(() => { worlds.length = 0; localStorage.clear(); vi.unstubAllGlobals(); });
 const clientHasEverything = () => vi.stubGlobal('fetch', async () => new Response(new Uint8Array([1]), { status: 200 }));
 
 const EMPTY = { spawns: [], routes: [], added: [] };
@@ -27,7 +32,7 @@ const hits = [{ id: 1423, name: 'Stormwind Guard', detail: 'Level 60' }];
 // The camera starts at the Eastern Kingdoms' start; these stand near, far, on Kalimdor, and where the game has a dungeon
 const spawns = [dot(1, 0, -5000), dot(2, 0, 100), dot(3, 1, 7), dot(4, 389, 1), dot(5, 0, 90, { event: { id: 12, name: "Hallow's End" } })];
 
-async function open(overrides: Record<string, unknown> = {}, onClose = vi.fn()) {
+async function open(overrides: Record<string, unknown> = {}) {
   clientHasEverything();
   const api = makeMockApi({
     worldLayer: vi.fn(async () => okv(EMPTY)),
@@ -35,12 +40,12 @@ async function open(overrides: Record<string, unknown> = {}, onClose = vi.fn()) 
     findSpawns: vi.fn(async () => okv({ spawns, capped: false })),
     ...overrides,
   });
-  render(<NamesProvider api={api}><World3DScreen hasClient onClose={onClose} /></NamesProvider>);
+  render(<NamesProvider api={api}>{workspace()}</NamesProvider>);
   await waitFor(() => expect(worlds).toHaveLength(1));
   await userEvent.click(screen.getByRole('button', { name: 'Find…' }));
   await userEvent.type(await screen.findByRole('searchbox', { name: 'Find by name or ID' }), 'guard');
   await userEvent.click(await screen.findByRole('button', { name: /Stormwind Guard/ }));
-  return { api, onClose };
+  return { api };
 }
 
 describe('listing the spawns of an NPC or object', () => {
@@ -129,7 +134,7 @@ describe('the find panel in the 3D screen', () => {
       searchEntities: vi.fn(async () => okv([{ id: 143981, name: 'Mailbox' }])),
       findSpawns: vi.fn(async () => okv({ spawns: [], capped: false })),
     });
-    render(<NamesProvider api={api}><World3DScreen hasClient onClose={vi.fn()} /></NamesProvider>);
+    render(<NamesProvider api={api}>{workspace()}</NamesProvider>);
     await waitFor(() => expect(worlds).toHaveLength(1));
     await userEvent.click(screen.getByRole('button', { name: 'Find…' }));
     await userEvent.click(screen.getByRole('radio', { name: 'Object' }));
@@ -142,12 +147,12 @@ describe('the find panel in the 3D screen', () => {
     expect(screen.getByRole('searchbox', { name: 'Find by name or ID' })).toBeTruthy();
   });
 
-  it('closes on Esc without closing the 3D screen under it', async () => {
-    const { onClose } = await open();
+  it('closes on Esc, leaving the world under it', async () => {
+    await open();
     await screen.findAllByRole('listitem');
     await userEvent.keyboard('{Escape}');
     expect(screen.queryByRole('dialog', { name: 'Find an NPC or object' })).toBeNull();
-    expect(onClose).not.toHaveBeenCalled();
+    expect(screen.getByRole('region', { name: 'World' })).toBeInTheDocument();
   });
 
   it('says why when the spawns cannot be read', async () => {
