@@ -1,5 +1,6 @@
 import type { PatchStatement } from '../export/build-patch';
 import type { ViewPreset } from '../db/view-spawns';
+import { MOVEMENT_TYPE, sameMovement, type Movement } from './movement';
 
 /**
  * The world layer: edits made in the 3D view to spawns and routes that are not part of any quest
@@ -57,17 +58,34 @@ export interface WorldAddedSpawn {
   look: WorldLook;
 }
 
+/** How an NPC moves, changed in the view: wander, movement type and its spawn's own path */
+export interface WorldMovementEdit {
+  guid: number;
+  entry: number;
+  name: string;
+  map: number;
+  /** Whether the spawn had a `creature_addon` row at its first edit: its path is then updated, else a row is written */
+  addonRow: boolean;
+  original: Movement;
+  current: Movement;
+}
+
 export interface WorldLayer {
   spawns: WorldSpawnEdit[];
   routes: WorldRouteEdit[];
   /** Spawns placed in the view; a project saved before there were any has none */
   added: WorldAddedSpawn[];
+  /** NPCs' movement; a project saved before it could be changed has none */
+  movements?: WorldMovementEdit[];
 }
 
 export const EMPTY_WORLD: WorldLayer = { spawns: [], routes: [], added: [] };
 
+export const movementsOf = (layer: WorldLayer): WorldMovementEdit[] => layer.movements ?? [];
+
 /** Whether the layer holds anything to export */
-export const hasWorldChanges = (layer: WorldLayer): boolean => layer.spawns.length > 0 || layer.routes.length > 0 || layer.added.length > 0;
+export const hasWorldChanges = (layer: WorldLayer): boolean =>
+  layer.spawns.length > 0 || layer.routes.length > 0 || layer.added.length > 0 || movementsOf(layer).length > 0;
 
 /** What a point added in the 3D view has in the columns the view does not edit */
 export const NEW_POINT_REST: Record<string, string | null> = {
@@ -160,13 +178,36 @@ export function addSpawn(layer: WorldLayer, spawn: WorldAddedSpawn): WorldLayer 
   return { ...layer, added: [...layer.added.filter((a) => !(a.kind === spawn.kind && a.guid === spawn.guid)), spawn] };
 }
 
-/** Takes back an edit to a database spawn, or removes a placed one */
+/** Takes back an edit to a database spawn, or removes a placed one with its movement and the new path made for it */
 export function revertSpawn(layer: WorldLayer, kind: WorldSpawnKind, guid: number): WorldLayer {
-  return {
+  const placed = isAdded(layer, kind, guid);
+  const movement = kind === 'creature' && placed ? movementsOf(layer).find((m) => m.guid === guid) : undefined;
+  const newPath = movement?.current.pathId ?? null;
+  const next: WorldLayer = {
     ...layer,
     spawns: layer.spawns.filter((s) => !(s.kind === kind && s.guid === guid)),
     added: layer.added.filter((a) => !(a.kind === kind && a.guid === guid)),
+    routes: newPath === null ? layer.routes : layer.routes.filter((r) => !(r.pathId === newPath && r.original.length === 0)),
   };
+  return placed && kind === 'creature' ? revertMovement(next, guid) : next;
+}
+
+/** Sets an NPC's movement; its first original is kept, and one put back is dropped */
+export function setMovement(layer: WorldLayer, edit: Omit<WorldMovementEdit, 'current'>, to: Movement): WorldLayer {
+  const all = movementsOf(layer);
+  const known = all.find((m) => m.guid === edit.guid);
+  const entry: WorldMovementEdit = known ? { ...known, current: to } : { ...edit, current: to };
+  const unchanged = sameMovement(entry.current, entry.original);
+  const movements = known
+    ? all.flatMap((m) => (m === known ? (unchanged ? [] : [entry]) : [m]))
+    : unchanged
+      ? all
+      : [...all, entry];
+  return { ...layer, movements };
+}
+
+export function revertMovement(layer: WorldLayer, guid: number): WorldLayer {
+  return { ...layer, movements: movementsOf(layer).filter((m) => m.guid !== guid) };
 }
 
 export function revertRoute(layer: WorldLayer, pathId: number): WorldLayer {
@@ -254,28 +295,58 @@ function addedStatements(spawn: WorldAddedSpawn, base: Record<string, string | n
   return { apply: [remove, { kind: 'insert', table: spawn.kind, row: addedRow(spawn, base) }], revert: [remove] };
 }
 
+function movementSet(m: Movement): Record<string, string> {
+  return { wander_distance: text(m.wander), MovementType: text(MOVEMENT_TYPE[m.type]) };
+}
+
 /**
- * The layer as a patch, and the patch that puts the database back as it was: spawns first, then
- * routes. `pointDefaults` is every `waypoint_data` column's default in the database written to, so a
- * point added in the view fills columns this tool does not know about; `spawnDefaults` does the same
- * for the `creature` and `gameobject` rows of spawns placed in the view.
+ * A movement as written and taken back: the spawn's wander and type, and its addon's path when that
+ * changed (a spawn with no addon row gets one, over the table's defaults, and the revert deletes it)
+ */
+function movementStatements(m: WorldMovementEdit, addonDefaults: Record<string, string | null> | undefined): { apply: PatchStatement[]; revert: PatchStatement[] } {
+  const key = { guid: text(m.guid) };
+  const apply: PatchStatement[] = [{ kind: 'update', table: 'creature', key, set: movementSet(m.current) }];
+  const revert: PatchStatement[] = [{ kind: 'update', table: 'creature', key, set: movementSet(m.original) }];
+  if (m.current.pathId !== m.original.pathId) {
+    const path = (p: number | null) => text(p ?? 0);
+    if (m.addonRow) {
+      apply.push({ kind: 'update', table: 'creature_addon', key, set: { path_id: path(m.current.pathId) } });
+      revert.push({ kind: 'update', table: 'creature_addon', key, set: { path_id: path(m.original.pathId) } });
+    } else {
+      apply.push({ kind: 'delete', table: 'creature_addon', key }, { kind: 'insert', table: 'creature_addon', row: { ...addonDefaults, guid: key.guid, path_id: path(m.current.pathId) } });
+      revert.push({ kind: 'delete', table: 'creature_addon', key });
+    }
+  }
+  return { apply, revert };
+}
+
+/**
+ * The layer as a patch, and the patch that puts the database back as it was: spawns, placed spawns,
+ * movements, then routes. `pointDefaults` is every `waypoint_data` column's default in the database
+ * written to, so a point added in the view fills columns this tool does not know about;
+ * `spawnDefaults` does the same for the `creature` and `gameobject` rows of spawns placed in the
+ * view, and `addonDefaults` for a `creature_addon` row written to give a spawn its path.
  */
 export function worldStatements(
   layer: WorldLayer,
   pointDefaults?: Record<string, string | null>,
   spawnDefaults: SpawnDefaults = {},
+  addonDefaults?: Record<string, string | null>,
 ): { apply: PatchStatement[]; revert: PatchStatement[] } {
   const base = pointBase(pointDefaults);
   const added = layer.added.map((a) => addedStatements(a, spawnDefaults[a.kind]));
+  const movements = movementsOf(layer).map((m) => movementStatements(m, addonDefaults));
   return {
     apply: [
       ...layer.spawns.map((s) => placementStatement(s, s.current)),
       ...added.flatMap((a) => a.apply),
+      ...movements.flatMap((m) => m.apply),
       ...layer.routes.flatMap((r) => routeStatements(r.pathId, r.current, base)),
     ],
     revert: [
       ...layer.spawns.map((s) => placementStatement(s, s.original)),
       ...added.flatMap((a) => a.revert),
+      ...movements.flatMap((m) => m.revert),
       ...layer.routes.flatMap((r) => routeStatements(r.pathId, r.original, base)),
     ],
   };

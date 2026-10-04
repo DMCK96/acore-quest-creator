@@ -4,6 +4,7 @@ import type { CompiledScripts } from '../scripts/compile';
 import { questTagPrefix } from '../scripts/tag';
 import type { EntityContext } from './context';
 import { itemRow, MODELLED_ITEM_COLUMNS } from './item-columns';
+import { MOVEMENT_TYPE } from '../world/movement';
 import { NPC_TYPE_VALUE, OBJECT_TYPE_VALUE, RANK_VALUE, type LootRow, type Patrol, type Page, type QuestEntities } from './model';
 
 /**
@@ -22,9 +23,6 @@ const UNIT_CLASS = 1;
 /** `GO_STATE_READY` and the fully drawn animation every placed object starts with. */
 const GO_READY = 1;
 const ANIM_FULL = 100;
-const RANDOM_MOVEMENT = 1;
-/** `WAYPOINT_MOTION_TYPE`: the spawn walks the path its `creature_addon` names. */
-const WAYPOINT_MOVEMENT = 2;
 const PACE_MOVE_TYPE = { walk: 0, run: 1 } as const;
 
 /** A patrol with a route to walk; one point alone is no route. */
@@ -144,7 +142,7 @@ export function compileEntities(input: {
         position_x: text(spawn.x), position_y: text(spawn.y), position_z: text(spawn.z), orientation: text(spawn.o),
         spawntimesecs: text(spawn.respawnSecs),
         wander_distance: text(patrol ? 0 : spawn.wander),
-        MovementType: text(patrol ? WAYPOINT_MOVEMENT : spawn.wander > 0 ? RANDOM_MOVEMENT : 0),
+        MovementType: text(patrol ? MOVEMENT_TYPE.path : spawn.wander > 0 ? MOVEMENT_TYPE.wander : MOVEMENT_TYPE.idle),
         // A spawn holds no weapons unless it names the equipment row: 0 means none.
         equipment_id: armed ? '1' : '0',
         Comment: `${questTagPrefix(questId)}npc${npc.entry}`,

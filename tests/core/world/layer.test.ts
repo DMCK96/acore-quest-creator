@@ -1,8 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import {
-  EMPTY_WORLD, NEW_POINT_REST, addSpawn, hasWorldChanges, isAdded, moveSpawn, revertRoute, revertSpawn, setRoute, worldStatements,
-  type Placement, type RoutePoint, type WorldAddedSpawn, type WorldSpawnEdit,
+  EMPTY_WORLD, NEW_POINT_REST, addSpawn, hasWorldChanges, isAdded, moveSpawn, movementsOf, revertMovement, revertRoute, revertSpawn, setMovement, setRoute, worldStatements,
+  type Placement, type RoutePoint, type WorldAddedSpawn, type WorldMovementEdit, type WorldSpawnEdit,
 } from '../../../src/core/world/layer';
+import { IDLE } from '../../../src/core/world/movement';
 
 const at = (x: number, over: Partial<Placement> = {}): Placement => ({ x, y: 2, z: 3, orientation: 0.5, rotation: null, ...over });
 const guard: Omit<WorldSpawnEdit, 'current'> = { kind: 'creature', guid: 80330, entry: 1423, name: 'Stormwind Guard', map: 0, original: at(1) };
@@ -164,5 +165,73 @@ describe('world layer: placed spawns', () => {
 
   it('says so when the columns of the table are not known, instead of writing a partial row', () => {
     expect(() => worldStatements(addSpawn(EMPTY_WORLD, placedGuard))).toThrow(/creature table's columns/);
+  });
+});
+
+const walker: Omit<WorldMovementEdit, 'current'> = { guid: 80330, entry: 1423, name: 'Stormwind Guard', map: 0, addonRow: true, original: { type: 'path', wander: 0, pathId: 801 } };
+const stander: Omit<WorldMovementEdit, 'current'> = { guid: 80331, entry: 1423, name: 'Stormwind Guard', map: 0, addonRow: false, original: IDLE };
+const placedNpc: WorldAddedSpawn = { kind: 'creature', guid: 90001, entry: 1423, name: 'Guard', map: 0, placement: at(1), look: { displayId: 1, scale: 1, equipment: [0, 0, 0], preset: null } };
+
+describe('world layer: movement', () => {
+  it('records the original at the first change, keeps it, and drops an entry put back', () => {
+    let layer = setMovement(EMPTY_WORLD, stander, { type: 'wander', wander: 5, pathId: null });
+    layer = setMovement(layer, { ...stander, original: { type: 'wander', wander: 5, pathId: null } }, { type: 'wander', wander: 8, pathId: null });
+    expect(movementsOf(layer)).toEqual([{ ...stander, current: { type: 'wander', wander: 8, pathId: null } }]);
+    expect(movementsOf(setMovement(layer, stander, IDLE))).toEqual([]);
+    expect(hasWorldChanges(layer)).toBe(true);
+  });
+
+  it('reads a layer saved before movements as having none', () => {
+    expect(movementsOf({ spawns: [], routes: [], added: [] })).toEqual([]);
+  });
+
+  it('reverts one NPC’s movement', () => {
+    const layer = setMovement(setMovement(EMPTY_WORLD, stander, { type: 'wander', wander: 3, pathId: null }), walker, IDLE);
+    expect(movementsOf(revertMovement(layer, 80331)).map((m) => m.guid)).toEqual([80330]);
+  });
+
+  it('a revert of a placed spawn drops its movement and the route made for it', () => {
+    let layer = addSpawn(EMPTY_WORLD, placedNpc);
+    layer = setMovement(layer, { guid: 90001, entry: 1423, name: 'Guard', map: 0, addonRow: false, original: IDLE }, { type: 'path', wander: 0, pathId: 900010 });
+    layer = setRoute(layer, { pathId: 900010, walkers: 1, original: [] }, [point(1), point(2)]);
+    const reverted = revertSpawn(layer, 'creature', 90001);
+    expect(movementsOf(reverted)).toEqual([]);
+    expect(reverted.routes).toEqual([]);
+  });
+
+  it('writes wander and movement type, and the revert puts them back', () => {
+    const layer = setMovement(EMPTY_WORLD, stander, { type: 'wander', wander: 5, pathId: null });
+    const { apply, revert } = worldStatements(layer);
+    expect(apply).toEqual([{ kind: 'update', table: 'creature', key: { guid: '80331' }, set: { wander_distance: '5', MovementType: '1' } }]);
+    expect(revert).toEqual([{ kind: 'update', table: 'creature', key: { guid: '80331' }, set: { wander_distance: '0', MovementType: '0' } }]);
+  });
+
+  it('updates the addon’s path when the spawn has an addon row', () => {
+    const layer = setMovement(EMPTY_WORLD, walker, IDLE);
+    const { apply, revert } = worldStatements(layer);
+    expect(apply).toContainEqual({ kind: 'update', table: 'creature_addon', key: { guid: '80330' }, set: { path_id: '0' } });
+    expect(revert).toContainEqual({ kind: 'update', table: 'creature_addon', key: { guid: '80330' }, set: { path_id: '801' } });
+  });
+
+  it('inserts an addon row over the table’s defaults when the spawn has none, and the revert deletes it', () => {
+    const layer = setMovement(EMPTY_WORLD, stander, { type: 'path', wander: 0, pathId: 803310 });
+    const { apply, revert } = worldStatements(layer, undefined, {}, { guid: '0', path_id: '0', bytes1: '0', auras: null });
+    expect(apply).toEqual([
+      { kind: 'update', table: 'creature', key: { guid: '80331' }, set: { wander_distance: '0', MovementType: '2' } },
+      { kind: 'delete', table: 'creature_addon', key: { guid: '80331' } },
+      { kind: 'insert', table: 'creature_addon', row: { guid: '80331', path_id: '803310', bytes1: '0', auras: null } },
+    ]);
+    expect(revert).toEqual([
+      { kind: 'update', table: 'creature', key: { guid: '80331' }, set: { wander_distance: '0', MovementType: '0' } },
+      { kind: 'delete', table: 'creature_addon', key: { guid: '80331' } },
+    ]);
+  });
+
+  it('writes movements after placed spawns and before routes', () => {
+    let layer = addSpawn(EMPTY_WORLD, placedNpc);
+    layer = setMovement(layer, { guid: 90001, entry: 1423, name: 'Guard', map: 0, addonRow: false, original: IDLE }, { type: 'path', wander: 0, pathId: 900010 });
+    layer = setRoute(layer, { pathId: 900010, walkers: 1, original: [] }, [point(1), point(2)]);
+    const { apply } = worldStatements(layer, undefined, { creature: { guid: null, id1: null, map: null } });
+    expect(apply.map((s) => s.table)).toEqual(['creature', 'creature', 'creature', 'creature_addon', 'creature_addon', 'waypoint_data', 'waypoint_data', 'waypoint_data']);
   });
 });

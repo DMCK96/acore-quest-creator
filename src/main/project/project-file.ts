@@ -173,6 +173,7 @@ const presetSchema = z.object({
     feet: z.number(), wrists: z.number(), hands: z.number(), back: z.number(), tabard: z.number(),
   }),
 });
+const movementSchema = z.object({ type: z.enum(['idle', 'wander', 'path']), wander: z.number(), pathId: z.number().int().nullable() });
 const worldSchema = z.object({
   spawns: z.array(
     z.object({
@@ -205,6 +206,20 @@ const worldSchema = z.object({
       }),
     )
     .default([]),
+  // Absent from a project saved before an NPC's movement could be changed
+  movements: z
+    .array(
+      z.object({
+        guid: z.number().int(),
+        entry: z.number().int(),
+        name: z.string(),
+        map: z.number().int(),
+        addonRow: z.boolean(),
+        original: movementSchema,
+        current: movementSchema,
+      }),
+    )
+    .optional(),
 });
 
 const fileSchema = z.object({
