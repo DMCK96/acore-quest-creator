@@ -71,7 +71,7 @@ describe('compileFights: reactions', () => {
   });
 
   it('chains death steps with links, because a dead NPC runs no lists', () => {
-    const out = compile([npc(fight({ reactions: [reaction({ kind: 'death' }, [yell('No...'), { kind: 'credit', objective: 1, group: false, waitMs: 500 }])] }))]);
+    const out = compile([npc(fight({ reactions: [reaction({ kind: 'death' }, [yell('No...'), { kind: 'credit', objective: 1, group: false, quest: 0, waitMs: 500 }])] }))]);
     expect(smart(out).map((r) => [r.source_type, r.id, r.link, r.event_type, r.action_type, r.action_param1, r.target_type])).toEqual([
       ['0', '0', '1', '6', '1', '0', '7'],
       ['0', '1', '0', '61', '33', '12000001', '1'],

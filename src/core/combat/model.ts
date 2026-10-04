@@ -56,7 +56,8 @@ const stepSchema = z.discriminatedUnion('kind', [
   z.object({ kind: z.literal('callForHelp'), radius: num, ...wait }),
   z.object({ kind: z.literal('holdAtHealth'), pct: num, ...wait }),
   z.object({ kind: z.literal('surrender'), ...wait }),
-  z.object({ kind: z.literal('credit'), objective: z.union([z.literal(1), z.literal(2), z.literal(3), z.literal(4)]), group: z.boolean(), ...wait }),
+  // `quest` names the quest whose objective it credits; 0 (saved before) names none.
+  z.object({ kind: z.literal('credit'), objective: z.union([z.literal(1), z.literal(2), z.literal(3), z.literal(4)]), group: z.boolean(), quest: int.default(0), ...wait }),
 ]);
 
 const reactionSchema = z.object({ id: z.string(), when: whenSchema, phases, steps: z.array(stepSchema) });

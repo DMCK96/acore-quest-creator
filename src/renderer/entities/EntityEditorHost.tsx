@@ -142,7 +142,8 @@ export function EntityEditorHost({
       )}
       {object && (
         <ObjectEditor object={object} onChange={saveObject} allocateSpawn={() => allocate('gameobjectSpawn')} allocatePage={() => allocate('page')}
-          tab={state.tab} onTab={onTab} hasServerData={hasServerData} />
+          tab={state.tab} onTab={onTab} hasServerData={hasServerData}
+          questId={typeof values['quest_template.ID'] === 'number' ? (values['quest_template.ID'] as number) : null} />
       )}
       {item && (
         <ItemEditor item={item} onChange={saveItem} allocatePage={() => allocate('page')} copyLook={copyLook} columns={itemColumns} tab={state.tab} onTab={onTab} />

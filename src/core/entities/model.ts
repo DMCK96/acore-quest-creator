@@ -109,6 +109,8 @@ const npcSchema = z.object({
   fight: fightSchema.nullable().default(null),
   // Added with the NPC editor (slice M): the weapons it holds, as items; none keeps older NPCs unarmed.
   equipment: z.object({ mainHand: int, offHand: int, ranged: int }).default({ mainHand: 0, offHand: 0, ranged: 0 }),
+  // The quest it was made for, or null when made outside a quest: where it came from, not a link list.
+  madeFor: int.nullable().default(null),
 });
 
 const pageSchema = z.object({ id: int, text: z.string() });
@@ -122,8 +124,10 @@ const objectSchema = z.object({
   spawns: z.array(spawnSchema),
   // Added with readable objects (slice E); defaults keep objects saved before then as they were.
   pages: z.array(pageSchema).default([]),
-  onlyDuringQuest: z.boolean().default(false),
+  // The quest a player must have in their log to use or loot it, or null for anyone.
+  onlyDuringQuest: int.nullable().default(null),
   loot: z.array(lootSchema).default([]),
+  madeFor: int.nullable().default(null),
 });
 
 export const ITEM_QUALITY_VALUE = { poor: 0, common: 1, uncommon: 2, rare: 3, epic: 4, legendary: 5, artifact: 6, heirloom: 7 } as const;
@@ -162,6 +166,7 @@ const itemSchema = z.object({
   stats: z.array(itemStatSchema).max(10),
   spells: z.array(itemSpellSchema).max(5),
   advanced: z.record(z.string(), z.string()),
+  madeFor: int.nullable().default(null),
 });
 
 export type Spawn = z.infer<typeof spawnSchema>;
@@ -184,11 +189,19 @@ export type ItemSpell = z.infer<typeof itemSpellSchema>;
 export type ItemQuality = CustomItem['quality'];
 export type Bonding = CustomItem['bonding'];
 
-export interface QuestEntities {
+/** The project's new NPCs, objects and items: one store, whichever quest (if any) they were made for. */
+export interface ProjectEntities {
   npcs: CustomNpc[];
   objects: CustomObject[];
   items: CustomItem[];
 }
+
+export type QuestEntities = ProjectEntities;
+
+export const EMPTY_ENTITIES: ProjectEntities = { npcs: [], objects: [], items: [] };
+
+/** The schema a whole store is checked against when the window sends it. */
+export const projectEntitiesSchema = z.object({ npcs: z.array(npcSchema), objects: z.array(objectSchema), items: z.array(itemSchema) });
 
 const validItems = <T>(schema: z.ZodType<T>, raw: unknown): T[] =>
   Array.isArray(raw)
@@ -198,7 +211,13 @@ const validItems = <T>(schema: z.ZodType<T>, raw: unknown): T[] =>
       })
     : [];
 
-/** The quest's new NPCs, objects and items; anything not valid is left out, never thrown. */
+/** The project's store; anything not valid is left out, never thrown. */
+export function readProjectEntities(raw: unknown): ProjectEntities {
+  const record = typeof raw === 'object' && raw !== null && !Array.isArray(raw) ? (raw as Record<string, unknown>) : {};
+  return { npcs: validItems(npcSchema, record.npcs), objects: validItems(objectSchema, record.objects), items: validItems(itemSchema, record.items) };
+}
+
+/** A quest's new NPCs, objects and items as projects before version 4 kept them; read only to move them. */
 export function readEntities(values: Readonly<Record<string, unknown>>): QuestEntities {
   const raw = values[ENTITIES_FIELD];
   const record = typeof raw === 'object' && raw !== null && !Array.isArray(raw) ? (raw as Record<string, unknown>) : {};
@@ -210,7 +229,7 @@ export function writeEntities(entities: QuestEntities): FieldValue {
   return entities as unknown as FieldValue;
 }
 
-export function newNpc(entry: number): CustomNpc {
+export function newNpc(entry: number, madeFor: number | null = null): CustomNpc {
   return {
     entry,
     name: '',
@@ -230,11 +249,12 @@ export function newNpc(entry: number): CustomNpc {
     loot: [],
     fight: null,
     equipment: { mainHand: 0, offHand: 0, ranged: 0 },
+    madeFor,
   };
 }
 
-export function newObject(entry: number): CustomObject {
-  return { entry, name: '', type: 'goober', displayId: 0, size: 1, spawns: [], pages: [], onlyDuringQuest: false, loot: [] };
+export function newObject(entry: number, madeFor: number | null = null): CustomObject {
+  return { entry, name: '', type: 'goober', displayId: 0, size: 1, spawns: [], pages: [], onlyDuringQuest: null, loot: [], madeFor };
 }
 
 export function newSpawn(guid: number): Spawn {
@@ -242,10 +262,10 @@ export function newSpawn(guid: number): Spawn {
 }
 
 /** A new item starts as a quest item: most are things the player is asked to collect. */
-export function newItem(entry: number): CustomItem {
+export function newItem(entry: number, madeFor: number | null = null): CustomItem {
   return {
     entry, name: '', description: '', quality: 'common', itemClass: 12, subclass: 0, inventoryType: 0, displayId: 0,
     itemLevel: 1, requiredLevel: 0, stackable: 1, maxCount: 1, bonding: 'quest', buyPrice: 0, sellPrice: 0, startsQuest: 0,
-    pages: [], armor: 0, damage: [], delayMs: 0, stats: [], spells: [], advanced: {},
+    pages: [], armor: 0, damage: [], delayMs: 0, stats: [], spells: [], advanced: {}, madeFor,
   };
 }

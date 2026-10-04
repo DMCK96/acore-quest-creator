@@ -167,8 +167,8 @@ export function compileEntities(input: {
     if (firstPage !== undefined && object.type === 'text') row.Data0 = text(firstPage);
     if (firstPage !== undefined && object.type === 'goober') row.Data7 = text(firstPage);
     // Only players with the quest in their log may use it (goober `Data1`) or loot it (chest `Data8`).
-    if (object.onlyDuringQuest && object.type === 'goober') row.Data1 = text(questId);
-    if (object.onlyDuringQuest && object.type === 'chest') row.Data8 = text(questId);
+    if (object.onlyDuringQuest !== null && object.type === 'goober') row.Data1 = text(questId);
+    if (object.onlyDuringQuest !== null && object.type === 'chest') row.Data8 = text(questId);
     insert('gameobject_template', row);
     if (object.type === 'chest') writeLoot('gameobject_loot_template', object.entry, object.loot, `Object "${object.name || object.entry}"`);
     else if (object.loot.length > 0) out.warnings.push(`Object "${object.name || object.entry}": only a chest can be looted, so its loot list is not written.`);

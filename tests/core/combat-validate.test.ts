@@ -49,7 +49,7 @@ describe('fightIssues', () => {
     expect(codes(react([{ kind: 'cast', spellId: 2054, target: 'hurtFriend', waitMs: 0 }], { kind: 'friendHealthBelow', pct: 40, range: 30 }))).toEqual([]);
   });
   it('flags credit for an objective that is not an NPC objective, once the objectives are known', () => {
-    const credit = react([{ kind: 'credit', objective: 2, group: false, waitMs: 0 }]);
+    const credit = react([{ kind: 'credit', objective: 2, group: false, quest: 0, waitMs: 0 }]);
     expect(codes(credit, null, [5, 0, 0, 0])).toEqual(['error:FIGHT_CREDIT_EMPTY']);
     expect(codes(credit, null, [5, 6, 0, 0])).toEqual([]);
     expect(codes(credit, null, null)).toEqual([]);

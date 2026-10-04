@@ -16,6 +16,7 @@ export function ObjectEditor({
   tab,
   onTab,
   hasServerData = true,
+  questId = null,
 }: {
   object: CustomObject;
   onChange(next: CustomObject): void;
@@ -25,10 +26,12 @@ export function ObjectEditor({
   onTab?(id: string): void;
   /** Whether looks can be named, from the server data folder. */
   hasServerData?: boolean;
+  /** The quest "only while on the quest" names */
+  questId?: number | null;
 }): React.JSX.Element {
   const hasPages = object.type === 'text' || object.type === 'goober';
   const tabs: EditorTab[] = [
-    { id: 'basics', label: 'Basics', render: () => <ObjectBasics object={object} onChange={onChange} /> },
+    { id: 'basics', label: 'Basics', render: () => <ObjectBasics object={object} onChange={onChange} questId={questId} /> },
     { id: 'look', label: 'Look', render: () => <ObjectLook object={object} onChange={onChange} hasServerData={hasServerData} /> },
   ];
   // Only an object that shows pages or can be looted has contents.

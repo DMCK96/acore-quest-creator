@@ -22,8 +22,8 @@ describe('object pages in the editor', () => {
   it('limits a usable object to the quest', async () => {
     const onChange = vi.fn();
     const lever = { ...newObject(9100002), name: 'Lever' };
-    await mountEditor({ [ENTITIES_FIELD]: writeEntities({ npcs: [], objects: [lever], items: [] }) }, { kind: 'object', entry: 9100002, isNew: false }, { onChange });
+    await mountEditor({ 'quest_template.ID': 60001, [ENTITIES_FIELD]: writeEntities({ npcs: [], objects: [lever], items: [] }) }, { kind: 'object', entry: 9100002, isNew: false }, { onChange });
     await userEvent.click(within(screen.getByRole('dialog', { name: 'Object: Lever' })).getByLabelText('Only usable while this quest is in the log'));
-    expect(last(onChange).objects[0]!.onlyDuringQuest).toBe(true);
+    expect(last(onChange).objects[0]!.onlyDuringQuest).toBe(60001);
   });
 });
