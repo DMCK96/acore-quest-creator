@@ -41,6 +41,8 @@ export interface EditingWorld {
   setPendingRoute(guid: number, points: EditPoint[]): void;
   /** Moves a drawn route to points being dragged */
   previewRoute(guid: number, points: EditPoint[]): void;
+  /** Takes an NPC's route and wander circle to where it is being dragged */
+  previewHome(guid: number, at: At): void;
 }
 
 export interface EditingOptions {
@@ -337,6 +339,7 @@ export class Editor {
         object.quaternion.copy(q);
       }
       object.updateMatrixWorld(true);
+      if (spawn.kind === 'creature') this.#world.previewHome(spawn.guid, to);
     }
 
     for (const route of drag.routes) {

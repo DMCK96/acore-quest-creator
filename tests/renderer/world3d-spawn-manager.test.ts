@@ -654,3 +654,29 @@ describe('a changed world layer, drawn in place', () => {
     expect(ball.position.y).toBe(5);
   });
 });
+
+describe('an NPC being dragged', () => {
+  it('takes its route\'s first leg and its wander circle with it as it goes', async () => {
+    const m = manager({ creatures: [creature(1, 1, { wander: 5, path: [{ x: 10, y: 0, z: 0 }] })], objects: [], capped: { creatures: false, objects: false } });
+    const group = (await m.loadArea(1, 0, box))!;
+    m.previewHome(1, { x: 3, y: 4, z: 0 });
+    const route = group.getObjectByName('route') as THREE.Group;
+    const line = route.children.find((c) => c instanceof THREE.Line) as THREE.Line;
+    expect(Array.from(line.geometry.getAttribute('position').array).slice(0, 3)).toEqual([3, 4, 0]);
+    const wander = group.getObjectByName('wander') as THREE.LineLoop;
+    const at = new THREE.Vector3().fromBufferAttribute(wander.geometry.getAttribute('position') as THREE.BufferAttribute, 0).applyMatrix4(wander.matrixWorld);
+    expect(at.x).toBeCloseTo(8, 6);
+    expect(at.y).toBeCloseTo(4, 6);
+  });
+
+  it('puts them back when the move was not kept and the layer comes back unchanged', async () => {
+    const m = manager({ creatures: [creature(1, 1, { wander: 5, path: [{ x: 10, y: 0, z: 0 }] })], objects: [], capped: { creatures: false, objects: false } });
+    const group = (await m.loadArea(1, 0, box))!;
+    m.previewHome(1, { x: 3, y: 4, z: 0 });
+    await m.setWorldLayer({ spawns: [], routes: [], added: [] });
+    const route = group.getObjectByName('route') as THREE.Group;
+    const line = route.children.find((c) => c instanceof THREE.Line) as THREE.Line;
+    expect(Array.from(line.geometry.getAttribute('position').array).slice(0, 3)).toEqual([0, 0, 0]);
+    expect((group.getObjectByName('wander') as THREE.LineLoop).position.toArray()).toEqual([0, 0, 0]);
+  });
+});

@@ -297,6 +297,7 @@ export function createWorld3D(options: World3DOptions): World3D {
       pickRoutePoint: (ray, guid) => manager.pickRoutePoint(ray, guid),
       setPendingRoute: (guid, points) => manager.setPendingRoute(guid, points),
       previewRoute: (guid, points) => manager.previewRoute(guid, points),
+      previewHome: (guid, at) => manager.previewHome(guid, at),
     },
     {
       onEdit: options.onEdit,

@@ -513,7 +513,31 @@ class SpawnManager {
       const creature: ViewCreature | undefined = group.userData.creatures?.get(guid);
       if (!creature) continue;
       for (const shown of group.getObjectByName('paths')?.children ?? []) {
-        if (shown.userData.guid === guid && shown.name === 'route') moveRouteDrawing(shown, { x: creature.x, y: creature.y, z: creature.z }, points);
+        if (shown.userData.guid === guid && shown.name === 'route') {
+          shown.userData.previewed = true;
+          moveRouteDrawing(shown, { x: creature.x, y: creature.y, z: creature.z }, points);
+        }
+      }
+    }
+  }
+
+  /** Takes an NPC's route (its first leg) and wander circle to where it is being dragged, without drawing its area again */
+  previewHome(guid: number, at: { x: number; y: number; z: number }) {
+    for (const group of this.#areas.values()) {
+      const creature: ViewCreature | undefined = group.userData.creatures?.get(guid);
+      if (!creature) continue;
+      for (const shown of group.getObjectByName('paths')?.children ?? []) {
+        if (shown.userData.guid !== guid) continue;
+        // Drawn from the next redraw's data again, whatever it says
+        shown.userData.previewed = true;
+        if (shown.name === 'route') {
+          const points = this.#pendingRoutes.get(guid) ?? creature.path;
+          if (points?.length) moveRouteDrawing(shown, at, points);
+        } else {
+          // A wander circle is drawn round where the NPC stood: shifted by how far it has gone
+          shown.position.set(at.x - creature.x, at.y - creature.y, at.z - creature.z);
+          shown.updateMatrixWorld(true);
+        }
       }
     }
   }
@@ -696,6 +720,8 @@ class SpawnManager {
     const changed = new globalThis.Set<number>();
     for (const [guid, creature] of now) if (movesKeyOf(creature) !== (before.has(guid) ? movesKeyOf(before.get(guid)!) : null)) changed.add(guid);
     for (const guid of before.keys()) if (!now.has(guid)) changed.add(guid);
+    // Moved while dragging: drawn again from the data, which may not have taken the move
+    for (const shown of paths.children) if (shown.userData.previewed) changed.add(shown.userData.guid);
     for (const shown of [...paths.children]) if (changed.has(shown.userData.guid)) this.#remove(shown);
     for (const guid of changed) {
       const creature = now.get(guid);

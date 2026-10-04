@@ -61,6 +61,7 @@ function setup(opts: { routes?: Record<number, Route>; floor?: number | null; an
   const routes = new Map(Object.entries(opts.routes ?? {}).map(([g, r]) => [Number(g), r]));
   const pending: [number, EditPoint[]][] = [];
   const previews: [number, EditPoint[]][] = [];
+  const homes: [number, { x: number; y: number; z: number }][] = [];
   const world: EditingWorld = {
     camera: new THREE.PerspectiveCamera(),
     dom: document.createElement('canvas'),
@@ -77,6 +78,7 @@ function setup(opts: { routes?: Record<number, Route>; floor?: number | null; an
       if (route) routes.set(guid, { ...route, points });
     },
     previewRoute: (guid, points) => previews.push([guid, points]),
+    previewHome: (guid, at) => homes.push([guid, at]),
   };
   const edits: SpawnEdit[] = [];
   const notices: (string | null)[] = [];
@@ -103,7 +105,7 @@ function setup(opts: { routes?: Record<number, Route>; floor?: number | null; an
     gizmo.events.moved(change(delta, angle));
     await gizmo.events.ended(lifted);
   };
-  return { editor, world, edits, notices, asked, selections, falloffs, floorZ, gizmo, npc, drop, drag, change, pending, previews };
+  return { editor, world, edits, notices, asked, selections, falloffs, floorZ, gizmo, npc, drop, drag, change, pending, previews, homes };
 }
 
 const placed = (edits: SpawnEdit[]) => edits.map((e) => (e.kind === 'place' ? [e.spawn.guid, e.to.x, e.to.y, e.to.z] : null));
@@ -423,5 +425,17 @@ describe('findings from the review', () => {
     t.editor.setSelection(sel({ spawns: [{ kind: 'creature', guid: 3 }], routes: [3] }));
     expect(t.editor.insertPoint(0, 0)).toBe(false);
     expect(t.notices).toEqual([]);
+  });
+});
+
+describe('an NPC dragged with its route', () => {
+  it('has its route and wander circle follow it while it is dragged', () => {
+    const t = setup();
+    t.npc(1, 0, 0);
+    t.editor.setSelection(sel({ spawns: [{ kind: 'creature', guid: 1 }] }));
+    t.editor.update();
+    t.gizmo.events.started();
+    t.gizmo.events.moved(t.change([3, 4, 0]));
+    expect(t.homes.at(-1)).toEqual([1, { x: 3, y: 4, z: 0 }]);
   });
 });

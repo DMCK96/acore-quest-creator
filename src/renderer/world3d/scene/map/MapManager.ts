@@ -246,6 +246,11 @@ class MapManager extends EventTarget {
     this.#spawnManager.previewRoute(guid, points);
   }
 
+  /** Takes an NPC's route and wander circle to where it is being dragged */
+  previewHome(guid: number, at: { x: number; y: number; z: number }) {
+    this.#spawnManager.previewHome(guid, at);
+  }
+
   /** A drawn spawn as a click would pick it, or null */
   pickedSpawn(kind: 'creature' | 'object', guid: number) {
     return this.#spawnManager.picked(kind, guid);
