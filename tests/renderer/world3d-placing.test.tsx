@@ -9,7 +9,7 @@ const worlds = vi.hoisted(() => [] as any[]);
 vi.mock('../../src/renderer/world3d/world3d', () => ({
   createWorld3D: (options: any) => {
     const world = { options, dispose: vi.fn(), cancelPath: vi.fn(), lookAt: vi.fn(), setSpawnVisibility: vi.fn(), setOwnSpawns: vi.fn(), select: vi.fn(),
-      setWorldLayer: vi.fn(), setMode: vi.fn(), setPlacing: vi.fn(), undo: vi.fn(), redo: vi.fn(), record: vi.fn(),
+      setWorldLayer: vi.fn(), setMode: vi.fn(), setPlacing: vi.fn(), cancelDrag: vi.fn(),
       setActive: vi.fn(), setScenery: vi.fn(), setTool: vi.fn(), setFalloff: vi.fn(), target: () => ({ x: 0, y: 0, z: 0 }), spawnStatus: () => ({ capped: { creatures: false, objects: false }, error: null }) };
     worlds.push(world);
     return world;
@@ -121,13 +121,4 @@ describe('placing an existing NPC or object from the 3D view', () => {
     expect(world.setPlacing).toHaveBeenLastCalledWith(null);
   });
 
-  it('makes a click-placed spawn an undo step', async () => {
-    const { world } = await threeD();
-    await choose('NPC', 'guard', 'Stormwind Guard');
-    world.options.onPlace({ target: { kind: 'creature', entry: 1423 }, at });
-    const spawn = { kind: 'creature', guid: 90001, entry: 1423, own: false };
-    await waitFor(() => expect(world.record).toHaveBeenCalledWith(
-      [{ kind: 'presence', spawn, present: false, at, map: expect.any(Number) }],
-      [{ kind: 'presence', spawn, present: true, at, map: expect.any(Number) }]));
-  });
 });

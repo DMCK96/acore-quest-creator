@@ -13,7 +13,7 @@ vi.mock('../../src/renderer/world3d/world3d', () => ({
     canvas.tabIndex = 0;
     options.container.appendChild(canvas);
     const world = { options, canvas, dispose: vi.fn(), lookAt: vi.fn(), setSpawnVisibility: vi.fn(), setOwnSpawns: vi.fn(), select: vi.fn(), selectSpawns: vi.fn(),
-      setWorldLayer: vi.fn(), setMode: vi.fn(), setPlacing: vi.fn(), undo: vi.fn(), redo: vi.fn(), record: vi.fn(), setMarked: vi.fn(),
+      setWorldLayer: vi.fn(), setMode: vi.fn(), setPlacing: vi.fn(), cancelDrag: vi.fn(), setMarked: vi.fn(),
       setActive: vi.fn(), setScenery: vi.fn(), setTool: vi.fn(), setFalloff: vi.fn(), setPendingMovement: vi.fn(), spawnMovement: vi.fn(() => ({ type: 'idle', wander: 0, pathId: null })),
       startPath: vi.fn(), finishPath: vi.fn(), cancelPath: vi.fn(), undoPoint: vi.fn(), selectedSpawns: vi.fn(() => []), groundAt: vi.fn(() => ({ x: 50, y: 60, z: 7 })), lastPointer: vi.fn(() => null),
       hasSpawn: vi.fn(() => true), routeOf: vi.fn(() => null),
@@ -61,7 +61,7 @@ describe('the right-click menu in the 3D view', () => {
     expect(screen.queryByRole('menu')).toBeNull();
   });
 
-  it('Place NPC here puts one down where it was right-clicked, selects it, and records it for undo', async () => {
+  it('Place NPC here puts one down where it was right-clicked and selects it', async () => {
     const { api, world } = await view();
     rightClick(world, { ground: at, hit: null, selection: [] });
     await userEvent.click(screen.getByRole('menuitem', { name: 'Place NPC here…' }));
@@ -69,13 +69,10 @@ describe('the right-click menu in the 3D view', () => {
     await userEvent.click(await screen.findByRole('button', { name: /Guard/ }));
     await waitFor(() => expect(api.worldAddSpawn).toHaveBeenCalledWith('creature', 1423, 0, expect.objectContaining({ x: 1, y: 2, z: 3 })));
     expect(world.setPlacing).not.toHaveBeenCalledWith(expect.objectContaining({ entry: 1423 }));
-    await waitFor(() => expect(world.record).toHaveBeenCalledWith(
-      [expect.objectContaining({ kind: 'presence', present: false, spawn: expect.objectContaining({ guid: 90001 }) })],
-      [expect.objectContaining({ kind: 'presence', present: true, spawn: expect.objectContaining({ guid: 90001 }) })]));
-    expect(world.selectSpawns).toHaveBeenCalledWith([{ kind: 'creature', guid: 90001 }]);
+    await waitFor(() => expect(world.selectSpawns).toHaveBeenCalledWith([{ kind: 'creature', guid: 90001 }]));
   });
 
-  it('copies the selection and pastes it where right-clicked, on the map being viewed, as one undo step', async () => {
+  it('copies the selection and pastes it where right-clicked, on the map being viewed', async () => {
     const { api, world } = await view();
     world.selectedSpawns.mockReturnValue([{ ...guard, map: 1 }, { ...guard, guid: 80331, placement: { ...guard.placement, x: 20 } }]);
     rightClick(world, { ground: at, hit: { type: 'spawn', spawn: guard }, selection: [guard, { ...guard, guid: 80331 }] });
@@ -84,7 +81,7 @@ describe('the right-click menu in the 3D view', () => {
     await userEvent.click(screen.getByRole('menuitem', { name: 'Paste here (2)' }));
     await waitFor(() => expect(api.worldAddSpawn).toHaveBeenCalledTimes(2));
     expect((api.worldAddSpawn as any).mock.calls.map((c: any[]) => [c[2], c[3].x])).toEqual([[0, 95], [0, 105]]);
-    await waitFor(() => expect(world.record).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(world.selectSpawns).toHaveBeenCalledTimes(1));
   });
 
   it('Ctrl+C and Ctrl+V on the view copy and paste under the cursor; in a text field they do nothing', async () => {
@@ -121,11 +118,11 @@ describe('the right-click menu in the 3D view', () => {
     rightClick(world, { ground: at, hit: null, selection: [guard] });
     await userEvent.click(screen.getByRole('menuitem', { name: 'Start path here' }));
     await waitFor(() => expect(world.startPath).toHaveBeenCalledWith(80330, 803300, at));
-    act(() => world.options.onEdit({ kind: 'route', spawn: { kind: 'creature', guid: 80330, entry: 1423, own: false }, pathId: 803300, points: [{ x: 1, y: 2, z: 3 }] }));
+    act(() => world.options.onGesture([{ kind: 'route', spawn: { kind: 'creature', guid: 80330, entry: 1423, own: false }, pathId: 803300, points: [{ x: 1, y: 2, z: 3 }] }]));
     await waitFor(() => expect(api.worldSetRoute).toHaveBeenCalledWith(803300, [{ x: 1, y: 2, z: 3, rest: {} }], { isNew: true }));
   });
 
-  it('Change wander distance previews, and Apply sends the movement and records it', async () => {
+  it('Change wander distance previews, and Apply sends the movement', async () => {
     const { api, world } = await view();
     rightClick(world, { ground: at, hit: { type: 'spawn', spawn: guard }, selection: [guard] });
     await userEvent.click(screen.getByRole('menuitem', { name: 'Change wander distance…' }));
@@ -135,9 +132,6 @@ describe('the right-click menu in the 3D view', () => {
     expect(world.setPendingMovement).toHaveBeenLastCalledWith(80330, { type: 'wander', wander: 8, pathId: null });
     await userEvent.click(screen.getByRole('button', { name: 'Apply' }));
     await waitFor(() => expect(api.worldSetMovement).toHaveBeenCalledWith(80330, { type: 'wander', wander: 8, pathId: null }));
-    expect(world.record).toHaveBeenCalledWith(
-      [{ kind: 'movement', spawn: { kind: 'creature', guid: 80330, entry: 1423, own: false }, to: { type: 'idle', wander: 0, pathId: null } }],
-      [{ kind: 'movement', spawn: { kind: 'creature', guid: 80330, entry: 1423, own: false }, to: { type: 'wander', wander: 8, pathId: null } }]);
   });
 
   it('says so and does nothing when the right-clicked spawn has gone', async () => {
@@ -154,9 +148,9 @@ describe('the right-click menu in the 3D view', () => {
     const { api, world } = await view({ worldRevert: vi.fn(async () => okv(EMPTY)) });
     const spawn = { kind: 'creature', guid: 90001, entry: 1423, own: false };
     const placement = { x: 1, y: 2, z: 3, orientation: 0, rotation: null };
-    act(() => world.options.onEdit({ kind: 'presence', spawn, present: false, at: placement, map: 0 }));
+    act(() => world.options.onGesture([{ kind: 'presence', spawn, present: false, at: placement, map: 0 }]));
     await waitFor(() => expect(api.worldRevert).toHaveBeenCalledWith({ kind: 'spawn', spawnKind: 'creature', guid: 90001 }));
-    act(() => world.options.onEdit({ kind: 'presence', spawn, present: true, at: placement, map: 0 }));
+    act(() => world.options.onGesture([{ kind: 'presence', spawn, present: true, at: placement, map: 0 }]));
     await waitFor(() => expect(api.worldAddSpawn).toHaveBeenCalledWith('creature', 1423, 0, placement, 90001));
   });
 
@@ -203,9 +197,7 @@ describe('the right-click menu in the 3D view', () => {
     rightClick(world, { ground: at, hit: { type: 'spawn', spawn: own }, selection: [own] });
     await userEvent.click(screen.getByRole('menuitem', { name: 'Remove path' }));
     const ref = { kind: 'creature', guid: 900, entry: 12000001, own: true };
-    await waitFor(() => expect(world.record).toHaveBeenCalledWith(
-      [{ kind: 'route', spawn: ref, pathId: 9000, points: [{ x: 1, y: 1, z: 1 }, { x: 2, y: 2, z: 2 }] }, { kind: 'movement', spawn: ref, to: { type: 'path', wander: 0, pathId: 9000 } }],
-      [{ kind: 'movement', spawn: ref, to: { type: 'idle', wander: 0, pathId: null } }]));
+    await waitFor(() => expect(onOwnEdit).toHaveBeenCalledWith({ kind: 'movement', spawn: ref, to: { type: 'idle', wander: 0, pathId: null } }));
   });
 
   it('knows a path made before a restart from the layer: its points go out as new, and Remove path takes them back', async () => {
@@ -213,25 +205,22 @@ describe('the right-click menu in the 3D view', () => {
     const withRoute = { ...EMPTY, routes: [newRoute] };
     const { api, world } = await view({ worldLayer: vi.fn(async () => okv(withRoute)), worldSetRoute: vi.fn(async () => okv(withRoute)), worldSetMovement: vi.fn(async () => okv(withRoute)) });
     await waitFor(() => expect(world.setWorldLayer).toHaveBeenCalled());
-    act(() => world.options.onEdit({ kind: 'route', spawn: { kind: 'creature', guid: 80330, entry: 1423, own: false }, pathId: 803300, points: [{ x: 3, y: 3, z: 3 }] }));
+    act(() => world.options.onGesture([{ kind: 'route', spawn: { kind: 'creature', guid: 80330, entry: 1423, own: false }, pathId: 803300, points: [{ x: 3, y: 3, z: 3 }] }]));
     await waitFor(() => expect(api.worldSetRoute).toHaveBeenCalledWith(803300, [{ x: 3, y: 3, z: 3, rest: {} }], { isNew: true }));
     const walking = { ...guard, pathId: 803300 };
     world.spawnMovement.mockReturnValue({ type: 'path', wander: 0, pathId: 803300 });
     world.routeOf.mockReturnValue({ pathId: 803300, points: [{ x: 1, y: 1, z: 1 }] });
     rightClick(world, { ground: at, hit: { type: 'spawn', spawn: walking }, selection: [walking] });
     await userEvent.click(screen.getByRole('menuitem', { name: 'Remove path' }));
-    await waitFor(() => expect(world.record).toHaveBeenCalledWith(
-      expect.arrayContaining([expect.objectContaining({ kind: 'route', pathId: 803300, points: [{ x: 1, y: 1, z: 1 }] })]),
-      expect.arrayContaining([expect.objectContaining({ kind: 'route', pathId: 803300, points: [] })])));
+    await waitFor(() => expect(api.worldSetRoute).toHaveBeenLastCalledWith(803300, [], { isNew: true }));
   });
 
-  it('does not keep a refused edit as an undo step', async () => {
+  it('says why an edit was refused', async () => {
     const { world } = await view({ worldSetMovement: vi.fn(async () => ({ ok: false, error: { code: 'BAD_REQUEST', message: 'Spawn 80330 is no longer in the database.' } })) });
     rightClick(world, { ground: at, hit: { type: 'spawn', spawn: guard }, selection: [guard] });
     await userEvent.click(screen.getByRole('menuitem', { name: 'Change wander distance…' }));
     await userEvent.click(screen.getByRole('button', { name: 'Apply' }));
     expect(await screen.findByText('Spawn 80330 is no longer in the database.')).toBeInTheDocument();
-    expect(world.record).not.toHaveBeenCalled();
   });
 
   it('forgets quest marks when the map changes, so Hide is not offered for nothing', async () => {

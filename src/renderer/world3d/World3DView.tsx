@@ -243,7 +243,9 @@ function WorldStage({
     world.current?.setWorldLayer(next);
   };
   // An undo or redo changed the world layer: a drag under way is dropped first, then the layer is drawn
-  const { worldLayer: undone } = useHistorySteps();
+  const { worldLayer: undone, runStep } = useHistorySteps();
+  const runStepRef = useRef(runStep);
+  runStepRef.current = runStep;
   const seenSeq = useRef(undone?.seq ?? 0);
   useEffect(() => {
     if (!undone || undone.seq === seenSeq.current) return;
@@ -411,9 +413,6 @@ function WorldStage({
       const { guid } = result.value;
       const added = result.value.layer.added.find((a) => a.kind === kind && a.guid === guid);
       created?.select({ kind: target.kind, guid });
-      // One undo step, as a placement from the menu is
-      const spawn = { kind: target.kind, guid, entry: target.entry, own: false };
-      created?.record([{ kind: 'presence', spawn, present: false, at, map }], [{ kind: 'presence', spawn, present: true, at, map }]);
       setSelected({
         kind: target.kind, guid, entry: target.entry, name: added?.name ?? '', own: false, added: true, pathId: 0, event: null,
         position: { x: at.x, y: at.y, z: at.z },
@@ -486,7 +485,11 @@ function WorldStage({
               setNote(null);
               onSelectRef.current?.(spawn);
             },
-            onEdit: (change) => void send(change),
+            // One gesture is one step of the project's history, its own and world edits alike
+            onGesture: (changes) =>
+              void runStepRef.current(async () => {
+                for (const change of changes) await send(change);
+              }),
             onContextMenu: (target, client) => live && menuRef.current.open(target, client),
             onDrawing: (drawing) => live && menuRef.current.onDrawing(drawing),
             onShortcut: (code) => live && menuRef.current.shortcut(code),
@@ -496,7 +499,7 @@ function WorldStage({
             floorZ,
             beforeRouteEdit,
             onNotice: (message) => live && setNote(message),
-            onPlace: (request) => void place(request),
+            onPlace: (request) => void runStepRef.current(() => place(request)),
             onPlaceEnd: () => live && setPlacing(null),
             spawns: async (spawnMap, box) => {
               const current = apiRef.current;

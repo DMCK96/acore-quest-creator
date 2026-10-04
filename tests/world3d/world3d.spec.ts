@@ -294,7 +294,7 @@ test('dragging the move gizmo moves the selected NPC and drops it on the server\
   expect((await state(page)).errors).toEqual([]);
 });
 
-test('Shift-click on the selected NPC\'s route inserts a point there, and Ctrl+Z takes it back out', async ({ page }) => {
+test('Shift-click on the selected NPC\'s route inserts a point there; Ctrl+Z is left to the app', async ({ page }) => {
   await openPage(page);
   const SPOT = { x: START.x + 60, y: START.y - 60, z: START.z };
   await page.evaluate(`window.__spawns = { creatures: [
@@ -315,9 +315,10 @@ test('Shift-click on the selected NPC\'s route inserts a point there, and Ctrl+Z
   expect(inserted).toMatchObject({ kind: 'route', pathId: 77, spawn: { guid: 9 } });
   expect(inserted.points.map((p: any) => p.carry ?? null)).toEqual([{ delay: '0' }, null, { delay: '9' }]);
   expect(Math.hypot(inserted.points[1].x - SPOT.x, inserted.points[1].y - SPOT.y)).toBeLessThan(2);
+  // Undo is the project's now: the view sends nothing of its own
   await page.keyboard.press('Control+KeyZ');
-  await expect.poll(async () => (await state(page)).edits.length).toBe(2);
-  expect((await state(page)).edits[1].points).toHaveLength(2);
+  await page.waitForTimeout(300);
+  expect((await state(page)).edits).toHaveLength(1);
 });
 
 test('a route never goes below two points', async ({ page }) => {
@@ -453,7 +454,7 @@ test('every model shader compiles, and none the game uses is missing', async ({ 
   expect(result.unimplemented).toEqual([]);
 });
 
-test('in Select mode a box picks two NPCs, the gizmo moves both, and Ctrl+Z puts both back', async ({ page }) => {
+test('in Select mode a box picks two NPCs and the gizmo moves both as one gesture', async ({ page }) => {
   await openPage(page);
   const SPOT = { x: START.x + 60, y: START.y - 60, z: START.z };
   // Either side of the camera's target, across the view, so the group's middle is the middle of the picture
@@ -489,13 +490,6 @@ test('in Select mode a box picks two NPCs, the gizmo moves both, and Ctrl+Z puts
   expect(Math.hypot(edits[0].to.x - edits[1].to.x, edits[0].to.y - edits[1].to.y)).toBeCloseTo(Math.hypot(4, 4), 3);
   expect(Math.hypot(edits[0].to.x - A.x, edits[0].to.y - A.y)).toBeGreaterThan(1);
 
-  await page.keyboard.press('Control+KeyZ');
-  await expect.poll(async () => (await state(page)).edits.length).toBe(4);
-  const back = Object.fromEntries((await state(page)).edits.slice(2).map((e) => [e.spawn.guid, [e.to.x, e.to.y]]));
-  expect(back[21][0]).toBeCloseTo(A.x, 3);
-  expect(back[21][1]).toBeCloseTo(A.y, 3);
-  expect(back[22][0]).toBeCloseTo(B.x, 3);
-  expect(back[22][1]).toBeCloseTo(B.y, 3);
   expect((await state(page)).errors).toEqual([]);
 });
 

@@ -36,7 +36,7 @@
           onProblems: (all) => (state.problems = all),
           onError: (message) => state.errors.push(`failed: ${message}`),
           onSelect: (spawn) => (state.selected = spawn),
-          onEdit: (edit) => state.edits.push(edit),
+          onGesture: (edits) => state.edits.push(...edits),
           // The server's floor where a spawn is dropped: what the test sets, else none
           floorZ: () => Promise.resolve(window.__floorZ ?? null),
           beforeRouteEdit: () => Promise.resolve(true),
@@ -60,7 +60,6 @@
       window.__mode = (mode) => world?.setMode(mode);
       window.__tool = (tool) => world?.setTool(tool);
       window.__falloff = (falloff) => world?.setFalloff(falloff);
-      window.__undo = () => world?.undo();
       window.__placing = (target) => world?.setPlacing(target);
       window.__world = () => world;
       window.__close = () => {

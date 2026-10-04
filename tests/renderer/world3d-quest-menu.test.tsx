@@ -16,7 +16,7 @@ vi.mock('../../src/renderer/world3d/world3d', () => ({
     canvas.tabIndex = 0;
     options.container.appendChild(canvas);
     const world = { options, canvas, dispose: vi.fn(), lookAt: vi.fn(), setSpawnVisibility: vi.fn(), setOwnSpawns: vi.fn(), select: vi.fn(), selectSpawns: vi.fn(),
-      setWorldLayer: vi.fn(), setMode: vi.fn(), setPlacing: vi.fn(), undo: vi.fn(), redo: vi.fn(), record: vi.fn(), setMarked: vi.fn(),
+      setWorldLayer: vi.fn(), setMode: vi.fn(), setPlacing: vi.fn(), cancelDrag: vi.fn(), setMarked: vi.fn(),
       setActive: vi.fn(), setScenery: vi.fn(), setTool: vi.fn(), setFalloff: vi.fn(), setPendingMovement: vi.fn(), spawnMovement: vi.fn(() => ({ type: 'idle', wander: 0, pathId: null })),
       startPath: vi.fn(), finishPath: vi.fn(), cancelPath: vi.fn(), undoPoint: vi.fn(), selectedSpawns: vi.fn(() => []), groundAt: vi.fn(() => null), lastPointer: vi.fn(() => null),
       hasSpawn: vi.fn(() => true), routeOf: vi.fn(() => null),
@@ -88,7 +88,7 @@ describe('quest actions in the World workspace', () => {
   it('the open quest’s own spawns are drawn and edited in the World workspace', async () => {
     const { world, onQuestField } = await workspace();
     await waitFor(() => expect(world.setOwnSpawns).toHaveBeenCalledWith(expect.objectContaining({ creatures: [expect.objectContaining({ guid: 900, own: true })] })));
-    act(() => world.options.onEdit({ kind: 'place', spawn: { kind: 'creature', guid: 900, entry: 12000001, own: true }, to: { x: 4, y: 5, z: 6, orientation: 0, rotation: null } }));
+    act(() => world.options.onGesture([{ kind: 'place', spawn: { kind: 'creature', guid: 900, entry: 12000001, own: true }, to: { x: 4, y: 5, z: 6, orientation: 0, rotation: null } }]));
     expect(onQuestField).toHaveBeenCalledWith('entities', expect.anything());
   });
 

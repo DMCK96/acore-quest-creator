@@ -42,8 +42,8 @@ export interface World3DOptions {
   spawns?: SpawnSource;
   /** Told which NPC or object was clicked, or null when a click hit neither (or Esc cleared it). */
   onSelect?(spawn: PickedSpawn | null): void;
-  /** Told each edit made in the view: a whole placement or a whole route, to store. */
-  onEdit?(edit: SpawnEdit): void;
+  /** Told each gesture made in the view: its whole placements and routes, to store as one step. */
+  onGesture?(edits: SpawnEdit[]): void;
   /** The server's floor nearest a height at a place, or null when it has none there. */
   floorZ?(x: number, y: number, nearZ: number): Promise<number | null>;
   /** Asked once per route before the first change to a world route that is not the quest's. */
@@ -99,10 +99,6 @@ export interface World3D {
   setMode(mode: 'move' | 'rotate'): void;
   /** Starts placing an existing NPC or object (each click on the ground places one), or stops with null. */
   setPlacing(target: PlaceTarget | null): void;
-  undo(): void;
-  redo(): void;
-  /** One undo step for edits the host made itself (a placement, a movement): remembered, not sent again. */
-  record(before: SpawnEdit[], after: SpawnEdit[]): void;
   /** Starts drawing a new path for a drawn NPC, its first point at `first`; each click then adds a point. */
   startPath(guid: number, pathId: number, first: { x: number; y: number; z: number }): void;
   /** Ends the path being drawn (one of fewer than two points is cancelled). */
@@ -370,7 +366,7 @@ export function createWorld3D(options: World3DOptions): World3D {
       spawnMovement: (guid) => manager.movement(guid),
     },
     {
-      onEdit: options.onEdit,
+      onGesture: options.onGesture,
       floorZ: options.floorZ,
       beforeRouteEdit: options.beforeRouteEdit,
       onNotice: options.onNotice,
@@ -380,6 +376,12 @@ export function createWorld3D(options: World3DOptions): World3D {
       onDrawing: (drawing) => options.onDrawing?.(drawing),
     },
   );
+  // A new layer or new own spawns drop what was drawn as pending: the editor draws a path being drawn
+  // again at once, and lets go of picked points once the routes are drawn as they now are
+  const followLayer = (redrawn: void | Promise<void>): void => {
+    editor.layerChanged();
+    void Promise.resolve(redrawn).then(() => editor.layerChanged());
+  };
   // The editing keys, on the view itself so they only act while it has focus; a key used here goes
   // no further (Esc that clears a selection must not also close the screen or the quest editor)
   const onKeyDown = (event: KeyboardEvent): void => {
@@ -553,11 +555,11 @@ export function createWorld3D(options: World3DOptions): World3D {
       manager.setScenery(scenery);
     },
     spawnStatus: () => manager.spawnStatus,
-    setOwnSpawns: (spawns) => manager.setOwnSpawns(spawns),
+    setOwnSpawns: (spawns) => followLayer(manager.setOwnSpawns(spawns)),
     select: (spawn) => setSelection(spawn ? combine(EMPTY_SELECTION, { spawns: [spawn] }, 'replace') : EMPTY_SELECTION, false),
     setTool: (next) => applyTool(next),
     setFalloff: (falloff) => editor.setFalloff(falloff),
-    setWorldLayer: (layer) => manager.setWorldLayer(layer),
+    setWorldLayer: (layer) => followLayer(manager.setWorldLayer(layer)),
     setMode: (mode) => editor.setMode(mode),
     setPlacing: (target) => {
       placing = target;
@@ -565,9 +567,6 @@ export function createWorld3D(options: World3DOptions): World3D {
       if (target && !isEmpty(selection)) setSelection(EMPTY_SELECTION);
       refreshEscape();
     },
-    undo: () => editor.undo(),
-    redo: () => editor.redo(),
-    record: (before, after) => editor.record(before, after),
     startPath: (guid, pathId, first) => editor.startPath(guid, pathId, first),
     finishPath: () => editor.finishPath(),
     cancelPath: () => editor.cancelPath(),

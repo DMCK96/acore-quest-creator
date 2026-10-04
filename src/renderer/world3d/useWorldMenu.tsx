@@ -52,7 +52,6 @@ export interface WorldMenuDeps {
 type Put = { kind: 'creature' | 'object'; entry: number; own: boolean; at: Placement };
 
 const refOf = (s: { kind: 'creature' | 'object'; guid: number; entry: number; own: boolean }): SpawnRef => ({ kind: s.kind, guid: s.guid, entry: s.entry, own: s.own });
-const absent = (edit: SpawnEdit): SpawnEdit => (edit.kind === 'presence' ? { ...edit, present: !edit.present } : edit);
 const plural = (n: number, one: string): string => `${n} ${one}${n === 1 ? '' : 's'}`;
 
 /**
@@ -70,7 +69,7 @@ export function useWorldMenu(deps: WorldMenuDeps): {
   d.current = deps;
   const [menu, setMenu] = useState<{ groups: MenuGroup[]; at: { x: number; y: number } } | null>(null);
   const [place, setPlace] = useState<{ what: 'creature' | 'object'; at: At } | null>(null);
-  const [wander, setWander] = useState<{ spawn: MenuSpawn; before: Movement } | null>(null);
+  const [wander, setWander] = useState<{ spawn: MenuSpawn } | null>(null);
   const [drawing, setDrawing] = useState<{ guid: number; points: number } | null>(null);
   const drawingRef = useRef(drawing);
   drawingRef.current = drawing;
@@ -147,7 +146,6 @@ export function useWorldMenu(deps: WorldMenuDeps): {
     const world = d.current.world.current;
     if (done.length > 0 && world) {
       world.selectSpawns(done.map((e) => ({ kind: e.spawn.kind, guid: e.spawn.guid })));
-      world.record(done.map(absent), done);
     }
     return done.length;
   };
@@ -188,11 +186,9 @@ export function useWorldMenu(deps: WorldMenuDeps): {
     return false;
   };
 
-  /** Sends edits the menu made and remembers them as one undo step, unless one was refused */
-  const commit = async (before: SpawnEdit[], after: SpawnEdit[]): Promise<void> => {
-    let kept = true;
-    for (const edit of after) kept = (await d.current.send(edit)) && kept;
-    if (kept) d.current.world.current?.record(before, after);
+  /** Sends edits the menu made, one after another */
+  const commit = async (edits: SpawnEdit[]): Promise<void> => {
+    for (const edit of edits) await d.current.send(edit);
   };
 
   const run = async (action: MenuAction): Promise<void> => {
@@ -227,7 +223,7 @@ export function useWorldMenu(deps: WorldMenuDeps): {
       case 'remove': {
         if (!still(action.spawn)) return;
         const gone: SpawnEdit = { kind: 'presence', spawn: refOf(action.spawn), present: false, at: action.spawn.placement, map: action.spawn.map };
-        await commit([absent(gone)], [gone]);
+        await commit([gone]);
         d.current.clearSelection();
         return;
       }
@@ -255,26 +251,16 @@ export function useWorldMenu(deps: WorldMenuDeps): {
       }
       case 'wander':
         if (!still(action.spawn)) return;
-        setWander({ spawn: action.spawn, before: world.spawnMovement(action.spawn.guid) ?? IDLE });
+        setWander({ spawn: action.spawn });
         return;
       case 'removePath': {
         const { spawn } = action;
         if (!still(spawn)) return;
         const ref = refOf(spawn);
-        const before: SpawnEdit[] = [{ kind: 'movement', spawn: ref, to: world.spawnMovement(spawn.guid) ?? { type: 'path', wander: 0, pathId: spawn.pathId } }];
         const after: SpawnEdit[] = [{ kind: 'movement', spawn: ref, to: IDLE }];
-        // A quest's own patrol goes with its movement, so the undo brings its points back too
-        if (spawn.own) {
-          const points = world.routeOf(spawn.guid)?.points ?? [];
-          before.unshift({ kind: 'route', spawn: ref, pathId: spawn.pathId, points });
-        }
         // A path made in this view is taken back with it; a database path is left for whoever else walks it
-        else if (d.current.isNewPath(spawn.pathId)) {
-          const points = world.routeOf(spawn.guid)?.points ?? [];
-          before.unshift({ kind: 'route', spawn: ref, pathId: spawn.pathId, points });
-          after.push({ kind: 'route', spawn: ref, pathId: spawn.pathId, points: [] });
-        }
-        await commit(before, after);
+        if (!spawn.own && d.current.isNewPath(spawn.pathId)) after.push({ kind: 'route', spawn: ref, pathId: spawn.pathId, points: [] });
+        await commit(after);
         return;
       }
       case 'spawnQuestEntity':
@@ -370,11 +356,11 @@ export function useWorldMenu(deps: WorldMenuDeps): {
           initial={wander.spawn.wander}
           onPreview={(yards) => d.current.world.current?.setPendingMovement(wander.spawn.guid, moving(yards))}
           onApply={(yards) => {
-            const { spawn, before } = wander;
+            const { spawn } = wander;
             setWander(null);
             d.current.focusView();
             const ref = refOf(spawn);
-            void commit([{ kind: 'movement', spawn: ref, to: before }], [{ kind: 'movement', spawn: ref, to: moving(yards) }]);
+            void commit([{ kind: 'movement', spawn: ref, to: moving(yards) }]);
           }}
           onClose={() => {
             d.current.world.current?.setPendingMovement(wander.spawn.guid, null);
