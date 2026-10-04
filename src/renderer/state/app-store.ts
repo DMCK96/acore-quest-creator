@@ -24,6 +24,7 @@ import type {
   Viewport,
 } from '@shared/ipc';
 import type { WorldLayer } from '@core/world/layer';
+import { toggleRole } from '@core/modules/quest-roles';
 import type { ModuleId } from '@core/modules/model';
 import { resetModule } from '@core/modules/catalog';
 import { draftToSaves, savedDraft, type ConnectionDraft } from '../connection/draft';
@@ -143,6 +144,11 @@ export interface AppState {
   jumpTo(stepId: number): Promise<void>;
   /** Runs `work` as one step of the history: everything it changes, and the quest edit it leaves pending, is undone together */
   historyStep(work: () => Promise<void>, label?: string, where?: StepPlace): Promise<void>;
+  /**
+   * Starts a new quest given and taken back by an NPC, after `previous` in its chain when that is set,
+   * as one step of the history
+   */
+  newQuestFrom(giver: { entry: number; name: string }, previous: number | null): Promise<void>;
   setHistory(list: HistoryList): void;
   dismissHistoryNote(): void;
 }
@@ -728,6 +734,23 @@ export function createAppStore(api: Api, opts: { saveDelayMs?: number } = {}): A
       } finally {
         await api.historyEnd(begun.value);
       }
+    },
+
+    async newQuestFrom(giver, previous) {
+      const label = `${previous === null ? 'New' : 'Next'} quest from ${giver.name}`;
+      await get().historyStep(async () => {
+        const was = get().open?.questId;
+        await get().newQuest();
+        const made = get().open;
+        // No new quest (it failed, or another open overtook it): the open one is not to be touched
+        if (!made || made.questId === was) return;
+        const target = { kind: 'creature' as const, id: giver.entry };
+        for (const role of ['giver', 'ender'] as const) {
+          const edits = toggleRole(get().open!.aggregate.values, role, target, true) ?? {};
+          for (const [fieldId, value] of Object.entries(edits)) get().setValue(fieldId, value);
+        }
+        if (previous !== null) get().setValue('quest_template_addon.PrevQuestID', previous);
+      }, label);
     },
 
     setHistory(list) {

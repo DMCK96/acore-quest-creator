@@ -134,7 +134,7 @@ interface ViewProps {
   /** Gives an NPC or object a part in the open quest, or takes it away; says why when it could not. */
   onQuestRole?(role: Role, target: RoleTarget, on: boolean): string | null;
   /** Starts a new quest given and taken back by an NPC; `after` puts it after the open quest in its chain. */
-  onNewQuest?(giver: { entry: number }, after: boolean): void;
+  onNewQuest?(giver: { entry: number; name: string }, after: boolean): void;
   /** Told the spawns of the open quest or its chain, when they are shown, to list them. */
   onShowSpawns?(groups: QuestSpawnGroup[], scope: 'quest' | 'chain'): void;
 }

@@ -35,7 +35,7 @@ export interface WorldWorkspaceProps {
   /** Changes one of the open quest's fields */
   onQuestField?(fieldId: string, value: FieldValue): void;
   /** Starts a new quest given and taken back by an NPC, after `previous` in its chain when that is set */
-  onNewQuest?(giver: { entry: number }, previous: number | null): void;
+  onNewQuest?(giver: { entry: number; name: string }, previous: number | null): void;
   /** A place to take the camera to (Show on the undo note); each request is its own, even to the same place */
   goTo?: { map: number; x: number; y: number; z: number; nonce: number };
 }

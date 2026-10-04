@@ -28,6 +28,8 @@ vi.mock('../../src/renderer/world3d/world3d', () => ({
 }));
 
 import { WorldWorkspace } from '../../src/renderer/world3d/WorldWorkspace';
+import { HistoryProvider } from '../../src/renderer/state/history-context';
+import { createAppStore } from '../../src/renderer/state/app-store';
 
 const EMPTY = { spawns: [], routes: [], added: [] };
 const guard = { kind: 'creature' as const, guid: 80330, entry: 1423, name: 'Guard', own: false, added: false, pathId: 0, wander: 0, map: 0, placement: { x: 10, y: 0, z: 5, orientation: 1, rotation: null } };
@@ -52,8 +54,10 @@ async function workspace(overrides: Record<string, unknown> = {}) {
   const onNewQuest = vi.fn();
   render(
     <NamesProvider api={api}>
-      <WorldWorkspace hasClient projectKey="p" projectName="P" onOpenSettings={vi.fn()} onShowQuests={vi.fn()} onStartQuest={vi.fn()}
-        quest={{ open, nodes: [nodeOf({ questId: 60001 })] }} onQuestField={onQuestField} onNewQuest={onNewQuest} />
+      <HistoryProvider store={createAppStore(api)}>
+        <WorldWorkspace hasClient projectKey="p" projectName="P" onOpenSettings={vi.fn()} onShowQuests={vi.fn()} onStartQuest={vi.fn()}
+          quest={{ open, nodes: [nodeOf({ questId: 60001 })] }} onQuestField={onQuestField} onNewQuest={onNewQuest} />
+      </HistoryProvider>
     </NamesProvider>,
   );
   await waitFor(() => expect(worlds).toHaveLength(1));
@@ -70,6 +74,14 @@ describe('quest actions in the World workspace', () => {
     expect(onQuestField).toHaveBeenCalledWith('gameobject_queststarter', []);
   });
 
+  it('making an NPC the quest giver is one step', async () => {
+    const { api, world, onQuestField } = await workspace();
+    rightClick(world, { ground: at, hit: { type: 'spawn', spawn: guard }, selection: [guard] });
+    await userEvent.click(screen.getByRole('menuitemcheckbox', { name: 'Quest giver' }));
+    await waitFor(() => expect(api.historyEnd).toHaveBeenCalledTimes(1));
+    expect(vi.mocked(api.historyBegin).mock.invocationCallOrder[0]!).toBeLessThan(onQuestField.mock.invocationCallOrder[0]!);
+  });
+
   it('Kill objective fills the first free slot', async () => {
     const { world, onQuestField } = await workspace();
     rightClick(world, { ground: at, hit: { type: 'spawn', spawn: guard }, selection: [guard] });
@@ -82,14 +94,15 @@ describe('quest actions in the World workspace', () => {
     const { world, onNewQuest } = await workspace();
     rightClick(world, { ground: at, hit: { type: 'spawn', spawn: guard }, selection: [guard] });
     await userEvent.click(screen.getByRole('menuitem', { name: 'Start the next quest in this chain' }));
-    expect(onNewQuest).toHaveBeenCalledWith({ entry: 1423 }, 60001);
+    expect(onNewQuest).toHaveBeenCalledWith({ entry: 1423, name: 'Guard' }, 60001);
   });
 
   it('the open quest’s own spawns are drawn and edited in the World workspace', async () => {
     const { world, onQuestField } = await workspace();
     await waitFor(() => expect(world.setOwnSpawns).toHaveBeenCalledWith(expect.objectContaining({ creatures: [expect.objectContaining({ guid: 900, own: true })] })));
     act(() => world.options.onGesture([{ kind: 'place', spawn: { kind: 'creature', guid: 900, entry: 12000001, own: true }, to: { x: 4, y: 5, z: 6, orientation: 0, rotation: null } }]));
-    expect(onQuestField).toHaveBeenCalledWith('entities', expect.anything());
+    // The gesture's step opens first
+    await waitFor(() => expect(onQuestField).toHaveBeenCalledWith('entities', expect.anything()));
   });
 
   it('Show quest spawns lists them by quest and role, marks those here, and Hide clears the marks', async () => {

@@ -12,6 +12,7 @@ import { placementAt } from './placing';
 import { WorldContextMenu } from './WorldContextMenu';
 import { WanderDialog } from './WanderDialog';
 import { PlaceDialog, type Chosen } from './PlaceDialog';
+import { useHistorySteps } from '../state/history-context';
 
 export const NO_LONGER_HERE = 'That spawn is no longer here';
 export const COPIED_COORDINATES = 'Copied .go xyz to the clipboard';
@@ -45,7 +46,7 @@ export interface WorldMenuDeps {
   onOwnEdit?(edit: SpawnEdit): boolean | void;
   /** Gives a spawn's NPC or object a part in the open quest, or takes it away; says why when it could not */
   onQuestRole?(role: Role, target: RoleTarget, on: boolean): string | null;
-  onNewQuest?(giver: { entry: number }, after: boolean): void;
+  onNewQuest?(giver: { entry: number; name: string }, after: boolean): void;
   onShowSpawns?(groups: QuestSpawnGroup[], scope: 'quest' | 'chain'): void;
 }
 
@@ -67,6 +68,10 @@ export function useWorldMenu(deps: WorldMenuDeps): {
 } {
   const d = useRef(deps);
   d.current = deps;
+  // Each action is one step of the project's history, however many changes it makes
+  const { runStep } = useHistorySteps();
+  const step = useRef(runStep);
+  step.current = runStep;
   const [menu, setMenu] = useState<{ groups: MenuGroup[]; at: { x: number; y: number } } | null>(null);
   const [place, setPlace] = useState<{ what: 'creature' | 'object'; at: At } | null>(null);
   const [wander, setWander] = useState<{ spawn: MenuSpawn } | null>(null);
@@ -137,12 +142,14 @@ export function useWorldMenu(deps: WorldMenuDeps): {
   };
 
   /** Puts spawns down one after another, selects them, and makes them one undo step; how many went down */
-  const putAll = async (puts: Put[]): Promise<number> => {
+  const putAll = async (puts: Put[], label?: string): Promise<number> => {
     const done: SpawnEdit[] = [];
-    for (const put of puts) {
-      const edit = await putOne(put);
-      if (edit) done.push(edit);
-    }
+    await step.current(async () => {
+      for (const put of puts) {
+        const edit = await putOne(put);
+        if (edit) done.push(edit);
+      }
+    }, label);
     const world = d.current.world.current;
     if (done.length > 0 && world) {
       world.selectSpawns(done.map((e) => ({ kind: e.spawn.kind, guid: e.spawn.guid })));
@@ -150,7 +157,7 @@ export function useWorldMenu(deps: WorldMenuDeps): {
     return done.length;
   };
 
-  const paste = async (entries: readonly ClipEntry[], at: At): Promise<void> => {
+  const paste = async (entries: readonly ClipEntry[], at: At, verb = 'Paste'): Promise<void> => {
     const { setNote, map } = d.current;
     const ok = pasteable(entries, openQuest(), titleOf);
     if (ok.entries.length === 0) {
@@ -158,7 +165,7 @@ export function useWorldMenu(deps: WorldMenuDeps): {
       return;
     }
     const laid = await Promise.all(layoutAt(ok.entries, at, map).map(async (l) => ({ kind: l.entry.kind, entry: l.entry.entry, own: l.entry.own, at: await floored(l.at) })));
-    await putAll(laid);
+    await putAll(laid, laid.length === 1 ? `${verb} a spawn` : `${verb} ${laid.length} spawns`);
     const left = entries.length - ok.entries.length;
     if (left > 0) setNote(`${left} of them could not be pasted: ${ok.blocked}`);
   };
@@ -176,7 +183,7 @@ export function useWorldMenu(deps: WorldMenuDeps): {
     if (!world || spawns.length === 0) return;
     const mean = (pick: (p: Placement) => number): number => spawns.reduce((sum, s) => sum + pick(s.placement), 0) / spawns.length;
     const off = duplicateOffset(world.camera().direction);
-    await paste(entriesOf(spawns, d.current.quest?.id ?? null), { x: mean((p) => p.x) + off.x, y: mean((p) => p.y) + off.y, z: mean((p) => p.z) });
+    await paste(entriesOf(spawns, d.current.quest?.id ?? null), { x: mean((p) => p.x) + off.x, y: mean((p) => p.y) + off.y, z: mean((p) => p.z) }, 'Duplicate');
   };
 
   /** Whether a spawn is still there to act on; says so when it is not */
@@ -186,9 +193,11 @@ export function useWorldMenu(deps: WorldMenuDeps): {
     return false;
   };
 
-  /** Sends edits the menu made, one after another */
-  const commit = async (edits: SpawnEdit[]): Promise<void> => {
-    for (const edit of edits) await d.current.send(edit);
+  /** Sends edits the menu made, one after another, as one step */
+  const commit = async (edits: SpawnEdit[], label?: string): Promise<void> => {
+    await step.current(async () => {
+      for (const edit of edits) await d.current.send(edit);
+    }, label);
   };
 
   const run = async (action: MenuAction): Promise<void> => {
@@ -260,7 +269,7 @@ export function useWorldMenu(deps: WorldMenuDeps): {
         const after: SpawnEdit[] = [{ kind: 'movement', spawn: ref, to: IDLE }];
         // A path made in this view is taken back with it; a database path is left for whoever else walks it
         if (!spawn.own && d.current.isNewPath(spawn.pathId)) after.push({ kind: 'route', spawn: ref, pathId: spawn.pathId, points: [] });
-        await commit(after);
+        await commit(after, `Removed the path of ${spawn.name}`);
         return;
       }
       case 'spawnQuestEntity':
@@ -268,12 +277,15 @@ export function useWorldMenu(deps: WorldMenuDeps): {
         return;
       case 'toggleRole': {
         const target: RoleTarget = { kind: action.spawn.kind === 'object' ? 'gameobject' : 'creature', id: action.spawn.entry };
-        const why = d.current.onQuestRole?.(action.role, target, action.on) ?? null;
+        let why: string | null = null;
+        await step.current(async () => {
+          why = d.current.onQuestRole?.(action.role, target, action.on) ?? null;
+        });
         if (why) setNote(why);
         return;
       }
       case 'newQuest':
-        d.current.onNewQuest?.({ entry: action.spawn.entry }, action.after);
+        d.current.onNewQuest?.({ entry: action.spawn.entry, name: action.spawn.name }, action.after);
         return;
       case 'showSpawns': {
         const { quest, chainIds, map } = d.current;

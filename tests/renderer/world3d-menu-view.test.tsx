@@ -25,6 +25,8 @@ vi.mock('../../src/renderer/world3d/world3d', () => ({
 }));
 
 import { World3DView } from '../../src/renderer/world3d/World3DView';
+import { HistoryProvider } from '../../src/renderer/state/history-context';
+import { createAppStore } from '../../src/renderer/state/app-store';
 
 const EMPTY = { spawns: [], routes: [], added: [] };
 const look = { displayId: 1, scale: 1, equipment: [0, 0, 0] as [number, number, number], preset: null };
@@ -45,7 +47,7 @@ async function view(overrides: Record<string, unknown> = {}) {
     searchEntities: vi.fn(async () => okv([{ id: 1423, name: 'Guard' }])),
     ...overrides,
   });
-  render(<NamesProvider api={api}><World3DView map={0} start={{ x: 0, y: 0, z: 0 }} hasClient /></NamesProvider>);
+  render(<NamesProvider api={api}><HistoryProvider store={createAppStore(api)}><World3DView map={0} start={{ x: 0, y: 0, z: 0 }} hasClient /></HistoryProvider></NamesProvider>);
   await waitFor(() => expect(worlds).toHaveLength(1));
   return { api, world: worlds[0] };
 }
@@ -82,6 +84,11 @@ describe('the right-click menu in the 3D view', () => {
     await waitFor(() => expect(api.worldAddSpawn).toHaveBeenCalledTimes(2));
     expect((api.worldAddSpawn as any).mock.calls.map((c: any[]) => [c[2], c[3].x])).toEqual([[0, 95], [0, 105]]);
     await waitFor(() => expect(world.selectSpawns).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(api.historyEnd).toHaveBeenCalledTimes(1));
+    expect(api.historyBegin).toHaveBeenCalledWith('Paste 2 spawns', undefined);
+    const [first, second] = vi.mocked(api.worldAddSpawn).mock.invocationCallOrder;
+    expect(vi.mocked(api.historyBegin).mock.invocationCallOrder[0]!).toBeLessThan(first!);
+    expect(second!).toBeLessThan(vi.mocked(api.historyEnd).mock.invocationCallOrder[0]!);
   });
 
   it('Ctrl+C and Ctrl+V on the view copy and paste under the cursor; in a text field they do nothing', async () => {
@@ -132,6 +139,7 @@ describe('the right-click menu in the 3D view', () => {
     expect(world.setPendingMovement).toHaveBeenLastCalledWith(80330, { type: 'wander', wander: 8, pathId: null });
     await userEvent.click(screen.getByRole('button', { name: 'Apply' }));
     await waitFor(() => expect(api.worldSetMovement).toHaveBeenCalledWith(80330, { type: 'wander', wander: 8, pathId: null }));
+    await waitFor(() => expect(api.historyEnd).toHaveBeenCalledTimes(1));
   });
 
   it('says so and does nothing when the right-clicked spawn has gone', async () => {

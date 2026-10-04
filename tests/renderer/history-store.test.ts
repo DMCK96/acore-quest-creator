@@ -104,3 +104,31 @@ describe('undo and redo in the store', () => {
     expect(store.getState().history.current).toBe(2);
   });
 });
+
+describe('a new quest from an NPC', () => {
+  it('is one step: the new quest, its giver and ender, and its place in the chain', async () => {
+    const { api, store } = await connected({ newQuest: vi.fn(async () => okv(sampleOpen({ questId: 60003 }))) });
+    await store.getState().openQuest(60001);
+    await store.getState().newQuestFrom({ entry: 1423, name: 'Guard' }, 60001);
+    expect(api.historyBegin).toHaveBeenCalledWith('Next quest from Guard', undefined);
+    const begin = vi.mocked(api.historyBegin).mock.invocationCallOrder[0]!;
+    const made = vi.mocked(api.newQuest).mock.invocationCallOrder[0]!;
+    const sent = vi.mocked(api.updateQuest).mock.invocationCallOrder.at(-1)!;
+    const end = vi.mocked(api.historyEnd).mock.invocationCallOrder[0]!;
+    expect([begin < made, made < sent, sent < end]).toEqual([true, true, true]);
+    const values = vi.mocked(api.updateQuest).mock.calls.at(-1)![0].values;
+    expect(values['creature_queststarter']).toEqual([{ id: 1423 }]);
+    expect(values['creature_questender']).toEqual([{ id: 1423 }]);
+    expect(values['quest_template_addon.PrevQuestID']).toBe(60001);
+    expect(store.getState().open!.questId).toBe(60003);
+  });
+
+  it('names a first quest from the NPC, and touches nothing when no quest was made', async () => {
+    const { api, store } = await connected({ newQuest: vi.fn(async () => okv(sampleOpen({ questId: 60003 }))) });
+    await store.getState().newQuestFrom({ entry: 1423, name: 'Guard' }, null);
+    expect(api.historyBegin).toHaveBeenCalledWith('New quest from Guard', undefined);
+    const { api: failing, store: s2 } = await connected({ newQuest: vi.fn(async () => errv('UNKNOWN', 'no')) });
+    await s2.getState().newQuestFrom({ entry: 1423, name: 'Guard' }, null);
+    expect(failing.updateQuest).not.toHaveBeenCalled();
+  });
+});
