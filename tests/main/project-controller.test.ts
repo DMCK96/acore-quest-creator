@@ -1,4 +1,5 @@
 import { describe, it, expect } from 'vitest';
+import { EMPTY_WORLD } from '../../src/core/world/layer';
 import { join } from 'node:path';
 import { createProjectController, suggestedFileName, type Dialogs, type UnsavedAnswer } from '../../src/main/project/controller';
 import { createProjectSession } from '../../src/main/project/session';
@@ -160,7 +161,7 @@ describe('ProjectController', () => {
   });
 
   it('Open loads a file, from a dialog or a given path, and remembers it', async () => {
-    const fs = memFs({ [P]: serializeProject({ ...defaultProjectMeta('North', 'D:\\sql'), quests: [q(60005)] }) });
+    const fs = memFs({ [P]: serializeProject({ ...defaultProjectMeta('North', 'D:\\sql'), quests: [q(60005)], world: EMPTY_WORLD }) });
     const { c, session, store, asked } = setup({ open: [P] }, fs);
     expect(await c.open()).toEqual({ done: true });
     expect(asked.open).toBe(1);
@@ -177,7 +178,7 @@ describe('ProjectController', () => {
   });
 
   it('opening the file that is already open, with unsaved changes, still asks first', async () => {
-    const fs = memFs({ [P]: serializeProject({ ...defaultProjectMeta('North', 'C:\\out'), quests: [] }) });
+    const fs = memFs({ [P]: serializeProject({ ...defaultProjectMeta('North', 'C:\\out'), quests: [], world: EMPTY_WORLD }) });
     const { c, session, asked } = setup({ unsaved: ['cancel'] }, fs);
     await c.open(P);
     session.quests.put(q(1));
@@ -199,7 +200,7 @@ describe('ProjectController', () => {
   });
 
   it('a recent project whose file is gone is flagged, and a failed open keeps it listed', async () => {
-    const fs = memFs({ [P]: serializeProject({ ...defaultProjectMeta('North', 'C:\\out'), quests: [] }) });
+    const fs = memFs({ [P]: serializeProject({ ...defaultProjectMeta('North', 'C:\\out'), quests: [], world: EMPTY_WORLD }) });
     const { c, store } = setup({}, fs);
     await c.open(P);
     fs.files.delete(P);
@@ -219,7 +220,7 @@ describe('ProjectController', () => {
   it('restores unsaved work left by a crash, as unsaved, against its original file', async () => {
     const fs = memFs();
     const before = setup({}, fs);
-    before.session.load({ ...defaultProjectMeta('North', 'C:\\out'), quests: [q(60000)] }, P, { dirty: true });
+    before.session.load({ ...defaultProjectMeta('North', 'C:\\out'), quests: [q(60000)], world: EMPTY_WORLD }, P, { dirty: true });
     await before.recovery.tick(before.session);
     const after = setup({}, fs);
     const [entry] = await after.c.recoveries();

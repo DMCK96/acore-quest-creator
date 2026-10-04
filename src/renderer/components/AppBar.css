@@ -1,0 +1,193 @@
+/* The app bar: the login card's frosted surface, with its gold hairline along the bottom. */
+.app-bar {
+  position: relative;
+  z-index: 1;
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
+  align-items: center;
+  gap: 1em;
+  padding: 0.55em 1.1em;
+  background: var(--glass-bg);
+  backdrop-filter: blur(var(--glass-blur));
+  border-bottom: 1px solid var(--glass-border);
+  box-shadow: 0 6px 24px rgba(0, 0, 0, 0.35);
+}
+
+.app-bar__identity {
+  display: flex;
+  align-items: center;
+  gap: 0.75em;
+  min-width: 0;
+}
+
+.app-bar__name {
+  display: flex;
+  align-items: center;
+  gap: 0.4em;
+  min-width: 0;
+}
+
+.app-bar__title {
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: 1.2em;
+  font-weight: normal;
+  color: #fff6e4;
+  text-shadow: var(--title-glow);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.app-bar__dirty {
+  color: var(--amber);
+  font-size: 1.4em;
+  line-height: 1;
+}
+
+.app-bar__project {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4em;
+  flex-shrink: 0;
+  font-size: 0.85em;
+}
+
+.app-bar__icon {
+  width: 1.05em;
+  height: 1.05em;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.4;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+/* World | Quests: a segmented switch, the chosen one lit gold. */
+.app-bar__tabs {
+  display: inline-flex;
+  padding: 3px;
+  gap: 2px;
+  border: 1px solid var(--glass-border);
+  border-radius: 999px;
+  background: rgba(20, 16, 12, 0.6);
+}
+
+.app-bar__tab {
+  appearance: none;
+  border: 1px solid transparent;
+  border-radius: 999px;
+  padding: 0.35em 1.25em;
+  background: none;
+  color: var(--text-muted);
+  font-family: var(--font-display);
+  font-size: 1em;
+  letter-spacing: 0.02em;
+  transition:
+    background 0.15s ease,
+    color 0.15s ease,
+    border-color 0.15s ease;
+}
+
+.app-bar__tab:hover {
+  color: var(--text);
+}
+
+.app-bar__tab[aria-selected='true'] {
+  background: var(--accent-soft);
+  border-color: var(--accent);
+  color: var(--accent-strong);
+  text-shadow: var(--title-glow);
+}
+
+.app-bar__tab:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.app-bar__status {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 0.5em;
+  min-width: 0;
+}
+
+.status-pill {
+  white-space: nowrap;
+}
+
+/*
+ * A narrower window: the bar stays one row. The status pills shrink to their dots (each keeps its
+ * words for screen readers and as a tooltip), then the Project button to its icon.
+ */
+@media (max-width: 1180px) {
+  .status-pill {
+    padding: 0.55em;
+  }
+
+  .status-pill__label {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+  }
+}
+
+@media (max-width: 760px) {
+  .app-bar {
+    gap: 0.6em;
+    padding: 0.5em 0.7em;
+  }
+
+  .app-bar__project-label {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+  }
+
+  .app-bar__tab {
+    padding: 0.35em 0.85em;
+  }
+}
+
+.status-pill {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5em;
+  padding: 0.4em 0.8em;
+  border-radius: 999px;
+  font-size: 0.85em;
+  border: 1px solid var(--border);
+  color: var(--text-muted);
+}
+
+.status-pill__dot {
+  width: 0.55em;
+  height: 0.55em;
+  border-radius: 50%;
+  background: var(--text-faint);
+}
+
+.status-pill--connected {
+  border-color: var(--green);
+  color: var(--green);
+}
+
+.status-pill--connected .status-pill__dot {
+  background: var(--green);
+}
+
+.status-pill--warning {
+  border-color: var(--amber);
+  color: var(--amber);
+}
+
+.status-pill--warning .status-pill__dot {
+  background: var(--amber);
+}

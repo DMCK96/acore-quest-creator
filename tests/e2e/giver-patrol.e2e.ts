@@ -35,6 +35,8 @@ test('a new quest giver is made, placed and given a patrol with a line to say, a
   await page.getByLabel('Password').fill(decodeURIComponent(u.password));
   await page.getByLabel('Server data folder (optional)').fill(DATA_DIR);
   await page.getByRole('button', { name: 'Save and connect' }).click();
+  // The world is the home screen; the quest graph is the Quests tab.
+  await page.getByRole('tab', { name: 'Quests' }).click();
 
   await page.getByRole('button', { name: 'New quest', exact: true }).click();
   await page.getByLabel('Quest title').fill('Patrol test');

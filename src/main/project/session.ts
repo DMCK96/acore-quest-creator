@@ -1,5 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import type { Viewport } from '../../shared/ipc';
+import { EMPTY_WORLD, type WorldLayer } from '../../core/world/layer';
 import { InvalidNameError, type ProjectDocument, type ProjectMeta, type ProjectQuest } from './project-file';
 
 /**
@@ -28,6 +29,11 @@ export interface ProjectSession {
     markExported(questId: number, path: string): void;
     usedQuestIds(): number[];
   };
+  /** Edits to spawns and routes outside any quest; a put is a change. */
+  world: {
+    get(): WorldLayer;
+    put(layer: WorldLayer): void;
+  };
   rename(name: string): void;
   /** Kept and saved, but panning around is not editing, so it is not a change. */
   setViewport(v: Viewport): void;
@@ -43,6 +49,7 @@ export function createProjectSession(initial: ProjectMeta, newId: () => string =
   let id = newId();
   let meta: ProjectMeta = structuredClone(initial);
   let quests = new Map<number, ProjectQuest>();
+  let world: WorldLayer = structuredClone(EMPTY_WORLD);
   let filePath: string | null = null;
   let dirty = false;
   let revision = 0;
@@ -110,6 +117,15 @@ export function createProjectSession(initial: ProjectMeta, newId: () => string =
       },
       usedQuestIds: () => [...quests.keys()].sort((a, b) => a - b),
     },
+    world: {
+      get: () => structuredClone(world),
+      put(layer) {
+        watched(() => {
+          world = structuredClone(layer);
+          change();
+        });
+      },
+    },
     rename(name) {
       const trimmed = name.trim();
       if (trimmed === '') throw new InvalidNameError('A project needs a name.');
@@ -127,6 +143,7 @@ export function createProjectSession(initial: ProjectMeta, newId: () => string =
         id = newId();
         meta = structuredClone(next);
         quests = new Map();
+        world = structuredClone(EMPTY_WORLD);
         filePath = null;
         dirty = false;
         revision = 0;
@@ -134,9 +151,10 @@ export function createProjectSession(initial: ProjectMeta, newId: () => string =
     },
     load(doc, path, opts) {
       watched(() => {
-        const { quests: docQuests, ...docMeta } = structuredClone(doc);
+        const { quests: docQuests, world: docWorld, ...docMeta } = structuredClone(doc);
         id = newId();
         meta = docMeta;
+        world = docWorld ?? structuredClone(EMPTY_WORLD);
         quests = new Map(docQuests.map((q) => [q.questId, q]));
         filePath = path;
         dirty = opts.dirty;
@@ -146,6 +164,7 @@ export function createProjectSession(initial: ProjectMeta, newId: () => string =
     toDocument: () => ({
       ...structuredClone(meta),
       quests: [...quests.values()].sort((a, b) => a.questId - b.questId).map((q) => structuredClone(q)),
+      world: structuredClone(world),
     }),
     markSaved(path) {
       watched(() => {

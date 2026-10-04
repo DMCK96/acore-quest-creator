@@ -7,13 +7,13 @@ const one = (name: string, body: string): Uint8Array => buildMpq([storedFile(nam
 const str = (b: Uint8Array | null): string | null => (b ? new TextDecoder().decode(b) : null);
 
 describe('client archive order', () => {
-  it('loads base, locale, patches by suffix, then locale patches', () => {
+  it('loads base, locale, then the patches by suffix, each locale patch just after the patch of its suffix', () => {
     const expected = [
       'common.MPQ', 'common-2.MPQ', 'expansion.MPQ', 'lichking.MPQ',
       'enUS/locale-enUS.MPQ', 'enUS/lichking-locale-enUS.MPQ',
-      'patch.MPQ', 'patch-2.MPQ', 'patch-3.MPQ', 'patch-A.MPQ', 'patch-C.MPQ', 'patch-CA.MPQ', 'patch-CHA.MPQ',
-      'area-52/patch-D.MPQ', 'patch-P.mpq', 'patch-WB.MPQ', 'patch-WB1.MPQ', 'patch-Z.MPQ',
-      'enUS/patch-enUS.MPQ', 'enUS/patch-enUS-2.MPQ', 'enUS/patch-enUS-3.MPQ',
+      'patch.MPQ', 'enUS/patch-enUS.MPQ', 'patch-2.MPQ', 'enUS/patch-enUS-2.MPQ', 'patch-3.MPQ', 'enUS/patch-enUS-3.MPQ',
+      'patch-A.MPQ', 'patch-C.MPQ', 'patch-CA.MPQ', 'patch-CHA.MPQ',
+      'area-52/patch-D.MPQ', 'patch-M.MPQ', 'patch-P.mpq', 'patch-WB.MPQ', 'patch-WB1.MPQ', 'patch-Z.MPQ',
     ];
     const shuffled = [...expected].reverse().concat(['deDE/locale-deDE.MPQ', 'area-52/readme.MPQ']);
     expect(archiveOrder(shuffled, 'enUS')).toEqual(expected);
@@ -36,6 +36,16 @@ describe('client files', () => {
     expect(str(await client.read('A'))).toBe('area-52');
     expect(str(await client.read('B'))).toBe('locale');
     expect(await client.read('C')).toBeNull();
+  });
+  it('reads a custom patch\'s table over the stock locale patches, as the game does', async () => {
+    // Ascension and CoA ship their display tables in patch-M; the locale patches carry the stock ones
+    const table = 'DBFilesClient\\GameObjectDisplayInfo.dbc';
+    const fs = memClient({
+      '/client/Data/common.MPQ': one('other', 'x'),
+      '/client/Data/patch-M.MPQ': one(table, 'custom'),
+      '/client/Data/enUS/patch-enUS-3.MPQ': one(table, 'stock'),
+    });
+    expect(str(await (await openClient('/client', fs))!.read(table))).toBe('custom');
   });
   it('reads a file that only a locale archive has', async () => {
     const fs = memClient({

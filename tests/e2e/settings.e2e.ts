@@ -33,6 +33,8 @@ test('settings add and remove the dev database, and a bad reconnect keeps the ol
   await page.getByLabel('Database').fill(db.database);
   await page.getByLabel('Password').fill(db.password);
   await page.getByRole('button', { name: 'Save and connect' }).click();
+  // The world is the home screen; the quest graph is the Quests tab.
+  await page.getByRole('tab', { name: 'Quests' }).click();
   await expect(page.getByText(`Connected: ${db.database}`)).toBeVisible();
 
   await page.getByRole('button', { name: 'New quest', exact: true }).click();

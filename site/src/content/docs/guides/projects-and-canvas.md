@@ -5,7 +5,7 @@ sidebar:
   order: 1
 ---
 
-After you connect, the app opens on the **canvas**: every quest in your project as a card, with lines showing which quest leads to which.
+After you connect, the app opens on the **World**. Your quests are on the **Quests** tab, beside it at the top: the **canvas**, with every quest in your project as a card and lines showing which quest leads to which. Switching tabs keeps both where you left them.
 
 ![The canvas showing a chain of quests, each a card linked to the next](../../../assets/screenshots/canvas.png)
 
@@ -19,14 +19,14 @@ Choose a card to preview the quest in a panel on the right: its giver, objective
 ## Find your way around
 
 - Drag the canvas to move around; scroll to zoom.
-- **Fit view** in the top bar zooms to show every quest.
+- **Fit view**, with **New quest** and **Add existing quest** in the quest tools at the top left, zooms to show every quest.
 - The small map in the corner shows where you are on a large canvas.
 
 When you are inside a quest, **← Back to chain** returns to the canvas.
 
 ## Projects
 
-Everything on the canvas is one **project**. Choose **Project** in the top bar to:
+Everything in the app, the quests and your changes to the world, is one **project**. Choose **Project** in the top bar to:
 
 - **Save** or **Save As…** the project as an `.aqc` file,
 - **Open…** another project, or pick one from **Recent projects**,

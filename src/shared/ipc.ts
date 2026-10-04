@@ -3,6 +3,26 @@ import type { RefKind } from '@core/db/types';
 import type { EntityHit, QuestSummary, SearchKind } from '@core/db/world-db';
 import type { SpellFacts } from '@core/game/spells';
 import type { MapBox, SpawnDot } from '@core/db/spawns';
+import type { ViewSpawns } from '@core/db/view-spawns';
+import type { Placement, RoutePoint, WorldAddedSpawn, WorldLayer, WorldMovementEdit, WorldRouteEdit, WorldSpawnEdit, WorldSpawnKind } from '@core/world/layer';
+import type { Movement } from '@core/world/movement';
+
+export type { Movement, Placement, RoutePoint, WorldAddedSpawn, WorldLayer, WorldMovementEdit, WorldRouteEdit, WorldSpawnEdit, WorldSpawnKind };
+
+/** One world layer entry as the World changes list shows it, and whether the database has moved off its original since. */
+export type WorldChange =
+  | (WorldSpawnEdit & { type: 'spawn'; drifted: boolean })
+  | (WorldRouteEdit & { type: 'route'; drifted: boolean })
+  /** A spawn placed in the view; `drifted` when the database now has a spawn with its id */
+  | (WorldAddedSpawn & { type: 'added'; drifted: boolean })
+  /** An NPC's movement; `drifted` when the database's no longer matches its original */
+  | (WorldMovementEdit & { type: 'movement'; drifted: boolean });
+
+/** What a world revert takes back: one spawn, one route, or one NPC's movement. */
+export type WorldRevertTarget =
+  | { kind: 'spawn'; spawnKind: WorldSpawnKind; guid: number }
+  | { kind: 'route'; pathId: number }
+  | { kind: 'movement'; guid: number };
 import type { PatchWarning } from '@core/export/build-patch';
 import type { UnmodelledColumn } from '@core/import/unmodelled';
 import type { UnavailableComponent } from '@core/links/availability';
@@ -65,6 +85,18 @@ export type MapFloors = { floors: number[]; ground: number | null } | { reason: 
 /** An existing spawn of one of the quest's givers, enders or objectives, shown read-only on its map. */
 export interface QuestMapRef extends SpawnDot {
   role: 'giver' | 'ender' | 'objective';
+}
+
+/** A spawn a quest uses: an existing one it names by role, or one of its own */
+export type QuestSpawn = SpawnDot & { role: 'giver' | 'ender' | 'objective' | 'own' };
+
+/** One quest's spawns for the 3D view; `cut` NPCs or objects had more than were listed (`capped` when any did) */
+export interface QuestSpawnGroup {
+  questId: number;
+  title: string;
+  spawns: QuestSpawn[];
+  capped: boolean;
+  cut: number;
 }
 
 /** What `spellFacts` answers: the spells found, or why spell names are not available. */
@@ -366,10 +398,39 @@ export interface Api {
   mapFloors(map: number, x: number, y: number): Promise<Result<MapFloors>>;
   /** Existing NPC and object spawns in an area of a map; `capped` when there were more than the page is sent. */
   mapSpawns(map: number, box: MapBox): Promise<Result<{ dots: SpawnDot[]; capped: boolean }>>;
+  /** NPCs and objects in an area of a map as the 3D view draws them; each kind capped at 2000. */
+  viewSpawns(map: number, box: MapBox): Promise<Result<ViewSpawns>>;
+  /** The project's edits to spawns and routes outside any quest. */
+  worldLayer(): Promise<Result<WorldLayer>>;
+  /** Moves or turns an existing spawn in the world layer; its original is read from the database at the first edit. */
+  worldMoveSpawn(kind: WorldSpawnKind, guid: number, to: Placement): Promise<Result<WorldLayer>>;
+  /**
+   * Places a new spawn of an existing NPC or object on a map: it gets the next free spawn id (or `guid`,
+   * when that is free, so an undone placement comes back as it was), and is written by the world patch.
+   */
+  worldAddSpawn(kind: WorldSpawnKind, entry: number, map: number, at: Placement, guid?: number): Promise<Result<{ layer: WorldLayer; guid: number }>>;
+  /** A route's points as the layer has them (else the database), and how many spawns walk it. */
+  worldRoute(pathId: number): Promise<Result<{ points: RoutePoint[]; walkers: number }>>;
+  /** Sets a route's points in the world layer; `isNew` for a path made in the view, which the database does not have. */
+  worldSetRoute(pathId: number, points: RoutePoint[], options?: { isNew?: boolean }): Promise<Result<WorldLayer>>;
+  /** Sets an NPC's movement (wander, movement type, its spawn's path); its original is read at the first edit. */
+  worldSetMovement(guid: number, to: Movement): Promise<Result<WorldLayer>>;
+  /** A free path id for a new path of an NPC: its guid times ten when that is free, else one past the highest in use. */
+  worldNewPathId(guid: number): Promise<Result<number>>;
+  /** Takes one spawn or route out of the world layer. */
+  worldRevert(target: WorldRevertTarget): Promise<Result<WorldLayer>>;
+  /** Every world layer entry, with whether the database has moved off its original. */
+  worldChanges(): Promise<Result<WorldChange[]>>;
+  /** Writes the world patch and its revert to the export folder. */
+  exportWorld(): Promise<Result<{ applyPath: string; revertPath: string; sql: string }>>;
   /** Where an NPC or object stands in the world, for jumping to it on the map. */
   entitySpawns(kind: 'creature' | 'gameobject', entry: number): Promise<Result<SpawnDot[]>>;
+  /** Every spawn of one NPC or object (up to a few hundred, `capped` when there are more), for jumping to them in the 3D view. */
+  findSpawns(kind: 'creature' | 'gameobject', entry: number): Promise<Result<{ spawns: SpawnDot[]; capped: boolean }>>;
   /** The existing spawns of the quest's givers, enders and objectives. */
   questMapRefs(questId: number): Promise<Result<QuestMapRef[]>>;
+  /** Every spawn each quest uses (its givers', enders' and objectives', and its own), for the 3D view to list and mark. */
+  questSpawnList(questIds: number[]): Promise<Result<QuestSpawnGroup[]>>;
   /** The GM commands to try the quest in game after applying it: reloads, restarts, travel and quest commands. */
   testCommands(questId: number): Promise<Result<TestCommands>>;
   /** The scripts around the quest that the Scripts module lists read-only. */
@@ -445,6 +506,11 @@ const MAX_RECOVERY_ID = 100;
 
 const positionSchema = z.object({ x: z.number(), y: z.number() });
 const viewportSchema = z.object({ x: z.number(), y: z.number(), zoom: z.number().positive() });
+const finite = z.number().finite();
+const worldKindArg = z.enum(['creature', 'gameobject']);
+const movementArg = z.object({ type: z.enum(['idle', 'wander', 'path']), wander: z.number().min(0), pathId: z.number().int().min(1).nullable() });
+const placementArg = z.object({ x: finite, y: finite, z: finite, orientation: finite, rotation: z.tuple([finite, finite, finite, finite]).nullable() });
+const routePointArg = z.object({ x: finite, y: finite, z: finite, rest: z.record(z.string(), z.string().nullable()) });
 
 const profileFields = {
   name: z.string(),
@@ -514,8 +580,25 @@ const REQUEST_SCHEMAS: Record<keyof Api, z.ZodType<unknown[]>> = {
   mapList: z.tuple([]),
   mapFloors: z.tuple([z.number().int(), z.number().finite(), z.number().finite()]),
   mapSpawns: z.tuple([z.number().int(), z.object({ minX: z.number().finite(), maxX: z.number().finite(), minY: z.number().finite(), maxY: z.number().finite() })]),
+  viewSpawns: z.tuple([z.number().int(), z.object({ minX: z.number().finite(), maxX: z.number().finite(), minY: z.number().finite(), maxY: z.number().finite() })]),
+  worldLayer: z.tuple([]),
+  worldMoveSpawn: z.tuple([worldKindArg, z.number().int(), placementArg]),
+  worldAddSpawn: z.tuple([worldKindArg, z.number().int().min(1), z.number().int().min(0), placementArg, z.number().int().min(1).optional()]),
+  worldRoute: z.tuple([z.number().int().min(1)]),
+  worldSetRoute: z.tuple([z.number().int().min(1), z.array(routePointArg), z.object({ isNew: z.boolean().optional() }).optional()]),
+  worldSetMovement: z.tuple([z.number().int().min(1), movementArg]),
+  worldNewPathId: z.tuple([z.number().int().min(1)]),
+  worldRevert: z.tuple([z.discriminatedUnion('kind', [
+    z.object({ kind: z.literal('spawn'), spawnKind: worldKindArg, guid: z.number().int() }),
+    z.object({ kind: z.literal('route'), pathId: z.number().int() }),
+    z.object({ kind: z.literal('movement'), guid: z.number().int() }),
+  ])]),
+  worldChanges: z.tuple([]),
+  exportWorld: z.tuple([]),
   entitySpawns: z.tuple([z.enum(['creature', 'gameobject']), z.number().int()]),
+  findSpawns: z.tuple([z.enum(['creature', 'gameobject']), z.number().int()]),
   questMapRefs: z.tuple([z.number()]),
+  questSpawnList: z.tuple([z.array(z.number().int().min(1)).max(50)]),
   allocateIds: z.tuple([z.enum(['creature', 'gameobject', 'creatureSpawn', 'gameobjectSpawn', 'page', 'item']), z.number().int().min(1).max(50)]),
   patrolPathId: z.tuple([z.number().int().min(1)]),
   entityTemplate: z.tuple([z.enum(['creature', 'gameobject', 'item']), z.number().int()]),

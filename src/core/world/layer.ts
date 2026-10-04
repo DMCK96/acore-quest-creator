@@ -1,0 +1,374 @@
+import type { PatchStatement } from '../export/build-patch';
+import type { ViewPreset } from '../db/view-spawns';
+import { MOVEMENT_TYPE, sameMovement, type Movement } from './movement';
+
+/**
+ * The world layer: edits made in the 3D view to spawns and routes that are not part of any quest
+ * (moving Northshire's mailbox, rerouting a guard). Each entry keeps what the database had at its
+ * first edit, so it can be listed as before and after, reverted, and written as a patch and its
+ * revert. Everything here is pure: each function returns a new layer.
+ */
+
+/** Where a spawn stands and how it is turned; `rotation` (x, y, z, w) is an object's, null for an NPC */
+export type Placement = { x: number; y: number; z: number; orientation: number; rotation: [number, number, number, number] | null };
+
+export type WorldSpawnKind = 'creature' | 'gameobject';
+
+export interface WorldSpawnEdit {
+  kind: WorldSpawnKind;
+  guid: number;
+  entry: number;
+  name: string;
+  map: number;
+  original: Placement;
+  current: Placement;
+}
+
+/** One point of a route; `rest` is every other `waypoint_data` column, kept as the database had it */
+export type RoutePoint = { x: number; y: number; z: number; rest: Record<string, string | null> };
+
+export interface WorldRouteEdit {
+  pathId: number;
+  /** Spawns that walk the route, counted at its first edit */
+  walkers: number;
+  original: RoutePoint[];
+  current: RoutePoint[];
+}
+
+/**
+ * What a placed spawn's template looked like when it was placed (its display, size and what it holds),
+ * kept so the view draws it without asking the database again
+ */
+export interface WorldLook {
+  displayId: number;
+  scale: number;
+  /** An NPC's held item ids: main hand, off hand, ranged; all 0 for an object */
+  equipment: [number, number, number];
+  preset: ViewPreset | null;
+}
+
+/** A spawn of an existing NPC or object placed in the 3D view: a new row, written by the world patch */
+export interface WorldAddedSpawn {
+  kind: WorldSpawnKind;
+  guid: number;
+  entry: number;
+  name: string;
+  map: number;
+  placement: Placement;
+  look: WorldLook;
+}
+
+/** How an NPC moves, changed in the view: wander, movement type and its spawn's own path */
+export interface WorldMovementEdit {
+  guid: number;
+  entry: number;
+  name: string;
+  map: number;
+  /** Whether the spawn had a `creature_addon` row at its first edit: its path is then updated, else a row is written */
+  addonRow: boolean;
+  /**
+   * Its template's addon (mount, stand state, auras) when the spawn has no row of its own: a row written
+   * to give the spawn a path replaces the template's, so it starts as a copy of it
+   */
+  addonSeed?: Record<string, string | null>;
+  /** `wander_distance` and `MovementType` as the database had them, put back by the revert as they were */
+  originalRaw?: { wander: number; type: number };
+  original: Movement;
+  current: Movement;
+}
+
+export interface WorldLayer {
+  spawns: WorldSpawnEdit[];
+  routes: WorldRouteEdit[];
+  /** Spawns placed in the view; a project saved before there were any has none */
+  added: WorldAddedSpawn[];
+  /** NPCs' movement; a project saved before it could be changed has none */
+  movements?: WorldMovementEdit[];
+}
+
+export const EMPTY_WORLD: WorldLayer = { spawns: [], routes: [], added: [] };
+
+export const movementsOf = (layer: WorldLayer): WorldMovementEdit[] => layer.movements ?? [];
+
+/** Whether the layer holds anything to export */
+export const hasWorldChanges = (layer: WorldLayer): boolean =>
+  layer.spawns.length > 0 || layer.routes.length > 0 || layer.added.length > 0 || movementsOf(layer).length > 0;
+
+/** What a point added in the 3D view has in the columns the view does not edit */
+export const NEW_POINT_REST: Record<string, string | null> = {
+  orientation: null,
+  delay: '0',
+  move_type: '0',
+  action: '0',
+  action_chance: '100',
+  wpguid: '0',
+};
+
+/**
+ * What the 3D view sends back has been through its own maths (a facing turned into a quaternion and
+ * back), so places and turns this close are the same
+ */
+const NEAR = 1e-4;
+const near = (a: number, b: number): boolean => Math.abs(a - b) <= NEAR;
+const samePlace = (a: { x: number; y: number; z: number }, b: { x: number; y: number; z: number }): boolean => near(a.x, b.x) && near(a.y, b.y) && near(a.z, b.z);
+
+/** The turn an object is drawn with: its rotation, or upright when it has none (all zero, as older rows do) */
+const drawnTurn = (p: Placement): [number, number, number, number] =>
+  p.rotation && p.rotation.some((v) => v !== 0) ? p.rotation : [0, 0, 0, 1];
+
+/** Whether two placements face the same way: an NPC by its facing, an object by its drawn turn (q and -q alike) */
+function sameTurn(kind: WorldSpawnKind, a: Placement, b: Placement): boolean {
+  if (kind === 'creature') {
+    const apart = Math.abs(a.orientation - b.orientation) % (Math.PI * 2);
+    return Math.min(apart, Math.PI * 2 - apart) <= NEAR;
+  }
+  const qa = drawnTurn(a);
+  const qb = drawnTurn(b);
+  const dot = qa.reduce((sum, v, i) => sum + v * qb[i]!, 0);
+  return Math.abs(Math.abs(dot) - 1) <= NEAR;
+}
+
+const samePoint = (a: RoutePoint, b: RoutePoint): boolean => {
+  const keys = Object.keys(a.rest);
+  return (
+    samePlace(a, b) &&
+    keys.length === Object.keys(b.rest).length &&
+    keys.every((k) => Object.prototype.hasOwnProperty.call(b.rest, k) && a.rest[k] === b.rest[k])
+  );
+};
+
+const sameRoute = (a: readonly RoutePoint[], b: readonly RoutePoint[]): boolean => a.length === b.length && a.every((p, i) => samePoint(p, b[i]!));
+
+/**
+ * Moves or turns a spawn; its first original is kept, and an entry back where it began is dropped. A
+ * spawn that still faces the way it was stored keeps the stored facing and rotation as they were, so
+ * a move alone never rewrites them (an object stored with no rotation is drawn upright, and the view
+ * would otherwise send that upright turn back as its own)
+ */
+export function moveSpawn(layer: WorldLayer, spawn: Omit<WorldSpawnEdit, 'current'>, to: Placement): WorldLayer {
+  // A spawn placed in the view has no original to be measured against: it simply stands where it is put
+  if (layer.added.some((a) => a.kind === spawn.kind && a.guid === spawn.guid)) {
+    return { ...layer, added: layer.added.map((a) => (a.kind === spawn.kind && a.guid === spawn.guid ? { ...a, placement: to } : a)) };
+  }
+  const known = layer.spawns.find((s) => s.kind === spawn.kind && s.guid === spawn.guid);
+  const original = known ? known.original : spawn.original;
+  const turned = !sameTurn(spawn.kind, original, to);
+  const current = turned ? to : { ...to, orientation: original.orientation, rotation: original.rotation };
+  const entry: WorldSpawnEdit = known ? { ...known, current } : { ...spawn, current };
+  const unchanged = !turned && samePlace(current, original);
+  const spawns = known
+    ? layer.spawns.flatMap((s) => (s === known ? (unchanged ? [] : [entry]) : [s]))
+    : unchanged
+      ? layer.spawns
+      : [...layer.spawns, entry];
+  return { ...layer, spawns };
+}
+
+/** Sets a route's points; its first original and walker count are kept, and a route put back is dropped */
+export function setRoute(layer: WorldLayer, route: Omit<WorldRouteEdit, 'current'>, points: RoutePoint[]): WorldLayer {
+  const known = layer.routes.find((r) => r.pathId === route.pathId);
+  const entry: WorldRouteEdit = known ? { ...known, current: points } : { ...route, current: points };
+  const unchanged = sameRoute(entry.current, entry.original);
+  const routes = known
+    ? layer.routes.flatMap((r) => (r === known ? (unchanged ? [] : [entry]) : [r]))
+    : unchanged
+      ? layer.routes
+      : [...layer.routes, entry];
+  return { ...layer, routes };
+}
+
+/** Whether a spawn is one placed in the view (not one the database has) */
+export const isAdded = (layer: WorldLayer, kind: WorldSpawnKind, guid: number): boolean => layer.added.some((a) => a.kind === kind && a.guid === guid);
+
+/** Places a spawn of an existing NPC or object */
+export function addSpawn(layer: WorldLayer, spawn: WorldAddedSpawn): WorldLayer {
+  return { ...layer, added: [...layer.added.filter((a) => !(a.kind === spawn.kind && a.guid === spawn.guid)), spawn] };
+}
+
+/** Takes back an edit to a database spawn, or removes a placed one with its movement and the new path made for it */
+export function revertSpawn(layer: WorldLayer, kind: WorldSpawnKind, guid: number): WorldLayer {
+  const placed = isAdded(layer, kind, guid);
+  const movement = kind === 'creature' && placed ? movementsOf(layer).find((m) => m.guid === guid) : undefined;
+  const newPath = movement?.current.pathId ?? null;
+  const next: WorldLayer = {
+    ...layer,
+    spawns: layer.spawns.filter((s) => !(s.kind === kind && s.guid === guid)),
+    added: layer.added.filter((a) => !(a.kind === kind && a.guid === guid)),
+    routes: newPath === null ? layer.routes : layer.routes.filter((r) => !(r.pathId === newPath && r.original.length === 0)),
+  };
+  return placed && kind === 'creature' ? revertMovement(next, guid) : next;
+}
+
+/** Sets an NPC's movement; its first original is kept, and one put back is dropped */
+export function setMovement(layer: WorldLayer, edit: Omit<WorldMovementEdit, 'current'>, to: Movement): WorldLayer {
+  const all = movementsOf(layer);
+  const known = all.find((m) => m.guid === edit.guid);
+  const entry: WorldMovementEdit = known ? { ...known, current: to } : { ...edit, current: to };
+  const unchanged = sameMovement(entry.current, entry.original);
+  const movements = known
+    ? all.flatMap((m) => (m === known ? (unchanged ? [] : [entry]) : [m]))
+    : unchanged
+      ? all
+      : [...all, entry];
+  return { ...layer, movements };
+}
+
+/** Takes back an NPC's movement, and the path made for it (one the database does not have) with it */
+export function revertMovement(layer: WorldLayer, guid: number): WorldLayer {
+  const gone = movementsOf(layer).find((m) => m.guid === guid);
+  const newPath = gone?.current.pathId ?? null;
+  return {
+    ...layer,
+    movements: movementsOf(layer).filter((m) => m.guid !== guid),
+    routes: newPath === null ? layer.routes : layer.routes.filter((r) => !(r.pathId === newPath && r.original.length === 0)),
+  };
+}
+
+/** Takes back a route; a path made in the view takes back the movement that walks it too */
+export function revertRoute(layer: WorldLayer, pathId: number): WorldLayer {
+  const made = layer.routes.some((r) => r.pathId === pathId && r.original.length === 0);
+  return {
+    ...layer,
+    routes: layer.routes.filter((r) => r.pathId !== pathId),
+    ...(made ? { movements: movementsOf(layer).filter((m) => m.current.pathId !== pathId) } : {}),
+  };
+}
+
+const text = (n: number): string => String(n);
+
+function placementStatement(spawn: WorldSpawnEdit, at: Placement): PatchStatement {
+  const set: Record<string, string> = { position_x: text(at.x), position_y: text(at.y), position_z: text(at.z), orientation: text(at.orientation) };
+  if (spawn.kind === 'gameobject' && at.rotation) at.rotation.forEach((v, i) => (set[`rotation${i}`] = text(v)));
+  return { kind: 'update', table: spawn.kind, key: { guid: text(spawn.guid) }, set };
+}
+
+/**
+ * What a point has in the columns it does not carry: the database's own defaults for every column it
+ * has (a fork's extra `velocity`, say), with a new point's usual values where the database has them
+ */
+function pointBase(columnDefaults: Record<string, string | null> | undefined): Record<string, string | null> {
+  if (!columnDefaults) return NEW_POINT_REST;
+  const usual = Object.entries(NEW_POINT_REST).filter(([column]) => column in columnDefaults);
+  return { ...columnDefaults, ...Object.fromEntries(usual) };
+}
+
+function routeStatements(pathId: number, points: readonly RoutePoint[], base: Record<string, string | null>): PatchStatement[] {
+  const id = text(pathId);
+  return [
+    { kind: 'delete', table: 'waypoint_data', key: { id } },
+    ...points.map((p, i): PatchStatement => ({
+      kind: 'insert',
+      table: 'waypoint_data',
+      row: { ...base, id, point: text(i + 1), position_x: text(p.x), position_y: text(p.y), position_z: text(p.z), ...p.rest },
+    })),
+  ];
+}
+
+/** The rows a placed spawn is written as: each table's database defaults, with what the view knows filled in */
+export type SpawnDefaults = Partial<Record<WorldSpawnKind, Record<string, string | null>>>;
+
+/** Seconds before a placed spawn respawns, as a spawn made in the game has */
+const RESPAWN_SECS = '300';
+/** A placed spawn is full-health, visible and idle: an object's `animprogress` and `state` */
+const ANIM_FULL = '100';
+const GO_READY = '1';
+/** Marks the rows this tool wrote, as a quest's export does with its own tag */
+const PLACED_COMMENT = 'ACQC 3D view';
+
+const round6 = (n: number): number => Math.round(n * 1e6) / 1e6;
+
+/** The `creature` or `gameobject` row of a placed spawn; only columns the database has are written */
+function addedRow(spawn: WorldAddedSpawn, base: Record<string, string | null>): Record<string, string | null> {
+  const at = spawn.placement;
+  const values: Record<string, string> = {
+    guid: text(spawn.guid),
+    map: text(spawn.map),
+    spawnMask: '1',
+    phaseMask: '1',
+    position_x: text(at.x),
+    position_y: text(at.y),
+    position_z: text(at.z),
+    orientation: text(at.orientation),
+    spawntimesecs: RESPAWN_SECS,
+    Comment: PLACED_COMMENT,
+  };
+  if (spawn.kind === 'creature') {
+    // Stock AzerothCore calls the spawn's NPC `id1`, older forks `id`; both are set, and only the one the database has is kept
+    values.id = text(spawn.entry);
+    values.id1 = text(spawn.entry);
+    values.equipment_id = spawn.look.equipment.some((item) => item > 0) ? '1' : '0';
+  } else {
+    values.id = text(spawn.entry);
+    // Turned about Z by its facing unless the view tilted it
+    const [x, y, z, w] = at.rotation && at.rotation.some((v) => v !== 0) ? at.rotation : [0, 0, Math.sin(at.orientation / 2), Math.cos(at.orientation / 2)];
+    [x, y, z, w].forEach((v, i) => (values[`rotation${i}`] = text(round6(v))));
+    values.animprogress = ANIM_FULL;
+    values.state = GO_READY;
+  }
+  return { ...base, ...Object.fromEntries(Object.entries(values).filter(([column]) => column in base)) };
+}
+
+/** A placed spawn as written, and as taken away: deleted by guid first, so the patch can be applied again */
+function addedStatements(spawn: WorldAddedSpawn, base: Record<string, string | null> | undefined): { apply: PatchStatement[]; revert: PatchStatement[] } {
+  const remove: PatchStatement = { kind: 'delete', table: spawn.kind, key: { guid: text(spawn.guid) } };
+  if (!base) throw new Error(`The ${spawn.kind} table's columns are not known, so a placed spawn cannot be written.`);
+  return { apply: [remove, { kind: 'insert', table: spawn.kind, row: addedRow(spawn, base) }], revert: [remove] };
+}
+
+function movementSet(m: Movement): Record<string, string> {
+  return { wander_distance: text(m.wander), MovementType: text(MOVEMENT_TYPE[m.type]) };
+}
+
+/**
+ * A movement as written and taken back: the spawn's wander and type, and its addon's path when that
+ * changed (a spawn with no addon row gets one, over the table's defaults, and the revert deletes it)
+ */
+function movementStatements(m: WorldMovementEdit, addonDefaults: Record<string, string | null> | undefined): { apply: PatchStatement[]; revert: PatchStatement[] } {
+  const key = { guid: text(m.guid) };
+  const apply: PatchStatement[] = [{ kind: 'update', table: 'creature', key, set: movementSet(m.current) }];
+  const was = m.originalRaw ? { wander_distance: text(m.originalRaw.wander), MovementType: text(m.originalRaw.type) } : movementSet(m.original);
+  const revert: PatchStatement[] = [{ kind: 'update', table: 'creature', key, set: was }];
+  if (m.current.pathId !== m.original.pathId) {
+    const path = (p: number | null) => text(p ?? 0);
+    if (m.addonRow) {
+      apply.push({ kind: 'update', table: 'creature_addon', key, set: { path_id: path(m.current.pathId) } });
+      revert.push({ kind: 'update', table: 'creature_addon', key, set: { path_id: path(m.original.pathId) } });
+    } else {
+      apply.push({ kind: 'delete', table: 'creature_addon', key }, { kind: 'insert', table: 'creature_addon', row: { ...addonDefaults, ...m.addonSeed, guid: key.guid, path_id: path(m.current.pathId) } });
+      revert.push({ kind: 'delete', table: 'creature_addon', key });
+    }
+  }
+  return { apply, revert };
+}
+
+/**
+ * The layer as a patch, and the patch that puts the database back as it was: spawns, placed spawns,
+ * movements, then routes. `pointDefaults` is every `waypoint_data` column's default in the database
+ * written to, so a point added in the view fills columns this tool does not know about;
+ * `spawnDefaults` does the same for the `creature` and `gameobject` rows of spawns placed in the
+ * view, and `addonDefaults` for a `creature_addon` row written to give a spawn its path.
+ */
+export function worldStatements(
+  layer: WorldLayer,
+  pointDefaults?: Record<string, string | null>,
+  spawnDefaults: SpawnDefaults = {},
+  addonDefaults?: Record<string, string | null>,
+): { apply: PatchStatement[]; revert: PatchStatement[] } {
+  const base = pointBase(pointDefaults);
+  const added = layer.added.map((a) => addedStatements(a, spawnDefaults[a.kind]));
+  const movements = movementsOf(layer).map((m) => movementStatements(m, addonDefaults));
+  return {
+    apply: [
+      ...layer.spawns.map((s) => placementStatement(s, s.current)),
+      ...added.flatMap((a) => a.apply),
+      ...movements.flatMap((m) => m.apply),
+      ...layer.routes.flatMap((r) => routeStatements(r.pathId, r.current, base)),
+    ],
+    revert: [
+      ...layer.spawns.map((s) => placementStatement(s, s.original)),
+      ...added.flatMap((a) => a.revert),
+      ...movements.flatMap((m) => m.revert),
+      ...layer.routes.flatMap((r) => routeStatements(r.pathId, r.original, base)),
+    ],
+  };
+}

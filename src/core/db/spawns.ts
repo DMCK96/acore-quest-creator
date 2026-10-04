@@ -11,6 +11,8 @@ export interface SpawnDot {
   x: number;
   y: number;
   z: number;
+  /** The game event it appears only during (a positive `eventEntry`); absent when it has none or the database has no event tables */
+  event?: { id: number; name: string };
 }
 
 /** An area of a map in world yards (X north, Y west). */
@@ -42,5 +44,6 @@ export function toSpawnDot(kind: SpawnKind, row: Readonly<Record<string, string 
   return {
     kind, guid: n(row.guid), entry: n(row.entry), name: row.name ?? '', map: n(row.map),
     x: n(row.position_x), y: n(row.position_y), z: n(row.position_z),
+    ...(n(row.event_entry) > 0 ? { event: { id: n(row.event_entry), name: row.event_name ?? '' } } : {}),
   };
 }

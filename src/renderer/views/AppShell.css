@@ -1,0 +1,21 @@
+/* The shell is the window: nothing in it scrolls the page, so the bar always stays at the top. */
+.app-shell {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+}
+
+.app-shell__workspace {
+  position: relative;
+  flex: 1;
+  min-height: 0;
+  min-width: 0;
+  display: flex;
+  overflow: hidden;
+}
+
+.app-shell__workspace[hidden] {
+  display: none;
+}

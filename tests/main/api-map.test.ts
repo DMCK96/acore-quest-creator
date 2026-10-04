@@ -53,6 +53,12 @@ describe('map API', () => {
     const out: any = await (await setup()).entitySpawns('creature', 197);
     expect(out.value.map((d: any) => [d.guid, d.map])).toEqual([[79970, 0], [79971, 1]]);
   });
+  it('lists every spawn of an NPC for the 3D view\'s finder, and says nothing is capped when there are few', async () => {
+    const out: any = await (await setup()).findSpawns('creature', 197);
+    expect(out.value.capped).toBe(false);
+    expect(out.value.spawns.map((d: any) => [d.guid, d.map, d.x])).toEqual([[79970, 0, -8902.59], [79971, 1, 1]]);
+    expect(((await (await setup()).findSpawns('creature', 999)) as any).value).toEqual({ spawns: [], capped: false });
+  });
   it('gives the spawns of the quest giver as read-only references', async () => {
     const api = await setup();
     const opened: any = await api.newQuest();

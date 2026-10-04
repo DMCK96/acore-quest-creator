@@ -1,0 +1,681 @@
+.world3d {
+  position: relative;
+  flex: 1;
+  min-width: 0;
+  background: #1c2230;
+}
+
+.world3d__stage,
+.world3d__canvas {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  display: block;
+}
+
+.world3d__area {
+  position: absolute;
+  top: 14px;
+  left: 14px;
+  margin: 0;
+  padding: 0.35rem 0.8rem;
+  border-radius: var(--radius);
+  background: var(--glass-bg-strong);
+  backdrop-filter: blur(var(--glass-blur));
+  border: 1px solid var(--glass-border);
+  font-family: var(--font-display);
+  color: #fff6e4;
+  text-shadow: var(--title-glow);
+  pointer-events: none;
+}
+
+.world3d__note {
+  position: absolute;
+  inset: auto 14px 14px 14px;
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  margin: 0;
+  padding: 0.65rem 0.9rem;
+  border-radius: var(--radius);
+  background: var(--glass-bg-strong);
+  backdrop-filter: blur(var(--glass-blur));
+  border: 1px solid var(--glass-border);
+}
+
+.world3d__missing {
+  position: absolute;
+  top: 14px;
+  left: 50%;
+  transform: translateX(-50%);
+  max-width: min(40rem, 50%);
+  margin: 0;
+  padding: 0.4rem 0.75rem;
+  border-radius: var(--radius);
+  font-size: 12px;
+  color: var(--text-muted);
+  background: var(--glass-bg-strong);
+  backdrop-filter: blur(var(--glass-blur));
+  border: 1px solid var(--glass-border);
+}
+
+.world3d__help {
+  position: absolute;
+  right: 14px;
+  bottom: 14px;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 8px;
+}
+
+.world3d__help-toggle {
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  background: var(--glass-bg-strong);
+  backdrop-filter: blur(var(--glass-blur));
+  border: 1px solid var(--glass-border);
+  color: var(--accent-strong);
+  font-family: var(--font-display);
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.world3d__help-toggle:hover,
+.world3d__help-toggle[aria-expanded='true'] {
+  border-color: var(--accent);
+}
+
+.world3d__help-list {
+  margin: 0;
+  padding: 0.7rem 0.9rem;
+  border-radius: var(--radius-lg);
+  font-size: 12px;
+  background: var(--glass-bg-strong);
+  backdrop-filter: blur(var(--glass-blur));
+  border: 1px solid var(--glass-border);
+}
+
+.world3d__help-list div {
+  display: flex;
+  gap: 12px;
+  justify-content: space-between;
+}
+
+.world3d__help-list dt {
+  font-weight: 600;
+}
+
+.world3d__help-list dd {
+  margin: 0;
+}
+
+.world3d__help-list p {
+  margin: 6px 0 0;
+  opacity: 0.75;
+}
+
+.world3d__layers {
+  position: absolute;
+  top: 14px;
+  right: 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  min-width: 11rem;
+  margin: 0;
+  padding: 0.7rem 0.85rem 0.8rem;
+  font-size: 13px;
+}
+
+.world3d__layers legend {
+  float: left;
+  width: 100%;
+  padding: 0;
+  margin-bottom: 0.15rem;
+}
+
+.world3d__layers .btn {
+  font-size: 12px;
+  padding: 0.35em 0.7em;
+}
+
+.world3d__layers-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  margin-top: 0.35rem;
+  padding-top: 0.55rem;
+  border-top: 1px solid var(--border-soft);
+}
+
+.world3d__layers label {
+  display: flex;
+  gap: 4px;
+  align-items: center;
+  cursor: pointer;
+}
+
+.world3d__spawn-note {
+  position: absolute;
+  right: 14px;
+  bottom: 94px;
+  margin: 0;
+  padding: 0.35rem 0.75rem;
+  border-radius: var(--radius);
+  font-size: 12px;
+  color: var(--text-muted);
+  background: var(--glass-bg-strong);
+  backdrop-filter: blur(var(--glass-blur));
+  border: 1px solid var(--glass-border);
+}
+
+.world3d__selected {
+  position: absolute;
+  left: 14px;
+  bottom: 14px;
+  max-width: min(340px, calc(100% - 28px));
+  padding: 0.65rem 0.85rem;
+  border-radius: var(--radius-lg);
+  font-size: 12px;
+  background: var(--glass-bg-strong);
+  backdrop-filter: blur(var(--glass-blur));
+  border: 1px solid var(--accent);
+  box-shadow: var(--glass-shadow), 0 0 18px rgba(207, 159, 63, 0.18);
+}
+
+.world3d__selected header {
+  display: flex;
+  gap: 8px;
+  align-items: flex-start;
+  justify-content: space-between;
+}
+
+.world3d__selected h3 {
+  margin: 0 0 4px;
+  font-family: var(--font-display);
+  font-size: 15px;
+  font-weight: normal;
+  color: #fff6e4;
+  text-shadow: var(--title-glow);
+}
+
+.world3d__selected p {
+  margin: 2px 0 0;
+}
+
+.world3d__selected-place {
+  opacity: 0.75;
+  font-variant-numeric: tabular-nums;
+}
+
+.world3d__selected-close {
+  padding: 0 4px;
+  border: 0;
+  background: none;
+  color: inherit;
+  font-size: 16px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.world3d__selected-note,
+.world3d__edit-note {
+  color: var(--accent-strong);
+}
+
+.world3d__edit-note {
+  position: absolute;
+  left: 14px;
+  bottom: 14px;
+  margin: 0;
+  padding: 0.4rem 0.8rem;
+  border-radius: var(--radius);
+  font-size: 12px;
+  background: var(--glass-bg-strong);
+  backdrop-filter: blur(var(--glass-blur));
+  border: 1px solid var(--glass-border);
+}
+
+.world3d__dialog-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 1em;
+}
+
+.world-changes {
+  width: min(52em, 100%);
+}
+
+.world-changes__table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.9em;
+}
+
+.world-changes__table th,
+.world-changes__table td {
+  padding: 0.35em 0.5em;
+  border-bottom: 1px solid var(--border);
+  text-align: left;
+  font-variant-numeric: tabular-nums;
+}
+
+.world-changes__drift {
+  display: block;
+  color: var(--accent);
+  font-size: 0.9em;
+}
+
+.world-changes__error {
+  color: var(--accent);
+}
+
+.world-changes__exported p {
+  margin: 0.2em 0;
+  word-break: break-all;
+}
+
+.world3d__loading {
+  position: absolute;
+  right: 14px;
+  bottom: 54px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0;
+  padding: 0.35rem 0.85rem 0.35rem 0.55rem;
+  border-radius: 999px;
+  font-size: 12px;
+  background: var(--glass-bg-strong);
+  backdrop-filter: blur(var(--glass-blur));
+  border: 1px solid var(--glass-border);
+  pointer-events: none;
+}
+
+.teleport {
+  width: min(40em, 100%);
+  display: flex;
+  flex-direction: column;
+}
+
+.teleport__search {
+  font: inherit;
+  padding: 0.45em 0.6em;
+  color: var(--text);
+  background: var(--bg-inset);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+}
+
+.teleport__search:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+
+.teleport__list {
+  margin-top: 0.8em;
+  max-height: 55vh;
+  overflow-y: auto;
+}
+
+.teleport__region > summary,
+.teleport__region-title {
+  margin: 0.4em 0;
+  font-weight: 600;
+  font-size: 1em;
+  cursor: pointer;
+}
+
+.teleport__zone h4 {
+  margin: 0.6em 0 0.2em 0.6em;
+  font-size: 0.85em;
+  color: var(--text-muted);
+}
+
+.teleport__zone ul {
+  margin: 0;
+  padding: 0 0 0 0.6em;
+  list-style: none;
+}
+
+.teleport__spot {
+  width: 100%;
+  padding: 0.25em 0.5em;
+  border: 0;
+  border-radius: var(--radius);
+  background: none;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.teleport__spot:hover:not(:disabled),
+.teleport__spot:focus-visible {
+  background: var(--bg-inset);
+}
+
+.teleport__spot:disabled {
+  opacity: 0.55;
+  cursor: default;
+}
+
+.teleport__note,
+.teleport__credit {
+  font-size: 0.85em;
+  color: var(--text-muted);
+}
+
+.teleport__credit {
+  margin: 0.8em 0 0;
+}
+
+.place-dialog {
+  width: min(34em, 100%);
+  display: flex;
+  flex-direction: column;
+}
+
+.place-dialog__kinds {
+  display: flex;
+  gap: 1.2em;
+  margin-bottom: 0.6em;
+}
+
+.place-dialog__kinds label {
+  display: flex;
+  gap: 0.4em;
+  align-items: center;
+  cursor: pointer;
+}
+
+.place-dialog__search {
+  font: inherit;
+  padding: 0.45em 0.6em;
+  color: var(--text);
+  background: var(--bg-inset);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+}
+
+.place-dialog__search:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+
+.place-dialog__list {
+  margin: 0.6em 0 0;
+  padding: 0;
+  max-height: 40vh;
+  overflow-y: auto;
+  list-style: none;
+}
+
+.place-dialog__hit {
+  display: flex;
+  justify-content: space-between;
+  gap: 1em;
+  width: 100%;
+  padding: 0.3em 0.5em;
+  border: 0;
+  border-radius: var(--radius);
+  background: none;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.place-dialog__hit:hover,
+.place-dialog__hit:focus-visible {
+  background: var(--bg-inset);
+}
+
+.place-dialog__detail,
+.place-dialog__note {
+  font-size: 0.85em;
+  color: var(--text-muted);
+}
+
+.place-dialog__note {
+  margin: 0.8em 0 0;
+}
+
+.world3d__placing {
+  position: absolute;
+  /* Under the tools */
+  top: 62px;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  margin: 0;
+  padding: 0.45rem 0.6rem 0.45rem 0.9rem;
+  border-radius: var(--radius-lg);
+  background: var(--glass-bg-strong);
+  backdrop-filter: blur(var(--glass-blur));
+  border: 1px solid var(--accent);
+  box-shadow: var(--glass-shadow);
+}
+
+.world3d__selected-actions {
+  margin-top: 8px;
+}
+
+.find-dialog__title {
+  margin: 0 0 0.6em;
+}
+
+.find-dialog__row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 1em;
+  padding: 0.3em 0.5em;
+}
+
+.find-dialog__row:hover {
+  background: var(--bg-inset);
+}
+
+/* The World workspace: the 3D view filling the space under the app bar, with its place card. */
+.world-workspace {
+  position: relative;
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  overflow: hidden;
+}
+
+/* Where the camera is, and the ways to go elsewhere: the top left, on the frosted surface. */
+.world-place {
+  position: absolute;
+  top: 14px;
+  left: 14px;
+  z-index: 2;
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  max-width: min(26rem, calc(100% - 28px));
+  padding: 0.75rem 0.9rem 0.8rem;
+}
+
+.world-place__title {
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: 1.25rem;
+  font-weight: normal;
+  color: #fff6e4;
+  text-shadow: var(--title-glow);
+}
+
+.world-place__map {
+  margin: 0;
+}
+
+.world-place__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  margin-top: 0.3rem;
+}
+
+.world-place__actions .btn[aria-expanded='true'] {
+  border-color: var(--accent);
+  color: var(--accent-strong);
+}
+
+.world-place__coordinates {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 0.5rem;
+  margin-top: 0.4rem;
+  padding-top: 0.6rem;
+  border-top: 1px solid var(--border-soft);
+}
+
+.world-place__coordinate input {
+  width: 6.5rem;
+}
+
+.world-place__map-field {
+  flex-basis: 100%;
+}
+
+/* No game client: the orb, and a card saying what is needed. */
+.world-empty {
+  position: relative;
+  flex: 1;
+  display: grid;
+  place-items: center;
+  overflow: hidden;
+  background: radial-gradient(ellipse at 50% 45%, #231a12 0%, var(--bg) 70%);
+}
+
+.world-empty__orb {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: min(60vmin, 34rem);
+  aspect-ratio: 1;
+  transform: translate(-50%, -50%);
+  pointer-events: none;
+}
+
+.world-empty__card {
+  position: relative;
+  z-index: 1;
+  width: min(26rem, calc(100% - 32px));
+  padding: 1.5rem 1.6rem;
+  text-align: center;
+  background: var(--glass-bg);
+}
+
+.world-empty__title {
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: 1.5rem;
+  font-weight: normal;
+  color: #fff6e4;
+  text-shadow: var(--title-glow);
+}
+
+.world-empty__text {
+  margin: 0.6rem 0 1.1rem;
+  line-height: 1.5;
+  color: var(--text-muted);
+}
+
+.world-empty__actions {
+  display: flex;
+  justify-content: center;
+  gap: 0.6rem;
+}
+
+/* The event the world is drawn during: under the layer checkboxes, the width of the card. */
+.world3d__event {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  margin-top: 0.3rem;
+  font-size: 12px;
+  text-align: left;
+  color: var(--text-muted);
+}
+
+.world3d__event select {
+  width: 100%;
+  max-width: 13rem;
+  font-size: 12px;
+  padding: 0.3em 2em 0.3em 0.5em;
+}
+
+/* The selection box dragged over the view in Select mode */
+.world3d__marquee {
+  position: absolute;
+  z-index: 1;
+  pointer-events: none;
+  border: 1px solid #ffd34d;
+  background: rgb(255 211 77 / 12%);
+}
+
+/* Camera or Select, and falloff: a row at the top middle of the view */
+.world3d__tools {
+  position: absolute;
+  top: 14px;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  gap: 2px;
+  padding: 3px;
+  border-radius: 999px;
+  font-size: 13px;
+}
+
+.world3d__tool {
+  appearance: none;
+  border: 1px solid transparent;
+  border-radius: 999px;
+  padding: 0.3em 1em;
+  background: none;
+  color: var(--text-muted);
+  white-space: nowrap;
+  transition:
+    background 0.15s ease,
+    color 0.15s ease,
+    border-color 0.15s ease;
+}
+
+.world3d__tool:hover {
+  color: var(--text);
+}
+
+.world3d__tool[aria-pressed='true'] {
+  background: var(--accent-soft);
+  border-color: var(--accent);
+  color: var(--accent-strong);
+}
+
+.world3d__tool:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+/* A narrow view has no room between the place card and the layers card: the tools go under the place card */
+@media (max-width: 980px) {
+  .world3d__tools {
+    top: 144px;
+    left: 14px;
+    transform: none;
+  }
+
+  .world3d__placing {
+    top: 190px;
+  }
+}

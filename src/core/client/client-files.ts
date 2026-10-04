@@ -2,9 +2,12 @@ import { openMpq, type ByteSource, type MpqArchive } from './mpq';
 
 /**
  * A game client's files, read through its MPQ archives in the order the client loads them: the
- * base archives, the locale's, then the patches by name and the locale's patches last, so a file
- * comes from the highest-priority archive that has it, as in game. Patches in folders below
- * `Data` (Ascension and CoA ship some there) sort among the others by name.
+ * base archives, the locale's, then the patches by their suffix, the locale's patch of a suffix just
+ * after the general one (patch-3, patch-enUS-3, patch-4 … patch-M), so a file comes from the
+ * highest-priority archive that has it, as in game. Custom patches therefore outrank the stock locale
+ * patches: Ascension and CoA ship their display tables in patch-M, over the stock ones in
+ * patch-enUS-3. Patches in folders below `Data` (Ascension and CoA ship some there) sort among the
+ * others by name.
  */
 
 export interface ClientFs {
@@ -54,8 +57,8 @@ export function archiveOrder(paths: string[], locale: string): string[] {
       else if (stem.startsWith('patch-')) ranked.push({ path, group: 2, key: stem.slice(6).toUpperCase(), sub: 0 });
       else ranked.push({ path, group: 0, key: BASE.indexOf(stem), sub: 0 });
     } else if (folder.toLowerCase() === loc) {
-      if (stem === `patch-${loc}`) ranked.push({ path, group: 3, key: '', sub: 0 });
-      else if (stem.startsWith(`patch-${loc}-`)) ranked.push({ path, group: 3, key: stem.slice(`patch-${loc}-`.length).toUpperCase(), sub: 0 });
+      if (stem === `patch-${loc}`) ranked.push({ path, group: 2, key: '', sub: 2 });
+      else if (stem.startsWith(`patch-${loc}-`)) ranked.push({ path, group: 2, key: stem.slice(`patch-${loc}-`.length).toUpperCase(), sub: 2 });
       else if (!stem.startsWith('patch')) ranked.push({ path, group: 1, key: LOCALE_BASE.indexOf(stem.endsWith(`-${loc}`) ? stem.slice(0, -loc.length - 1) : stem), sub: 0 });
     } else if (!LOCALE_FOLDER.test(folder) && (stem === 'patch' || stem.startsWith('patch-'))) {
       ranked.push({ path, group: 2, key: stem === 'patch' ? '' : stem.slice(6).toUpperCase(), sub: 1 });

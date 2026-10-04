@@ -14,10 +14,11 @@
   max-height: 84vh;
   overflow-y: auto;
   padding: 1.2em 1.4em;
-  background: var(--bg-panel-raised);
-  border: 1px solid var(--border);
+  background: var(--glass-bg-strong);
+  backdrop-filter: blur(var(--glass-blur));
+  border: 1px solid var(--glass-border);
   border-radius: var(--radius-lg);
-  box-shadow: var(--shadow);
+  box-shadow: var(--glass-shadow);
   color: var(--text);
 }
 
@@ -32,6 +33,9 @@
   margin: 0;
   font-family: var(--font-display);
   font-size: 1.2em;
+  font-weight: normal;
+  color: #fff6e4;
+  text-shadow: var(--title-glow);
 }
 
 .project-dialog__field {

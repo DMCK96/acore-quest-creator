@@ -64,6 +64,8 @@ const spawnSchema = z.object({
   wander: num.min(0),
   // Added with patrols (slice L); null keeps spawns saved before then as they were.
   patrol: patrolSchema.nullable().default(null),
+  // An object's whole rotation (x, y, z, w), set when it is tilted in the 3D view; null turns it by `o` alone
+  rotation: z.tuple([num, num, num, num]).nullable().default(null),
 });
 
 export const RANK_VALUE = { normal: 0, elite: 1, rareElite: 2, boss: 3, rare: 4 } as const;
@@ -236,7 +238,7 @@ export function newObject(entry: number): CustomObject {
 }
 
 export function newSpawn(guid: number): Spawn {
-  return { guid, map: 0, x: 0, y: 0, z: 0, o: 0, respawnSecs: 300, wander: 0, patrol: null };
+  return { guid, map: 0, x: 0, y: 0, z: 0, o: 0, respawnSecs: 300, wander: 0, patrol: null, rotation: null };
 }
 
 /** A new item starts as a quest item: most are things the player is asked to collect. */

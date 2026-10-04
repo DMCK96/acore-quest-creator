@@ -5,6 +5,7 @@ import type { ColumnInfo, RawRow, RawValue, RefKind, Where } from './types';
 import { isNumericColumn } from './types';
 import { ENTITY_TABLES, ID_TEXT, toHit, type DbSearchKind, type EntityHit } from './entity-search';
 import { SPAWN_TABLES, spawnEntryColumn, toSpawnDot, type MapBox, type SpawnDot, type SpawnKind } from './spawns';
+import { EVENT_FIELD, EVENT_ROW, orderPath, toViewCreature, toViewObject, type ViewCreature, type ViewObject, pickPreset } from './view-spawns';
 import { LOOKUP_KINDS, UnknownColumnError, UnknownTableError, type QuestSummary, type WorldDb } from './world-db';
 
 export interface MysqlWorldDbOptions {
@@ -318,18 +319,136 @@ class MysqlWorldDb implements WorldDb {
     return this.spawns(kind, 's.map = ? AND s.position_x BETWEEN ? AND ? AND s.position_y BETWEEN ? AND ?', [map, box.minX, box.maxX, box.minY, box.maxY], limit);
   }
 
+  async spawnsForView(map: number, box: MapBox, limit: number): Promise<{ creatures: ViewCreature[]; objects: ViewObject[] }> {
+    const take = Math.max(0, Math.trunc(limit));
+    const boxed = 's.map = ? AND s.position_x BETWEEN ? AND ? AND s.position_y BETWEEN ? AND ?';
+    const boxParams = [map, box.minX, box.maxX, box.minY, box.maxY];
+    const text = (rows: Record<string, unknown>[]) =>
+      rows.map((r) => Object.fromEntries(Object.entries(r).map(([k, v]) => [k, v === null || v === undefined ? null : String(v)])) as Record<string, string | null>);
+    const query = (context: string, sql: string, params: unknown[]) =>
+      this.run(context, async () => text((await this.pool.query(sql, params))[0] as Record<string, unknown>[]));
+
+    const eventOf = (table: string) => this.viewEventJoin(table);
+
+    // Creatures, each with its template's first model (the lowest Idx)
+    const entry = ident(spawnEntryColumn('creature', (await this.knownColumns('creature')).map((c) => c.name)));
+    await this.knownColumns('creature_template_model');
+    const creatureEvents = await eventOf('game_event_creature');
+    // A spawn with an addon row of its own walks that row's route (none when it is 0), else its
+    // template's (a whole kind of NPC walking one route), as the server reads them
+    const templateRoutes = (await this.columns('creature_template_addon')).length > 0;
+    const pathColumn = templateRoutes ? 'CASE WHEN ad.guid IS NULL THEN ta.path_id ELSE ad.path_id END' : 'ad.path_id';
+    const routeJoins =
+      ' LEFT JOIN creature_addon ad ON ad.guid = s.guid' + (templateRoutes ? ` LEFT JOIN creature_template_addon ta ON ta.entry = s.${entry}` : '');
+    const creatureRows = await query(
+      'reading creature',
+      `SELECT s.guid, s.${entry} AS entry, s.map, s.position_x, s.position_y, s.position_z, s.orientation, s.wander_distance, s.MovementType, s.equipment_id, ` +
+        `t.name, m.CreatureDisplayID AS display_id, m.DisplayScale AS display_scale, ${pathColumn} AS path_id${creatureEvents.columns} ` +
+        `FROM creature s LEFT JOIN creature_template t ON t.entry = s.${entry}${routeJoins} ` +
+        `LEFT JOIN (SELECT CreatureID, MIN(Idx) AS Idx FROM creature_template_model GROUP BY CreatureID) f ON f.CreatureID = s.${entry} ` +
+        `LEFT JOIN creature_template_model m ON m.CreatureID = f.CreatureID AND m.Idx = f.Idx${creatureEvents.joins} ` +
+        `WHERE ${boxed} ORDER BY s.guid LIMIT ?`,
+      [...boxParams, take],
+    );
+
+    // Their patrol routes (each route once, however many walk it) and held items, in one query each
+    const paths = new Map<string, Record<string, string | null>[]>();
+    const equipment = new Map<string, [number, number, number]>();
+    const pathIds = [...new Set(creatureRows.map((r) => r.path_id).filter((id): id is string => id !== null && id !== '0'))];
+    if (pathIds.length > 0) {
+      for (const row of await query('reading waypoint_data', `SELECT w.* FROM waypoint_data w WHERE w.id IN (${pathIds.map(() => '?').join(', ')})`, pathIds)) {
+        const list = paths.get(row.id ?? '') ?? [];
+        list.push(row);
+        paths.set(row.id ?? '', list);
+      }
+    }
+    if (creatureRows.length > 0) {
+      const armed = creatureRows.filter((r) => r.equipment_id !== null && r.equipment_id !== '0');
+      if (armed.length > 0) {
+        const pairs = armed.map(() => '(CreatureID = ? AND ID = ?)').join(' OR ');
+        for (const row of await query(
+          'reading creature_equip_template',
+          `SELECT CreatureID, ID, ItemID1, ItemID2, ItemID3 FROM creature_equip_template WHERE ${pairs}`,
+          armed.flatMap((r) => [r.entry, r.equipment_id]),
+        )) {
+          equipment.set(`${row.CreatureID}:${row.ID}`, [Number(row.ItemID1 ?? 0), Number(row.ItemID2 ?? 0), Number(row.ItemID3 ?? 0)]);
+        }
+      }
+    }
+    // How the server dresses an NPC from a display preset (a CoA table; a database without it has none)
+    const entries = [...new Set(creatureRows.map((r) => r.entry).filter((e): e is string => e !== null))];
+    const presets =
+      entries.length > 0 && (await this.columns('creature_display_preset')).length > 0
+        ? await query('reading creature_display_preset', `SELECT * FROM creature_display_preset WHERE entry IN (${entries.map(() => '?').join(', ')})`, entries)
+        : [];
+    const creatures = creatureRows.map((r) => {
+      const route = paths.get(r.path_id ?? '');
+      return toViewCreature(
+        r,
+        route && route.length > 0 ? orderPath(route) : null,
+        equipment.get(`${r.entry}:${r.equipment_id}`) ?? [0, 0, 0],
+        presets.length > 0 ? pickPreset(presets, Number(r.entry), Number(r.display_id ?? 0)) : null,
+      );
+    });
+
+    const objectEvents = await eventOf('game_event_gameobject');
+    const objectRows = await query(
+      'reading gameobject',
+      `SELECT s.guid, s.id AS entry, s.map, s.position_x, s.position_y, s.position_z, s.rotation0, s.rotation1, s.rotation2, s.rotation3, ` +
+        `t.name, t.displayId AS display_id, t.size${objectEvents.columns} FROM gameobject s LEFT JOIN gameobject_template t ON t.entry = s.id${objectEvents.joins} ` +
+        `WHERE ${boxed} ORDER BY s.guid LIMIT ?`,
+      [...boxParams, take],
+    );
+
+    return { creatures, objects: objectRows.map(toViewObject) };
+  }
+
   async spawnsOfEntries(kind: SpawnKind, entries: readonly number[], limit: number): Promise<SpawnDot[]> {
     if (entries.length === 0) return [];
     return this.spawns(kind, `s.{entry} IN (${entries.map(() => '?').join(', ')})`, [...entries], limit);
+  }
+
+  /**
+   * The game event a spawn appears for (a positive eventEntry; a negative one is a spawn the event
+   * removes, which is there the rest of the time): the columns and joins that add `event_entry` and
+   * `event_name` to a query of `table`'s spawns (`s`). A database without the event tables has none.
+   */
+  private async eventJoin(table: string): Promise<{ columns: string; joins: string }> {
+    const has = (await this.columns('game_event')).length > 0 && (await this.columns(table)).length > 0;
+    return has
+      ? {
+          columns: ', ev.eventEntry AS event_entry, ge.description AS event_name',
+          joins:
+            ` LEFT JOIN (SELECT guid, MIN(eventEntry) AS eventEntry FROM ${table} WHERE eventEntry > 0 GROUP BY guid) ev ON ev.guid = s.guid` +
+            ` LEFT JOIN game_event ge ON ge.eventEntry = ev.eventEntry`,
+        }
+      : { columns: '', joins: '' };
+  }
+
+  /**
+   * As `eventJoin`, plus `event_list`: every event row of the spawn (the entry, negative for an event
+   * that takes it away, and the event's name), for the 3D view's event filter. See `EVENT_FIELD`.
+   */
+  private async viewEventJoin(table: string): Promise<{ columns: string; joins: string }> {
+    const base = await this.eventJoin(table);
+    if (!base.columns) return base;
+    return {
+      columns: `${base.columns}, el.event_list`,
+      joins:
+        base.joins +
+        ` LEFT JOIN (SELECT e.guid, GROUP_CONCAT(CONCAT(e.eventEntry, '${EVENT_FIELD}', IFNULL(gl.description, '')) ORDER BY ABS(e.eventEntry) SEPARATOR '${EVENT_ROW}') AS event_list` +
+        ` FROM ${table} e LEFT JOIN game_event gl ON gl.eventEntry = ABS(e.eventEntry) GROUP BY e.guid) el ON el.guid = s.guid`,
+    };
   }
 
   /** Spawns with their template's name, filtered by `where` (its `?` bound to `params`, `{entry}` the entry column). */
   private async spawns(kind: SpawnKind, where: string, params: number[], limit: number): Promise<SpawnDot[]> {
     const spec = SPAWN_TABLES[kind];
     const entry = `${ident(spawnEntryColumn(kind, (await this.knownColumns(spec.table)).map((c) => c.name)))}`;
+    const event = await this.eventJoin(kind === 'creature' ? 'game_event_creature' : 'game_event_gameobject');
     const sql =
-      `SELECT s.guid, s.${entry} AS entry, s.map, s.position_x, s.position_y, s.position_z, t.name ` +
-      `FROM ${ident(spec.table)} s LEFT JOIN ${ident(spec.template)} t ON t.entry = s.${entry} ` +
+      `SELECT s.guid, s.${entry} AS entry, s.map, s.position_x, s.position_y, s.position_z, t.name${event.columns} ` +
+      `FROM ${ident(spec.table)} s LEFT JOIN ${ident(spec.template)} t ON t.entry = s.${entry}${event.joins} ` +
       `WHERE ${where.replace('{entry}', entry)} ORDER BY s.guid LIMIT ?`;
     const rows = await this.run(`reading ${spec.table}`, async () => {
       const [result] = await this.pool.query(sql, [...params, Math.max(0, Math.trunc(limit))]);

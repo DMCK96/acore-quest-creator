@@ -46,8 +46,12 @@ export function LoginScreen({
       return;
     }
     const from = orb.getBoundingClientRect();
-    // With quests on the canvas there is no orb to land on: it shrinks away where it is.
-    const target = document.querySelector('.canvas-empty__circle .quest-orb')?.getBoundingClientRect();
+    // It lands on the largest orb showing in the app (the welcome's, else the app bar's mark); with
+    // none, it shrinks away where it is.
+    const target = [...document.querySelectorAll('[data-orb-target]')]
+      .map((el) => el.getBoundingClientRect())
+      .filter((box) => box.width > 0)
+      .sort((a, b) => b.width - a.width)[0];
     const dx = target ? target.left + target.width / 2 - (from.left + from.width / 2) : 0;
     const dy = target ? target.top + target.height / 2 - (from.top + from.height / 2) : 0;
     const scale = target ? target.width / from.width : 0.2;

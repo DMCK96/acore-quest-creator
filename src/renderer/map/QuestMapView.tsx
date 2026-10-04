@@ -12,6 +12,13 @@ import type { MapMode } from './MapOpener';
 import { PatrolPanel } from './PatrolPanel';
 import { PointMenu, type PointMenuItem } from './PointMenu';
 import { usePatrolMode } from './usePatrolMode';
+import { World3DView } from '../world3d/World3DView';
+import { ownEdit } from './own-3d-edit';
+import { ownViewSpawns } from '@core/entities/view-spawns';
+import { toggleRole } from '@core/modules/quest-roles';
+import { useNameBook } from '../state/names';
+import { questMenuInfo } from '../world3d/quest-context';
+import { OBJECTIVES_FULL } from '../world3d/menu/quest-items';
 import { LeafletMap, type MapMarkerView, type MapView } from './LeafletMap';
 import './map.css';
 
@@ -87,6 +94,9 @@ export function QuestMapView({
   // while the first waited must not be undone by it.
   const valuesRef = useRef(values);
   valuesRef.current = values;
+  const names = useNameBook();
+  // The quest as the 3D view's right-click menu sees it: its own NPCs to paste and spawn, its givers and objectives
+  const questInfo = useMemo(() => questMenuInfo(open, [], names), [open, names]);
   const [maps, setMaps] = useState<MapInfo[]>(CONTINENTS);
   const [refs, setRefs] = useState<QuestMapRef[]>([]);
   const [dots, setDots] = useState<SpawnDot[]>([]);
@@ -110,6 +120,8 @@ export function QuestMapView({
   /** The map the author chose, and where the map was last asked to look; until then, the quest's positions. */
   const [mapId, setMapId] = useState<number | null>(null);
   const [view, setView] = useState<MapView | null>(null);
+  /** Whether the 3D view takes the map's place; the markers and their panel stay the same. */
+  const [show3d, setShow3d] = useState(false);
   const viewTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
@@ -451,11 +463,35 @@ export function QuestMapView({
         <div className="quest-map__search">
           <EntityPicker id="quest-map-search" label="Jump to" kind={searchKind} value={searchEntry} onChange={(entry) => void jumpTo(entry)} />
         </div>
+        <button type="button" className="btn" aria-pressed={show3d} onClick={() => setShow3d((v) => !v)}>
+          3D view
+        </button>
         <button type="button" className="btn" onClick={onClose}>
           Close
         </button>
       </header>
       <div className="quest-map__body">
+        {show3d ? (
+          <World3DView map={currentMap} hasClient={hasClient} start={{ x: shownView.x, y: shownView.y, z: start?.z ?? 0 }} own={ownViewSpawns({ npcs, objects })}
+            onOwnEdit={(edit) => {
+              const change = ownEdit(valuesRef.current, edit);
+              if (change) onChange(change.field, change.value);
+              return change !== null;
+            }}
+            quest={questInfo}
+            onQuestRole={(role, target, on) => {
+              const edits = toggleRole(valuesRef.current, role, target, on);
+              if (!edits) return OBJECTIVES_FULL;
+              for (const [fieldId, value] of Object.entries(edits)) onChange(fieldId, value);
+              return null;
+            }}
+            onSelect={(spawn) => {
+              // A spawn the quest has a marker for is selected in the panel too
+              const id = spawn && `spawn:${spawn.kind === 'creature' ? 'npc' : 'obj'}:${spawn.entry}:${spawn.guid}`;
+              if (id && markers.some((m) => m.id === id)) setSelectedId(id);
+            }}
+          />
+        ) : (
         <LeafletMap
           map={currentMap}
           view={shownView}
@@ -486,6 +522,7 @@ export function QuestMapView({
           onDotClick={dotClicked}
           onViewChanged={(box, zoom) => viewChanged(box, zoom)}
         />
+        )}
         <aside className="quest-map__side">
           {modeState?.kind === 'place' && (
             <div role="status" className="quest-map__mode">

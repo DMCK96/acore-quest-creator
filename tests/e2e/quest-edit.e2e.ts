@@ -42,10 +42,12 @@ async function connectAndAddQuest(): Promise<{ app: ElectronApplication; page: P
   await page.getByLabel('Database').fill(u.pathname.slice(1));
   await page.getByLabel('Password').fill(decodeURIComponent(u.password));
   await page.getByRole('button', { name: 'Save and connect' }).click();
+  // The world is the home screen; the quest graph is the Quests tab.
+  await page.getByRole('tab', { name: 'Quests' }).click();
 
-  // `exact` because the canvas empty state offers "+ Create New Quest" and "Add Existing Quest
-  // Chain" beside the header's own buttons, and role-name matching is substring by default.
-  await expect(page.getByRole('button', { name: 'New quest', exact: true })).toBeVisible(); // the canvas is the home screen
+  // `exact` because the empty quests offer "+ Create New Quest" and "Add Existing Quest Chain"
+  // beside the quest tools' own buttons, and role-name matching is substring by default.
+  await expect(page.getByRole('button', { name: 'New quest', exact: true })).toBeVisible();
   await page.getByRole('button', { name: 'Add existing quest', exact: true }).click();
   await page.getByRole('searchbox').fill('a');
   await page.getByRole('button', { name: /level \d+\)/ }).first().click();
@@ -65,7 +67,7 @@ test('connect, preview a quest, edit it in the module flow, review changes and e
 
   // The editor is the module flow, not tabs.
   await expect(page.getByRole('list', { name: 'Modules' })).toBeVisible();
-  await expect(page.getByRole('tab')).toHaveCount(0);
+  await expect(page.getByRole('tab').filter({ hasNotText: /^(World|Quests)$/ })).toHaveCount(0);
 
   const title = page.getByLabel('Quest title');
   const original = await title.inputValue();

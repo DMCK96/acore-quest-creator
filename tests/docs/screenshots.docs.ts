@@ -36,6 +36,16 @@ async function shot(page: Page, name: string): Promise<void> {
 }
 
 /** Adds a spawn on an NPC or object editor's Placement tab from `.gps` output. */
+/** Waits for the world and its NPCs and objects to finish loading, and a moment more for models to draw */
+async function worldSettled(page: Page): Promise<void> {
+  for (let i = 0; i < 90; i++) {
+    const busy = (await page.getByText('Loading the world…').count()) + (await page.getByText(/Loading NPCs and objects/).count());
+    if (busy === 0) break;
+    await page.waitForTimeout(1000);
+  }
+  await page.waitForTimeout(4000);
+}
+
 async function spawnAt(editor: Locator, gps: string): Promise<void> {
   await editor.getByRole('tab', { name: 'Placement' }).click();
   await editor.getByRole('button', { name: 'Add spawn' }).click();
@@ -96,6 +106,9 @@ test.describe.serial('docs screenshots', () => {
 
   test('canvas', async () => {
     await page.getByRole('button', { name: 'Connect', exact: true }).click();
+    // The app opens on the world, greeting a fresh profile; the quest graph is the Quests tab.
+    await page.getByRole('button', { name: 'Just look around' }).click({ timeout: 30000 });
+    await page.getByRole('tab', { name: 'Quests' }).click();
     await expect(page.getByRole('button', { name: 'New quest', exact: true })).toBeVisible({ timeout: 30000 });
     await expect(page.getByText('Game client', { exact: true })).toBeVisible();
     await page.getByRole('button', { name: 'Add existing quest', exact: true }).click();
@@ -320,5 +333,56 @@ test.describe.serial('docs screenshots', () => {
     await expect(settings.getByLabel('Password', { exact: true })).toHaveAttribute('type', 'password');
     await withGenericFields(settings, () => shot(page, 'settings'));
     await settings.getByRole('button', { name: 'Close' }).click();
+  });
+
+  // The 3D world, with the quest built above still open, so the menu offers its quest items too
+  test('world', async () => {
+    await page.getByRole('tab', { name: 'World' }).click();
+    await page.getByRole('button', { name: 'Find…' }).click();
+    const find = page.getByRole('dialog', { name: 'Find an NPC or object' });
+    await find.getByRole('searchbox', { name: 'Find by name or ID' }).fill('Marshal McBride');
+    await find.locator('.place-dialog__hit').first().click({ timeout: 30000 });
+    await find.getByRole('button', { name: /^Go to spawn/ }).first().click({ timeout: 30000 });
+    await expect(page.getByRole('region', { name: 'Selected spawn' })).toBeVisible({ timeout: 30000 });
+    await worldSettled(page);
+    await shot(page, 'world');
+  });
+
+  test('world-menu', async () => {
+    // Objects off, so a right-click lands on the ground and not on a server's invisible collision objects
+    await page.getByRole('group', { name: 'Layers' }).getByLabel('Objects').uncheck();
+    await page.waitForTimeout(1000);
+    const box = (await page.locator('.world3d__stage canvas').boundingBox())!;
+    await page.mouse.click(box.x + box.width * 0.62, box.y + box.height * 0.62, { button: 'right' });
+    await expect(page.getByRole('menu', { name: 'World actions' })).toBeVisible();
+    await shot(page, 'world-menu');
+    await page.keyboard.press('Escape');
+  });
+
+  test('world-changes', async () => {
+    const box = (await page.locator('.world3d__stage canvas').boundingBox())!;
+    const at = (fx: number, fy: number) => ({ x: box.x + box.width * fx, y: box.y + box.height * fy });
+    // A guard placed beside the marshal, given a path of three points
+    const ground = at(0.62, 0.62);
+    await page.mouse.click(ground.x, ground.y, { button: 'right' });
+    await page.getByRole('menuitem', { name: 'Place NPC here…' }).click();
+    await page.getByRole('searchbox', { name: 'Find by name or ID' }).fill('Stormwind City Guard');
+    await page.locator('.place-dialog__hit').first().click({ timeout: 30000 });
+    await expect(page.getByRole('button', { name: 'World changes (1)' })).toBeVisible({ timeout: 30000 });
+    await page.waitForTimeout(1500);
+    const next = at(0.72, 0.55);
+    await page.mouse.click(next.x, next.y, { button: 'right' });
+    await page.getByRole('menuitem', { name: 'Start path here' }).click();
+    const last = at(0.78, 0.7);
+    await page.waitForTimeout(800);
+    await page.mouse.click(last.x, last.y);
+    await page.waitForTimeout(800);
+    await page.locator('.world3d__stage canvas').focus();
+    await page.keyboard.press('Enter');
+    await page.getByRole('button', { name: /^World changes/ }).click();
+    const changes = page.getByRole('dialog', { name: 'World changes' });
+    await expect(changes.getByText(/walks path/)).toBeVisible({ timeout: 30000 });
+    await shot(page, 'world-changes');
+    await changes.getByRole('button', { name: 'Close' }).first().click();
   });
 });

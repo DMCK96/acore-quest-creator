@@ -1,15 +1,19 @@
 /*
- * While the login screen leaves (App's `leaving`), its orb flies onto the empty canvas's: that one
- * stays hidden until the flying one lands on it, and the words on it wait too.
+ * While the login screen leaves (App's `leaving`), its orb flies onto the orb waiting in the app (the
+ * welcome's, the empty quests', or the app bar's mark): those stay hidden until the flying one lands,
+ * and the words with them wait too.
  */
-.app-arriving .canvas-empty__circle .quest-orb {
+.app-arriving [data-orb-target] .quest-orb,
+.app-arriving .orb-mark {
   visibility: hidden;
 }
 
-.app-arriving .canvas-empty__content {
+.app-arriving .canvas-empty__content,
+.app-arriving .welcome__card {
   opacity: 0;
 }
 
-.canvas-empty__content {
+.canvas-empty__content,
+.welcome__card {
   transition: opacity 0.4s ease-out;
 }

@@ -24,6 +24,8 @@ export interface MapTiles {
   /** The client folder opened (now, if not yet): its archives and what went wrong; null without one. */
   clientStatus(): Promise<ClientStatus | null>;
   tile(map: number, zoom: number, tx: number, ty: number): Promise<Uint8Array>;
+  /** A file from the game client's archives, for the 3D view; null without a client or when it has no such file. */
+  clientFile(path: string): Promise<Uint8Array | null>;
 }
 
 export interface TileCache {
@@ -285,6 +287,14 @@ ${client.fingerprint}`);
       if (!dirNow) return null;
       const { opened, problem } = await openClient();
       return { dir: dirNow, archives: opened?.archives ?? [], problems: opened ? opened.problems : problem ? [problem] : [] };
+    },
+    async clientFile(path) {
+      try {
+        return (await ensureImagery())?.read(path) ?? null;
+      } catch (error) {
+        console.warn(`Client file ${path} failed: ${error instanceof Error ? error.message : String(error)}`);
+        return null;
+      }
     },
     async tile(map, zoom, tx, ty) {
       if (!dir && !clientDir) return transparent;

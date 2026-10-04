@@ -43,6 +43,8 @@ test('a new NPC is created, placed, made the quest giver and exported with the q
   await page.getByLabel('Database').fill(u.pathname.slice(1));
   await page.getByLabel('Password').fill(decodeURIComponent(u.password));
   await page.getByRole('button', { name: 'Save and connect' }).click();
+  // The world is the home screen; the quest graph is the Quests tab.
+  await page.getByRole('tab', { name: 'Quests' }).click();
 
   await page.getByRole('button', { name: 'New quest', exact: true }).click();
   await page.getByLabel('Quest title').fill('Meet Hela');

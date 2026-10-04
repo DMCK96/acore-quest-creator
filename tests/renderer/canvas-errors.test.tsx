@@ -3,7 +3,7 @@ import { describe, it, expect } from 'vitest';
 import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { createAppStore } from '../../src/renderer/state/app-store';
-import { CanvasHome } from '../../src/renderer/views/CanvasHome';
+import { AppShell } from '../../src/renderer/views/AppShell';
 import { makeMockApi, okv, errv, sampleOpen, nodeOf } from './mock-api';
 
 const drift = { missingTables: [], unregistered: [], missingColumns: [], typeMismatches: [], blockingTables: [] };
@@ -22,7 +22,8 @@ async function canvas(over: Record<string, any> = {}) {
   });
   const store = createAppStore(api, { saveDelayMs: 0 });
   await store.getState().connect(form);
-  const view = render(<CanvasHome store={store} />);
+  const view = render(<AppShell store={store} />);
+  await userEvent.click(screen.getByRole('tab', { name: 'Quests' }));
   return { api, store, view };
 }
 

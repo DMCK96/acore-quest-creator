@@ -1,0 +1,118 @@
+<!doctype html>
+<html>
+  <body style="margin: 0; background: #000">
+    <div id="stage" style="width: 960px; height: 600px; position: relative"></div>
+    <script type="module">
+      import { createWorld3D } from '/src/renderer/world3d/world3d.ts';
+
+      // Each world the page makes is kept so a test can leave it; what a test reads is in `__state`.
+      const state = (window.__state = { ready: false, problems: [], errors: [], selected: null, edits: [], notices: [], placed: [], placeEnds: 0, selection: null, tools: [], falloffs: [], contexts: [], drawings: [] });
+      window.addEventListener('error', (e) => state.errors.push(String(e.message)));
+      // Esc that reaches the document: what a screen or editor round the view would see
+      state.escapes = 0;
+      document.addEventListener('keydown', (e) => e.key === 'Escape' && (state.escapes += 1));
+      window.addEventListener('unhandledrejection', (e) => state.errors.push(`rejected: ${e.reason}`));
+      let world = null;
+      window.__open = (directory, map, start) => {
+        world?.dispose();
+        state.ready = false;
+        state.problems = [];
+        state.selected = null;
+        state.edits = [];
+        state.notices = [];
+        state.placed = [];
+        state.placeEnds = 0;
+        state.selection = null;
+        state.tools = [];
+        state.falloffs = [];
+        state.contexts = [];
+        state.drawings = [];
+        world = createWorld3D({
+          container: document.getElementById('stage'),
+          directory,
+          map,
+          start,
+          onReady: () => (state.ready = true),
+          onProblems: (all) => (state.problems = all),
+          onError: (message) => state.errors.push(`failed: ${message}`),
+          onSelect: (spawn) => (state.selected = spawn),
+          onEdit: (edit) => state.edits.push(edit),
+          // The server's floor where a spawn is dropped: what the test sets, else none
+          floorZ: () => Promise.resolve(window.__floorZ ?? null),
+          beforeRouteEdit: () => Promise.resolve(true),
+          onNotice: (message) => message && state.notices.push(message),
+          onPlace: (request) => state.placed.push(request),
+          onPlaceEnd: () => (state.placeEnds += 1),
+          onSelection: (summary) => (state.selection = summary),
+          onTool: (tool) => state.tools.push(tool),
+          onFalloff: (falloff) => state.falloffs.push(falloff),
+          onContextMenu: (target, client) => state.contexts.push({ target, client }),
+          onDrawing: (drawing) => state.drawings.push(drawing),
+          // Spawns the test sets in window.__spawns (none by default)
+          spawns: () => Promise.resolve(window.__spawns ?? { creatures: [], objects: [], capped: { creatures: false, objects: false } }),
+        });
+      };
+      // Where the camera is and which way it looks
+      window.__camera = () => world?.camera();
+      window.__setVisibility = (visibility) => world?.setSpawnVisibility(visibility);
+      window.__setScenery = (scenery) => world?.setScenery(scenery);
+      window.__select = (spawn) => world?.select(spawn);
+      window.__mode = (mode) => world?.setMode(mode);
+      window.__tool = (tool) => world?.setTool(tool);
+      window.__falloff = (falloff) => world?.setFalloff(falloff);
+      window.__undo = () => world?.undo();
+      window.__placing = (target) => world?.setPlacing(target);
+      window.__world = () => world;
+      window.__close = () => {
+        world?.dispose();
+        world = null;
+      };
+      // The colour of a point (as fractions of the width and height) in a PNG of the picture.
+      window.__pixel = async (base64, fx, fy) => {
+        const bitmap = await createImageBitmap(new Blob([Uint8Array.from(atob(base64), (c) => c.charCodeAt(0))], { type: 'image/png' }));
+        const canvas = new OffscreenCanvas(bitmap.width, bitmap.height);
+        const context = canvas.getContext('2d');
+        context.drawImage(bitmap, 0, 0);
+        return Array.from(context.getImageData(Math.floor(bitmap.width * fx), Math.floor(bitmap.height * fy), 1, 1).data);
+      };
+      // Every model fragment shader, with the vertex shader it is used with, compiled on a real graphics
+      // context: a shader that does not compile draws nothing, and says so only in the console.
+      window.__compileModelShaders = async () => {
+        const THREE = await import('three');
+        const { getFragmentShader } = await import('/src/renderer/world3d/scene/model/shader/fragment.ts');
+        const { getVertexShader } = await import('/src/renderer/world3d/scene/model/shader/vertex.ts');
+        const { default: ModelMaterial } = await import('/src/renderer/world3d/scene/model/ModelMaterial.ts');
+        const { SceneLight } = await import('/src/renderer/world3d/scene/light/SceneLight.ts');
+        const canvas = document.createElement('canvas');
+        const renderer = new THREE.WebGLRenderer({ canvas });
+        const failures = [];
+        const unimplemented = [];
+        let current = '';
+        renderer.debug.onShaderError = (gl, program, vertex, fragment) =>
+          failures.push(current + ': ' + (gl.getShaderInfoLog(vertex) || '') + (gl.getShaderInfoLog(fragment) || '') + (gl.getProgramInfoLog(program) || ''));
+        const warn = console.warn;
+        console.warn = (...args) => (/unimplemented/.test(String(args[0])) ? unimplemented.push(String(args[0])) : warn(...args));
+        const geometry = new THREE.BufferGeometry();
+        geometry.setAttribute('position', new THREE.BufferAttribute(new Float32Array([0, 0, -2, 1, 0, -2, 0, 1, -2]), 3));
+        const scene = new THREE.Scene();
+        const camera = new THREE.PerspectiveCamera();
+        const texture = new THREE.DataTexture(new Uint8Array(16).fill(255), 2, 2);
+        texture.needsUpdate = true;
+        // Fragment shaders 0-5 take one texture, 6-22 two (VERTEX_T1 = 0 and VERTEX_T1_T2 = 3 serve them).
+        for (let shader = 0; shader <= 22; shader++) {
+          const two = shader >= 6;
+          current = 'fragment shader ' + shader;
+          const material = new ModelMaterial(getVertexShader(two ? 3 : 0), getFragmentShader(shader), two ? [texture, texture] : [texture], -1, [], -1, false, 0, { ...new SceneLight().uniforms });
+          const mesh = new THREE.Mesh(geometry, material);
+          scene.add(mesh);
+          renderer.render(scene, camera);
+          scene.remove(mesh);
+        }
+        console.warn = warn;
+        renderer.dispose();
+        return { failures, unimplemented };
+      };
+      window.__loaded = true;
+    </script>
+  </body>
+</html>

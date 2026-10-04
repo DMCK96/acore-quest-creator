@@ -1,6 +1,7 @@
 import type { ColumnInfo, RawRow, RefKind, Where } from './types';
 import type { DbSearchKind, EntityHit } from './entity-search';
 import type { MapBox, SpawnDot, SpawnKind } from './spawns';
+import type { ViewCreature, ViewObject } from './view-spawns';
 
 export type { DbSearchKind, EntityHit, SearchKind } from './entity-search';
 
@@ -68,6 +69,11 @@ export interface WorldDb {
   selectMax?(table: string, column: string): Promise<number | null>;
   /** Spawns of one kind on a map inside a box, ordered by guid, at most `limit`. */
   spawnsInBox?(kind: SpawnKind, map: number, box: MapBox, limit: number): Promise<SpawnDot[]>;
+  /**
+   * Creatures and objects on a map inside a box for the 3D view, each kind ordered by guid and at most
+   * `limit`: with facing, display, scale, wander, patrol route and held items.
+   */
+  spawnsForView?(map: number, box: MapBox, limit: number): Promise<{ creatures: ViewCreature[]; objects: ViewObject[] }>;
   /** Spawns of these entries on any map, ordered by guid, at most `limit`. */
   spawnsOfEntries?(kind: SpawnKind, entries: readonly number[], limit: number): Promise<SpawnDot[]>;
   searchQuests(text: string, limit: number): Promise<QuestSummary[]>;

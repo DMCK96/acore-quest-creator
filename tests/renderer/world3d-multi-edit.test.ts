@@ -1,0 +1,609 @@
+// @vitest-environment jsdom
+import * as THREE from 'three';
+import { describe, expect, it, vi } from 'vitest';
+
+const gizmos = vi.hoisted(() => [] as any[]);
+vi.mock('../../src/renderer/world3d/scene/edit/Gizmo', async (importActual) => {
+  const actual = await importActual<typeof import('../../src/renderer/world3d/scene/edit/Gizmo')>();
+  class FakeGizmo {
+    events: any;
+    hovered = false;
+    dragging = false;
+    at: THREE.Vector3 | null = null;
+    turns: string | null = null;
+    mode = 'move';
+    constructor(_camera: unknown, _dom: unknown, _scene: unknown, _ground: unknown, events: any) {
+      this.events = events;
+      gizmos.push(this);
+    }
+    get attached() {
+      return this.at !== null;
+    }
+    attach(at: THREE.Vector3, _q: THREE.Quaternion, turns: string) {
+      this.at = at.clone();
+      this.turns = turns;
+    }
+    detach() {
+      this.at = null;
+      this.turns = null;
+    }
+    setMode(mode: string) {
+      this.mode = mode;
+    }
+    groundAt() {
+      return 0;
+    }
+    dispose() {}
+  }
+  return { ...actual, Gizmo: FakeGizmo };
+});
+
+import { Editor, PICK_POINT_FIRST, TOO_SHORT, type EditingWorld } from '../../src/renderer/world3d/editing';
+import type { EditPoint, SpawnEdit } from '../../src/renderer/world3d/edits';
+import { EMPTY_SELECTION, type Selection } from '../../src/renderer/world3d/scene/edit/selection';
+import type { Falloff } from '../../src/renderer/world3d/scene/edit/falloff';
+
+type Route = { pathId: number; own: boolean; entry: number; points: EditPoint[] };
+const sel = (s: Partial<Selection>): Selection => ({ ...EMPTY_SELECTION, ...s });
+const line = (pathId: number, xs: number[], y = 0): Route => ({ pathId, own: false, entry: 1, points: xs.map((x) => ({ x, y, z: 0 })) });
+const key = (code: string) => new KeyboardEvent('keydown', { code });
+
+function setup(opts: { routes?: Record<number, Route>; floor?: number | null; answers?: Record<number, boolean | Promise<boolean>> } = {}) {
+  const spawns = new Map<string, THREE.Object3D>();
+  const npc = (guid: number, x: number, y: number) => {
+    const o = new THREE.Object3D();
+    o.position.set(x, y, 0);
+    o.userData.spawn = { kind: 'creature', guid, entry: 100 + guid, own: false };
+    spawns.set(`creature:${guid}`, o);
+    return o;
+  };
+  const drop = (guid: number) => spawns.delete(`creature:${guid}`);
+  const routes = new Map(Object.entries(opts.routes ?? {}).map(([g, r]) => [Number(g), r]));
+  const pending: [number, EditPoint[]][] = [];
+  const previews: [number, EditPoint[]][] = [];
+  const homes: [number, { x: number; y: number; z: number }][] = [];
+  const movements: [number, unknown][] = [];
+  let groundAt: THREE.Vector3 | null = null;
+  // A path started in the view: its id, so the first pending route of an NPC with none makes it
+  let lastPathId = 0;
+  const world: EditingWorld = {
+    camera: new THREE.PerspectiveCamera(),
+    dom: document.createElement('canvas'),
+    scene: new THREE.Scene(),
+    ground: () => [],
+    pickGround: () => groundAt?.clone() ?? null,
+    rayAt: () => new THREE.Ray(),
+    findSpawn: (kind, guid) => spawns.get(`${kind}:${guid}`) ?? null,
+    spawnRoute: (guid) => routes.get(guid) ?? null,
+    pickRoutePoint: () => null,
+    setPendingRoute: (guid, points) => {
+      pending.push([guid, points]);
+      const route = routes.get(guid);
+      if (route) routes.set(guid, { ...route, points });
+      else if (lastPathId > 0) routes.set(guid, { pathId: lastPathId, own: false, entry: 100 + guid, points });
+    },
+    previewRoute: (guid, points) => previews.push([guid, points]),
+    previewHome: (guid, at) => homes.push([guid, at]),
+    setPendingMovement: (guid, m) => {
+      movements.push([guid, m]);
+      if (m?.type === 'path' && m.pathId) lastPathId = m.pathId;
+    },
+    spawnMovement: () => null,
+  };
+  const edits: SpawnEdit[] = [];
+  const notices: (string | null)[] = [];
+  const asked: number[] = [];
+  const selections: Selection[] = [];
+  const falloffs: Falloff[] = [];
+  const floorZ = vi.fn(async () => (opts.floor === undefined ? 1 : opts.floor));
+  const editor = new Editor(world, {
+    onEdit: (e) => edits.push(e),
+    floorZ,
+    onNotice: (m) => notices.push(m),
+    onSelection: (s) => selections.push(s),
+    onFalloff: (f) => falloffs.push(f),
+    beforeRouteEdit: (_spawn, pathId) => {
+      asked.push(pathId);
+      return Promise.resolve(opts.answers?.[pathId] ?? true);
+    },
+  });
+  const gizmo = gizmos.at(-1);
+  const change = (delta: [number, number, number] = [0, 0, 0], angle = 0) => ({ delta: new THREE.Vector3(...delta), angle, quaternion: new THREE.Quaternion(), axis: null });
+  const drag = async (delta?: [number, number, number], angle?: number, lifted = false) => {
+    editor.update();
+    gizmo.events.started();
+    gizmo.events.moved(change(delta, angle));
+    await gizmo.events.ended(lifted);
+  };
+  return { editor, world, edits, notices, asked, selections, falloffs, floorZ, gizmo, npc, drop, drag, change, pending, previews, homes, movements, setGround: (v: THREE.Vector3 | null) => { groundAt = v; } };
+}
+
+const placed = (edits: SpawnEdit[]) => edits.map((e) => (e.kind === 'place' ? [e.spawn.guid, e.to.x, e.to.y, e.to.z] : null));
+
+describe('moving and turning a selection in the 3D view', () => {
+  it('moves every selected spawn by the drag, drops each on the server floor, and undoes them as one step', async () => {
+    const t = setup({ floor: 1 });
+    t.npc(1, 0, 0);
+    t.npc(2, 10, 0);
+    t.editor.setSelection(sel({ spawns: [{ kind: 'creature', guid: 1 }, { kind: 'creature', guid: 2 }] }));
+    t.editor.update();
+    expect(t.gizmo.at.toArray()).toEqual([5, 0, 0]);
+    expect(t.gizmo.turns).toBe('z');
+    await t.drag([0, 4, 0]);
+    expect(t.floorZ).toHaveBeenCalledTimes(2);
+    expect(placed(t.edits)).toEqual([[1, 0, 4, 1], [2, 10, 4, 1]]);
+    t.editor.undo();
+    expect(placed(t.edits.slice(2))).toEqual([[1, 0, 0, 0], [2, 10, 0, 0]]);
+  });
+
+  it('moves picked route points as a block, leaving the rest of the route where it was', async () => {
+    const t = setup({ routes: { 7: line(50, [0, 10, 20, 30]) }, floor: 0 });
+    t.npc(7, -5, 0);
+    t.editor.setSelection(sel({ points: [{ guid: 7, index: 1 }, { guid: 7, index: 2 }], routes: [7] }));
+    await t.drag([0, 4, 0]);
+    expect(t.edits).toHaveLength(1);
+    expect(t.edits[0]).toMatchObject({ kind: 'route', pathId: 50, spawn: { guid: 7 } });
+    expect((t.edits[0] as any).points.map((p: EditPoint) => [p.x, p.y])).toEqual([[0, 0], [10, 4], [20, 4], [30, 0]]);
+  });
+
+  it('with falloff on, the rest of the route follows by a share that falls with distance', async () => {
+    const t = setup({ routes: { 7: line(50, [0, 5, 10, 20]) }, floor: 0 });
+    t.npc(7, -5, 0);
+    t.editor.setFalloff({ on: true, radius: 10 });
+    t.editor.setSelection(sel({ points: [{ guid: 7, index: 0 }], routes: [7] }));
+    await t.drag([0, 4, 0]);
+    expect((t.edits[0] as any).points.map((p: EditPoint) => p.y)).toEqual([4, 2, 0, 0]);
+  });
+
+  it('the wheel during a falloff drag grows the radius and the curve follows at once; otherwise the wheel is the camera\'s', () => {
+    const t = setup({ routes: { 7: line(50, [0, 5, 10, 20]) }, floor: 0 });
+    t.npc(7, -5, 0);
+    expect(t.editor.wheel(-100)).toBe(false);
+    t.editor.setFalloff({ on: true, radius: 10 });
+    t.editor.setSelection(sel({ points: [{ guid: 7, index: 0 }], routes: [7] }));
+    t.editor.update();
+    t.gizmo.events.started();
+    t.gizmo.events.moved(t.change([0, 4, 0]));
+    expect(t.previews.at(-1)![1][2]!.y).toBe(0);
+    expect(t.editor.wheel(-100)).toBe(true);
+    expect(t.editor.falloff.radius).toBeCloseTo(11, 9);
+    expect(t.previews.at(-1)![1][2]!.y).toBeGreaterThan(0);
+    expect(t.falloffs.at(-1)!.radius).toBeCloseTo(11, 9);
+  });
+
+  it('R turns the group round its centre: positions swing and facings turn, with no floor drop', async () => {
+    const t = setup();
+    t.npc(1, 0, 0);
+    t.npc(2, 10, 0);
+    t.editor.setSelection(sel({ spawns: [{ kind: 'creature', guid: 1 }, { kind: 'creature', guid: 2 }] }));
+    t.editor.setMode('rotate');
+    await t.drag(undefined, Math.PI / 2);
+    expect(t.floorZ).not.toHaveBeenCalled();
+    const to = t.edits.map((e) => (e.kind === 'place' ? [e.to.x, e.to.y, e.to.orientation] : []));
+    expect(to[0]![0]).toBeCloseTo(5, 6);
+    expect(to[0]![1]).toBeCloseTo(-5, 6);
+    expect(to[0]![2]).toBeCloseTo(Math.PI / 2, 6);
+    expect(to[1]![0]).toBeCloseTo(5, 6);
+    expect(to[1]![1]).toBeCloseTo(5, 6);
+    expect(to[1]![2]).toBeCloseTo(Math.PI / 2, 6);
+  });
+
+  it('a drag released where it started makes no edit and no undo step', async () => {
+    const t = setup();
+    t.npc(1, 0, 0);
+    t.editor.setSelection(sel({ spawns: [{ kind: 'creature', guid: 1 }] }));
+    await t.drag();
+    expect(t.edits).toEqual([]);
+    expect(t.floorZ).not.toHaveBeenCalled();
+    t.editor.undo();
+    expect(t.edits).toEqual([]);
+  });
+
+  it('a spawn redrawn during a drag is followed by guid, and one gone by the end is left out', async () => {
+    const t = setup({ floor: 0 });
+    t.npc(1, 0, 0);
+    t.npc(2, 10, 0);
+    t.editor.setSelection(sel({ spawns: [{ kind: 'creature', guid: 1 }, { kind: 'creature', guid: 2 }] }));
+    t.editor.update();
+    t.gizmo.events.started();
+    // The area was redrawn: a new object stands for spawn 1
+    const redrawn = t.npc(1, 0, 0);
+    t.gizmo.events.moved(t.change([0, 4, 0]));
+    expect(redrawn.position.y).toBe(4);
+    t.drop(2);
+    await t.gizmo.events.ended(false);
+    expect(placed(t.edits)).toEqual([[1, 0, 4, 0]]);
+  });
+});
+
+describe('route edits on several routes at once', () => {
+  it('a route answered no goes back, and the rest of the gesture stands as one undo step', async () => {
+    const a = line(50, [0, 10]);
+    const b = line(60, [0, 10], 20);
+    const t = setup({ routes: { 7: a, 8: b }, floor: 0, answers: { 60: false } });
+    t.npc(7, -5, 0);
+    t.npc(8, -5, 20);
+    t.editor.setSelection(sel({ points: [{ guid: 7, index: 0 }, { guid: 8, index: 0 }], routes: [7, 8] }));
+    await t.drag([1, 0, 0]);
+    expect(t.edits.map((e) => e.kind === 'route' && e.pathId)).toEqual([50]);
+    expect(t.pending).toContainEqual([8, b.points]);
+    t.editor.undo();
+    expect(t.edits.slice(1).map((e) => e.kind === 'route' && e.pathId)).toEqual([50]);
+  });
+
+  it('asks about one shared route at a time', async () => {
+    let release!: (yes: boolean) => void;
+    const first = new Promise<boolean>((resolve) => (release = resolve));
+    const t = setup({ routes: { 7: line(50, [0, 10]), 8: line(60, [0, 10], 20) }, floor: 0, answers: { 50: first, 60: true } });
+    t.npc(7, -5, 0);
+    t.npc(8, -5, 20);
+    t.editor.setSelection(sel({ points: [{ guid: 7, index: 0 }, { guid: 8, index: 0 }], routes: [7, 8] }));
+    const done = t.drag([1, 0, 0]);
+    await vi.waitFor(() => expect(t.asked).toEqual([50]));
+    await new Promise((resolve) => setTimeout(resolve, 10));
+    expect(t.asked).toEqual([50]);
+    release(true);
+    await done;
+    expect(t.asked).toEqual([50, 60]);
+    expect(t.edits.map((e) => e.kind === 'route' && e.pathId)).toEqual([50, 60]);
+  });
+
+  it('Delete removes every picked point, leaving a route that would fall below two as it was', async () => {
+    const t = setup({ routes: { 7: line(50, [0, 10, 20]), 8: line(60, [0, 10, 20, 30], 20) } });
+    t.npc(7, -5, 0);
+    t.npc(8, -5, 20);
+    t.editor.setSelection(sel({ points: [{ guid: 7, index: 0 }, { guid: 7, index: 1 }, { guid: 8, index: 2 }], routes: [7, 8] }));
+    expect(t.editor.keyDown(key('Delete'))).toBe(true);
+    await vi.waitFor(() => expect(t.edits).toHaveLength(1));
+    expect(t.edits[0]).toMatchObject({ kind: 'route', pathId: 60 });
+    expect((t.edits[0] as any).points.map((p: EditPoint) => p.x)).toEqual([0, 10, 30]);
+    expect(t.notices).toContain(TOO_SHORT);
+    expect(t.editor.selection.points).toEqual([{ guid: 7, index: 0 }, { guid: 7, index: 1 }]);
+    expect(t.selections.at(-1)!.points).toEqual([{ guid: 7, index: 0 }, { guid: 7, index: 1 }]);
+  });
+
+  it('a click on a leg of an active route puts a new point there and picks it', async () => {
+    const t = setup({ routes: { 7: { pathId: 50, own: false, entry: 1, points: [{ x: 0, y: 0, z: 0 }, { x: 10, y: 0, z: 0 }, { x: 10, y: 10, z: 0 }] } } });
+    t.npc(7, -5, 0);
+    t.world.pickGround = () => new THREE.Vector3(5, 1, 0);
+    t.editor.setSelection(sel({ routes: [7] }));
+    expect(t.editor.insertPoint(0, 0)).toBe(true);
+    await vi.waitFor(() => expect(t.edits).toHaveLength(1));
+    expect((t.edits[0] as any).points.map((p: EditPoint) => [p.x, p.y])).toEqual([[0, 0], [5, 1], [10, 0], [10, 10]]);
+    expect(t.editor.selection.points).toEqual([{ guid: 7, index: 1 }]);
+  });
+
+  it('with several active routes and no leg near, a new point goes after the last picked one; with none picked, nothing is added', async () => {
+    const t = setup({ routes: { 7: line(50, [0, 10]), 8: line(60, [0, 10, 20], 20) } });
+    t.npc(7, -5, 0);
+    t.npc(8, -5, 20);
+    t.world.pickGround = () => new THREE.Vector3(50, 50, 0);
+    t.editor.setSelection(sel({ routes: [7, 8] }));
+    expect(t.editor.insertPoint(0, 0)).toBe(true);
+    expect(t.notices).toContain(PICK_POINT_FIRST);
+    expect(t.edits).toEqual([]);
+    t.editor.setSelection(sel({ points: [{ guid: 7, index: 0 }, { guid: 8, index: 1 }], routes: [7, 8] }));
+    t.editor.insertPoint(0, 0);
+    await vi.waitFor(() => expect(t.edits).toHaveLength(1));
+    expect(t.edits[0]).toMatchObject({ pathId: 60 });
+    expect((t.edits[0] as any).points.map((p: EditPoint) => p.x)).toEqual([0, 10, 50, 20]);
+  });
+
+  it('O switches falloff and [ ] change its radius, each told to the host', () => {
+    const t = setup();
+    expect(t.editor.keyDown(key('KeyO'))).toBe(true);
+    expect(t.falloffs.at(-1)).toEqual({ on: true, radius: 10 });
+    t.editor.keyDown(key('BracketRight'));
+    expect(t.falloffs.at(-1)!.radius).toBeCloseTo(11, 9);
+    t.editor.keyDown(key('BracketLeft'));
+    expect(t.falloffs.at(-1)!.radius).toBeCloseTo(9.9, 9);
+    t.editor.keyDown(key('KeyO'));
+    expect(t.falloffs.at(-1)!.on).toBe(false);
+  });
+});
+
+describe('where the picked points are drawn', () => {
+  it('as the route has them, following a drag', () => {
+    const t = setup({ routes: { 7: line(50, [0, 10]) } });
+    t.npc(7, -5, 0);
+    t.editor.setSelection(sel({ points: [{ guid: 7, index: 1 }], routes: [7] }));
+    expect(t.editor.pointPositions()).toEqual([{ x: 10, y: 0, z: 0 }]);
+    t.editor.update();
+    t.gizmo.events.started();
+    t.gizmo.events.moved(t.change([0, 3, 0]));
+    expect(t.editor.pointPositions()).toEqual([{ x: 10, y: 3, z: 0 }]);
+  });
+});
+
+describe('the selection after an undo', () => {
+  it('keeps the picked points that the route still has, so the move can be tried again at once', async () => {
+    const t = setup({ routes: { 7: line(50, [0, 10, 20]) }, floor: 0 });
+    t.npc(7, -5, 0);
+    t.editor.setSelection(sel({ points: [{ guid: 7, index: 1 }, { guid: 7, index: 2 }], routes: [7] }));
+    await t.drag([0, 4, 0]);
+    t.editor.undo();
+    expect(t.editor.selection.points).toEqual([{ guid: 7, index: 1 }, { guid: 7, index: 2 }]);
+  });
+
+  it('drops a picked point an undo takes out of the route', async () => {
+    const t = setup({ routes: { 7: line(50, [0, 10]) } });
+    t.npc(7, -5, 0);
+    t.world.pickGround = () => new THREE.Vector3(5, 1, 0);
+    t.editor.setSelection(sel({ routes: [7] }));
+    t.editor.insertPoint(0, 0);
+    await vi.waitFor(() => expect(t.edits).toHaveLength(1));
+    expect(t.editor.selection.points).toEqual([{ guid: 7, index: 1 }]);
+    t.editor.setSelection(sel({ points: [{ guid: 7, index: 2 }], routes: [7] }));
+    t.editor.undo();
+    expect(t.editor.selection.points).toEqual([]);
+  });
+});
+
+describe('findings from the review', () => {
+  it('keeps a tilt of one object even when its turn about Z did not change', async () => {
+    const t = setup();
+    const box = new THREE.Object3D();
+    box.userData.spawn = { kind: 'object', guid: 30, entry: 300, own: false };
+    t.world.findSpawn = (kind, guid) => (kind === 'object' && guid === 30 ? box : null);
+    t.editor.setSelection(sel({ spawns: [{ kind: 'object', guid: 30 }] }));
+    t.editor.setMode('rotate');
+    t.editor.update();
+    expect(t.gizmo.turns).toBe('all');
+    t.gizmo.events.started();
+    const tilt = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(1, 0, 0), 0.3);
+    t.gizmo.events.moved({ delta: new THREE.Vector3(), angle: 0, quaternion: tilt, axis: 'X' });
+    await t.gizmo.events.ended(false);
+    expect(t.edits).toHaveLength(1);
+    expect((t.edits[0] as any).to.rotation[0]).toBeCloseTo(Math.sin(0.15), 6);
+  });
+
+  it('edits the route of an NPC too far away to be drawn: drag, delete and insert', async () => {
+    // No npc(7): the NPC is out of draw distance, its route still drawn
+    const t = setup({ routes: { 7: line(50, [0, 10, 20, 30]) }, floor: 0 });
+    t.editor.setSelection(sel({ points: [{ guid: 7, index: 1 }], routes: [7] }));
+    await t.drag([0, 4, 0]);
+    expect(t.edits[0]).toMatchObject({ kind: 'route', pathId: 50, spawn: { kind: 'creature', guid: 7, entry: 1, own: false } });
+    t.editor.keyDown(key('Delete'));
+    await vi.waitFor(() => expect(t.edits).toHaveLength(2));
+    expect((t.edits[1] as any).points).toHaveLength(3);
+    t.world.pickGround = () => new THREE.Vector3(5, 0.5, 0);
+    t.editor.insertPoint(0, 0);
+    await vi.waitFor(() => expect(t.edits).toHaveLength(3));
+    expect((t.edits[2] as any).points).toHaveLength(4);
+  });
+
+  it('draws a released route where it was dragged at once, so a quick second drag starts from there', async () => {
+    let release!: () => void;
+    const held = new Promise<void>((resolve) => (release = resolve));
+    const t = setup({ routes: { 7: line(50, [0, 10, 20]) } });
+    t.npc(7, -5, 0);
+    const floor = vi.fn(async () => {
+      await held;
+      return 0;
+    });
+    // The world says where routes are drawn: pending ones as they are pending
+    const pending = new Map<number, EditPoint[]>();
+    const base = t.world.spawnRoute;
+    t.world.setPendingRoute = (guid, points) => pending.set(guid, points);
+    t.world.spawnRoute = (guid) => {
+      const route = base(guid);
+      return route && pending.has(guid) ? { ...route, points: pending.get(guid)! } : route;
+    };
+    const editor = new Editor(t.world, { onEdit: (e) => t.edits.push(e), floorZ: floor });
+    const gizmo = gizmos.at(-1);
+    editor.setSelection(sel({ points: [{ guid: 7, index: 1 }], routes: [7] }));
+    editor.update();
+    gizmo.events.started();
+    gizmo.events.moved(t.change([0, 4, 0]));
+    const first = gizmo.events.ended(false);
+    // Still waiting for the server's floor, the route is already drawn as dragged, and the gizmo stays with it
+    expect(t.world.spawnRoute(7)!.points[1]!.y).toBe(4);
+    editor.update();
+    expect(gizmo.at.y).toBe(4);
+    release();
+    await first;
+  });
+
+  it('saves a spawn redrawn after the last move where it was dragged to', async () => {
+    const t = setup({ floor: 0 });
+    t.npc(1, 0, 0);
+    t.editor.setSelection(sel({ spawns: [{ kind: 'creature', guid: 1 }] }));
+    t.editor.update();
+    t.gizmo.events.started();
+    t.gizmo.events.moved(t.change([0, 4, 0]));
+    // A redraw lands while the pointer holds still: a fresh object back at the stored place
+    t.npc(1, 0, 0);
+    await t.gizmo.events.ended(false);
+    expect(placed(t.edits)).toEqual([[1, 0, 4, 0]]);
+  });
+
+  it('lets go of a route\'s picked points when an undo changes how many points it has', async () => {
+    const t = setup({ routes: { 7: line(50, [0, 10, 20, 30, 40]) } });
+    t.npc(7, -5, 0);
+    t.editor.setSelection(sel({ points: [{ guid: 7, index: 2 }, { guid: 7, index: 4 }], routes: [7] }));
+    t.editor.keyDown(key('Delete'));
+    await vi.waitFor(() => expect(t.edits).toHaveLength(1));
+    t.editor.setSelection(sel({ points: [{ guid: 7, index: 2 }], routes: [7] }));
+    t.editor.undo();
+    expect(t.editor.selection.points).toEqual([]);
+  });
+
+  it('leaves a Shift-click alone when no active route exists (an NPC that stands still)', () => {
+    const t = setup();
+    t.npc(3, 0, 0);
+    t.world.pickGround = () => new THREE.Vector3(1, 1, 0);
+    t.editor.setSelection(sel({ spawns: [{ kind: 'creature', guid: 3 }], routes: [3] }));
+    expect(t.editor.insertPoint(0, 0)).toBe(false);
+    expect(t.notices).toEqual([]);
+  });
+});
+
+describe('an NPC dragged with its route', () => {
+  it('has its route and wander circle follow it while it is dragged', () => {
+    const t = setup();
+    t.npc(1, 0, 0);
+    t.editor.setSelection(sel({ spawns: [{ kind: 'creature', guid: 1 }] }));
+    t.editor.update();
+    t.gizmo.events.started();
+    t.gizmo.events.moved(t.change([3, 4, 0]));
+    expect(t.homes.at(-1)).toEqual([1, { x: 3, y: 4, z: 0 }]);
+  });
+});
+
+describe('steps the host made itself', () => {
+  const at = { x: 1, y: 2, z: 3, orientation: 0, rotation: null };
+  const added = (present: boolean): SpawnEdit => ({ kind: 'presence', spawn: { kind: 'creature', guid: 90001, entry: 1423, own: false }, present, at, map: 0 });
+
+  it('records a placement as one step without sending it again, and undo sends its absence', () => {
+    const t = setup();
+    t.editor.record([added(false)], [added(true)]);
+    expect(t.edits).toEqual([]);
+    t.editor.undo();
+    expect(t.edits).toEqual([added(false)]);
+    t.editor.redo();
+    expect(t.edits).toEqual([added(false), added(true)]);
+  });
+
+  it('draws an undone movement at once and sends it', () => {
+    const t = setup();
+    const spawn = { kind: 'creature' as const, guid: 7, entry: 1, own: false };
+    const before: SpawnEdit = { kind: 'movement', spawn, to: { type: 'idle', wander: 0, pathId: null } };
+    const after: SpawnEdit = { kind: 'movement', spawn, to: { type: 'wander', wander: 5, pathId: null } };
+    t.editor.record([before], [after]);
+    t.editor.undo();
+    expect(t.movements).toEqual([[7, { type: 'idle', wander: 0, pathId: null }]]);
+    expect(t.edits).toEqual([before]);
+  });
+});
+
+describe('drawing a new path', () => {
+  const idle = { type: 'idle' as const, wander: 0, pathId: null };
+  const walking = { type: 'path' as const, wander: 0, pathId: 803310 };
+  const ref = { kind: 'creature' as const, guid: 7, entry: 107, own: false };
+  const settle = () => new Promise((resolve) => setTimeout(resolve, 0));
+
+  it('starts with the NPC walking a one-point path, as one step', () => {
+    const t = setup();
+    t.npc(7, 0, 0);
+    t.editor.startPath(7, 803310, { x: 5, y: 0, z: 0 });
+    expect(t.edits).toEqual([
+      { kind: 'movement', spawn: ref, to: walking },
+      { kind: 'route', spawn: ref, pathId: 803310, points: [{ x: 5, y: 0, z: 0 }] },
+    ]);
+    expect(t.editor.drawing).toEqual({ guid: 7, points: 1 });
+  });
+
+  it('each click on the ground adds a point at the end, one step each, without asking about a shared route', async () => {
+    const t = setup();
+    t.npc(7, 0, 0);
+    t.editor.startPath(7, 803310, { x: 5, y: 0, z: 0 });
+    t.setGround(new THREE.Vector3(9, 0, 0));
+    expect(t.editor.appendPoint(0, 0)).toBe(true);
+    await settle();
+    expect(t.edits.at(-1)).toEqual({ kind: 'route', spawn: ref, pathId: 803310, points: [{ x: 5, y: 0, z: 0 }, { x: 9, y: 0, z: 0 }] });
+    expect(t.asked).toEqual([]);
+    expect(t.editor.drawing).toEqual({ guid: 7, points: 2 });
+  });
+
+  it('a click on the sky adds nothing', () => {
+    const t = setup();
+    t.npc(7, 0, 0);
+    t.editor.startPath(7, 803310, { x: 5, y: 0, z: 0 });
+    t.setGround(null);
+    t.editor.appendPoint(0, 0);
+    expect(t.editor.drawing).toEqual({ guid: 7, points: 1 });
+  });
+
+  it('undo takes the last point back; undoing the first cancels the path', async () => {
+    const t = setup();
+    t.npc(7, 0, 0);
+    t.editor.startPath(7, 803310, { x: 5, y: 0, z: 0 });
+    t.setGround(new THREE.Vector3(9, 0, 0));
+    t.editor.appendPoint(0, 0);
+    await settle();
+    t.editor.undoPoint();
+    expect(t.editor.drawing).toEqual({ guid: 7, points: 1 });
+    t.editor.undoPoint();
+    expect(t.editor.drawing).toBeNull();
+    expect(t.edits.slice(-2)).toEqual([
+      { kind: 'route', spawn: ref, pathId: 803310, points: [] },
+      { kind: 'movement', spawn: ref, to: idle },
+    ]);
+  });
+
+  it('finishing with one point cancels and says why, and it cannot be redone', () => {
+    const t = setup();
+    t.npc(7, 0, 0);
+    t.editor.startPath(7, 803310, { x: 5, y: 0, z: 0 });
+    t.editor.finishPath();
+    expect(t.editor.drawing).toBeNull();
+    expect(t.notices.at(-1)).toBe('A path needs at least two points');
+    expect(t.edits.at(-1)).toEqual({ kind: 'movement', spawn: ref, to: idle });
+    const count = t.edits.length;
+    t.editor.redo();
+    expect(t.edits.length).toBe(count);
+  });
+
+  it('cancel puts everything back and cannot be redone', async () => {
+    const t = setup();
+    t.npc(7, 0, 0);
+    t.editor.startPath(7, 803310, { x: 5, y: 0, z: 0 });
+    t.setGround(new THREE.Vector3(9, 0, 0));
+    t.editor.appendPoint(0, 0);
+    await settle();
+    const before = t.edits.length;
+    t.editor.cancelPath();
+    expect(t.edits.slice(before)).toEqual([
+      { kind: 'route', spawn: ref, pathId: 803310, points: [{ x: 5, y: 0, z: 0 }] },
+      { kind: 'route', spawn: ref, pathId: 803310, points: [] },
+      { kind: 'movement', spawn: ref, to: idle },
+    ]);
+    const after = t.edits.length;
+    t.editor.redo();
+    expect(t.edits.length).toBe(after);
+  });
+
+  it('Enter finishes and Ctrl+Z takes back a point while drawing', async () => {
+    const t = setup();
+    t.npc(7, 0, 0);
+    t.editor.startPath(7, 803310, { x: 5, y: 0, z: 0 });
+    t.setGround(new THREE.Vector3(9, 0, 0));
+    t.editor.appendPoint(0, 0);
+    await settle();
+    expect(t.editor.keyDown(new KeyboardEvent('keydown', { code: 'KeyZ', ctrlKey: true }))).toBe(true);
+    expect(t.editor.drawing).toEqual({ guid: 7, points: 1 });
+    t.editor.appendPoint(0, 0);
+    await settle();
+    expect(t.editor.keyDown(new KeyboardEvent('keydown', { code: 'Enter' }))).toBe(true);
+    expect(t.editor.drawing).toBeNull();
+    expect(t.notices.at(-1)).not.toBe('A path needs at least two points');
+  });
+});
+
+describe('while a path is drawn', () => {
+  it('refuses redo, so the path\u2019s own steps stay the last ones', async () => {
+    const t = setup();
+    t.npc(7, 0, 0);
+    t.editor.startPath(7, 803310, { x: 5, y: 0, z: 0 });
+    t.setGround(new THREE.Vector3(9, 0, 0));
+    t.editor.appendPoint(0, 0);
+    t.editor.undoPoint();
+    const count = t.edits.length;
+    expect(t.editor.keyDown(new KeyboardEvent('keydown', { code: 'KeyY', ctrlKey: true }))).toBe(true);
+    expect(t.editor.keyDown(new KeyboardEvent('keydown', { code: 'KeyZ', ctrlKey: true, shiftKey: true }))).toBe(true);
+    expect(t.edits.length).toBe(count);
+    t.editor.cancelPath();
+    expect(t.edits.at(-1)).toEqual({ kind: 'movement', spawn: { kind: 'creature', guid: 7, entry: 107, own: false }, to: { type: 'idle', wander: 0, pathId: null } });
+  });
+
+  it('takes the gizmo away, so the NPC cannot be dragged into the path\u2019s undo steps', () => {
+    const t = setup();
+    t.npc(7, 0, 0);
+    t.editor.setSelection(sel({ spawns: [{ kind: 'creature', guid: 7 }] }));
+    t.editor.update();
+    expect(t.gizmo.attached).toBe(true);
+    t.editor.startPath(7, 803310, { x: 5, y: 0, z: 0 });
+    t.editor.update();
+    expect(t.gizmo.attached).toBe(false);
+  });
+});

@@ -10,6 +10,7 @@ import {
 import { loadFork } from './ddl';
 import { SPAWN_TABLES, spawnEntryColumn, toSpawnDot, type MapBox, type SpawnDot, type SpawnKind } from '@core/db/spawns';
 import { ENTITY_TABLES, ID_TEXT, rankHits, toHit, type DbSearchKind, type EntityHit } from '@core/db/entity-search';
+import { orderPath, pickPreset, toViewCreature, toViewObject, type ViewCreature, type ViewObject } from '@core/db/view-spawns';
 
 type MutableRow = Record<string, RawValue>;
 interface Table {
@@ -161,6 +162,53 @@ export class FakeWorldDb implements WorldDb {
     return (await this.spawnDots(kind))
       .filter((d) => d.map === map && d.x >= box.minX && d.x <= box.maxX && d.y >= box.minY && d.y <= box.maxY)
       .slice(0, limit);
+  }
+
+  async spawnsForView(map: number, box: MapBox, limit: number): Promise<{ creatures: ViewCreature[]; objects: ViewObject[] }> {
+    const inBox = (r: RawRow) => {
+      const x = Number(r.position_x), y = Number(r.position_y);
+      return Number(r.map) === map && x >= box.minX && x <= box.maxX && y >= box.minY && y <= box.maxY;
+    };
+    const byGuid = (a: RawRow, b: RawRow) => Number(a.guid) - Number(b.guid);
+
+    const entryColumn = spawnEntryColumn('creature', this.table('creature').columns.map((c) => c.name));
+    const names = new Map((await this.selectRows('creature_template', {})).map((r) => [r.entry, r.name ?? null]));
+    // The template's first model: the lowest Idx
+    const models = new Map<string, RawRow>();
+    for (const m of await this.selectRows('creature_template_model', {})) {
+      const known = models.get(m.CreatureID ?? '');
+      if (!known || Number(m.Idx) < Number(known.Idx)) models.set(m.CreatureID ?? '', m);
+    }
+    const addons = new Map((await this.selectRows('creature_addon', {})).map((a) => [a.guid, a.path_id]));
+    // A spawn without a route of its own walks its template's, when the database has template addons
+    const templateAddons = this.tables.has('creature_template_addon')
+      ? new Map((await this.selectRows('creature_template_addon', {})).map((a) => [a.entry, a.path_id]))
+      : new Map<string | null, string | null>();
+    const waypoints = await this.selectRows('waypoint_data', {});
+    const equips = await this.selectRows('creature_equip_template', {});
+    const presets = this.tables.has('creature_display_preset') ? await this.selectRows('creature_display_preset', {}) : [];
+    const creatures = (await this.selectRows('creature', {})).filter(inBox).sort(byGuid).slice(0, limit).map((r) => {
+      const entry = r[entryColumn] ?? null;
+      const model = models.get(entry ?? '');
+      const own = addons.get(r.guid);
+      const pathId = addons.has(r.guid) ? own : templateAddons.get(entry);
+      const points = pathId && pathId !== '0' ? waypoints.filter((w) => w.id === pathId) : [];
+      const equip = r.equipment_id && r.equipment_id !== '0' ? equips.find((e) => e.CreatureID === entry && e.ID === r.equipment_id) : undefined;
+      return toViewCreature(
+        { ...r, entry, name: names.get(entry) ?? null, display_id: model?.CreatureDisplayID ?? null, display_scale: model?.DisplayScale ?? null, path_id: pathId ?? null },
+        points.length > 0 ? orderPath(points) : null,
+        equip ? [Number(equip.ItemID1 ?? 0), Number(equip.ItemID2 ?? 0), Number(equip.ItemID3 ?? 0)] : [0, 0, 0],
+        presets.length > 0 ? pickPreset(presets, Number(entry), Number(model?.CreatureDisplayID ?? 0)) : null,
+      );
+    });
+
+    const templates = new Map((await this.selectRows('gameobject_template', {})).map((t) => [t.entry, t]));
+    const objects = (await this.selectRows('gameobject', {})).filter(inBox).sort(byGuid).slice(0, limit).map((r) => {
+      const t = templates.get(r.id ?? null);
+      return toViewObject({ ...r, entry: r.id ?? null, name: t?.name ?? null, display_id: t?.displayId ?? null, size: t?.size ?? null });
+    });
+
+    return { creatures, objects };
   }
 
   async spawnsOfEntries(kind: SpawnKind, entries: readonly number[], limit: number): Promise<SpawnDot[]> {

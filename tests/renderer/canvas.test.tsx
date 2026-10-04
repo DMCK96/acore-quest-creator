@@ -66,9 +66,14 @@ describe('CanvasHome', () => {
   });
   it('shows an inviting empty state with the two ways to start', async () => {
     await canvas({ listNodes: async () => okv([]) });
-    expect(await screen.findByText(/start your journey/i)).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'New quest' })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Add existing quest' })).toBeInTheDocument();
+    expect(await screen.findByRole('heading', { name: 'Quests' })).toBeInTheDocument();
+    expect(screen.getByText(/No quests in this project yet\./)).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Create New Quest' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Add Existing Quest Chain' })).toBeInTheDocument();
+    const tools = screen.getByRole('toolbar', { name: 'Quest tools' });
+    expect(within(tools).getByRole('button', { name: 'New quest' })).toBeInTheDocument();
+    expect(within(tools).getByRole('button', { name: 'Add existing quest' })).toBeInTheDocument();
+    expect(document.querySelector('.canvas-empty')!.textContent).not.toMatch(/\p{Extended_Pictographic}/u);
   });
   it('creates a quest where the empty canvas is double-clicked', async () => {
     const { api, view } = await canvas();

@@ -16,7 +16,8 @@ export function newPatrol(pathId: number): Patrol {
   return { pathId, startPace: 'walk', points: [] };
 }
 
-const newPoint = (at: At): PatrolPoint => ({ x: at.x, y: at.y, z: at.z, waitSecs: 0, facing: null, paceFromHere: null, actions: [] });
+/** A point that does not wait, turn, change pace or do anything */
+export const newPatrolPoint = (at: At): PatrolPoint => ({ x: at.x, y: at.y, z: at.z, waitSecs: 0, facing: null, paceFromHere: null, actions: [] });
 const has = (p: Patrol, index: number): boolean => index >= 0 && index < p.points.length;
 const withPoint = (p: Patrol, index: number, change: (point: PatrolPoint) => PatrolPoint): Patrol =>
   has(p, index) ? { ...p, points: p.points.map((q, i) => (i === index ? change(q) : q)) } : p;
@@ -24,13 +25,13 @@ const withPoint = (p: Patrol, index: number, change: (point: PatrolPoint) => Pat
 const waiting = (point: PatrolPoint): PatrolPoint => (point.waitSecs === 0 ? { ...point, waitSecs: DEFAULT_POSE_WAIT } : point);
 
 export function addPoint(p: Patrol, at: At): Patrol {
-  return { ...p, points: [...p.points, newPoint(at)] };
+  return { ...p, points: [...p.points, newPatrolPoint(at)] };
 }
 
 /** A new point that takes `points[index]`'s place, pushing it and the rest one on. */
 export function insertPoint(p: Patrol, index: number, at: At): Patrol {
   if (index < 0 || index > p.points.length) return p;
-  return { ...p, points: [...p.points.slice(0, index), newPoint(at), ...p.points.slice(index)] };
+  return { ...p, points: [...p.points.slice(0, index), newPatrolPoint(at), ...p.points.slice(index)] };
 }
 
 export function movePoint(p: Patrol, index: number, at: At): Patrol {

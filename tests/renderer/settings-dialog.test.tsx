@@ -4,7 +4,7 @@ import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { createAppStore } from '../../src/renderer/state/app-store';
 import { SettingsDialog } from '../../src/renderer/views/SettingsDialog';
-import { TopBar } from '../../src/renderer/components/TopBar';
+import { AppBar } from '../../src/renderer/components/AppBar';
 import type { ConnectSummary, ProfileRecord } from '@shared/ipc';
 import type { SchemaDiff } from '@core/schema/diff';
 import { makeMockApi, okv, errv, sampleOpen } from './mock-api';
@@ -172,11 +172,11 @@ describe('SettingsDialog partial save', () => {
   });
 });
 
-describe('TopBar settings button', () => {
+describe("the app bar's settings button", () => {
   it('opens settings', async () => {
     const onOpenSettings = vi.fn();
     const store = createAppStore(makeMockApi());
-    render(<TopBar store={store} onNewQuest={() => {}} onAddExisting={() => {}} onFitView={() => {}} onOpenProject={() => {}} onOpenSettings={onOpenSettings} />);
+    render(<AppBar store={store} workspace="world" onWorkspace={() => {}} onOpenProject={() => {}} onOpenSettings={onOpenSettings} />);
     await userEvent.click(screen.getByRole('button', { name: 'Settings' }));
     expect(onOpenSettings).toHaveBeenCalled();
   });

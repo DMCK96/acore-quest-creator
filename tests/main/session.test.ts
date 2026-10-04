@@ -1,6 +1,7 @@
 import { describe, it, expect, vi } from 'vitest';
 import { createProjectSession } from '../../src/main/project/session';
 import { defaultProjectMeta, InvalidNameError, type ProjectQuest } from '../../src/main/project/project-file';
+import { EMPTY_WORLD } from '../../src/core/world/layer';
 
 const q = (questId: number, over: Partial<ProjectQuest> = {}): ProjectQuest => ({
   questId, isNew: false, aggregate: { questId, isNew: false, values: {}, readOnly: [], sharedItems: {} } as ProjectQuest['aggregate'],
@@ -85,7 +86,7 @@ describe('ProjectSession', () => {
 
   it('load takes a document, a path and a dirty flag, under a new id', () => {
     const s = fresh();
-    const doc = { ...defaultProjectMeta('Loaded', 'C:\\out'), quests: [q(60005, { x: 7 })] };
+    const doc = { ...defaultProjectMeta('Loaded', 'C:\\out'), quests: [q(60005, { x: 7 })], world: EMPTY_WORLD };
     s.load(doc, 'C:\\l.aqc', { dirty: true });
     expect([s.id(), s.filePath(), s.dirty(), s.meta().name]).toEqual(['s2', 'C:\\l.aqc', true, 'Loaded']);
     expect(s.toDocument()).toEqual(doc);
@@ -104,5 +105,30 @@ describe('ProjectSession', () => {
     off();
     s.reset(defaultProjectMeta('X', 'C:\\out'));
     expect(listener).toHaveBeenCalledTimes(3);
+  });
+});
+
+
+describe('ProjectSession: the world layer', () => {
+  const layer = { spawns: [], routes: [{ pathId: 801, walkers: 1, original: [], current: [{ x: 1, y: 2, z: 3, rest: {} }] }], added: [] };
+
+  it('starts empty, and a put is a change that toDocument and load carry', () => {
+    const s = fresh();
+    expect(s.world.get()).toEqual(EMPTY_WORLD);
+    s.world.put(layer);
+    expect([s.dirty(), s.revision()]).toEqual([true, 1]);
+    expect(s.toDocument().world).toEqual(layer);
+    const t = fresh();
+    t.load(s.toDocument(), 'C:\\p.aqc', { dirty: false });
+    expect(t.world.get()).toEqual(layer);
+  });
+
+  it('hands out copies, and reset empties it', () => {
+    const s = fresh();
+    s.world.put(layer);
+    s.world.get().routes.length = 0;
+    expect(s.world.get().routes).toHaveLength(1);
+    s.reset(defaultProjectMeta('Untitled Project', 'C:\\out'));
+    expect(s.world.get()).toEqual(EMPTY_WORLD);
   });
 });

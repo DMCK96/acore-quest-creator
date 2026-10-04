@@ -4,7 +4,7 @@ import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { createAppStore } from '../../src/renderer/state/app-store';
 import { QuestPicker } from '../../src/renderer/views/QuestPicker';
-import { TopBar } from '../../src/renderer/components/TopBar';
+import { AppBar } from '../../src/renderer/components/AppBar';
 import { renderFlow } from './module-harness';
 import { makeMockApi, okv, errv, sampleOpen } from './mock-api';
 
@@ -151,15 +151,15 @@ describe('game client pill', () => {
     const store = createAppStore(api);
     await store.getState().loadProfiles();
     await store.getState().connectProfile(1);
-    render(<TopBar store={store} onNewQuest={() => {}} onAddExisting={() => {}} onFitView={() => {}} onOpenProject={() => {}} onOpenSettings={() => {}} />);
+    render(<AppBar store={store} workspace="world" onWorkspace={() => {}} onOpenProject={() => {}} onOpenSettings={() => {}} />);
   };
   it('shows the client folder read cleanly', async () => {
     await connectWith({ dir: 'E:/WoW', archives: ['common.MPQ', 'patch.MPQ'], problems: [] });
-    expect(screen.getByText('Game client')).toHaveAttribute('title', expect.stringContaining('Read 2 archives'));
+    expect(screen.getByText('Game client').closest('.status-pill')).toHaveAttribute('title', expect.stringContaining('Read 2 archives'));
   });
   it('warns when the folder is not a game client', async () => {
     await connectWith({ dir: 'E:/Downloads', archives: [], problems: ['No game archives were found in this folder.'] });
-    const pill = screen.getByText('Game client: 1 problem');
+    const pill = screen.getByText('Game client: 1 problem').closest('.status-pill');
     expect(pill).toHaveClass('status-pill--warning');
     expect(pill).toHaveAttribute('title', expect.stringContaining('No game archives'));
   });

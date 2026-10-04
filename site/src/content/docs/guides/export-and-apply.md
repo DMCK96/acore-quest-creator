@@ -25,6 +25,15 @@ The app refuses to export a quest it cannot write back faithfully. The button is
 
 Then [test it in game](/acore-quest-creator/guides/test-in-game/).
 
+## World changes
+
+Changes made in [the World](/acore-quest-creator/guides/the-world/) to spawns that belong to no quest (moved or placed spawns, changed routes, new paths and wander) are not part of any quest's patch. Open **World changes** in the World's Layers card and choose **Export world patch**. It writes two files to the same export folder, numbered per day:
+
+- `<date>_<nn>_world.sql`: the changes.
+- `<date>_<nn>_world_revert.sql`: puts the database back as it was before them.
+
+A spawn placed in the World is written with a new spawn ID, and the patch deletes that ID first so it can be run again. An NPC given a new path gets its own addon row, copied from its template's so it keeps its mount and auras.
+
 :::caution
 The dev database should be a copy on a test server. Never point it at your live world database.
 :::
