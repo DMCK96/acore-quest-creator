@@ -23,7 +23,7 @@ describe('new NPC with a scene', () => {
     const schema = await loadSchema(db, tables);
     const keys = { ...SCRIPT_KEYS, ...ENTITY_KEYS };
     const exportOnce = async (): Promise<PatchStatement[]> => {
-      const ents = scriptStatements(compileEntities({ questId: Q, entities, givers: [], context: await readEntityContext(db, Q, entities) }), schema).statements;
+      const ents = scriptStatements(compileEntities({ entities, givers: [], context: await readEntityContext(db, entities, [Q]) }), schema).statements;
       const scripts = scriptStatements(compileScenes({ questId: Q, scenes: [scene], objectives: [0, 0, 0, 0], context: await readScriptContext(db, Q, [scene]) }), schema).statements;
       const of = (list: PatchStatement[], kind: PatchStatement['kind']) => list.filter((s) => s.kind === kind);
       return [...of(ents, 'delete'), ...of(scripts, 'delete'), ...of(ents, 'insert'), ...of(scripts, 'set-flag'), ...of(scripts, 'update'), ...of(scripts, 'insert')];

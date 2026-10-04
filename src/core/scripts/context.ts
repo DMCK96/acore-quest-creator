@@ -104,6 +104,17 @@ export async function taggedRows(db: WorldDb, table: string, column: string, que
   }
 }
 
+/** Rows whose `column` starts with `prefix`; none when the database cannot say or lacks the table */
+export async function prefixedRows(db: WorldDb, table: string, column: string, prefix: string): Promise<RawRow[]> {
+  if (!db.selectByPrefix) return [];
+  try {
+    return await db.selectByPrefix(table, column, prefix);
+  } catch (error) {
+    if (error instanceof UnknownTableError || error instanceof UnknownColumnError) return [];
+    throw error;
+  }
+}
+
 async function maxOf(db: WorldDb, table: string, column: string): Promise<number> {
   if (!db.selectMax) return 0;
   try {

@@ -6,7 +6,7 @@ describe('custom items in the entity model', () => {
     expect(newItem(990001)).toEqual({
       entry: 990001, name: '', description: '', quality: 'common', itemClass: 12, subclass: 0, inventoryType: 0, displayId: 0,
       itemLevel: 1, requiredLevel: 0, stackable: 1, maxCount: 1, bonding: 'quest', buyPrice: 0, sellPrice: 0, startsQuest: 0,
-      pages: [], armor: 0, damage: [], delayMs: 0, stats: [], spells: [], advanced: {},
+      pages: [], armor: 0, damage: [], delayMs: 0, stats: [], spells: [], advanced: {}, madeFor: null,
     });
   });
   it('round-trips items and reads none from a project saved before items', () => {

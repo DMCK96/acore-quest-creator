@@ -6,7 +6,7 @@ import { entityIssues } from '../../src/core/entities/validate';
 
 const Q = 60001;
 const compile = (objects: ReturnType<typeof newObject>[]) =>
-  compileEntities({ questId: Q, entities: { npcs: [], objects, items: [] }, givers: [], context: EMPTY_ENTITY_CONTEXT });
+  compileEntities({ entities: { npcs: [], objects, items: [] }, givers: [], context: EMPTY_ENTITY_CONTEXT });
 
 describe('pages and quest-only objects', () => {
   it('reads an object saved before pages existed', () => {

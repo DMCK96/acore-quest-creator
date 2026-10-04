@@ -68,7 +68,7 @@ describe('new NPCs through the API', () => {
     const out: any = await api.exportQuest(aggregate.questId);
     expect(out.ok).toBe(true);
     expect(out.value.sql).toMatch(/INSERT INTO `creature_template` \(.*\) VALUES \(11000240,/);
-    expect(out.value.sql).toMatch(/INSERT INTO `creature` .*'AQC q\d+ npc11000240'/);
+    expect(out.value.sql).toMatch(/INSERT INTO `creature` .*'AQC npc11000240 '/);
     expect(out.value.sql.indexOf('INSERT INTO `creature_template`')).toBeLessThan(out.value.sql.indexOf('INSERT INTO `creature_queststarter`'));
   });
   it('copies an NPC\'s weapons with its look', async () => {

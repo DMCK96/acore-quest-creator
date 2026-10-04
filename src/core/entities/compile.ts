@@ -1,11 +1,11 @@
 import { fightIsEmpty } from '../combat/model';
 import { hasPointActions } from '../patrol/compile';
 import type { CompiledScripts } from '../scripts/compile';
-import { questTagPrefix } from '../scripts/tag';
+import { entityLootTag, entityOf, entityTag } from '../scripts/tag';
 import type { EntityContext } from './context';
 import { itemRow, MODELLED_ITEM_COLUMNS } from './item-columns';
 import { MOVEMENT_TYPE } from '../world/movement';
-import { NPC_TYPE_VALUE, OBJECT_TYPE_VALUE, RANK_VALUE, type LootRow, type Patrol, type Page, type QuestEntities } from './model';
+import { NPC_TYPE_VALUE, OBJECT_TYPE_VALUE, RANK_VALUE, type LootRow, type Patrol, type Page, type ProjectEntities } from './model';
 
 /**
  * New NPCs and objects to template and spawn rows, in the same shape as compiled scripts so one
@@ -60,29 +60,34 @@ const num = (raw: string | null | undefined): number => {
   return Number.isFinite(n) ? n : 0;
 };
 
+/** A spawn tag exports before version 4 wrote: the quest's, then the entity's */
+const LEGACY_SPAWN_TAG = /^AQC q\d+ (npc|obj)(\d+)$/;
+const LEGACY_LOOT_TAG = /^AQC q\d+ loot$/;
+
 export function compileEntities(input: {
-  questId: number;
-  entities: QuestEntities;
-  /** Creature entries that start or end this quest. */
+  entities: ProjectEntities;
+  /** Creature entries any project quest starts or ends with. */
   givers: readonly number[];
-  /** Items the quest requires: their drops belong to Objectives, so loot lists never write them. */
-  questItems?: readonly number[];
+  /** Items project quests require, with the quest: their drops belong to Objectives, so loot lists never write them. */
+  questItems?: readonly { item: number; questId: number }[];
   context: EntityContext;
   /** The `item_template` columns the export database has; null or absent when not known. */
   itemColumns?: ReadonlySet<string> | null;
 }): CompiledScripts {
-  const { questId, entities, givers, context } = input;
-  const questItems = new Set(input.questItems ?? []);
-  const lootTag = `${questTagPrefix(questId)}loot`;
+  const { entities, givers, context } = input;
+  const questItems = new Map<number, number>();
+  for (const { item, questId } of input.questItems ?? []) if (!questItems.has(item)) questItems.set(item, questId);
   const lootKeys: Record<'creature_loot_template' | 'gameobject_loot_template', Map<string, Row>> = {
     creature_loot_template: new Map(),
     gameobject_loot_template: new Map(),
   };
   const writeLoot = (table: 'creature_loot_template' | 'gameobject_loot_template', entry: number, loot: readonly LootRow[], label: string): number => {
     let written = 0;
+    const lootTag = entityLootTag(table === 'creature_loot_template' ? 'npc' : 'obj', entry);
     for (const row of loot) {
-      if (questItems.has(row.item)) {
-        out.warnings.push(`${label}: item ${row.item} is one this quest asks for, so its drops are set in Objectives, not in the loot list.`);
+      const asking = questItems.get(row.item);
+      if (asking !== undefined) {
+        out.warnings.push(`${label}: item ${row.item} is one quest ${asking} asks for, so its drops are set in that quest's Objectives, not in the loot list.`);
         continue;
       }
       insert(table, {
@@ -145,7 +150,7 @@ export function compileEntities(input: {
         MovementType: text(patrol ? MOVEMENT_TYPE.path : spawn.wander > 0 ? MOVEMENT_TYPE.wander : MOVEMENT_TYPE.idle),
         // A spawn holds no weapons unless it names the equipment row: 0 means none.
         equipment_id: armed ? '1' : '0',
-        Comment: `${questTagPrefix(questId)}npc${npc.entry}`,
+        Comment: entityTag('npc', npc.entry),
       });
       if (patrol) {
         insert('creature_addon', { guid: text(spawn.guid), path_id: text(patrol.pathId) });
@@ -167,8 +172,8 @@ export function compileEntities(input: {
     if (firstPage !== undefined && object.type === 'text') row.Data0 = text(firstPage);
     if (firstPage !== undefined && object.type === 'goober') row.Data7 = text(firstPage);
     // Only players with the quest in their log may use it (goober `Data1`) or loot it (chest `Data8`).
-    if (object.onlyDuringQuest !== null && object.type === 'goober') row.Data1 = text(questId);
-    if (object.onlyDuringQuest !== null && object.type === 'chest') row.Data8 = text(questId);
+    if (object.onlyDuringQuest !== null && object.type === 'goober') row.Data1 = text(object.onlyDuringQuest);
+    if (object.onlyDuringQuest !== null && object.type === 'chest') row.Data8 = text(object.onlyDuringQuest);
     insert('gameobject_template', row);
     if (object.type === 'chest') writeLoot('gameobject_loot_template', object.entry, object.loot, `Object "${object.name || object.entry}"`);
     else if (object.loot.length > 0) out.warnings.push(`Object "${object.name || object.entry}": only a chest can be looted, so its loot list is not written.`);
@@ -183,7 +188,7 @@ export function compileEntities(input: {
           ? { rotation0: text(round6(spawn.rotation[0])), rotation1: text(round6(spawn.rotation[1])), rotation2: text(round6(spawn.rotation[2])), rotation3: text(round6(spawn.rotation[3])) }
           : { rotation0: '0', rotation1: '0', rotation2: text(round6(Math.sin(spawn.o / 2))), rotation3: text(round6(Math.cos(spawn.o / 2))) }),
         spawntimesecs: text(spawn.respawnSecs), animprogress: text(ANIM_FULL), state: text(GO_READY),
-        Comment: `${questTagPrefix(questId)}obj${object.entry}`,
+        Comment: entityTag('obj', object.entry),
       });
     }
   }
@@ -199,14 +204,25 @@ export function compileEntities(input: {
     }
   }
 
-  // Every key the project holds, plus spawns this quest placed before and the author since removed.
-  // Only spawns of an NPC or object still in the project: like its template, the spawns of one the
-  // project no longer has (or never had, in a fresh project) are left as they are.
-  const tagOf = (kind: 'npc' | 'obj', entry: number): string => `${questTagPrefix(questId)}${kind}${entry}`;
-  const npcTags = new Set(entities.npcs.map((n) => tagOf('npc', n.entry)));
-  const objectTags = new Set(entities.objects.map((o) => tagOf('obj', o.entry)));
-  for (const row of context.taggedCreatureSpawns) if (npcTags.has(row.Comment ?? '')) creatureGuids.add(num(row.guid));
-  for (const row of context.taggedObjectSpawns) if (objectTags.has(row.Comment ?? '')) objectGuids.add(num(row.guid));
+  // Every key the project holds, plus spawns a past export placed and the author since removed, found by
+  // the entity's tag or the quest tag exports before version 4 wrote. Only spawns of an NPC or object
+  // still in the project: like its template, the spawns of one the project no longer has are left alone.
+  const spawnOwner = (comment: string | null | undefined): { kind: string; entry: number } | null => {
+    const tagged = entityOf(comment);
+    if (tagged && tagged.rest === '') return tagged;
+    const legacy = typeof comment === 'string' ? LEGACY_SPAWN_TAG.exec(comment) : null;
+    return legacy ? { kind: legacy[1]!, entry: Number(legacy[2]) } : null;
+  };
+  const npcEntriesHeld = new Set(entities.npcs.map((n) => n.entry));
+  const objectEntriesHeld = new Set(entities.objects.map((o) => o.entry));
+  for (const row of context.taggedCreatureSpawns) {
+    const owner = spawnOwner(row.Comment);
+    if (owner?.kind === 'npc' && npcEntriesHeld.has(owner.entry)) creatureGuids.add(num(row.guid));
+  }
+  for (const row of context.taggedObjectSpawns) {
+    const owner = spawnOwner(row.Comment);
+    if (owner?.kind === 'obj' && objectEntriesHeld.has(owner.entry)) objectGuids.add(num(row.guid));
+  }
   const sorted = (values: Iterable<number>): number[] => [...new Set(values)].sort((a, b) => a - b);
   const add = (table: string, keys: Row[]): void => {
     if (keys.length > 0) out.deletes[table] = keys;
@@ -241,8 +257,10 @@ export function compileEntities(input: {
     ['creature_loot_template', context.taggedLoot.creature, npcEntries],
     ['gameobject_loot_template', context.taggedLoot.gameobject, chestEntries],
   ] as const) {
+    const kind = table === 'creature_loot_template' ? 'npc' : 'obj';
     for (const r of rows) {
-      if (r.Comment !== lootTag || !owned.has(num(r.Entry))) continue;
+      const ours = r.Comment === entityLootTag(kind, num(r.Entry)) || LEGACY_LOOT_TAG.test(r.Comment ?? '');
+      if (!ours || !owned.has(num(r.Entry))) continue;
       lootKeys[table].set(`${num(r.Entry)}/${num(r.Item)}`, { Entry: text(num(r.Entry)), Item: text(num(r.Item)) });
     }
     const keys = [...lootKeys[table].values()].sort((a, b) => num(a.Entry) - num(b.Entry) || num(a.Item) - num(b.Item));

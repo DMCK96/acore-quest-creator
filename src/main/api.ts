@@ -1070,10 +1070,10 @@ export function createApi(deps: ApiDeps): Api {
     const entities = readEntities(quest.aggregate.values);
     const givers = [...relationOwners(quest.aggregate, 'starter'), ...relationOwners(quest.aggregate, 'ender')]
       .flatMap((o) => (o.kind === 'creature' ? [o.entry] : []));
-    const entityContext = await readEntityContext(live.db, quest.questId, entities);
+    const entityContext = await readEntityContext(live.db, entities, [quest.questId]);
     const newEntities = scriptStatements(
       compileEntities({
-        questId: quest.questId, entities, givers, questItems: questItemsOf(quest.aggregate), context: entityContext,
+        entities, givers, questItems: questItemsOf(quest.aggregate).map((item) => ({ item, questId: quest.questId })), context: entityContext,
         itemColumns: live.scriptSchema.tables.item_template ? new Set(live.scriptSchema.tables.item_template.map((c) => c.name)) : null,
       }),
       exportSchema(live),

@@ -9,7 +9,7 @@ const npc = { ...newNpc(12000001), name: 'Scout Hela', subname: 'Pathfinder', mi
 const chest = { ...newObject(9100001), name: 'Old Chest', type: 'chest' as const, displayId: 259, spawns: [{ ...newSpawn(7000001), o: Math.PI }] };
 const entities: QuestEntities = { npcs: [npc], objects: [chest], items: [] };
 const compile = (over: Partial<Parameters<typeof compileEntities>[0]> = {}) =>
-  compileEntities({ questId: Q, entities, givers: [], context: EMPTY_ENTITY_CONTEXT, ...over });
+  compileEntities({ entities, givers: [], context: EMPTY_ENTITY_CONTEXT, ...over });
 
 describe('compileEntities', () => {
   it('writes the NPC template, its model and its spawn', () => {
@@ -21,7 +21,7 @@ describe('compileEntities', () => {
     expect(out.inserts.creature_template_model).toEqual([{ CreatureID: '12000001', Idx: '0', CreatureDisplayID: '1234', DisplayScale: '1', Probability: '1' }]);
     expect(out.inserts.creature).toEqual([expect.objectContaining({
       guid: '6000001', id1: '12000001', map: '0', spawnMask: '1', phaseMask: '1', position_x: '1.5', position_y: '2.5', position_z: '3.5',
-      orientation: '1', spawntimesecs: '300', wander_distance: '5', MovementType: '1', Comment: 'AQC q60001 npc12000001',
+      orientation: '1', spawntimesecs: '300', wander_distance: '5', MovementType: '1', Comment: 'AQC npc12000001 ',
     })]);
     expect(out.deletes.creature_template).toEqual([{ entry: '12000001' }]);
     expect(out.deletes.creature_template_model).toEqual([{ CreatureID: '12000001', Idx: '0' }]);
@@ -31,7 +31,7 @@ describe('compileEntities', () => {
     const out = compile();
     expect(out.inserts.gameobject_template).toEqual([expect.objectContaining({ entry: '9100001', type: '3', displayId: '259', name: 'Old Chest', size: '1', Data1: '9100001', AIName: '' })]);
     const spawn = out.inserts.gameobject![0]!;
-    expect(spawn).toMatchObject({ guid: '7000001', id: '9100001', state: '1', animprogress: '100', Comment: 'AQC q60001 obj9100001' });
+    expect(spawn).toMatchObject({ guid: '7000001', id: '9100001', state: '1', animprogress: '100', Comment: 'AQC obj9100001 ' });
     expect(Number(spawn.rotation2)).toBeCloseTo(1, 5);
     expect(Number(spawn.rotation3)).toBeCloseTo(0, 5);
   });

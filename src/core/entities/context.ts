@@ -1,8 +1,9 @@
 import type { RawRow } from '../db/types';
 import type { WorldDb } from '../db/world-db';
 import { rowsOrNone } from '../links/context';
-import { taggedRows } from '../scripts/context';
-import type { QuestEntities } from './model';
+import { prefixedRows } from '../scripts/context';
+import { questTagPrefix } from '../scripts/tag';
+import type { ProjectEntities } from './model';
 
 /** The tables new NPCs, objects and items are written to. */
 export const ENTITY_TABLES = [
@@ -56,16 +57,31 @@ export const EMPTY_ENTITY_CONTEXT: EntityContext = {
   waypointRows: [],
 };
 
-export async function readEntityContext(db: WorldDb, questId: number, entities: QuestEntities): Promise<EntityContext> {
+/**
+ * Reads what the database holds for the project's entities. Spawns and loot a past export wrote are
+ * found by the entity tags, and by the quest tags of `legacyQuestIds` that exports before version 4 wrote.
+ */
+export async function readEntityContext(db: WorldDb, entities: ProjectEntities, legacyQuestIds: readonly number[]): Promise<EntityContext> {
   const npcEntries = entities.npcs.map((n) => String(n.entry));
   const objectEntries = entities.objects.map((o) => String(o.entry));
+  const tagged = async (table: string, prefixes: readonly string[]): Promise<RawRow[]> => {
+    const found = await Promise.all(prefixes.map((p) => prefixedRows(db, table, 'Comment', p)));
+    const seen = new Set<string>();
+    return found.flat().filter((row) => {
+      const key = JSON.stringify(row);
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    });
+  };
+  const legacy = legacyQuestIds.map(questTagPrefix);
   const [creatures, gameobjects, taggedCreatureSpawns, taggedObjectSpawns, creatureLoot, objectLoot] = await Promise.all([
     rowsOrNone(db, 'creature_template', { entry: npcEntries }),
     rowsOrNone(db, 'gameobject_template', { entry: objectEntries }),
-    taggedRows(db, 'creature', 'Comment', questId),
-    taggedRows(db, 'gameobject', 'Comment', questId),
-    taggedRows(db, 'creature_loot_template', 'Comment', questId),
-    taggedRows(db, 'gameobject_loot_template', 'Comment', questId),
+    tagged('creature', ['AQC npc', ...legacy]),
+    tagged('gameobject', ['AQC obj', ...legacy]),
+    tagged('creature_loot_template', ['AQC npc', ...legacy]),
+    tagged('gameobject_loot_template', ['AQC obj', ...legacy]),
   ]);
   const pick = (rows: readonly RawRow[], columns: readonly string[]): RawRow[] =>
     rows.map((row) => Object.fromEntries(columns.map((c) => [c, row[c] ?? null])));
