@@ -231,6 +231,25 @@ export class Editor {
     return true;
   }
 
+  /**
+   * Drops a drag under way without an edit: everything dragged goes back where it was drawn before it.
+   * An undo arriving mid-drag does this first, so the drag cannot land on top of what the undo put back
+   */
+  cancelDrag(): void {
+    const drag = this.#drag;
+    if (!drag) return;
+    this.#drag = null;
+    for (const spawn of drag.spawns) {
+      const object = this.#world.findSpawn(spawn.kind, spawn.guid);
+      if (!object) continue;
+      object.position.copy(spawn.start);
+      object.quaternion.copy(spawn.quaternion);
+      object.updateMatrixWorld(true);
+      if (spawn.kind === 'creature') this.#world.previewHome(spawn.guid, { x: spawn.start.x, y: spawn.start.y, z: spawn.start.z });
+    }
+    for (const route of drag.routes) this.#world.previewRoute(route.guid, route.before);
+  }
+
   /** Takes back the path's last point; taking back its first cancels the path */
   undoPoint(): void {
     const drawing = this.#drawing;

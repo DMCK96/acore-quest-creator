@@ -7,7 +7,18 @@ import '../views/ProjectDialog.css';
  * Every edit in the project's world layer, as it was in the database and as it is now: revert one,
  * or export them all as the world patch and the patch that puts the database back.
  */
-export function WorldChanges({ api, onLayer, onClose }: { api: Api; onLayer(layer: WorldLayer): void; onClose(): void }): React.JSX.Element {
+export function WorldChanges({
+  api,
+  onLayer,
+  onClose,
+  layerSeq = 0,
+}: {
+  api: Api;
+  onLayer(layer: WorldLayer): void;
+  onClose(): void;
+  /** Moves when an undo or redo changed the layer, so the list is read again */
+  layerSeq?: number;
+}): React.JSX.Element {
   const dialog = useRef<HTMLDivElement>(null);
   const [changes, setChanges] = useState<WorldChange[] | null>(null);
   const [exported, setExported] = useState<{ applyPath: string; revertPath: string } | null>(null);
@@ -20,9 +31,9 @@ export function WorldChanges({ api, onLayer, onClose }: { api: Api; onLayer(laye
   };
   useEffect(() => {
     void load();
-    // Loaded once when opened; a revert loads again
+    // Loaded when opened, and again after an undo changed the layer; a revert loads again itself
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [layerSeq]);
 
   const revert = async (change: WorldChange): Promise<void> => {
     const result = await api.worldRevert(

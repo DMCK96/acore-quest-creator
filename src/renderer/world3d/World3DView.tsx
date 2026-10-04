@@ -6,6 +6,7 @@ import type { Tool } from './controls';
 import { FALLOFF_DEFAULT, FALLOFF_MAX, FALLOFF_MIN } from './scene/edit/falloff';
 import { summaryText } from './summary';
 import { useApi } from '../state/names';
+import { useHistorySteps } from '../state/history-context';
 import type { EventFilter, PickedSpawn, SpawnStatus, SpawnVisibility } from './scene/spawn/SpawnManager';
 import type { ViewSpawns } from '@core/db/view-spawns';
 import { chooseZ, floorCandidates } from '@core/map/floors';
@@ -241,6 +242,17 @@ function WorldStage({
     setLayer(next);
     world.current?.setWorldLayer(next);
   };
+  // An undo or redo changed the world layer: a drag under way is dropped first, then the layer is drawn
+  const { worldLayer: undone } = useHistorySteps();
+  const seenSeq = useRef(undone?.seq ?? 0);
+  useEffect(() => {
+    if (!undone || undone.seq === seenSeq.current) return;
+    seenSeq.current = undone.seq;
+    world.current?.cancelDrag();
+    takeLayer(undone.layer);
+    // takeLayer only writes refs and state
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [undone]);
   /** Takes the camera close to the pending focus and selects it, with the layers that would hide it on */
   const bringIntoView = (): void => {
     const target = pendingFocus.current;
@@ -728,7 +740,7 @@ function WorldStage({
           {note}
         </p>
       )}
-      {changesOpen && api && <WorldChanges api={api} onLayer={takeLayer} onClose={() => setChangesOpen(false)} />}
+      {changesOpen && api && <WorldChanges api={api} onLayer={takeLayer} onClose={() => setChangesOpen(false)} layerSeq={undone?.seq ?? 0} />}
       {!unavailable && menu.elements}
       {shared && (
         <SharedRouteDialog

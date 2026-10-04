@@ -607,3 +607,20 @@ describe('while a path is drawn', () => {
     expect(t.gizmo.attached).toBe(false);
   });
 });
+
+describe('a drag dropped by an undo', () => {
+  it('puts what was dragged back where it was and makes no edit when the gizmo lets go', async () => {
+    const t = setup({ floor: 1 });
+    const o = t.npc(1, 0, 0);
+    t.editor.setSelection(sel({ spawns: [{ kind: 'creature', guid: 1 }] }));
+    t.editor.update();
+    t.gizmo.events.started();
+    t.gizmo.events.moved(t.change([0, 4, 0]));
+    expect(o.position.y).toBe(4);
+    t.editor.cancelDrag();
+    expect(o.position.toArray()).toEqual([0, 0, 0]);
+    expect(t.homes.at(-1)).toEqual([1, { x: 0, y: 0, z: 0 }]);
+    await t.gizmo.events.ended(false);
+    expect(t.edits).toEqual([]);
+  });
+});

@@ -109,6 +109,8 @@ export interface World3D {
   finishPath(): void;
   /** Puts back everything the path being drawn changed. */
   cancelPath(): void;
+  /** Drops a drag under way, putting what was dragged back, with no edit */
+  cancelDrag(): void;
   /** Takes back the last point of the path being drawn. */
   undoPoint(): void;
   /** Rings the spawns a quest uses, under each that is drawn; null takes the rings away. */
@@ -569,6 +571,7 @@ export function createWorld3D(options: World3DOptions): World3D {
     startPath: (guid, pathId, first) => editor.startPath(guid, pathId, first),
     finishPath: () => editor.finishPath(),
     cancelPath: () => editor.cancelPath(),
+    cancelDrag: () => editor.cancelDrag(),
     undoPoint: () => editor.undoPoint(),
     setMarked(spawns) {
       marked = spawns ? [...spawns] : [];
