@@ -63,12 +63,15 @@ function setup(opts: { routes?: Record<number, Route>; floor?: number | null; an
   const previews: [number, EditPoint[]][] = [];
   const homes: [number, { x: number; y: number; z: number }][] = [];
   const movements: [number, unknown][] = [];
+  let groundAt: THREE.Vector3 | null = null;
+  // A path started in the view: its id, so the first pending route of an NPC with none makes it
+  let lastPathId = 0;
   const world: EditingWorld = {
     camera: new THREE.PerspectiveCamera(),
     dom: document.createElement('canvas'),
     scene: new THREE.Scene(),
     ground: () => [],
-    pickGround: () => null,
+    pickGround: () => groundAt?.clone() ?? null,
     rayAt: () => new THREE.Ray(),
     findSpawn: (kind, guid) => spawns.get(`${kind}:${guid}`) ?? null,
     spawnRoute: (guid) => routes.get(guid) ?? null,
@@ -77,10 +80,14 @@ function setup(opts: { routes?: Record<number, Route>; floor?: number | null; an
       pending.push([guid, points]);
       const route = routes.get(guid);
       if (route) routes.set(guid, { ...route, points });
+      else if (lastPathId > 0) routes.set(guid, { pathId: lastPathId, own: false, entry: 100 + guid, points });
     },
     previewRoute: (guid, points) => previews.push([guid, points]),
     previewHome: (guid, at) => homes.push([guid, at]),
-    setPendingMovement: (guid, m) => movements.push([guid, m]),
+    setPendingMovement: (guid, m) => {
+      movements.push([guid, m]);
+      if (m?.type === 'path' && m.pathId) lastPathId = m.pathId;
+    },
     spawnMovement: () => null,
   };
   const edits: SpawnEdit[] = [];
@@ -108,7 +115,7 @@ function setup(opts: { routes?: Record<number, Route>; floor?: number | null; an
     gizmo.events.moved(change(delta, angle));
     await gizmo.events.ended(lifted);
   };
-  return { editor, world, edits, notices, asked, selections, falloffs, floorZ, gizmo, npc, drop, drag, change, pending, previews, homes, movements };
+  return { editor, world, edits, notices, asked, selections, falloffs, floorZ, gizmo, npc, drop, drag, change, pending, previews, homes, movements, setGround: (v: THREE.Vector3 | null) => { groundAt = v; } };
 }
 
 const placed = (edits: SpawnEdit[]) => edits.map((e) => (e.kind === 'place' ? [e.spawn.guid, e.to.x, e.to.y, e.to.z] : null));
@@ -466,5 +473,109 @@ describe('steps the host made itself', () => {
     t.editor.undo();
     expect(t.movements).toEqual([[7, { type: 'idle', wander: 0, pathId: null }]]);
     expect(t.edits).toEqual([before]);
+  });
+});
+
+describe('drawing a new path', () => {
+  const idle = { type: 'idle' as const, wander: 0, pathId: null };
+  const walking = { type: 'path' as const, wander: 0, pathId: 803310 };
+  const ref = { kind: 'creature' as const, guid: 7, entry: 107, own: false };
+  const settle = () => new Promise((resolve) => setTimeout(resolve, 0));
+
+  it('starts with the NPC walking a one-point path, as one step', () => {
+    const t = setup();
+    t.npc(7, 0, 0);
+    t.editor.startPath(7, 803310, { x: 5, y: 0, z: 0 });
+    expect(t.edits).toEqual([
+      { kind: 'movement', spawn: ref, to: walking },
+      { kind: 'route', spawn: ref, pathId: 803310, points: [{ x: 5, y: 0, z: 0 }] },
+    ]);
+    expect(t.editor.drawing).toEqual({ guid: 7, points: 1 });
+  });
+
+  it('each click on the ground adds a point at the end, one step each, without asking about a shared route', async () => {
+    const t = setup();
+    t.npc(7, 0, 0);
+    t.editor.startPath(7, 803310, { x: 5, y: 0, z: 0 });
+    t.setGround(new THREE.Vector3(9, 0, 0));
+    expect(t.editor.appendPoint(0, 0)).toBe(true);
+    await settle();
+    expect(t.edits.at(-1)).toEqual({ kind: 'route', spawn: ref, pathId: 803310, points: [{ x: 5, y: 0, z: 0 }, { x: 9, y: 0, z: 0 }] });
+    expect(t.asked).toEqual([]);
+    expect(t.editor.drawing).toEqual({ guid: 7, points: 2 });
+  });
+
+  it('a click on the sky adds nothing', () => {
+    const t = setup();
+    t.npc(7, 0, 0);
+    t.editor.startPath(7, 803310, { x: 5, y: 0, z: 0 });
+    t.setGround(null);
+    t.editor.appendPoint(0, 0);
+    expect(t.editor.drawing).toEqual({ guid: 7, points: 1 });
+  });
+
+  it('undo takes the last point back; undoing the first cancels the path', async () => {
+    const t = setup();
+    t.npc(7, 0, 0);
+    t.editor.startPath(7, 803310, { x: 5, y: 0, z: 0 });
+    t.setGround(new THREE.Vector3(9, 0, 0));
+    t.editor.appendPoint(0, 0);
+    await settle();
+    t.editor.undoPoint();
+    expect(t.editor.drawing).toEqual({ guid: 7, points: 1 });
+    t.editor.undoPoint();
+    expect(t.editor.drawing).toBeNull();
+    expect(t.edits.slice(-2)).toEqual([
+      { kind: 'route', spawn: ref, pathId: 803310, points: [] },
+      { kind: 'movement', spawn: ref, to: idle },
+    ]);
+  });
+
+  it('finishing with one point cancels and says why, and it cannot be redone', () => {
+    const t = setup();
+    t.npc(7, 0, 0);
+    t.editor.startPath(7, 803310, { x: 5, y: 0, z: 0 });
+    t.editor.finishPath();
+    expect(t.editor.drawing).toBeNull();
+    expect(t.notices.at(-1)).toBe('A path needs at least two points');
+    expect(t.edits.at(-1)).toEqual({ kind: 'movement', spawn: ref, to: idle });
+    const count = t.edits.length;
+    t.editor.redo();
+    expect(t.edits.length).toBe(count);
+  });
+
+  it('cancel puts everything back and cannot be redone', async () => {
+    const t = setup();
+    t.npc(7, 0, 0);
+    t.editor.startPath(7, 803310, { x: 5, y: 0, z: 0 });
+    t.setGround(new THREE.Vector3(9, 0, 0));
+    t.editor.appendPoint(0, 0);
+    await settle();
+    const before = t.edits.length;
+    t.editor.cancelPath();
+    expect(t.edits.slice(before)).toEqual([
+      { kind: 'route', spawn: ref, pathId: 803310, points: [{ x: 5, y: 0, z: 0 }] },
+      { kind: 'route', spawn: ref, pathId: 803310, points: [] },
+      { kind: 'movement', spawn: ref, to: idle },
+    ]);
+    const after = t.edits.length;
+    t.editor.redo();
+    expect(t.edits.length).toBe(after);
+  });
+
+  it('Enter finishes and Ctrl+Z takes back a point while drawing', async () => {
+    const t = setup();
+    t.npc(7, 0, 0);
+    t.editor.startPath(7, 803310, { x: 5, y: 0, z: 0 });
+    t.setGround(new THREE.Vector3(9, 0, 0));
+    t.editor.appendPoint(0, 0);
+    await settle();
+    expect(t.editor.keyDown(new KeyboardEvent('keydown', { code: 'KeyZ', ctrlKey: true }))).toBe(true);
+    expect(t.editor.drawing).toEqual({ guid: 7, points: 1 });
+    t.editor.appendPoint(0, 0);
+    await settle();
+    expect(t.editor.keyDown(new KeyboardEvent('keydown', { code: 'Enter' }))).toBe(true);
+    expect(t.editor.drawing).toBeNull();
+    expect(t.notices.at(-1)).not.toBe('A path needs at least two points');
   });
 });

@@ -57,6 +57,8 @@ export interface World3DOptions {
   onTool?(tool: Tool): void;
   /** Told when falloff was switched or its radius changed by a key or the wheel. */
   onFalloff?(falloff: Falloff): void;
+  /** Told when a new path starts or stops being drawn, and how many points it has. */
+  onDrawing?(drawing: { guid: number; points: number } | null): void;
 }
 
 /** How much is selected: NPCs, objects, and route points with how many routes they are on */
@@ -92,6 +94,16 @@ export interface World3D {
   setPlacing(target: PlaceTarget | null): void;
   undo(): void;
   redo(): void;
+  /** One undo step for edits the host made itself (a placement, a movement): remembered, not sent again. */
+  record(before: SpawnEdit[], after: SpawnEdit[]): void;
+  /** Starts drawing a new path for a drawn NPC, its first point at `first`; each click then adds a point. */
+  startPath(guid: number, pathId: number, first: { x: number; y: number; z: number }): void;
+  /** Ends the path being drawn (one of fewer than two points is cancelled). */
+  finishPath(): void;
+  /** Puts back everything the path being drawn changed. */
+  cancelPath(): void;
+  /** Takes back the last point of the path being drawn. */
+  undoPoint(): void;
   /** Stops drawing (while the world is hidden) or starts again; a hidden world costs nothing. */
   setActive(active: boolean): void;
   /** The point the camera looks at and turns round. */
@@ -253,6 +265,8 @@ export function createWorld3D(options: World3DOptions): World3D {
   };
   const modifierOf = (keys: ClickKeys): Modifier => (keys.ctrl ? 'remove' : keys.shift ? 'add' : 'replace');
   const click = (x: number, y: number, keys: ClickKeys): void => {
+    // While a path is drawn, each click on the ground is its next point
+    if (editor.appendPoint(x, y)) return;
     if (placing) {
       void place(x, y);
       return;
@@ -309,11 +323,19 @@ export function createWorld3D(options: World3DOptions): World3D {
       // A delete or an insert changed the picked points
       onSelection: (next) => setSelection(next, false),
       onFalloff: (next) => options.onFalloff?.(next),
+      onDrawing: (drawing) => options.onDrawing?.(drawing),
     },
   );
   // The editing keys, on the view itself so they only act while it has focus; a key used here goes
   // no further (Esc that clears a selection must not also close the screen or the quest editor)
   const onKeyDown = (event: KeyboardEvent): void => {
+    // Esc finishes a path being drawn first
+    if (event.code === 'Escape' && editor.drawing) {
+      editor.finishPath();
+      event.preventDefault();
+      event.stopPropagation();
+      return;
+    }
     const used = event.code === 'Escape' ? !isEmpty(selection) || placing !== null : editor.keyDown(event);
     if (event.code === 'Escape' && placing) {
       // Esc stops placing first; a second one clears the selection
@@ -466,6 +488,11 @@ export function createWorld3D(options: World3DOptions): World3D {
     },
     undo: () => editor.undo(),
     redo: () => editor.redo(),
+    record: (before, after) => editor.record(before, after),
+    startPath: (guid, pathId, first) => editor.startPath(guid, pathId, first),
+    finishPath: () => editor.finishPath(),
+    cancelPath: () => editor.cancelPath(),
+    undoPoint: () => editor.undoPoint(),
     setActive(active) {
       if (active === running || disposed) return;
       running = active;

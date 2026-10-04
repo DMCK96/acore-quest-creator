@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import type { Placement } from '@core/world/layer';
-import type { Movement } from '@core/world/movement';
+import { IDLE, type Movement } from '@core/world/movement';
 import type { EditPoint, SpawnEdit, SpawnRef } from './edits';
 import { Gizmo, placementOf, quaternionOf, type GizmoChange, type GizmoMode, type GizmoTurns } from './scene/edit/Gizmo';
 import { createHistory } from './scene/edit/history';
@@ -20,6 +20,7 @@ import { centreOf, movedBy, turnedAbout, turnQuaternion } from './scene/edit/gro
 export const NOT_SNAPPED = 'The height is from the drawn ground, not the server.';
 export const TOO_SHORT = 'A route keeps at least two points.';
 export const PICK_POINT_FIRST = 'Pick a point of the route first, or click on one of its legs.';
+export const TOO_FEW_POINTS = 'A path needs at least two points';
 
 type Kind = 'creature' | 'object';
 type At = { x: number; y: number; z: number };
@@ -61,12 +62,17 @@ export interface EditingOptions {
   onSelection?(selection: Selection): void;
   /** Told when falloff was switched or its radius changed by a key or the wheel */
   onFalloff?(falloff: Falloff): void;
+  /** Told when a new path starts or stops being drawn, and how many points it has */
+  onDrawing?(drawing: { guid: number; points: number } | null): void;
 }
 
 /** A spawn being dragged, as it stood when the drag began */
 type DraggedSpawn = { kind: Kind; guid: number; start: THREE.Vector3; quaternion: THREE.Quaternion; before: Placement };
 /** A route with picked points being dragged: its points as they stood, and as they are now */
 type DraggedRoute = { guid: number; before: EditPoint[]; current: EditPoint[]; picked: Set<number> };
+
+/** A new path being drawn for an NPC: each click adds a point, each point is its own undo step */
+type Drawing = { guid: number; pathId: number; ref: SpawnRef; points: EditPoint[]; steps: number };
 
 type Drag = {
   spawns: DraggedSpawn[];
@@ -93,6 +99,7 @@ export class Editor {
   #falloff: Falloff = { on: false, radius: FALLOFF_DEFAULT };
   #mode: GizmoMode = 'move';
   #drag: Drag | null = null;
+  #drawing: Drawing | null = null;
   /** Where the gizmo was last put, so it is put again only when that changes */
   #attached: { at: THREE.Vector3; quaternion: THREE.Quaternion; turns: GizmoTurns } | null = null;
 
@@ -178,6 +185,100 @@ export class Editor {
     return true;
   }
 
+  /** The new path being drawn, and how many points it has; null when none is */
+  get drawing(): { guid: number; points: number } | null {
+    return this.#drawing ? { guid: this.#drawing.guid, points: this.#drawing.points.length } : null;
+  }
+
+  /**
+   * Starts a new path for a drawn NPC at a point: it now walks that path, which has the one point.
+   * Another path being drawn is finished first. One undo step.
+   */
+  startPath(guid: number, pathId: number, first: At): void {
+    if (this.#drawing) this.finishPath();
+    const ref = this.#ref('creature', guid);
+    if (!ref) return;
+    // A path made here is this NPC's alone: there is nobody to ask about changing it
+    this.#answers.set(pathId, Promise.resolve(true));
+    const was = this.#world.spawnMovement(guid) ?? IDLE;
+    const walks: Movement = { type: 'path', wander: 0, pathId };
+    const point: EditPoint = { x: first.x, y: first.y, z: first.z };
+    this.#drawing = { guid, pathId, ref, points: [point], steps: 1 };
+    this.#world.setPendingMovement(guid, walks);
+    this.#now(
+      [this.#pathEdit([]), { kind: 'movement', spawn: ref, to: was }],
+      [{ kind: 'movement', spawn: ref, to: walks }, this.#pathEdit([point])],
+    );
+    this.#tellDrawing();
+  }
+
+  /** While a path is drawn, a click on the ground adds a point at its end; true when the click was the path's */
+  appendPoint(ndcX: number, ndcY: number): boolean {
+    const drawing = this.#drawing;
+    if (!drawing) return false;
+    const ground = this.#world.pickGround(ndcX, ndcY);
+    if (!ground) return true;
+    const before = this.#pathEdit(drawing.points);
+    drawing.points = [...drawing.points, { x: ground.x, y: ground.y, z: ground.z }];
+    drawing.steps += 1;
+    this.#now([before], [this.#pathEdit(drawing.points)]);
+    this.#tellDrawing();
+    return true;
+  }
+
+  /** Takes back the path's last point; taking back its first cancels the path */
+  undoPoint(): void {
+    const drawing = this.#drawing;
+    if (!drawing) return;
+    if (drawing.steps <= 1) {
+      this.cancelPath();
+      return;
+    }
+    this.undo();
+    drawing.steps -= 1;
+    drawing.points = drawing.points.slice(0, -1);
+    this.#tellDrawing();
+  }
+
+  /** Ends the path being drawn; one with fewer than two points is cancelled, as no NPC can walk it */
+  finishPath(): void {
+    const drawing = this.#drawing;
+    if (!drawing) return;
+    if (drawing.points.length < MIN_ROUTE_POINTS) {
+      this.cancelPath();
+      this.#options.onNotice?.(TOO_FEW_POINTS);
+      return;
+    }
+    this.#drawing = null;
+    this.#tellDrawing();
+  }
+
+  /** Puts back everything the path being drawn changed; it cannot be redone */
+  cancelPath(): void {
+    const drawing = this.#drawing;
+    if (!drawing) return;
+    this.#drawing = null;
+    for (let i = 0; i < drawing.steps; i++) this.undo();
+    this.#history.forgetRedo();
+    this.#tellDrawing();
+  }
+
+  #pathEdit(points: EditPoint[]): SpawnEdit {
+    const drawing = this.#drawing!;
+    return { kind: 'route', spawn: drawing.ref, pathId: drawing.pathId, points };
+  }
+
+  #tellDrawing(): void {
+    this.#options.onDrawing?.(this.drawing);
+  }
+
+  /** Edits nobody need be asked about: drawn at once, remembered as one undo step and sent */
+  #now(before: SpawnEdit[], after: SpawnEdit[]): void {
+    for (const edit of after) if (edit.kind === 'route') this.#world.setPendingRoute(edit.spawn.guid, edit.points);
+    this.#history.push(before, after);
+    for (const edit of after) this.#options.onEdit?.(edit);
+  }
+
   /** A wheel turn during a falloff drag grows or shrinks the radius; true when it was used */
   wheel(deltaY: number): boolean {
     const drag = this.#drag;
@@ -191,6 +292,15 @@ export class Editor {
   /** The editing keys; true when the key was one of them */
   keyDown(event: KeyboardEvent): boolean {
     const ctrl = event.ctrlKey || event.metaKey;
+    // While a path is drawn, Enter finishes it and Ctrl+Z takes back its last point
+    if (this.#drawing && event.code === 'Enter') {
+      this.finishPath();
+      return true;
+    }
+    if (this.#drawing && ctrl && event.code === 'KeyZ' && !event.shiftKey) {
+      this.undoPoint();
+      return true;
+    }
     if (ctrl && event.code === 'KeyZ') {
       if (event.shiftKey) this.redo();
       else this.undo();
