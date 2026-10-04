@@ -115,6 +115,11 @@ export interface AppState {
    * Makes a new NPC, object or item with a fresh ID, made for `madeFor` (a quest, or null), and sends
    * it at once so it is its own undo step before an editor opens on it
    */
+  /**
+   * Deletes one of the project's NPCs, objects or items, emptying every giver card that named it, as one
+   * undo step; the open quest shows the cards as they now are. Returns the error to show, or null.
+   */
+  deleteEntity(kind: 'npc' | 'object' | 'item', entry: number): Promise<string | null>;
   createEntity(kind: 'npc' | 'object' | 'item', preset: Partial<CustomNpc> | Partial<CustomObject> | Partial<CustomItem>, madeFor: number | null): Promise<{ entry: number } | { error: string }>;
   /** Switches the previewed quest into the module editor. */
   editQuest(): void;
@@ -513,6 +518,22 @@ export function createAppStore(api: Api, opts: { saveDelayMs?: number } = {}): A
     async loadEntities() {
       const read = await api.projectEntities();
       if (read.ok) set({ entities: read.value, entitiesSeq: ++entitiesSeq });
+    },
+
+    async deleteEntity(kind, entry) {
+      await get().flushAll();
+      const result = await api.deleteEntity(kind, entry);
+      if (!result.ok) {
+        set({ error: result.error.message });
+        return result.error.message;
+      }
+      set({ entities: result.value.entities, entitiesSeq: ++entitiesSeq });
+      const open = get().open;
+      const mine = open ? result.value.quests.find((q) => q.questId === open.questId) : undefined;
+      if (open && mine) set({ open: { ...open, aggregate: mine.aggregate }, dirty: false });
+      if (result.value.quests.length > 0) await get().loadNodes();
+      else await get().loadProjectState();
+      return null;
     },
 
     async createEntity(kind, preset, madeFor) {

@@ -415,6 +415,11 @@ export interface Api {
   projectEntities(): Promise<Result<ProjectEntities>>;
   /** Replaces the project's new NPCs, objects and items: one undo step (typing in one merges). */
   putProjectEntities(next: ProjectEntities): Promise<Result<true>>;
+  /**
+   * Deletes one of the project's NPCs, objects or items and empties every quest's giver card that named
+   * it, as one undo step; gives the store and the quests it changed, as they now are.
+   */
+  deleteEntity(kind: 'npc' | 'object' | 'item', entry: number): Promise<Result<{ entities: ProjectEntities; quests: { questId: number; aggregate: QuestAggregate }[] }>>;
   /** The project's edits to spawns and routes outside any quest. */
   worldLayer(): Promise<Result<WorldLayer>>;
   /** Moves or turns an existing spawn in the world layer; its original is read from the database at the first edit. */
@@ -616,6 +621,7 @@ const REQUEST_SCHEMAS: Record<keyof Api, z.ZodType<unknown[]>> = {
   projectEntities: z.tuple([]),
   // Each entry is checked against the entity schemas by the main process
   putProjectEntities: z.tuple([z.object({ npcs: z.array(z.unknown()), objects: z.array(z.unknown()), items: z.array(z.unknown()) })]),
+  deleteEntity: z.tuple([z.enum(['npc', 'object', 'item']), z.number().int().min(1)]),
   worldLayer: z.tuple([]),
   worldMoveSpawn: z.tuple([worldKindArg, z.number().int(), placementArg]),
   worldAddSpawn: z.tuple([worldKindArg, z.number().int().min(1), z.number().int().min(0), placementArg, z.number().int().min(1).optional()]),

@@ -1,5 +1,6 @@
 import type { CustomNpc, Spawn } from '@core/entities/model';
 import { FightEditor } from '../../combat/FightEditor';
+import { CreditQuestsProvider } from '../../combat/credit-quests';
 import { NumberField } from '../../scripts/fields';
 import { EditorTabs } from '../EditorTabs';
 import { LootList } from '../LootList';
@@ -17,6 +18,7 @@ export function NpcEditor({
   onTab,
   hasServerData = true,
   others,
+  quests = [],
 }: {
   npc: CustomNpc;
   /** This quest's other new NPCs, which "Look like…" can copy before the database has them. */
@@ -27,7 +29,10 @@ export function NpcEditor({
   onTab?(id: string): void;
   /** Whether looks can be named, from the server data folder. */
   hasServerData?: boolean;
+  /** The project's quests a fight's credit can name, those that use the NPC first */
+  quests?: readonly { questId: number; title: string }[];
 }): React.JSX.Element {
+  const credit = { quests, defaultQuest: npc.madeFor ?? quests[0]?.questId ?? 0 };
   return (
     <EditorTabs
       label="NPC"
@@ -45,7 +50,9 @@ export function NpcEditor({
                 <NumberField label="Health multiplier" value={npc.healthModifier} onChange={(healthModifier) => onChange({ ...npc, healthModifier })} />
                 <NumberField label="Damage multiplier" value={npc.damageModifier} onChange={(damageModifier) => onChange({ ...npc, damageModifier })} />
               </div>
-              <FightEditor idPrefix={`npc-${npc.entry}`} entry={npc.entry} fight={npc.fight} onChange={(fight) => onChange({ ...npc, fight })} />
+              <CreditQuestsProvider value={credit}>
+                <FightEditor idPrefix={`npc-${npc.entry}`} entry={npc.entry} fight={npc.fight} onChange={(fight) => onChange({ ...npc, fight })} />
+              </CreditQuestsProvider>
             </div>
           ),
         },

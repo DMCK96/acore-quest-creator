@@ -42,6 +42,7 @@ export const API_METHODS = [
   'viewSpawns',
   'projectEntities',
   'putProjectEntities',
+  'deleteEntity',
   'worldLayer',
   'worldMoveSpawn',
   'worldAddSpawn',

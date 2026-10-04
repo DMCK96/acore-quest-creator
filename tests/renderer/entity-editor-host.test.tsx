@@ -5,6 +5,7 @@ import userEvent from '@testing-library/user-event';
 import type { LeafletMapProps } from '../../src/renderer/map/LeafletMap';
 import { mountEditor } from './module-harness';
 import { createAppStore } from '../../src/renderer/state/app-store';
+import { ProjectEntitiesFromStore } from '../../src/renderer/state/project-entities';
 import { QuestFlowView } from '../../src/renderer/views/QuestFlowView';
 import { NamesProvider } from '../../src/renderer/state/names';
 import { RewardTablesProvider } from '../../src/renderer/state/reward-tables';
@@ -36,25 +37,25 @@ describe('entity editor host', () => {
     expect(within(dialog).getByRole('button', { name: 'Delete NPC' })).toBeTruthy();
   });
 
-  it('discard removes the NPC and empties the giver card it was on, after asking', async () => {
+  it('discard hands the delete on (which empties the giver cards that named it), after asking', async () => {
     const confirm = vi.spyOn(window, 'confirm').mockReturnValueOnce(false).mockReturnValueOnce(true);
-    const { onChange, onClose } = await mountEditor(withHela(), { kind: 'npc', entry: 12000005, isNew: true });
+    const quests = [{ questId: 60001, title: 'Wolves', uses: { npcs: [12000005], objects: [], items: [] } }];
+    const { onDelete, onClose } = await mountEditor(withHela({ ...newNpc(12000005) }), { kind: 'npc', entry: 12000005, isNew: true }, { quests });
     await userEvent.click(screen.getByRole('button', { name: 'Discard' }));
-    expect(onChange).not.toHaveBeenCalled();
+    expect(onDelete).not.toHaveBeenCalled();
     await userEvent.click(screen.getByRole('button', { name: 'Discard' }));
-    expect(confirm).toHaveBeenLastCalledWith('Discard this NPC? It is removed from the quest.');
-    expect(entitiesIn(onChange).npcs).toEqual([]);
-    expect(onChange).toHaveBeenCalledWith('creature_queststarter', [{ id: 0 }]);
+    expect(confirm).toHaveBeenLastCalledWith("Discard this NPC? Quest 'Wolves' names it; its giver cards will be emptied.");
+    expect(onDelete).toHaveBeenCalledWith('npc', 12000005);
     expect(onClose).toHaveBeenCalled();
   });
 
   it('opens a new item, titles it, and deletes it after asking', async () => {
     vi.spyOn(window, 'confirm').mockReturnValue(true);
-    const { onChange, onClose } = await mountEditor({ [ENTITIES_FIELD]: writeEntities({ npcs: [], objects: [], items: [newItem(990301)] }) }, { kind: 'item', entry: 990301, isNew: true });
+    const { onDelete, onClose } = await mountEditor({ [ENTITIES_FIELD]: writeEntities({ npcs: [], objects: [], items: [newItem(990301)] }) }, { kind: 'item', entry: 990301, isNew: true });
     const dialog = screen.getByRole('dialog', { name: 'New item' });
     expect(within(dialog).getByRole('tab', { name: 'Basics' })).toBeTruthy();
     await userEvent.click(within(dialog).getByRole('button', { name: 'Discard' }));
-    expect(entitiesIn(onChange).items).toEqual([]);
+    expect(onDelete).toHaveBeenCalledWith('item', 990301);
     expect(onClose).toHaveBeenCalled();
   });
 
@@ -72,7 +73,7 @@ async function mountFlow() {
   const api = makeMockApi({ newQuest: vi.fn(async () => okv(open)), allocateIds: vi.fn(async (kind: string) => okv(kind === 'creature' ? [12000005] : [900])) });
   const store = createAppStore(api, { saveDelayMs: 0 });
   await store.getState().newQuest();
-  render(<NamesProvider api={api}><RewardTablesProvider api={api}><QuestFlowView store={store} /></RewardTablesProvider></NamesProvider>);
+  render(<NamesProvider api={api}><RewardTablesProvider api={api}><ProjectEntitiesFromStore store={store}><QuestFlowView store={store} /></ProjectEntitiesFromStore></RewardTablesProvider></NamesProvider>);
   return { store, api };
 }
 
@@ -83,8 +84,9 @@ describe('the editor in the quest flow', () => {
     await userEvent.click(screen.getByRole('button', { name: 'New NPC for starts at 1' }));
     const editor = await screen.findByRole('dialog', { name: 'New NPC' });
     const values = store.getState().open!.aggregate.values;
-    expect(readEntities(values).npcs.map((n) => n.entry)).toEqual([12000005]);
-    expect(readEntities(values).npcs[0]!.questGiver).toBe(true);
+    const { npcs } = store.getState().entities;
+    expect(npcs.map((n) => [n.entry, n.madeFor])).toEqual([[12000005, 60123]]);
+    expect(npcs[0]!.questGiver).toBe(true);
     expect(values.creature_queststarter).toEqual([{ id: 12000005 }]);
     await userEvent.click(within(editor).getByRole('button', { name: 'Done' }));
     expect(screen.queryByRole('dialog', { name: 'New NPC' })).toBeNull();

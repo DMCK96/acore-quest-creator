@@ -76,6 +76,7 @@ import { sceneIssues } from '../core/scripts/validate';
 import { compileEntities } from '../core/entities/compile';
 import { compilePatrols, hasPointActions } from '../core/patrol/compile';
 import { ENTITY_KEYS, ENTITY_TABLES, readEntityContext } from '../core/entities/context';
+import { emptyGiversOf } from '../core/modules/givers';
 import { narrowTo, objectivesOf, questItemsOf, questUses, relationOwners } from '../core/entities/links';
 import { NPC_TYPE_VALUE, OBJECT_TYPE_VALUE, RANK_VALUE, projectEntitiesSchema, readProjectEntities, type ProjectEntities, type QuestEntities } from '../core/entities/model';
 import { entityIssues } from '../core/entities/validate';
@@ -1825,6 +1826,26 @@ export function createApi(deps: ApiDeps): Api {
         deps.session.entities.put(parsed.data);
         return true as const;
       }),
+
+    deleteEntity: (kind, entry) =>
+      run(() => asOneStep(async () => {
+        const store = projectEntities();
+        const list = kind === 'npc' ? 'npcs' : kind === 'object' ? 'objects' : 'items';
+        if (!(store[list] as { entry: number }[]).some((e) => e.entry === entry)) throw fail('BAD_REQUEST', `There is no such ${kind === 'npc' ? 'NPC' : kind} in the project.`);
+        deps.session.entities.put({ ...store, [list]: (store[list] as { entry: number }[]).filter((e) => e.entry !== entry) } as ProjectEntities);
+        // An item is never a giver; an NPC or object comes off every quest's giver cards
+        const changed: { questId: number; aggregate: QuestAggregate }[] = [];
+        if (kind !== 'item') {
+          for (const quest of quests.list()) {
+            const edits = emptyGiversOf(quest.aggregate.values, kind === 'npc' ? 'creature' : 'gameobject', entry);
+            if (Object.keys(edits).length === 0) continue;
+            const aggregate = { ...quest.aggregate, values: { ...quest.aggregate.values, ...edits } };
+            quests.put({ ...quest, aggregate });
+            changed.push({ questId: quest.questId, aggregate });
+          }
+        }
+        return { entities: deps.session.entities.get(), quests: changed };
+      })),
 
     worldLayer: () => run(async () => deps.session.world.get()),
 

@@ -65,4 +65,25 @@ describe('the project store through the API', () => {
     const nodes: any = await api.listNodes();
     expect(nodes.value[0].uses).toEqual({ npcs: [11000240], objects: [], items: [] });
   });
+
+  it('deletes an NPC and empties every quest’s giver card that named it, as one undo step', async () => {
+    const { api, session } = await setup();
+    const ids: number[] = [];
+    for (const title of ['A', 'B']) {
+      const opened: any = await api.newQuest();
+      const aggregate = opened.value.aggregate;
+      aggregate.values['quest_template.LogTitle'] = title;
+      aggregate.values.creature_queststarter = [{ id: 11000240 }];
+      await api.updateQuest(aggregate);
+      ids.push(aggregate.questId);
+    }
+    await api.putProjectEntities({ ...EMPTY_ENTITIES, npcs: [hela] });
+    const out: any = await api.deleteEntity('npc', 11000240);
+    expect(out.value.entities.npcs).toEqual([]);
+    expect(out.value.quests.map((q: any) => [q.questId, q.aggregate.values.creature_queststarter])).toEqual([[ids[0], [{ id: 0 }]], [ids[1], [{ id: 0 }]]]);
+    expect(session.quests.get(ids[1]!)!.aggregate.values.creature_queststarter).toEqual([{ id: 0 }]);
+    const undone: any = await api.historyUndo();
+    expect(undone.value.entities.npcs.map((n: any) => n.entry)).toEqual([11000240]);
+    expect(session.quests.get(ids[0]!)!.aggregate.values.creature_queststarter).toEqual([{ id: 11000240 }]);
+  });
 });

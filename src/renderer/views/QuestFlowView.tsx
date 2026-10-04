@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { ENTITIES_FIELD, newItem, newNpc, newObject, readEntities, writeEntities } from '@core/entities/model';
+import { EMPTY_ENTITIES } from '@core/entities/model';
+import { useProjectEntities } from '../state/project-entities';
 import { EntityEditorProvider, type EditorRequest, type OpenEditor } from '../entities/EntityEditorContext';
 import { EntityEditorHost, type EditorState } from '../entities/EntityEditorHost';
 import { MODULES, moduleById, offeredModules, presentModules } from '@core/modules/catalog';
@@ -24,6 +25,7 @@ import './QuestFlowView.css';
 export function QuestFlowView({ store }: { store: AppStore }): React.JSX.Element | null {
   const open = store((s) => s.open);
   const api = useApi();
+  const project = useProjectEntities();
   const issues = store((s) => s.issues);
   const links = store((s) => s.links);
   const openPanel = store((s) => s.openPanel);
@@ -112,17 +114,11 @@ export function QuestFlowView({ store }: { store: AppStore }): React.JSX.Element
     if (!api) return 'Not connected.';
     // The first `if` returned for both existing kinds; TypeScript cannot narrow a union-typed `kind` out.
     const made = request as Extract<EditorRequest, { kind: 'newNpc' | 'newObject' | 'newItem' }>;
-    const result = await api.allocateIds(made.kind === 'newNpc' ? 'creature' : made.kind === 'newObject' ? 'gameobject' : 'item', 1);
-    if (!result.ok || result.value.length === 0) return result.ok ? 'No free ID could be found.' : result.error.message;
-    const entry = result.value[0]!;
-    // Created in the quest at once, from the values as they are now (never a draft).
-    const now = readEntities(store.getState().open?.aggregate.values ?? {});
-    const next = made.kind === 'newNpc'
-      ? { ...now, npcs: [...now.npcs, { ...newNpc(entry), ...made.preset, entry }] }
-      : made.kind === 'newObject'
-        ? { ...now, objects: [...now.objects, { ...newObject(entry), ...made.preset, entry }] }
-        : { ...now, items: [...now.items, { ...newItem(entry), ...made.preset, entry }] };
-    setValue(ENTITIES_FIELD, writeEntities(next));
+    // Created in the project at once (never a draft), made for the open quest unless asked otherwise
+    const kind = made.kind === 'newNpc' ? 'npc' : made.kind === 'newObject' ? 'object' : 'item';
+    const result = await store.getState().createEntity(kind, made.preset ?? {}, made.madeFor !== undefined ? made.madeFor : (store.getState().open?.questId ?? null));
+    if ('error' in result) return result.error;
+    const entry = result.entry;
     made.onCreated?.(entry);
     setEditor({ kind: made.kind === 'newNpc' ? 'npc' : made.kind === 'newObject' ? 'object' : 'item', entry, isNew: true });
     return null;
@@ -206,7 +202,9 @@ export function QuestFlowView({ store }: { store: AppStore }): React.JSX.Element
         />
       )}
       {editor && openPanel !== 'map' && (
-        <EntityEditorHost values={values} onChange={setValue} state={editor} onTab={onEditorTab} onClose={closeEditor} hasServerData={hasServerData} />
+        <EntityEditorHost entities={project?.entities ?? EMPTY_ENTITIES} onChange={(next) => project?.setEntities(next)} quests={project?.quests ?? []}
+          state={editor} onTab={onEditorTab} onClose={closeEditor} hasServerData={hasServerData}
+          onDelete={(kind, entry) => void store.getState().deleteEntity(kind, entry)} />
       )}
     </div>
     </MapOpenerProvider>

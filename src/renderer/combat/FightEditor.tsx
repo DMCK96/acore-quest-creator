@@ -6,6 +6,7 @@ import { useApi } from '../state/names';
 import { AbilityEditor } from './AbilityEditor';
 import { PhaseList } from './PhaseList';
 import { defaultWhen, ReactionEditor, WHEN_LABELS } from './ReactionEditor';
+import { creditingQuest, useCreditQuests } from './credit-quests';
 import './combat.css';
 
 /** A select that does something when an option is chosen and goes back to its placeholder. */
@@ -55,7 +56,9 @@ export function FightEditor({ idPrefix, entry, fight, onChange }: { idPrefix: st
   }, [api, idsKey]);
 
   const lines = useMemo(() => (fight ? describeFight(fight, (id) => names[id]) : []), [fight, names]);
-  const preset = (id: PresetId): void => onChange(applyPreset(fight, id));
+  const credit = useCreditQuests();
+  // A preset's credit step credits the quest the NPC is for
+  const preset = (id: PresetId): void => onChange(creditingQuest(applyPreset(fight, id), credit.defaultQuest));
 
   if (fight === null || (fightIsEmpty(fight) && fight.phases.length === 0)) {
     return (

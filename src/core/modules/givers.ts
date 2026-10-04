@@ -30,3 +30,21 @@ export function writeGivers(role: 'start' | 'end', targets: readonly GiverTarget
   const rows = (kind: GiverTarget['kind']) => targets.filter((t) => t.kind === kind).map((t) => ({ id: t.id }));
   return { [tables.creature]: rows('creature'), [tables.gameobject]: rows('gameobject') };
 }
+
+/**
+ * The giver field edits that take an NPC or object off a quest's cards: a card that named it goes
+ * back to empty, as it was before New, and one empty card per role is enough. Only fields that change.
+ */
+export function emptyGiversOf(values: Values, kind: GiverTarget['kind'], entry: number): Record<string, FieldValue> {
+  const out: Record<string, FieldValue> = {};
+  for (const role of ['start', 'end'] as const) {
+    const targets = readGivers(values, role);
+    if (!targets.some((t) => t.kind === kind && t.id === entry)) continue;
+    const emptied = targets.map((t) => (t.kind === kind && t.id === entry ? { ...t, id: 0 } : t));
+    const kept = emptied.filter((t, i) => t.id !== 0 || emptied.findIndex((u) => u.id === 0) === i);
+    for (const [fieldId, value] of Object.entries(writeGivers(role, kept))) {
+      if (JSON.stringify(value) !== JSON.stringify(values[fieldId] ?? [])) out[fieldId] = value;
+    }
+  }
+  return out;
+}
