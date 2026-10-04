@@ -1,14 +1,15 @@
 // @vitest-environment jsdom
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { act, render, screen, waitFor, within } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 
-type Fake = { setActive: ReturnType<typeof vi.fn>; at: { x: number; y: number; z: number }; area: (name: string) => void };
+type Fake = { setActive: ReturnType<typeof vi.fn>; setScenery: ReturnType<typeof vi.fn>; at: { x: number; y: number; z: number }; area: (name: string) => void };
 const created = vi.hoisted(() => [] as Fake[]);
 
 vi.mock('../../src/renderer/world3d/world3d', () => ({
   createWorld3D: (options: { onArea?: (name: string) => void }) => {
     const world = {
-      at: { x: 1, y: 2, z: 3 }, setActive: vi.fn(), dispose: vi.fn(), lookAt: vi.fn(), setSpawnVisibility: vi.fn(),
+      at: { x: 1, y: 2, z: 3 }, setActive: vi.fn(), setScenery: vi.fn(), dispose: vi.fn(), lookAt: vi.fn(), setSpawnVisibility: vi.fn(),
       spawnStatus: () => ({ capped: { creatures: false, objects: false }, error: null, loading: 0 }),
       target() { return world.at; }, area: (name: string) => options.onArea?.(name),
     };
@@ -80,5 +81,29 @@ describe('the 3D view in a workspace', () => {
     expect(layers).toHaveClass('glass');
     expect(within(layers).getByText('Layers')).toHaveClass('section-label');
     expect(screen.getByRole('status').querySelector('.orb-mark--spinning')).not.toBeNull();
+  });
+
+  it('shows or hides buildings and trees from the layers, and remembers the choice', async () => {
+    clientHasEverything();
+    localStorage.removeItem('acqc.world3d.layers');
+    const first = render(<World3DView map={0} start={start} hasClient />);
+    await waitFor(() => expect(created).toHaveLength(1));
+    const layers = screen.getByRole('group', { name: 'Layers' });
+    const buildings = within(layers).getByRole('checkbox', { name: 'Buildings' });
+    const trees = within(layers).getByRole('checkbox', { name: 'Trees & props' });
+    expect(buildings).toBeChecked();
+    expect(trees).toBeChecked();
+    expect(created[0]!.setScenery).toHaveBeenLastCalledWith({ buildings: true, doodads: true });
+    await userEvent.click(buildings);
+    expect(created[0]!.setScenery).toHaveBeenLastCalledWith({ buildings: false, doodads: true });
+    await userEvent.click(trees);
+    expect(created[0]!.setScenery).toHaveBeenLastCalledWith({ buildings: false, doodads: false });
+    first.unmount();
+    // The next view opens with them hidden
+    render(<World3DView map={0} start={start} hasClient />);
+    await waitFor(() => expect(created).toHaveLength(2));
+    expect(within(screen.getByRole('group', { name: 'Layers' })).getByRole('checkbox', { name: 'Buildings' })).not.toBeChecked();
+    expect(created[1]!.setScenery).toHaveBeenLastCalledWith({ buildings: false, doodads: false });
+    localStorage.removeItem('acqc.world3d.layers');
   });
 });

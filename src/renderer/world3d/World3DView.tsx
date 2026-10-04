@@ -1,7 +1,7 @@
 import { Component, useEffect, useRef, useState, type ReactNode } from 'react';
 import { assetUrl } from '@core/client/asset-url';
 import { worldMapDirectory } from '@core/map/world-maps';
-import { createWorld3D, type World3D } from './world3d';
+import { createWorld3D, type Scenery, type World3D } from './world3d';
 import { useApi } from '../state/names';
 import type { PickedSpawn, SpawnStatus, SpawnVisibility } from './scene/spawn/SpawnManager';
 import type { ViewSpawns } from '@core/db/view-spawns';
@@ -37,18 +37,25 @@ const CONTROLS: [string, string][] = [
 
 /** Where the layer checkboxes are remembered, per viewer. */
 const LAYERS_KEY = 'acqc.world3d.layers';
+/** What the layer checkboxes show: the world's scenery, and its NPCs, objects and their paths */
+type Layers = SpawnVisibility & Scenery;
 /** Event spawns (holidays, fairs) are off until asked for: they are only in the world while their event runs. */
-const DEFAULT_LAYERS: SpawnVisibility = { creatures: true, objects: true, paths: true, events: false };
-const LAYER_LABELS: [keyof SpawnVisibility, string, string?][] = [
+const DEFAULT_LAYERS: Layers = { buildings: true, doodads: true, creatures: true, objects: true, paths: true, events: false };
+const LAYER_LABELS: [keyof Layers, string, string?][] = [
+  ['buildings', 'Buildings', 'Houses, towers and what is inside them. Hidden, clicks land on the ground under them'],
+  ['doodads', 'Trees & props', 'Trees, bushes, fences, carts and the rest of the small scenery'],
   ['creatures', 'NPCs'],
   ['objects', 'Objects'],
   ['paths', 'Paths'],
   ['events', 'Event spawns', 'NPCs and objects that appear only while a game event (a holiday, a fair) runs'],
 ];
 
-function readLayers(): SpawnVisibility {
+const spawnsOf = ({ creatures, objects, paths, events }: Layers): SpawnVisibility => ({ creatures, objects, paths, events });
+const sceneryOf = ({ buildings, doodads }: Layers): Scenery => ({ buildings, doodads });
+
+function readLayers(): Layers {
   try {
-    const saved = JSON.parse(localStorage.getItem(LAYERS_KEY) ?? 'null') as Partial<SpawnVisibility> | null;
+    const saved = JSON.parse(localStorage.getItem(LAYERS_KEY) ?? 'null') as Partial<Layers> | null;
     return { ...DEFAULT_LAYERS, ...(saved ?? {}) };
   } catch {
     return { ...DEFAULT_LAYERS };
@@ -155,7 +162,7 @@ function WorldStage({ map, start, hasClient, own, onSelect, onOwnEdit, focus, ac
   const [missing, setMissing] = useState<readonly string[]>([]);
   const [status, setStatus] = useState<'loading' | 'slow' | 'ready'>('loading');
   const [help, setHelp] = useState(false);
-  const [layers, setLayers] = useState<SpawnVisibility>(readLayers);
+  const [layers, setLayers] = useState<Layers>(readLayers);
   const [spawns, setSpawns] = useState<SpawnStatus | null>(null);
   const [selected, setSelected] = useState<PickedSpawn | null>(null);
   const onSelectRef = useRef(onSelect);
@@ -352,7 +359,8 @@ function WorldStage({ map, start, hasClient, own, onSelect, onOwnEdit, focus, ac
               return result.ok ? result.value : { error: result.error.message };
             },
           });
-          created.setSpawnVisibility(layersRef.current);
+          created.setSpawnVisibility(spawnsOf(layersRef.current));
+          created.setScenery(sceneryOf(layersRef.current));
           if (!activeRef.current) created.setActive(false);
           if (ownRef.current) created.setOwnSpawns(ownRef.current);
           world.current = created;
@@ -378,7 +386,8 @@ function WorldStage({ map, start, hasClient, own, onSelect, onOwnEdit, focus, ac
 
   // The layer checkboxes: applied to the world and remembered.
   useEffect(() => {
-    world.current?.setSpawnVisibility(layers);
+    world.current?.setSpawnVisibility(spawnsOf(layers));
+    world.current?.setScenery(sceneryOf(layers));
     try {
       localStorage.setItem(LAYERS_KEY, JSON.stringify(layers));
     } catch {

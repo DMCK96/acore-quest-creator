@@ -105,6 +105,44 @@ test('draws the terrain, and a model or texture that cannot be read costs the ar
   await expect.poll(() => client.requested.includes('200 xtextures/river/lake_a.1.blp'), { timeout: 10000 }).toBe(true);
 });
 
+test('buildings can be hidden, and are then neither drawn nor in the way of a click on the ground', async ({ page }) => {
+  await openPage(page);
+  await open(page, 'azeroth', 0);
+  await page.waitForFunction('window.__state.ready', null, { timeout: 45000 });
+  await page.waitForTimeout(1000);
+  const canvas = page.locator('canvas.world3d__canvas');
+  const box = (await canvas.boundingBox())!;
+  const [cx, cy] = [box.x + box.width / 2, box.y + box.height / 2];
+  const middle = async () => (await page.evaluate(`window.__pixel(${JSON.stringify((await canvas.screenshot()).toString('base64'))}, 0.5, 0.5)`)) as number[];
+  const placedAt = async () => {
+    const before = (await state(page)).placed.length;
+    await page.mouse.click(cx, cy);
+    await expect.poll(async () => (await state(page)).placed.length).toBe(before + 1);
+    return (await state(page)).placed[before]!.at.z;
+  };
+
+  // The house is in the middle: its brick roof, and a click there lands on the roof
+  const [roofR, , roofB] = await middle();
+  expect(roofR!).toBeGreaterThan(roofB! + 60);
+  await page.evaluate("window.__placing({ kind: 'creature', entry: 1423 })");
+  const onRoof = await placedAt();
+
+  // Hidden: the roof is gone from the picture, and the same click lands on the ground under it
+  await page.evaluate('window.__setScenery({ buildings: false, doodads: true })');
+  await page.waitForTimeout(300);
+  const [r, , b] = await middle();
+  expect(r!).toBeLessThan(b! + 60);
+  const onGround = await placedAt();
+  expect(onGround).toBeLessThan(onRoof - 1);
+
+  // Shown again: back as it was
+  await page.evaluate('window.__setScenery({ buildings: true, doodads: true })');
+  await page.waitForTimeout(300);
+  const [againR, , againB] = await middle();
+  expect(againR!).toBeGreaterThan(againB! + 60);
+  expect((await state(page)).errors).toEqual([]);
+});
+
 test('draws liquid: magma covering a tile, its look read from LiquidType.dbc and its flipbook only as long as it is', async ({ page }) => {
   const shaderErrors: string[] = [];
   page.on('console', (message) => {

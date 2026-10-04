@@ -60,6 +60,8 @@ class MapManager extends EventTarget {
   #wmoGroups = new globalThis.Map<number, THREE.Group>();
   #liquidGroups = new globalThis.Map<number, THREE.Group>();
   #spawnGroups = new globalThis.Map<number, THREE.Group>();
+  /** Whether buildings (with what is inside them) and doodads (trees, fences, carts) are drawn */
+  #scenery = { buildings: true, doodads: true };
   /** Areas whose spawns were asked for and not dropped since (drawn, on their way, or failed) */
   #spawnAsked = new Set<number>();
   #mapId: number;
@@ -190,6 +192,11 @@ class MapManager extends EventTarget {
     this.#spawnManager.setOwnSpawns(spawns).catch((error) => console.warn(`3D view: the quest's own NPCs and objects could not be drawn: ${describeError(error)}`));
   }
 
+  /** Shows or hides buildings and doodads; a hidden kind is not drawn and not hit by a click */
+  setScenery(scenery: { buildings: boolean; doodads: boolean }) {
+    this.#scenery = { ...scenery };
+  }
+
   setSpawnVisibility(visibility: SpawnVisibility) {
     this.#spawnManager.setVisibility(visibility).catch((error) => console.warn(`3D view: the NPCs and objects could not be redrawn: ${describeError(error)}`));
   }
@@ -314,8 +321,14 @@ class MapManager extends EventTarget {
     // Cull entire groups to save on frustum intersection cost
     this.#cullGroups();
 
-    this.#doodadManager.cull(this.#cullingFrustum, camera.position);
-    this.#doodadManager.update(deltaTime, camera);
+    if (this.#scenery.doodads) {
+      this.#doodadManager.cull(this.#cullingFrustum, camera.position);
+      this.#doodadManager.update(deltaTime, camera);
+    } else {
+      // Hidden doodads are left as they were: neither culled nor animated
+      for (const doodadGroup of this.#doodadGroups.values()) doodadGroup.visible = false;
+    }
+    for (const wmoGroup of this.#wmoGroups.values()) wmoGroup.visible = this.#scenery.buildings;
 
     this.#liquidManager.update(deltaTime);
 

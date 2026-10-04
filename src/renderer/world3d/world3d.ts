@@ -50,11 +50,16 @@ export interface World3DOptions {
   onPlaceEnd?(): void;
 }
 
+/** Which of the world's scenery is drawn */
+export type Scenery = { buildings: boolean; doodads: boolean };
+
 export interface World3D {
   /** Moves the camera to look at a world point; `close` stands near it (a few yards, to see one NPC or object) rather than far. */
   lookAt(x: number, y: number, z: number, close?: boolean): void;
   /** Where the camera is and which way it looks (a unit vector). */
   camera(): { position: { x: number; y: number; z: number }; direction: { x: number; y: number; z: number } };
+  /** Shows or hides buildings and doodads (trees, fences, carts); hidden ones are not hit by clicks either. */
+  setScenery(scenery: Scenery): void;
   /** Shows or hides NPCs, objects and their paths, without unloading them. */
   setSpawnVisibility(visibility: SpawnVisibility): void;
   /** Whether a kind of spawn was capped, or why none could be read. */
@@ -155,10 +160,12 @@ export function createWorld3D(options: World3DOptions): World3D {
   // What is under a place on screen, for orbiting round it and for how far a wheel notch moves: the
   // terrain and buildings only (models and liquid are thin or see-through)
   const raycaster = new THREE.Raycaster();
+  // What a click can land on: the terrain, and the buildings while they are shown
+  let scenery: Scenery = { buildings: true, doodads: true };
+  const clickable = (group: THREE.Object3D): boolean => group.name === 'terrain' || (group.name === 'buildings' && scenery.buildings);
   const pick = (x: number, y: number): THREE.Vector3 | null => {
     raycaster.setFromCamera(new THREE.Vector2(x, y), camera);
-    const solid = manager.root.children.filter((group) => group.name === 'terrain' || group.name === 'buildings');
-    return raycaster.intersectObjects(solid, true)[0]?.point ?? null;
+    return raycaster.intersectObjects(manager.root.children.filter(clickable), true)[0]?.point ?? null;
   };
   // A click selects the nearest NPC or object under it that nothing solid stands in front of, unless
   // it was on the selected NPC's route (a point, or Shift to add one)
@@ -203,7 +210,7 @@ export function createWorld3D(options: World3DOptions): World3D {
     options.onSelect?.(spawn);
   };
   const controls = new WorldControls(camera, renderer.domElement, { pick, onClick: click, blocked: () => editor.blocked });
-  const solid = (): THREE.Object3D[] => manager.root.children.filter((group) => group.name === 'terrain' || group.name === 'buildings');
+  const solid = (): THREE.Object3D[] => manager.root.children.filter(clickable);
   const editor = new Editor(
     {
       camera,
@@ -260,7 +267,9 @@ export function createWorld3D(options: World3DOptions): World3D {
   const groundBelow = (x: number, y: number, fromZ: number, distance: number): number | null => {
     down.set(new THREE.Vector3(x, y, fromZ), new THREE.Vector3(0, 0, -1));
     down.far = distance;
-    return down.intersectObjects(solid(), true)[0]?.point.z ?? null;
+    // Every floor, shown or not: where an NPC stands does not change with what is drawn
+    const floors = manager.root.children.filter((group) => group.name === 'terrain' || group.name === 'buildings');
+    return down.intersectObjects(floors, true)[0]?.point.z ?? null;
   };
   const manager = new MapManager({ host: HOST, textureManager: textures, dbManager: databases, characterTexture, soundManager: SILENT, groundBelow });
   manager.addEventListener('area:change', (event) => {
@@ -330,6 +339,10 @@ export function createWorld3D(options: World3DOptions): World3D {
   return {
     lookAt,
     setSpawnVisibility: (visibility) => manager.setSpawnVisibility(visibility),
+    setScenery(next) {
+      scenery = { ...next };
+      manager.setScenery(scenery);
+    },
     spawnStatus: () => manager.spawnStatus,
     setOwnSpawns: (spawns) => manager.setOwnSpawns(spawns),
     select: (spawn) => choose(spawn),

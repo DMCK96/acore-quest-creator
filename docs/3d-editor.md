@@ -95,6 +95,8 @@ Looked at and **not** used: `wowserhq/client` (it is the game's UI layer), `vjeu
   - The first time a project is shown in the World (`acqc.welcome.seen`, by project file or `untitled`; `welcome-seen.ts`), a welcome over the glowing orb offers well-known places (`teleport-picks.ts`), the teleport search (`TeleportPicker`, shared with the Teleport panel), **Find an NPC or object**, **Start a quest** and **Just look around**. Without a game client, the World shows a card offering Settings and the Quests instead. The login orb flies into the welcome's orb, or the app bar's.
   - One look: the login card's frosted surface (`--glass-*` tokens, `.glass`, `.section-label` in `theme.css`) for the app bar, modals, the place card, the layers card, the selected-spawn card, notes, the loading pill (a spinning orb mark) and the graph's quest tools, minimap and zoom.
 
+- **Buildings** and **Trees & props** in the layers card (remembered with the other layers) hide the world's buildings (with what is inside them) and its doodads (trees, fences, carts). Hidden ones are neither drawn nor hit by a click, so placing, dragging a spawn or a route point and picking the ground land on the terrain under a roof or canopy, and an NPC inside a hidden building can be clicked (`World3D.setScenery`; `MapManager` skips culling and animating hidden doodads). Standing NPCs on the ground still uses every floor. Water stays drawn.
+
 ### Known gaps
 
 Things that are missing or approximate. Roughly in order of how much they matter.

@@ -45,6 +45,7 @@
       // Where the camera is and which way it looks
       window.__camera = () => world?.camera();
       window.__setVisibility = (visibility) => world?.setSpawnVisibility(visibility);
+      window.__setScenery = (scenery) => world?.setScenery(scenery);
       window.__select = (spawn) => world?.select(spawn);
       window.__mode = (mode) => world?.setMode(mode);
       window.__undo = () => world?.undo();
