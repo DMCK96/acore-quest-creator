@@ -221,3 +221,26 @@ describe('findings from the review, in the view', () => {
     }
   });
 });
+
+describe('one gesture, one layer drawn', () => {
+  it('draws only the layer that answers the last edit of a gesture, so nothing is drawn back where it was', async () => {
+    const layerA = { ...EMPTY, spawns: [{ ...moved.spawns[0], guid: 1 }] };
+    const layerB = { ...EMPTY, spawns: [{ ...moved.spawns[0], guid: 1 }, { ...moved.spawns[0], guid: 2 }] };
+    const worldMoveSpawn = vi.fn().mockImplementationOnce(async () => okv(layerA)).mockImplementationOnce(async () => okv(layerB));
+    const { world } = await questMap(makeMockApi({ worldLayer: vi.fn(async () => okv(EMPTY)), worldMoveSpawn }));
+    world.options.onEdit(place(false, 1, 1423));
+    world.options.onEdit(place(false, 2, 1423));
+    await waitFor(() => expect(world.setWorldLayer).toHaveBeenLastCalledWith(layerB));
+    expect(world.setWorldLayer.mock.calls.map(([layer]: [unknown]) => layer)).not.toContainEqual(layerA);
+  });
+
+  it('draws the last layer that came back when the last edit of a gesture fails', async () => {
+    const layerA = { ...EMPTY, spawns: [{ ...moved.spawns[0], guid: 1 }] };
+    const worldMoveSpawn = vi.fn().mockImplementationOnce(async () => okv(layerA)).mockImplementationOnce(async () => errv('NOT_CONNECTED', 'the database said no'));
+    const { world } = await questMap(makeMockApi({ worldLayer: vi.fn(async () => okv(EMPTY)), worldMoveSpawn }));
+    world.options.onEdit(place(false, 1, 1423));
+    world.options.onEdit(place(false, 2, 1423));
+    await waitFor(() => expect(world.setWorldLayer).toHaveBeenLastCalledWith(layerA));
+    expect(await screen.findByText(/the database said no/)).toBeTruthy();
+  });
+});

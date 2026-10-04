@@ -271,6 +271,9 @@ function WorldStage({ map, start, hasClient, own, onSelect, onOwnEdit, focus, ac
     // One gesture's edits go to the main process one after another: each answer is a whole new
     // layer, so an earlier, slower answer must never replace a later one
     let queue: Promise<void> = Promise.resolve();
+    // World edits sent and not yet answered. Each answer is the whole layer, so only the last one of a
+    // gesture is drawn: an earlier one would draw the gesture's later spawns back where they were
+    let waiting = 0;
     let created: World3D | null = null;
     // Each route's answer to "change it for everyone who walks it?", for as long as this world lives
     const answers = new Map<number, Promise<boolean>>();
@@ -304,12 +307,13 @@ function WorldStage({ map, start, hasClient, own, onSelect, onOwnEdit, focus, ac
             );
       if (!live) return;
       if (result.ok) {
-        applyLayer(result.value);
+        // Kept, and drawn once the gesture's last answer is in
+        layerRef.current = result.value;
+        setLayer(result.value);
         placed(change);
         setNote(null);
       } else {
         setNote(result.error.message);
-        created?.setWorldLayer(layerRef.current);
       }
     };
     // A click while placing: the spawn goes into the world layer, and is selected so it can be turned or moved at once
@@ -387,9 +391,19 @@ function WorldStage({ map, start, hasClient, own, onSelect, onOwnEdit, focus, ac
               // The quest's own edits are taken at once; world edits wait their turn
               if (change.spawn.own && onOwnEditRef.current) void edit(change);
               // One that fails outright is said, and the queue goes on
-              else queue = queue.then(() => edit(change)).catch((error: unknown) => {
-                  if (live) setNote(`The change could not be kept: ${error instanceof Error ? error.message : String(error)}`);
-                });
+              else {
+                waiting += 1;
+                queue = queue
+                  .then(() => edit(change))
+                  .catch((error: unknown) => {
+                    if (live) setNote(`The change could not be kept: ${error instanceof Error ? error.message : String(error)}`);
+                  })
+                  .finally(() => {
+                    waiting -= 1;
+                    // The last answer: the layer as the main process now has it (a refused edit is drawn back)
+                    if (waiting === 0 && live) created?.setWorldLayer(layerRef.current);
+                  });
+              }
             },
             onSelection: (next) => live && setSummary(next),
             onTool: (tool) => live && setLayers((l) => ({ ...l, tool })),
