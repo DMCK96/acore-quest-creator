@@ -83,9 +83,11 @@ export function AppShell({ store }: { store: AppStore }): React.JSX.Element {
           onQuestField={(fieldId, value) => store.getState().setValue(fieldId, value)}
           onNewQuest={(giver, previous) => {
             void (async () => {
+              const was = store.getState().open?.questId;
               await store.getState().newQuest();
               const made = store.getState().open;
-              if (!made) return;
+              // No new quest (it failed, or another open overtook it): the open one is not to be touched
+              if (!made || made.questId === was) return;
               // The NPC gives the new quest and takes it back; in a chain, it comes after the one that was open
               const target = { kind: 'creature' as const, id: giver.entry };
               for (const role of ['giver', 'ender'] as const) {

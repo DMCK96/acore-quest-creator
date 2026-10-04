@@ -222,7 +222,7 @@ describe('movement through the API', () => {
     const { api, db } = await setup(world);
     db.update('creature', { guid: '80330' }, { MovementType: '2', wander_distance: '0' });
     const out: any = await api.worldSetMovement(80330, { type: 'wander', wander: 5, pathId: null });
-    expect(out.value.movements).toEqual([{ guid: 80330, entry: 1423, name: 'Stormwind Guard', map: 0, addonRow: true,
+    expect(out.value.movements).toEqual([{ guid: 80330, entry: 1423, name: 'Stormwind Guard', map: 0, addonRow: true, originalRaw: { wander: 0, type: 2 },
       original: { type: 'path', wander: 0, pathId: 801 }, current: { type: 'wander', wander: 5, pathId: null } }]);
   });
 
@@ -313,5 +313,17 @@ describe('the spawns a quest uses', () => {
     const roles = group.spawns.map((s: any) => `${s.role}:${s.kind}:${s.guid}`).sort();
     expect(roles).toEqual(['giver:creature:80330', 'giver:creature:80331', 'giver:creature:80332', 'objective:gameobject:5', 'own:creature:900'].sort());
     expect(group.spawns.find((s: any) => s.role === 'own')).toMatchObject({ entry: 12000001, name: 'Hela', map: 0, x: 1, y: 2, z: 3 });
+  });
+
+  it('reads a template-only addon as the seed of the spawn row a new path writes, and keeps the raw wander for the revert', async () => {
+    const { api, db, written } = await setup(world);
+    db.update('creature', { guid: '80331' }, { MovementType: '0', wander_distance: '5' });
+    db.update('creature_template_addon', { entry: '1423' }, { path_id: '0', mount: '2410' });
+    await api.worldSetMovement(80331, { type: 'path', wander: 0, pathId: 803310 });
+    await api.worldSetRoute(803310, [{ x: 1, y: 0, z: 0, rest: {} }, { x: 2, y: 0, z: 0, rest: {} }], { isNew: true });
+    const out: any = await api.exportWorld();
+    expect(out.value.sql).toMatch(/INSERT INTO `creature_addon`[^;]*2410/);
+    const revert = [...written.entries()].find(([path]) => path.endsWith('_world_revert.sql'))![1];
+    expect(revert).toMatch(/UPDATE `creature` SET `wander_distance` = 5, `MovementType` = 0 WHERE `guid` = 80331/);
   });
 });

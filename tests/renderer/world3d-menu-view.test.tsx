@@ -165,4 +165,46 @@ describe('the right-click menu in the 3D view', () => {
     await view({ worldLayer: vi.fn(async () => okv({ ...EMPTY, movements })) });
     expect(await screen.findByRole('button', { name: 'World changes (1)' })).toBeEnabled();
   });
+
+  it('does not paste or duplicate while a path is drawn', async () => {
+    const { api, world } = await view();
+    world.selectedSpawns.mockReturnValue([guard]);
+    act(() => { world.options.onShortcut('KeyC'); });
+    act(() => world.options.onDrawing({ guid: 80330, points: 2 }));
+    act(() => { world.options.onShortcut('KeyV'); });
+    act(() => { world.options.onShortcut('KeyD'); });
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    expect(api.worldAddSpawn).not.toHaveBeenCalled();
+  });
+
+  it('a map switch cancels the path being drawn, and the next world\u2019s menu is the usual one', async () => {
+    vi.stubGlobal('fetch', async () => new Response(new Uint8Array([1]), { status: 200 }));
+    const api = makeMockApi({ worldLayer: vi.fn(async () => okv(EMPTY)) });
+    const { rerender } = render(<NamesProvider api={api}><World3DView map={0} start={{ x: 0, y: 0, z: 0 }} hasClient /></NamesProvider>);
+    await waitFor(() => expect(worlds).toHaveLength(1));
+    act(() => worlds[0].options.onDrawing({ guid: 80330, points: 1 }));
+    rerender(<NamesProvider api={api}><World3DView map={1} start={{ x: 0, y: 0, z: 0 }} hasClient /></NamesProvider>);
+    await waitFor(() => expect(worlds).toHaveLength(2));
+    expect(worlds[0].cancelPath).toHaveBeenCalled();
+    rightClick(worlds[1], { ground: at, hit: null, selection: [] });
+    expect(screen.getByRole('menuitem', { name: 'Place NPC here…' })).toBeInTheDocument();
+  });
+
+  it('Remove path on a quest\u2019s own NPC keeps its points in the undo step', async () => {
+    const onOwnEdit = vi.fn();
+    vi.stubGlobal('fetch', async () => new Response(new Uint8Array([1]), { status: 200 }));
+    const api = makeMockApi({ worldLayer: vi.fn(async () => okv(EMPTY)) });
+    render(<NamesProvider api={api}><World3DView map={0} start={{ x: 0, y: 0, z: 0 }} hasClient onOwnEdit={onOwnEdit} /></NamesProvider>);
+    await waitFor(() => expect(worlds).toHaveLength(1));
+    const world = worlds[0];
+    const own = { ...guard, guid: 900, entry: 12000001, own: true, pathId: 9000 };
+    world.spawnMovement.mockReturnValue({ type: 'path', wander: 0, pathId: 9000 });
+    world.routeOf.mockReturnValue({ pathId: 9000, points: [{ x: 1, y: 1, z: 1 }, { x: 2, y: 2, z: 2 }] });
+    rightClick(world, { ground: at, hit: { type: 'spawn', spawn: own }, selection: [own] });
+    await userEvent.click(screen.getByRole('menuitem', { name: 'Remove path' }));
+    const ref = { kind: 'creature', guid: 900, entry: 12000001, own: true };
+    await waitFor(() => expect(world.record).toHaveBeenCalledWith(
+      [{ kind: 'route', spawn: ref, pathId: 9000, points: [{ x: 1, y: 1, z: 1 }, { x: 2, y: 2, z: 2 }] }, { kind: 'movement', spawn: ref, to: { type: 'path', wander: 0, pathId: 9000 } }],
+      [{ kind: 'movement', spawn: ref, to: { type: 'idle', wander: 0, pathId: null } }]));
+  });
 });

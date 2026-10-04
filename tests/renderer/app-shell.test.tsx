@@ -8,7 +8,7 @@ vi.mock('../../src/renderer/world3d/world3d', () => ({
   createWorld3D: (options: any) => {
     const world = {
       options, setOwnSpawns: vi.fn(), setWorldLayer: vi.fn(), setMarked: vi.fn(),
-      dispose: vi.fn(), lookAt: vi.fn(), setSpawnVisibility: vi.fn(), setActive: vi.fn(), setScenery: vi.fn(), setTool: vi.fn(), setFalloff: vi.fn(), target: () => ({ x: 0, y: 0, z: 0 }),
+      dispose: vi.fn(), cancelPath: vi.fn(), lookAt: vi.fn(), setSpawnVisibility: vi.fn(), setActive: vi.fn(), setScenery: vi.fn(), setTool: vi.fn(), setFalloff: vi.fn(), target: () => ({ x: 0, y: 0, z: 0 }),
       spawnStatus: () => ({ capped: { creatures: false, objects: false }, error: null, loading: 0 }),
     };
     created.push(world);
@@ -144,5 +144,19 @@ describe('the app shell', () => {
     expect(values.creature_queststarter).toEqual([{ id: 1423 }]);
     expect(values.creature_questender).toEqual([{ id: 1423 }]);
     expect(tab('Quests')).toHaveAttribute('aria-selected', 'true');
+  });
+
+  it('leaves the open quest alone when the new quest cannot be made', async () => {
+    const { store } = await shell({ newQuest: async () => ({ ok: false, error: { code: 'UNKNOWN', message: 'no' } }) });
+    await store.getState().openQuest(60001);
+    await userEvent.click(tab('World'));
+    await waitFor(() => expect(created).toHaveLength(1));
+    const guard = { kind: 'creature', guid: 80330, entry: 1423, name: 'Guard', own: false, added: false, pathId: 0, wander: 0, map: 0, placement: { x: 1, y: 2, z: 3, orientation: 0, rotation: null } };
+    act(() => created[0]!.options.onContextMenu({ ground: { x: 1, y: 2, z: 3 }, hit: { type: 'spawn', spawn: guard }, selection: [guard] }, { x: 10, y: 10 }));
+    await userEvent.click(screen.getByRole('menuitem', { name: 'Start the next quest in this chain' }));
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    const values = store.getState().open?.aggregate.values ?? {};
+    expect(values['quest_template_addon.PrevQuestID']).toBeUndefined();
+    expect(values.creature_queststarter).toBeUndefined();
   });
 });

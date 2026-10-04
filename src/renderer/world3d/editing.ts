@@ -306,6 +306,8 @@ export class Editor {
       this.undoPoint();
       return true;
     }
+    // Nothing else may step the history while a path is drawn: its own steps must stay the last ones
+    if (this.#drawing && ctrl && (event.code === 'KeyY' || event.code === 'KeyZ')) return true;
     if (ctrl && event.code === 'KeyZ') {
       if (event.shiftKey) this.redo();
       else this.undo();
@@ -355,6 +357,12 @@ export class Editor {
   /** Every frame: keeps the gizmo on the middle of what is selected, which a redraw may have replaced */
   update(): void {
     if (this.#drag || this.#gizmo.dragging) return;
+    // While a path is drawn the NPC cannot be dragged: a move would land among the path's undo steps
+    if (this.#drawing) {
+      if (this.#gizmo.attached) this.#gizmo.detach();
+      this.#attached = null;
+      return;
+    }
     const spawns = this.#selection.spawns.flatMap((s) => {
       const object = this.#world.findSpawn(s.kind, s.guid);
       return object ? [{ kind: s.kind, object }] : [];

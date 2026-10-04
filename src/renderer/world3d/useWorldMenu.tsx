@@ -70,10 +70,17 @@ export function useWorldMenu(deps: WorldMenuDeps): {
   const [place, setPlace] = useState<{ what: 'creature' | 'object'; at: At } | null>(null);
   const [wander, setWander] = useState<{ spawn: MenuSpawn; before: Movement } | null>(null);
   const [drawing, setDrawing] = useState<{ guid: number; points: number } | null>(null);
+  const drawingRef = useRef(drawing);
+  drawingRef.current = drawing;
   const [marked, setMarked] = useState(false);
 
   // A menu belongs to the world it was opened on
   useEffect(() => setMenu(null), [deps.map, deps.active]);
+  // A path being drawn belongs to its world: a new map's world starts without one
+  useEffect(() => {
+    setDrawing(null);
+    drawingRef.current = null;
+  }, [deps.map]);
   // Marks belong to the quest they were shown for
   const questId = deps.quest?.id ?? null;
   useEffect(() => {
@@ -253,8 +260,13 @@ export function useWorldMenu(deps: WorldMenuDeps): {
         const ref = refOf(spawn);
         const before: SpawnEdit[] = [{ kind: 'movement', spawn: ref, to: world.spawnMovement(spawn.guid) ?? { type: 'path', wander: 0, pathId: spawn.pathId } }];
         const after: SpawnEdit[] = [{ kind: 'movement', spawn: ref, to: IDLE }];
+        // A quest's own patrol goes with its movement, so the undo brings its points back too
+        if (spawn.own) {
+          const points = world.routeOf(spawn.guid)?.points ?? [];
+          before.unshift({ kind: 'route', spawn: ref, pathId: spawn.pathId, points });
+        }
         // A path made in this view is taken back with it; a database path is left for whoever else walks it
-        if (d.current.newPaths.has(spawn.pathId)) {
+        else if (d.current.newPaths.has(spawn.pathId)) {
           const points = world.routeOf(spawn.guid)?.points ?? [];
           before.unshift({ kind: 'route', spawn: ref, pathId: spawn.pathId, points });
           after.push({ kind: 'route', spawn: ref, pathId: spawn.pathId, points: [] });
@@ -305,6 +317,8 @@ export function useWorldMenu(deps: WorldMenuDeps): {
   const shortcut = (code: 'KeyC' | 'KeyV' | 'KeyD'): boolean => {
     const world = d.current.world.current;
     if (!world) return false;
+    // A paste or a duplicate while a path is drawn would land among the path's undo steps
+    if (drawingRef.current && code !== 'KeyC') return true;
     if (code === 'KeyC') copy();
     else if (code === 'KeyD') void duplicate();
     else {

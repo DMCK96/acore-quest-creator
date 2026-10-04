@@ -509,6 +509,17 @@ describe('the world layer in the view', () => {
     expect(m.movement(1)).toEqual({ type: 'idle', wander: 0, pathId: null });
   });
 
+  it('drops a pending movement when the quest\u2019s own spawns come back', async () => {
+    const m = manager({ creatures: [], objects: [], capped: { creatures: false, objects: false } });
+    await m.loadArea(1, 0, box);
+    const own = { creatures: [creature(900, 1, { own: true, x: 0.5, y: 0.5 })], objects: [], capped: { creatures: false, objects: false } };
+    await m.setOwnSpawns(own);
+    await m.setPendingMovement(900, { type: 'wander', wander: 9, pathId: null });
+    expect(m.movement(900)).toEqual({ type: 'wander', wander: 9, pathId: null });
+    await m.setOwnSpawns(own);
+    expect(m.movement(900)).toEqual({ type: 'idle', wander: 0, pathId: null });
+  });
+
   it('describes a drawn spawn for the menu', async () => {
     const m = manager({ creatures: [creature(1, 1, { x: 0.5, y: 0.5, orientation: 2, wander: 4 })], objects: [], capped: { creatures: false, objects: false } });
     await m.loadArea(1, 0, box);

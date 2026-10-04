@@ -1690,7 +1690,7 @@ export function createApi(deps: ApiDeps): Api {
         // A spawn placed in the view stood still when it was placed, and the database does not have it
         const fromPlaced = (layer: WorldLayer) => {
           const placed = layer.added.find((a) => a.kind === 'creature' && a.guid === guid);
-          return placed ? { entry: placed.entry, name: placed.name, map: placed.map, movement: IDLE, addonRow: false } : null;
+          return placed ? { entry: placed.entry, name: placed.name, map: placed.map, movement: IDLE, addonRow: false, originalRaw: undefined } : null;
         };
         // Database first, layer after, as worldMoveSpawn does, so an edit made meanwhile is kept
         const start = deps.session.world.get();
@@ -1703,7 +1703,12 @@ export function createApi(deps: ApiDeps): Api {
           known = knownIn(layer);
         }
         if (!known && !read) throw fail('BAD_REQUEST', `Spawn ${guid} is no longer in the database.`);
-        const edit = known ?? { guid, entry: read!.entry, name: read!.name, map: read!.map, addonRow: read!.addonRow, original: read!.movement };
+        const was = read as Awaited<ReturnType<typeof readMovement>>;
+        const edit = known ?? {
+          guid, entry: was!.entry, name: was!.name, map: was!.map, addonRow: was!.addonRow, original: was!.movement,
+          ...(was!.addonSeed ? { addonSeed: was!.addonSeed } : {}),
+          ...(was!.originalRaw ? { originalRaw: was!.originalRaw } : {}),
+        };
         const next = setMovement(layer, edit, to);
         deps.session.world.put(next);
         return next;

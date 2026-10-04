@@ -10,7 +10,7 @@ const nearby = vi.hoisted(() => ({ list: [] as { id: number; name: string }[] })
 vi.mock('../../src/renderer/world3d/world3d', () => ({
   createWorld3D: (options: { onArea?: (name: string) => void }) => {
     const world = {
-      at: { x: 1, y: 2, z: 3 }, setActive: vi.fn(), setScenery: vi.fn(), setTool: vi.fn(), setFalloff: vi.fn(), dispose: vi.fn(), lookAt: vi.fn(), setSpawnVisibility: vi.fn(),
+      at: { x: 1, y: 2, z: 3 }, setActive: vi.fn(), setScenery: vi.fn(), setTool: vi.fn(), setFalloff: vi.fn(), dispose: vi.fn(), cancelPath: vi.fn(), lookAt: vi.fn(), setSpawnVisibility: vi.fn(),
       spawnStatus: () => ({ capped: { creatures: false, objects: false }, error: null, loading: 0, events: nearby.list }),
       target() { return world.at; }, area: (name: string) => options.onArea?.(name),
     };

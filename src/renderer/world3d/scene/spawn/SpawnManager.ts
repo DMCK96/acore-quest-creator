@@ -334,6 +334,7 @@ class SpawnManager {
   async setOwnSpawns(spawns: ViewSpawns) {
     this.#own = spawns;
     this.#pendingRoutes.clear();
+    this.#pendingMovements.clear();
     await this.#redraw();
   }
 

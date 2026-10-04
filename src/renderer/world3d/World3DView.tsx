@@ -394,6 +394,9 @@ function WorldStage({
       const { guid } = result.value;
       const added = result.value.layer.added.find((a) => a.kind === kind && a.guid === guid);
       created?.select({ kind: target.kind, guid });
+      // One undo step, as a placement from the menu is
+      const spawn = { kind: target.kind, guid, entry: target.entry, own: false };
+      created?.record([{ kind: 'presence', spawn, present: false, at, map }], [{ kind: 'presence', spawn, present: true, at, map }]);
       setSelected({
         kind: target.kind, guid, entry: target.entry, name: added?.name ?? '', own: false, added: true, pathId: 0, event: null,
         position: { x: at.x, y: at.y, z: at.z },
@@ -498,6 +501,8 @@ function WorldStage({
         }
       });
     return () => {
+      // A path being drawn is not left half made: it is put back as it was
+      created?.cancelPath();
       live = false;
       clearTimeout(slow);
       created?.dispose();

@@ -66,6 +66,13 @@ export interface WorldMovementEdit {
   map: number;
   /** Whether the spawn had a `creature_addon` row at its first edit: its path is then updated, else a row is written */
   addonRow: boolean;
+  /**
+   * Its template's addon (mount, stand state, auras) when the spawn has no row of its own: a row written
+   * to give the spawn a path replaces the template's, so it starts as a copy of it
+   */
+  addonSeed?: Record<string, string | null>;
+  /** `wander_distance` and `MovementType` as the database had them, put back by the revert as they were */
+  originalRaw?: { wander: number; type: number };
   original: Movement;
   current: Movement;
 }
@@ -306,14 +313,15 @@ function movementSet(m: Movement): Record<string, string> {
 function movementStatements(m: WorldMovementEdit, addonDefaults: Record<string, string | null> | undefined): { apply: PatchStatement[]; revert: PatchStatement[] } {
   const key = { guid: text(m.guid) };
   const apply: PatchStatement[] = [{ kind: 'update', table: 'creature', key, set: movementSet(m.current) }];
-  const revert: PatchStatement[] = [{ kind: 'update', table: 'creature', key, set: movementSet(m.original) }];
+  const was = m.originalRaw ? { wander_distance: text(m.originalRaw.wander), MovementType: text(m.originalRaw.type) } : movementSet(m.original);
+  const revert: PatchStatement[] = [{ kind: 'update', table: 'creature', key, set: was }];
   if (m.current.pathId !== m.original.pathId) {
     const path = (p: number | null) => text(p ?? 0);
     if (m.addonRow) {
       apply.push({ kind: 'update', table: 'creature_addon', key, set: { path_id: path(m.current.pathId) } });
       revert.push({ kind: 'update', table: 'creature_addon', key, set: { path_id: path(m.original.pathId) } });
     } else {
-      apply.push({ kind: 'delete', table: 'creature_addon', key }, { kind: 'insert', table: 'creature_addon', row: { ...addonDefaults, guid: key.guid, path_id: path(m.current.pathId) } });
+      apply.push({ kind: 'delete', table: 'creature_addon', key }, { kind: 'insert', table: 'creature_addon', row: { ...addonDefaults, ...m.addonSeed, guid: key.guid, path_id: path(m.current.pathId) } });
       revert.push({ kind: 'delete', table: 'creature_addon', key });
     }
   }

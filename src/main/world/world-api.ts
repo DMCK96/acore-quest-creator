@@ -135,7 +135,15 @@ export async function worldSchema(db: WorldDb, hash: string): Promise<SchemaInfo
 export async function readMovement(
   db: WorldDb,
   guid: number,
-): Promise<{ entry: number; name: string; map: number; movement: Movement; addonRow: boolean } | null> {
+): Promise<{
+  entry: number;
+  name: string;
+  map: number;
+  movement: Movement;
+  addonRow: boolean;
+  addonSeed?: Record<string, string | null>;
+  originalRaw: { wander: number; type: number };
+} | null> {
   const [row] = await db.selectRows('creature', { guid: String(guid) });
   if (!row) return null;
   const entry = num(row[spawnEntryColumn('creature', (await db.columns('creature')).map((c) => c.name))]);
@@ -143,7 +151,13 @@ export async function readMovement(
   const [addon] = (await hasTable(db, 'creature_addon')) ? await db.selectRows('creature_addon', { guid: String(guid) }) : [];
   const [templateAddon] = !addon && (await hasTable(db, 'creature_template_addon')) ? await db.selectRows('creature_template_addon', { entry: String(entry) }) : [];
   const movement = movementOfRow({ MovementType: row.MovementType, wander_distance: row.wander_distance, path_id: (addon ?? templateAddon)?.path_id ?? null });
-  return { entry, name: named?.name ?? '', map: num(row.map), movement, addonRow: addon !== undefined };
+  // A spawn row written later replaces the template's addon, so it starts as a copy of it
+  const addonSeed = templateAddon ? Object.fromEntries(Object.entries(templateAddon).filter(([column]) => column !== 'entry' && column !== 'path_id')) : undefined;
+  return {
+    entry, name: named?.name ?? '', map: num(row.map), movement, addonRow: addon !== undefined,
+    ...(addonSeed ? { addonSeed } : {}),
+    originalRaw: { wander: num(row.wander_distance), type: num(row.MovementType) },
+  };
 }
 
 /** Whether the database no longer holds an NPC's original movement; a placed spawn's never drifts */

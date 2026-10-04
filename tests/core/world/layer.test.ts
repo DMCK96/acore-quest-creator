@@ -235,3 +235,17 @@ describe('world layer: movement', () => {
     expect(apply.map((s) => s.table)).toEqual(['creature', 'creature', 'creature', 'creature_addon', 'creature_addon', 'waypoint_data', 'waypoint_data', 'waypoint_data']);
   });
 });
+
+describe('world layer: movement keeps what the database had', () => {
+  it('seeds a new addon row from the template addon, so its mount and auras stay', () => {
+    const layer = setMovement(EMPTY_WORLD, { ...stander, addonSeed: { mount: '2410', bytes1: '1', auras: '1234' } }, { type: 'path', wander: 0, pathId: 803310 });
+    const { apply } = worldStatements(layer, undefined, {}, { guid: '0', path_id: '0', mount: '0', bytes1: '0', auras: null });
+    expect(apply).toContainEqual({ kind: 'insert', table: 'creature_addon', row: { guid: '80331', path_id: '803310', mount: '2410', bytes1: '1', auras: '1234' } });
+  });
+
+  it('puts back the wander distance and movement type the database had, not the normalised ones', () => {
+    const layer = setMovement(EMPTY_WORLD, { ...stander, originalRaw: { wander: 5, type: 0 } }, { type: 'path', wander: 0, pathId: 803310 });
+    const { revert } = worldStatements(layer);
+    expect(revert[0]).toEqual({ kind: 'update', table: 'creature', key: { guid: '80331' }, set: { wander_distance: '5', MovementType: '0' } });
+  });
+});

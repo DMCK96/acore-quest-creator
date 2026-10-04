@@ -579,3 +579,31 @@ describe('drawing a new path', () => {
     expect(t.notices.at(-1)).not.toBe('A path needs at least two points');
   });
 });
+
+describe('while a path is drawn', () => {
+  it('refuses redo, so the path\u2019s own steps stay the last ones', async () => {
+    const t = setup();
+    t.npc(7, 0, 0);
+    t.editor.startPath(7, 803310, { x: 5, y: 0, z: 0 });
+    t.setGround(new THREE.Vector3(9, 0, 0));
+    t.editor.appendPoint(0, 0);
+    t.editor.undoPoint();
+    const count = t.edits.length;
+    expect(t.editor.keyDown(new KeyboardEvent('keydown', { code: 'KeyY', ctrlKey: true }))).toBe(true);
+    expect(t.editor.keyDown(new KeyboardEvent('keydown', { code: 'KeyZ', ctrlKey: true, shiftKey: true }))).toBe(true);
+    expect(t.edits.length).toBe(count);
+    t.editor.cancelPath();
+    expect(t.edits.at(-1)).toEqual({ kind: 'movement', spawn: { kind: 'creature', guid: 7, entry: 107, own: false }, to: { type: 'idle', wander: 0, pathId: null } });
+  });
+
+  it('takes the gizmo away, so the NPC cannot be dragged into the path\u2019s undo steps', () => {
+    const t = setup();
+    t.npc(7, 0, 0);
+    t.editor.setSelection(sel({ spawns: [{ kind: 'creature', guid: 7 }] }));
+    t.editor.update();
+    expect(t.gizmo.attached).toBe(true);
+    t.editor.startPath(7, 803310, { x: 5, y: 0, z: 0 });
+    t.editor.update();
+    expect(t.gizmo.attached).toBe(false);
+  });
+});

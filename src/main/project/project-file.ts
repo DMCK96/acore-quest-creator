@@ -215,6 +215,8 @@ const worldSchema = z.object({
         name: z.string(),
         map: z.number().int(),
         addonRow: z.boolean(),
+        addonSeed: z.record(z.string(), z.string().nullable()).optional(),
+        originalRaw: z.object({ wander: z.number(), type: z.number() }).optional(),
         original: movementSchema,
         current: movementSchema,
       }),

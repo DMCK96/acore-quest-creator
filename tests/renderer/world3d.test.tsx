@@ -11,7 +11,7 @@ vi.mock('../../src/renderer/world3d/world3d', () => ({
   createWorld3D: (options: { directory: string; map: number; start: unknown; onReady?: () => void }) => {
     if (failing.on) throw new Error('WebGL is not available');
     const world = {
-      directory: options.directory, map: options.map, start: options.start, dispose: vi.fn(), lookAt: vi.fn(), ready: () => options.onReady?.(),
+      directory: options.directory, map: options.map, start: options.start, dispose: vi.fn(), cancelPath: vi.fn(), lookAt: vi.fn(), ready: () => options.onReady?.(),
       setSpawnVisibility: vi.fn(), setActive: vi.fn(), setScenery: vi.fn(), setTool: vi.fn(), setFalloff: vi.fn(), target: () => ({ x: 0, y: 0, z: 0 }), spawnStatus: () => ({ capped: { creatures: false, objects: false }, error: null, loading: loadingAreas.n }),
     };
     created.push(world);
