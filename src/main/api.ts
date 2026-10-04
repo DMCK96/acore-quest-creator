@@ -76,6 +76,7 @@ import { sceneIssues } from '../core/scripts/validate';
 import { compileEntities } from '../core/entities/compile';
 import { compilePatrols, hasPointActions } from '../core/patrol/compile';
 import { ENTITY_KEYS, ENTITY_TABLES, readEntityContext } from '../core/entities/context';
+import { objectivesOf, questItemsOf, relationOwners } from '../core/entities/links';
 import { ENTITIES_FIELD, NPC_TYPE_VALUE, OBJECT_TYPE_VALUE, RANK_VALUE, readEntities, writeEntities, type QuestEntities } from '../core/entities/model';
 import { entityIssues } from '../core/entities/validate';
 import { gmCommands } from '../core/testing/gm';
@@ -630,33 +631,6 @@ export function createApi(deps: ApiDeps): Api {
   const missingScriptTables = (live: Session): string[] =>
     SCRIPT_TABLES.filter((t) => !live.scriptSchema.tables[t]);
 
-  /** The four NPC-or-object objectives as signed entries: creatures positive, objects negative, none 0. */
-  function objectivesOf(aggregate: QuestAggregate): number[] {
-    const rows = aggregate.values['quest_template.RequiredNpcOrGo'];
-    const list = Array.isArray(rows) ? (rows as Array<Record<string, unknown>>) : [];
-    return [0, 1, 2, 3].map((i) => {
-      const target = list[i]?.target as { target?: string; id?: number } | undefined;
-      if (!target || typeof target.id !== 'number') return 0;
-      return target.target === 'gameobject' ? -target.id : target.id;
-    });
-  }
-
-  /** The quest's starters or enders as scene owners. */
-  function relationOwners(aggregate: QuestAggregate, kind: 'starter' | 'ender'): SceneOwner[] {
-    const owners: SceneOwner[] = [];
-    for (const [fieldId, ownerKind] of [
-      [`creature_quest${kind}`, 'creature'],
-      [`gameobject_quest${kind}`, 'gameobject'],
-    ] as const) {
-      const rows = aggregate.values[fieldId];
-      if (!Array.isArray(rows)) continue;
-      for (const row of rows as Array<Record<string, unknown>>) {
-        if (typeof row.id === 'number' && row.id > 0) owners.push({ kind: ownerKind, entry: row.id });
-      }
-    }
-    return owners;
-  }
-
   /** The scene issues of a quest, which need the owners' templates to tell whether a C++ script runs them. */
   async function scriptIssues(live: Session, aggregate: QuestAggregate): Promise<Issue[]> {
     const scenes = readScenes(aggregate.values);
@@ -682,13 +656,6 @@ export function createApi(deps: ApiDeps): Api {
       missingTables: missingScriptTables(live),
       specialFlags: typeof flags === 'number' ? flags : 0,
     });
-  }
-
-  /** The items the quest asks for: their drops are set in Objectives, never by a loot list. */
-  function questItemsOf(aggregate: QuestAggregate): number[] {
-    const rows = aggregate.values['quest_template.RequiredItems'];
-    if (!Array.isArray(rows)) return [];
-    return (rows as Array<Record<string, unknown>>).flatMap((r) => (typeof r.item === 'number' && r.item > 0 ? [r.item] : []));
   }
 
   /**
