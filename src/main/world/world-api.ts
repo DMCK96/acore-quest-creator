@@ -2,7 +2,8 @@ import type { RawRow, SchemaInfo } from '../../core/db/types';
 import type { WorldDb } from '../../core/db/world-db';
 import { spawnEntryColumn } from '../../core/db/spawns';
 import { pickPreset } from '../../core/db/view-spawns';
-import type { Placement, RoutePoint, WorldAddedSpawn, WorldLook, WorldRouteEdit, WorldSpawnEdit, WorldSpawnKind } from '../../core/world/layer';
+import type { Placement, RoutePoint, WorldAddedSpawn, WorldLook, WorldMovementEdit, WorldRouteEdit, WorldSpawnEdit, WorldSpawnKind } from '../../core/world/layer';
+import { movementOfRow, sameMovement, type Movement } from '../../core/world/movement';
 
 /**
  * What the world layer reads from the world database: a spawn's placement and a route's points as
@@ -122,6 +123,32 @@ export async function routeDrifted(db: WorldDb, edit: WorldRouteEdit): Promise<b
 /** The tables a world patch writes, as the export renders them */
 export async function worldSchema(db: WorldDb, hash: string): Promise<SchemaInfo> {
   const tables: SchemaInfo['tables'] = {};
-  for (const table of ['creature', 'gameobject', 'waypoint_data']) tables[table] = await db.columns(table);
+  for (const table of ['creature', 'gameobject', 'waypoint_data', 'creature_addon']) tables[table] = await db.columns(table);
   return { tables, forbidden: [], hash };
+}
+
+/**
+ * An NPC spawn's movement as the database has it, with its entry, name and map: its own addon's path,
+ * else its template's (what the server walks today). `addonRow` says whether the spawn has its own
+ * addon row, which decides whether a new path updates it or writes one. Null when the spawn is gone.
+ */
+export async function readMovement(
+  db: WorldDb,
+  guid: number,
+): Promise<{ entry: number; name: string; map: number; movement: Movement; addonRow: boolean } | null> {
+  const [row] = await db.selectRows('creature', { guid: String(guid) });
+  if (!row) return null;
+  const entry = num(row[spawnEntryColumn('creature', (await db.columns('creature')).map((c) => c.name))]);
+  const [named] = await db.selectRows('creature_template', { entry: String(entry) });
+  const [addon] = (await hasTable(db, 'creature_addon')) ? await db.selectRows('creature_addon', { guid: String(guid) }) : [];
+  const [templateAddon] = !addon && (await hasTable(db, 'creature_template_addon')) ? await db.selectRows('creature_template_addon', { entry: String(entry) }) : [];
+  const movement = movementOfRow({ MovementType: row.MovementType, wander_distance: row.wander_distance, path_id: (addon ?? templateAddon)?.path_id ?? null });
+  return { entry, name: named?.name ?? '', map: num(row.map), movement, addonRow: addon !== undefined };
+}
+
+/** Whether the database no longer holds an NPC's original movement; a placed spawn's never drifts */
+export async function movementDrifted(db: WorldDb, edit: WorldMovementEdit, placed: boolean): Promise<boolean> {
+  if (placed) return false;
+  const now = await readMovement(db, edit.guid);
+  return !now || !sameMovement(now.movement, edit.original);
 }

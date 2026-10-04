@@ -11,7 +11,7 @@ describe('parseRequest', () => {
       'openQuest', 'previewChanges', 'questLinks', 'removeNode', 'rewardTables', 'updateQuest', 'saveProfile', 'saveViewport', 'searchQuests', 'searchEntities', 'startupProfile',
       'testConnection', 'validate', 'questScripts', 'testCommands', 'groundHeight', 'spellFacts', 'mapList', 'mapFloors', 'mapSpawns', 'viewSpawns', 'entitySpawns', 'findSpawns', 'questMapRefs', 'allocateIds', 'entityTemplate', 'itemColumns',
       'patrolPathId', 'renameProject', 'newProject', 'openProject', 'saveProject', 'saveProjectAs', 'recentProjects', 'forgetRecent', 'recoveries', 'restoreRecovery', 'discardRecovery',
-      'worldLayer', 'worldMoveSpawn', 'worldAddSpawn', 'worldRoute', 'worldSetRoute', 'worldRevert', 'worldChanges', 'exportWorld',
+      'worldLayer', 'worldMoveSpawn', 'worldAddSpawn', 'worldRoute', 'worldSetRoute', 'worldRevert', 'worldChanges', 'exportWorld', 'worldSetMovement', 'worldNewPathId',
     ].sort());
   });
   it('refuses world edits with a bad kind, a missing rotation or a point without its columns', () => {
@@ -24,6 +24,16 @@ describe('parseRequest', () => {
     expect(parseRequest('worldMoveSpawn', ['creature', 5, { x: 1, y: 2, z: 3, orientation: 0 }]).ok).toBe(false);
     expect(parseRequest('worldSetRoute', [801, [{ x: 1, y: 2, z: 3 }]]).ok).toBe(false);
     expect(parseRequest('worldRevert', [{ kind: 'route', pathId: 801 }]).ok).toBe(true);
+  });
+  it('checks movement and new-path requests', () => {
+    const at = { x: 1, y: 2, z: 3, orientation: 0, rotation: null };
+    expect(parseRequest('worldSetMovement', [80330, { type: 'wander', wander: 5, pathId: null }]).ok).toBe(true);
+    expect(parseRequest('worldSetMovement', [80330, { type: 'run', wander: 5, pathId: null }]).ok).toBe(false);
+    expect(parseRequest('worldSetMovement', [80330, { type: 'wander', wander: -1, pathId: null }]).ok).toBe(false);
+    expect(parseRequest('worldNewPathId', [80330]).ok).toBe(true);
+    expect(parseRequest('worldAddSpawn', ['creature', 1423, 0, at, 95000]).ok).toBe(true);
+    expect(parseRequest('worldSetRoute', [5, [], { isNew: true }]).ok).toBe(true);
+    expect(parseRequest('worldRevert', [{ kind: 'movement', guid: 1 }]).ok).toBe(true);
   });
   it('accepts well-formed requests', () => {
     expect(parseRequest('openQuest', [60001]).ok).toBe(true);

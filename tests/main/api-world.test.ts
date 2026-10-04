@@ -215,3 +215,79 @@ describe('the world layer through the API', () => {
     });
   });
 });
+
+describe('movement through the API', () => {
+  it('reads an NPC’s movement once, from its spawn addon, and records a change', async () => {
+    const { api, db } = await setup(world);
+    db.update('creature', { guid: '80330' }, { MovementType: '2', wander_distance: '0' });
+    const out: any = await api.worldSetMovement(80330, { type: 'wander', wander: 5, pathId: null });
+    expect(out.value.movements).toEqual([{ guid: 80330, entry: 1423, name: 'Stormwind Guard', map: 0, addonRow: true,
+      original: { type: 'path', wander: 0, pathId: 801 }, current: { type: 'wander', wander: 5, pathId: null } }]);
+  });
+
+  it('takes a template’s path as the original when the spawn has no addon, and writes a spawn addon to remove it', async () => {
+    const { api, db, written } = await setup(world);
+    db.update('creature', { guid: '80331' }, { MovementType: '2' });
+    await api.worldSetMovement(80331, { type: 'idle', wander: 0, pathId: null });
+    const changes: any = await api.worldChanges();
+    expect(changes.value[0]).toMatchObject({ type: 'movement', addonRow: false, original: { type: 'path', pathId: 802 } });
+    const out: any = await api.exportWorld();
+    expect(out.value.sql).toMatch(/INSERT INTO `creature_addon`[^;]*80331/);
+    const revert = [...written.entries()].find(([path]) => path.endsWith('_world_revert.sql'))![1];
+    expect(revert).toMatch(/DELETE FROM `creature_addon` WHERE[^;]*80331/);
+  });
+
+  it('places a movement on a placed spawn from idle, without reading the database', async () => {
+    const { api } = await setup(world);
+    const placed: any = await api.worldAddSpawn('creature', 1423, 0, to(1));
+    const out: any = await api.worldSetMovement(placed.value.guid, { type: 'wander', wander: 3, pathId: null });
+    expect(out.value.movements[0]).toMatchObject({ guid: placed.value.guid, addonRow: false, original: { type: 'idle', wander: 0, pathId: null } });
+  });
+
+  it('refuses an NPC that is not in the database', async () => {
+    const { api } = await setup(world);
+    const out: any = await api.worldSetMovement(4242, { type: 'idle', wander: 0, pathId: null });
+    expect(out.ok).toBe(false);
+  });
+
+  it('gives a new path id: guid × 10 when free, else one past the highest in use', async () => {
+    const { api, db } = await setup(world);
+    expect((await api.worldNewPathId(80331) as any).value).toBe(803310);
+    db.insert('waypoint_data', { id: '803310', point: '1', position_x: '0', position_y: '0', position_z: '0' });
+    expect((await api.worldNewPathId(80331) as any).value).toBe(803311);
+  });
+
+  it('counts the layer’s own new paths as in use', async () => {
+    const { api } = await setup(world);
+    await api.worldSetMovement(80331, { type: 'path', wander: 0, pathId: 803310 });
+    await api.worldSetRoute(803310, [{ x: 1, y: 0, z: 0, rest: {} }], { isNew: true });
+    expect((await api.worldNewPathId(80331) as any).value).toBe(803311);
+  });
+
+  it('sets the points of a new path that the database does not have', async () => {
+    const { api } = await setup(world);
+    const out: any = await api.worldSetRoute(803310, [{ x: 1, y: 0, z: 0, rest: {} }], { isNew: true });
+    expect(out.value.routes).toEqual([{ pathId: 803310, walkers: 1, original: [], current: [{ x: 1, y: 0, z: 0, rest: {} }] }]);
+  });
+
+  it('places a spawn with the guid it is given when that is free, and refuses one in use', async () => {
+    const { api } = await setup(world);
+    const out: any = await api.worldAddSpawn('creature', 1423, 0, to(1), 95000);
+    expect(out.value.guid).toBe(95000);
+    const taken: any = await api.worldAddSpawn('creature', 1423, 0, to(1), 80330);
+    expect(taken.ok).toBe(false);
+    expect(taken.error.message).toBe('Spawn 80330 is in use');
+  });
+
+  it('lists a movement among the changes, flagged once the database has moved on, and reverts it', async () => {
+    const { api, db } = await setup(world);
+    await api.worldSetMovement(80332, { type: 'wander', wander: 4, pathId: null });
+    let changes: any = await api.worldChanges();
+    expect(changes.value.find((c: any) => c.type === 'movement')).toMatchObject({ guid: 80332, drifted: false });
+    db.update('creature', { guid: '80332' }, { wander_distance: '9', MovementType: '1' });
+    changes = await api.worldChanges();
+    expect(changes.value.find((c: any) => c.type === 'movement').drifted).toBe(true);
+    const out: any = await api.worldRevert({ kind: 'movement', guid: 80332 });
+    expect(out.value.movements ?? []).toEqual([]);
+  });
+});

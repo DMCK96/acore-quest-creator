@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import type { Api, Placement, RoutePoint, WorldChange, WorldLayer } from '@shared/ipc';
+import type { Api, Movement, Placement, RoutePoint, WorldChange, WorldLayer } from '@shared/ipc';
 import { trapTab } from '../components/trap-tab';
 import '../views/ProjectDialog.css';
 
@@ -26,7 +26,9 @@ export function WorldChanges({ api, onLayer, onClose }: { api: Api; onLayer(laye
 
   const revert = async (change: WorldChange): Promise<void> => {
     const result = await api.worldRevert(
-      change.type === 'route' ? { kind: 'route', pathId: change.pathId } : { kind: 'spawn', spawnKind: change.kind, guid: change.guid },
+      change.type === 'route' ? { kind: 'route', pathId: change.pathId }
+      : change.type === 'movement' ? { kind: 'movement', guid: change.guid }
+      : { kind: 'spawn', spawnKind: change.kind, guid: change.guid },
     );
     if (!result.ok) {
       setError(result.error.message);
@@ -76,7 +78,7 @@ export function WorldChanges({ api, onLayer, onClose }: { api: Api; onLayer(laye
             </thead>
             <tbody>
               {changes.map((change) => (
-                <ChangeRow key={change.type === 'route' ? `route:${change.pathId}` : `${change.type}:${change.kind}:${change.guid}`} change={change} onRevert={() => void revert(change)} />
+                <ChangeRow key={change.type === 'route' ? `route:${change.pathId}` : change.type === 'movement' ? `movement:${change.guid}` : `${change.type}:${change.kind}:${change.guid}`} change={change} onRevert={() => void revert(change)} />
               ))}
             </tbody>
           </table>
@@ -103,6 +105,8 @@ export function WorldChanges({ api, onLayer, onClose }: { api: Api; onLayer(laye
 }
 
 const where = (p: Placement): string => `${p.x.toFixed(2)}, ${p.y.toFixed(2)}, ${p.z.toFixed(2)}`;
+/** How an NPC moves, in a few words */
+const moves = (m: Movement): string => (m.type === 'path' ? `walks path ${m.pathId ?? 0}` : m.type === 'wander' ? `wanders ${m.wander} yd` : 'stands still');
 const points = (route: readonly RoutePoint[]): string => `${route.length} ${route.length === 1 ? 'point' : 'points'}`;
 
 function ChangeRow({ change, onRevert }: { change: WorldChange; onRevert(): void }): React.JSX.Element {
@@ -121,6 +125,23 @@ function ChangeRow({ change, onRevert }: { change: WorldChange; onRevert(): void
         <td>
           <button type="button" className="btn" aria-label={`Remove ${name}`} onClick={onRevert}>
             Remove
+          </button>
+        </td>
+      </tr>
+    );
+  }
+  if (change.type === 'movement') {
+    const name = change.name || `NPC ${change.entry}`;
+    return (
+      <tr>
+        <td>
+          {name} · movement · spawn {change.guid} {drift}
+        </td>
+        <td>{moves(change.original)}</td>
+        <td>{moves(change.current)}</td>
+        <td>
+          <button type="button" className="btn" aria-label={`Revert movement of ${name}`} onClick={onRevert}>
+            Revert
           </button>
         </td>
       </tr>

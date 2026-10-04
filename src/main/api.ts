@@ -34,8 +34,9 @@ import { diffSchema, hasBlockingDrift } from '../core/schema/diff';
 import { loadSchema } from '../core/schema/load';
 import { refCheckerFor, validateQuest, type Issue, type RefChecker } from '../core/validate/validate';
 import { TOOL_VERSION } from '../core/version';
-import { addSpawn, hasWorldChanges, isAdded, moveSpawn, revertRoute, revertSpawn, setRoute, worldStatements, type RoutePoint, type SpawnDefaults, type WorldLayer } from '../core/world/layer';
-import { addedDrifted, countWalkers, readPlacement, readRoute, readTemplateLook, routeDrifted, spawnDrifted, worldSchema } from './world/world-api';
+import { addSpawn, hasWorldChanges, isAdded, moveSpawn, movementsOf, revertMovement, revertRoute, revertSpawn, setMovement, setRoute, worldStatements, type RoutePoint, type SpawnDefaults, type WorldLayer } from '../core/world/layer';
+import { IDLE } from '../core/world/movement';
+import { addedDrifted, countWalkers, movementDrifted, readMovement, readPlacement, readRoute, readTemplateLook, routeDrifted, spawnDrifted, worldSchema } from './world/world-api';
 import type {
   Api,
   ApiError,
@@ -544,6 +545,31 @@ export function createApi(deps: ApiDeps): Api {
     const rows = aggregate.values['quest_template.RequiredItems'];
     if (!Array.isArray(rows)) return [];
     return (rows as Array<Record<string, unknown>>).flatMap((r) => (typeof r.item === 'number' && r.item > 0 ? [r.item] : []));
+  }
+
+  /**
+   * A path id no route uses yet, for a new path of the spawn `guid`: the database's own convention of
+   * the guid times ten when that is free, else one past the highest id in use. In use counts the
+   * database, the project's patrols and the world layer's routes and new paths.
+   */
+  async function freePathId(guid: number): Promise<number> {
+    const live = connected();
+    const layer = deps.session.world.get();
+    const used = [
+      ...projectEntities().npcs.flatMap((n) => n.spawns.flatMap((s) => (s.patrol ? [s.patrol.pathId] : []))),
+      ...layer.routes.map((r) => r.pathId),
+      ...movementsOf(layer).flatMap((m) => (m.current.pathId === null ? [] : [m.current.pathId])),
+    ];
+    const candidate = guid * 10;
+    const inDb = (await rowsOrNone(live.db, 'waypoint_data', { id: [String(candidate)] })).length > 0;
+    if (!inDb && !used.includes(candidate)) return candidate;
+    let dbMax = 0;
+    try {
+      dbMax = (await live.db.selectMax?.('waypoint_data', 'id')) ?? 0;
+    } catch {
+      dbMax = 0;
+    }
+    return Math.max(dbMax, ...used, 0) + 1;
   }
 
   /** Every new NPC, object and item in the project, from every quest. */
@@ -1076,24 +1102,12 @@ export function createApi(deps: ApiDeps): Api {
 
     patrolPathId: (guid) =>
       run(async () => {
-        const live = connected();
-        const { npcs } = projectEntities();
-        const spawns = npcs.flatMap((n) => n.spawns);
-        const pinned = spawns.find((s) => s.guid === guid)?.patrol;
+        const pinned = projectEntities().npcs.flatMap((n) => n.spawns).find((s) => s.guid === guid)?.patrol;
         if (pinned) return pinned.pathId;
-        const projectPaths = spawns.flatMap((s) => (s.patrol ? [s.patrol.pathId] : []));
-        // The database's own convention: a spawn's path is its guid times ten.
-        const candidate = guid * 10;
-        const inDb = (await rowsOrNone(live.db, 'waypoint_data', { id: [String(candidate)] })).length > 0;
-        if (!inDb && !projectPaths.includes(candidate)) return candidate;
-        let dbMax = 0;
-        try {
-          dbMax = (await live.db.selectMax?.('waypoint_data', 'id')) ?? 0;
-        } catch {
-          dbMax = 0;
-        }
-        return Math.max(dbMax, ...projectPaths, 0) + 1;
+        return freePathId(guid);
       }),
+
+    worldNewPathId: (guid) => run(async () => freePathId(guid)),
 
     entityTemplate: (kind, entry) =>
       run(async () => {
@@ -1568,11 +1582,13 @@ export function createApi(deps: ApiDeps): Api {
 
     worldLayer: () => run(async () => deps.session.world.get()),
 
-    worldAddSpawn: (kind, entry, map, at) =>
+    worldAddSpawn: (kind, entry, map, at, wanted) =>
       run(async () => {
         const db = connected().db;
         const template = await readTemplateLook(db, kind, entry);
         if (!template) throw fail('BAD_REQUEST', `${kind === 'creature' ? 'NPC' : 'Object'} ${entry} is not in the database.`);
+        // A spawn put back by a redo keeps its id, as long as nothing has taken it meanwhile
+        const taken = wanted !== undefined && (await readPlacement(db, kind, wanted)) !== null;
         let dbMax = 0;
         try {
           dbMax = (await db.selectMax?.(kind, 'guid')) ?? 0;
@@ -1584,7 +1600,9 @@ export function createApi(deps: ApiDeps): Api {
         const { npcs, objects } = projectEntities();
         const quests = (kind === 'creature' ? npcs : objects).flatMap((e) => e.spawns.map((s) => s.guid));
         const layer = deps.session.world.get();
-        const guid = Math.max(dbMax, ...quests, ...layer.added.filter((a) => a.kind === kind).map((a) => a.guid), 0) + 1;
+        const placed = layer.added.filter((a) => a.kind === kind).map((a) => a.guid);
+        if (wanted !== undefined && (taken || quests.includes(wanted) || placed.includes(wanted))) throw fail('BAD_REQUEST', `Spawn ${wanted} is in use`);
+        const guid = wanted ?? Math.max(dbMax, ...quests, ...placed, 0) + 1;
         const next = addSpawn(layer, { kind, guid, entry, name: template.name, map, placement: at, look: template.look });
         deps.session.world.put(next);
         return { layer: next, guid };
@@ -1626,15 +1644,17 @@ export function createApi(deps: ApiDeps): Api {
         return { points: original, walkers };
       }),
 
-    worldSetRoute: (pathId, points) =>
+    worldSetRoute: (pathId, points, options) =>
       run(async () => {
         const knownIn = (layer: WorldLayer) => layer.routes.find((r) => r.pathId === pathId);
+        // A path made in the view is not in the database: it starts from nothing, walked by its one NPC
+        const fresh = async () => (options?.isNew ? { original: [] as RoutePoint[], walkers: 1 } : routeFromDatabase(pathId));
         // Database first, layer after, as worldMoveSpawn does, so an edit made meanwhile is kept
-        let read = knownIn(deps.session.world.get()) ? null : await routeFromDatabase(pathId);
+        let read = knownIn(deps.session.world.get()) ? null : await fresh();
         let layer = deps.session.world.get();
         let known = knownIn(layer);
         if (!known && !read) {
-          read = await routeFromDatabase(pathId);
+          read = await fresh();
           layer = deps.session.world.get();
           known = knownIn(layer);
         }
@@ -1644,11 +1664,43 @@ export function createApi(deps: ApiDeps): Api {
         return next;
       }),
 
+    worldSetMovement: (guid, to) =>
+      run(async () => {
+        const db = connected().db;
+        const knownIn = (layer: WorldLayer) => movementsOf(layer).find((m) => m.guid === guid);
+        // A spawn placed in the view stood still when it was placed, and the database does not have it
+        const fromPlaced = (layer: WorldLayer) => {
+          const placed = layer.added.find((a) => a.kind === 'creature' && a.guid === guid);
+          return placed ? { entry: placed.entry, name: placed.name, map: placed.map, movement: IDLE, addonRow: false } : null;
+        };
+        // Database first, layer after, as worldMoveSpawn does, so an edit made meanwhile is kept
+        const start = deps.session.world.get();
+        let read = knownIn(start) ? null : (fromPlaced(start) ?? (await readMovement(db, guid)));
+        let layer = deps.session.world.get();
+        let known = knownIn(layer);
+        if (!known && !read) {
+          read = fromPlaced(layer) ?? (await readMovement(db, guid));
+          layer = deps.session.world.get();
+          known = knownIn(layer);
+        }
+        if (!known && !read) throw fail('BAD_REQUEST', `Spawn ${guid} is no longer in the database.`);
+        const edit = known ?? { guid, entry: read!.entry, name: read!.name, map: read!.map, addonRow: read!.addonRow, original: read!.movement };
+        const next = setMovement(layer, edit, to);
+        deps.session.world.put(next);
+        return next;
+      }),
+
     worldRevert: (target) =>
       run(async () => {
         const layer = deps.session.world.get();
-        const next = target.kind === 'spawn' ? revertSpawn(layer, target.spawnKind, target.guid) : revertRoute(layer, target.pathId);
-        if (next.spawns.length !== layer.spawns.length || next.routes.length !== layer.routes.length || next.added.length !== layer.added.length) deps.session.world.put(next);
+        const next =
+          target.kind === 'spawn' ? revertSpawn(layer, target.spawnKind, target.guid)
+          : target.kind === 'route' ? revertRoute(layer, target.pathId)
+          : revertMovement(layer, target.guid);
+        const changed =
+          next.spawns.length !== layer.spawns.length || next.routes.length !== layer.routes.length || next.added.length !== layer.added.length ||
+          movementsOf(next).length !== movementsOf(layer).length;
+        if (changed) deps.session.world.put(next);
         return next;
       }),
 
@@ -1660,6 +1712,9 @@ export function createApi(deps: ApiDeps): Api {
           ...(await Promise.all(layer.spawns.map(async (s) => ({ ...s, type: 'spawn' as const, drifted: await spawnDrifted(db, s) })))),
           ...(await Promise.all(layer.added.map(async (a) => ({ ...a, type: 'added' as const, drifted: await addedDrifted(db, a) })))),
           ...(await Promise.all(layer.routes.map(async (r) => ({ ...r, type: 'route' as const, drifted: await routeDrifted(db, r) })))),
+          ...(await Promise.all(
+            movementsOf(layer).map(async (m) => ({ ...m, type: 'movement' as const, drifted: await movementDrifted(db, m, isAdded(layer, 'creature', m.guid)) })),
+          )),
         ];
       }),
 
@@ -1674,7 +1729,10 @@ export function createApi(deps: ApiDeps): Api {
         for (const kind of ['creature', 'gameobject'] as const) {
           if (layer.added.some((a) => a.kind === kind)) spawnDefaults[kind] = defaultColumnValues(kind, schema);
         }
-        const { apply, revert } = worldStatements(layer, defaultColumnValues('waypoint_data', schema), spawnDefaults);
+        // A spawn given a path without an addon row of its own gets one, made of the table's own columns
+        const writesAddon = movementsOf(layer).some((m) => !m.addonRow && m.current.pathId !== m.original.pathId);
+        const addonDefaults = writesAddon ? defaultColumnValues('creature_addon', schema) : undefined;
+        const { apply, revert } = worldStatements(layer, defaultColumnValues('waypoint_data', schema), spawnDefaults, addonDefaults);
         const date = patchDate(deps.now());
         const sql = renderPatch(apply, schema, { toolVersion: TOOL_VERSION, date, label: 'World changes' });
         const revertSql = renderPatch(revert, schema, { toolVersion: TOOL_VERSION, date, label: 'World changes: revert' });

@@ -4,19 +4,25 @@ import type { EntityHit, QuestSummary, SearchKind } from '@core/db/world-db';
 import type { SpellFacts } from '@core/game/spells';
 import type { MapBox, SpawnDot } from '@core/db/spawns';
 import type { ViewSpawns } from '@core/db/view-spawns';
-import type { Placement, RoutePoint, WorldAddedSpawn, WorldLayer, WorldRouteEdit, WorldSpawnEdit, WorldSpawnKind } from '@core/world/layer';
+import type { Placement, RoutePoint, WorldAddedSpawn, WorldLayer, WorldMovementEdit, WorldRouteEdit, WorldSpawnEdit, WorldSpawnKind } from '@core/world/layer';
+import type { Movement } from '@core/world/movement';
 
-export type { Placement, RoutePoint, WorldAddedSpawn, WorldLayer, WorldRouteEdit, WorldSpawnEdit, WorldSpawnKind };
+export type { Movement, Placement, RoutePoint, WorldAddedSpawn, WorldLayer, WorldMovementEdit, WorldRouteEdit, WorldSpawnEdit, WorldSpawnKind };
 
 /** One world layer entry as the World changes list shows it, and whether the database has moved off its original since. */
 export type WorldChange =
   | (WorldSpawnEdit & { type: 'spawn'; drifted: boolean })
   | (WorldRouteEdit & { type: 'route'; drifted: boolean })
   /** A spawn placed in the view; `drifted` when the database now has a spawn with its id */
-  | (WorldAddedSpawn & { type: 'added'; drifted: boolean });
+  | (WorldAddedSpawn & { type: 'added'; drifted: boolean })
+  /** An NPC's movement; `drifted` when the database's no longer matches its original */
+  | (WorldMovementEdit & { type: 'movement'; drifted: boolean });
 
-/** What a world revert takes back: one spawn, or one route. */
-export type WorldRevertTarget = { kind: 'spawn'; spawnKind: WorldSpawnKind; guid: number } | { kind: 'route'; pathId: number };
+/** What a world revert takes back: one spawn, one route, or one NPC's movement. */
+export type WorldRevertTarget =
+  | { kind: 'spawn'; spawnKind: WorldSpawnKind; guid: number }
+  | { kind: 'route'; pathId: number }
+  | { kind: 'movement'; guid: number };
 import type { PatchWarning } from '@core/export/build-patch';
 import type { UnmodelledColumn } from '@core/import/unmodelled';
 import type { UnavailableComponent } from '@core/links/availability';
@@ -386,12 +392,19 @@ export interface Api {
   worldLayer(): Promise<Result<WorldLayer>>;
   /** Moves or turns an existing spawn in the world layer; its original is read from the database at the first edit. */
   worldMoveSpawn(kind: WorldSpawnKind, guid: number, to: Placement): Promise<Result<WorldLayer>>;
-  /** Places a new spawn of an existing NPC or object on a map: it gets the next free spawn id, and is written by the world patch. */
-  worldAddSpawn(kind: WorldSpawnKind, entry: number, map: number, at: Placement): Promise<Result<{ layer: WorldLayer; guid: number }>>;
+  /**
+   * Places a new spawn of an existing NPC or object on a map: it gets the next free spawn id (or `guid`,
+   * when that is free, so an undone placement comes back as it was), and is written by the world patch.
+   */
+  worldAddSpawn(kind: WorldSpawnKind, entry: number, map: number, at: Placement, guid?: number): Promise<Result<{ layer: WorldLayer; guid: number }>>;
   /** A route's points as the layer has them (else the database), and how many spawns walk it. */
   worldRoute(pathId: number): Promise<Result<{ points: RoutePoint[]; walkers: number }>>;
-  /** Sets an existing route's points in the world layer. */
-  worldSetRoute(pathId: number, points: RoutePoint[]): Promise<Result<WorldLayer>>;
+  /** Sets a route's points in the world layer; `isNew` for a path made in the view, which the database does not have. */
+  worldSetRoute(pathId: number, points: RoutePoint[], options?: { isNew?: boolean }): Promise<Result<WorldLayer>>;
+  /** Sets an NPC's movement (wander, movement type, its spawn's path); its original is read at the first edit. */
+  worldSetMovement(guid: number, to: Movement): Promise<Result<WorldLayer>>;
+  /** A free path id for a new path of an NPC: its guid times ten when that is free, else one past the highest in use. */
+  worldNewPathId(guid: number): Promise<Result<number>>;
   /** Takes one spawn or route out of the world layer. */
   worldRevert(target: WorldRevertTarget): Promise<Result<WorldLayer>>;
   /** Every world layer entry, with whether the database has moved off its original. */
@@ -481,6 +494,7 @@ const positionSchema = z.object({ x: z.number(), y: z.number() });
 const viewportSchema = z.object({ x: z.number(), y: z.number(), zoom: z.number().positive() });
 const finite = z.number().finite();
 const worldKindArg = z.enum(['creature', 'gameobject']);
+const movementArg = z.object({ type: z.enum(['idle', 'wander', 'path']), wander: z.number().min(0).max(100), pathId: z.number().int().min(1).nullable() });
 const placementArg = z.object({ x: finite, y: finite, z: finite, orientation: finite, rotation: z.tuple([finite, finite, finite, finite]).nullable() });
 const routePointArg = z.object({ x: finite, y: finite, z: finite, rest: z.record(z.string(), z.string().nullable()) });
 
@@ -555,12 +569,15 @@ const REQUEST_SCHEMAS: Record<keyof Api, z.ZodType<unknown[]>> = {
   viewSpawns: z.tuple([z.number().int(), z.object({ minX: z.number().finite(), maxX: z.number().finite(), minY: z.number().finite(), maxY: z.number().finite() })]),
   worldLayer: z.tuple([]),
   worldMoveSpawn: z.tuple([worldKindArg, z.number().int(), placementArg]),
-  worldAddSpawn: z.tuple([worldKindArg, z.number().int().min(1), z.number().int().min(0), placementArg]),
+  worldAddSpawn: z.tuple([worldKindArg, z.number().int().min(1), z.number().int().min(0), placementArg, z.number().int().min(1).optional()]),
   worldRoute: z.tuple([z.number().int().min(1)]),
-  worldSetRoute: z.tuple([z.number().int().min(1), z.array(routePointArg)]),
+  worldSetRoute: z.tuple([z.number().int().min(1), z.array(routePointArg), z.object({ isNew: z.boolean().optional() }).optional()]),
+  worldSetMovement: z.tuple([z.number().int().min(1), movementArg]),
+  worldNewPathId: z.tuple([z.number().int().min(1)]),
   worldRevert: z.tuple([z.discriminatedUnion('kind', [
     z.object({ kind: z.literal('spawn'), spawnKind: worldKindArg, guid: z.number().int() }),
     z.object({ kind: z.literal('route'), pathId: z.number().int() }),
+    z.object({ kind: z.literal('movement'), guid: z.number().int() }),
   ])]),
   worldChanges: z.tuple([]),
   exportWorld: z.tuple([]),

@@ -52,4 +52,16 @@ describe('the World changes modal', () => {
     expect(rows[1]).toHaveTextContent('Route 802 · 1 spawn');
     expect(rows[1]).not.toHaveTextContent('1 spawns');
   });
+
+  it('lists an NPC’s movement before and after, and reverts it', async () => {
+    const movement = { type: 'movement', guid: 80330, entry: 1423, name: 'Stormwind Guard', map: 0, addonRow: true, drifted: false,
+      original: { type: 'path', wander: 0, pathId: 801 }, current: { type: 'wander', wander: 5, pathId: null } };
+    const worldRevert = vi.fn(async () => okv({ spawns: [], routes: [], added: [] }));
+    render(<WorldChanges api={makeMockApi({ worldChanges: vi.fn(async () => okv([movement])), worldRevert })} onLayer={vi.fn()} onClose={vi.fn()} />);
+    const row = (await screen.findByText(/Stormwind Guard · movement/)).closest('tr')!;
+    expect(within(row).getByText('walks path 801')).toBeInTheDocument();
+    expect(within(row).getByText('wanders 5 yd')).toBeInTheDocument();
+    await userEvent.click(within(row).getByRole('button', { name: 'Revert movement of Stormwind Guard' }));
+    expect(worldRevert).toHaveBeenCalledWith({ kind: 'movement', guid: 80330 });
+  });
 });
