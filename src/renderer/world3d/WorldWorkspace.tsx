@@ -6,6 +6,8 @@ import { FindDialog, type FoundSpawn } from './FindDialog';
 import { TeleportDialog } from './TeleportDialog';
 import { QuestOrb } from '../components/QuestOrb';
 import { readLastPlace, writeLastPlace } from './last-place';
+import { markWelcomeSeen, welcomeSeen } from './welcome-seen';
+import { Welcome } from './Welcome';
 import './world3d.css';
 
 export interface WorldWorkspaceProps {
@@ -26,9 +28,10 @@ type Point = { x: number; y: number; z: number };
 /**
  * The world, as the app's main workspace: the 3D view of a continent with a place card (where the
  * camera is, Teleport, Find and typed coordinates). It opens where it was left. Without a game client
- * it says what is needed instead.
+ * it says what is needed instead. The first time a project is shown here, a welcome over the orb offers
+ * a place to start.
  */
-export function WorldWorkspace({ hasClient, active = true, onOpenSettings, onShowQuests }: WorldWorkspaceProps): React.JSX.Element {
+export function WorldWorkspace({ hasClient, active = true, projectKey, projectName, onOpenSettings, onShowQuests, onStartQuest }: WorldWorkspaceProps): React.JSX.Element {
   const [first] = useState(readLastPlace);
   const [mapId, setMapId] = useState(first.map);
   const [at, setAt] = useState<Point>({ x: first.x, y: first.y, z: first.z });
@@ -42,6 +45,16 @@ export function WorldWorkspace({ hasClient, active = true, onOpenSettings, onSho
   const [finding, setFinding] = useState(false);
   // The spawn the view is to bring into view (each pick is its own, even of the same spawn)
   const [focus, setFocus] = useState<FocusTarget | undefined>();
+  // Projects whose welcome was closed here; read with what storage says, so a project greeted
+  // elsewhere, or opened while this was hidden, is handled when the world is next shown
+  const [closed, setClosed] = useState<ReadonlySet<string>>(new Set());
+  const welcoming = active && hasClient && !closed.has(projectKey) && !welcomeSeen(projectKey);
+  /** Closes the welcome for this project for good, then does what was chosen */
+  const leaveWelcome = (then?: () => void): void => {
+    markWelcomeSeen(projectKey);
+    setClosed((keys) => new Set(keys).add(projectKey));
+    then?.();
+  };
 
   /** Moves the camera to a point, on the map given (this one by default), and remembers it */
   const goTo = (point: Point, map = mapRef.current): void => {
@@ -68,8 +81,8 @@ export function WorldWorkspace({ hasClient, active = true, onOpenSettings, onSho
 
   // Esc closes this workspace's own panels, the top one first; it never leaves the world. The view
   // clears its own selection.
-  const panels = useRef({ finding, teleporting, coordinates });
-  panels.current = { finding, teleporting, coordinates };
+  const panels = useRef({ finding, teleporting, coordinates, welcoming, leaveWelcome });
+  panels.current = { finding, teleporting, coordinates, welcoming, leaveWelcome };
   useEffect(() => {
     if (!active) return;
     const onKeyDown = (e: KeyboardEvent): void => {
@@ -78,6 +91,7 @@ export function WorldWorkspace({ hasClient, active = true, onOpenSettings, onSho
       if (open.finding) setFinding(false);
       else if (open.teleporting) setTeleporting(false);
       else if (open.coordinates) setCoordinates(false);
+      else if (open.welcoming) open.leaveWelcome();
       else return;
       e.stopPropagation();
     };
@@ -175,6 +189,15 @@ export function WorldWorkspace({ hasClient, active = true, onOpenSettings, onSho
           </form>
         )}
       </section>
+      {welcoming && (
+        <Welcome
+          projectName={projectName}
+          onPick={(spot) => leaveWelcome(() => teleport(spot))}
+          onFind={() => leaveWelcome(() => setFinding(true))}
+          onStartQuest={() => leaveWelcome(onStartQuest)}
+          onClose={() => leaveWelcome()}
+        />
+      )}
       {finding && <FindDialog from={{ map: mapId, ...at }} onGo={find} onClose={() => setFinding(false)} />}
       {teleporting && <TeleportDialog onPick={teleport} onClose={() => setTeleporting(false)} />}
     </section>

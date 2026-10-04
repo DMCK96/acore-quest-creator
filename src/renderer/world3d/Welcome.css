@@ -1,0 +1,89 @@
+/* The welcome: the world dimmed, the orb glowing in the middle, and the card over it. */
+.welcome {
+  position: absolute;
+  inset: 0;
+  z-index: 40;
+  display: grid;
+  place-items: center;
+  padding: 2rem 1rem;
+  overflow-y: auto;
+  background: radial-gradient(ellipse at 50% 50%, rgba(23, 19, 16, 0.55) 0%, rgba(23, 19, 16, 0.92) 70%);
+}
+
+.welcome__orb {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: min(70vmin, 40rem);
+  aspect-ratio: 1;
+  transform: translate(-50%, -50%);
+  pointer-events: none;
+}
+
+.welcome__card {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 0.7rem;
+  width: min(34rem, 100%);
+  max-height: min(44rem, calc(100% - 2rem));
+  padding: 1.6rem 1.7rem 1.4rem;
+  background: var(--glass-bg);
+}
+
+.welcome__title {
+  margin: 0;
+  text-align: center;
+  font-family: var(--font-display);
+  font-size: 1.7rem;
+  font-weight: normal;
+  color: #fff6e4;
+  text-shadow: var(--title-glow);
+}
+
+.welcome__lead {
+  margin: 0 0 0.3rem;
+  text-align: center;
+  color: var(--text-muted);
+}
+
+.welcome__label {
+  margin: 0.3rem 0 0;
+}
+
+.welcome__picks {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.welcome__pick {
+  font-size: 0.85rem;
+  padding: 0.3em 0.75em;
+}
+
+/* The teleport list, shorter than in its own panel. */
+.welcome__search {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  min-height: 0;
+}
+
+.welcome__search .teleport__list {
+  max-height: 12rem;
+}
+
+.welcome__actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 0.5rem;
+  margin-top: 0.3rem;
+  padding-top: 0.8rem;
+  border-top: 1px solid var(--border-soft);
+}
