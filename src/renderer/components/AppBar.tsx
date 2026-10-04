@@ -94,8 +94,8 @@ export function AppBar({
         {connectedDatabase && summary?.client && <ClientPill status={summary.client} />}
         <button type="button" className="btn btn--icon" aria-label="Settings" title="Settings" onClick={onOpenSettings}>
           <svg className="app-bar__icon" viewBox="0 0 16 16" aria-hidden="true">
-            <circle cx="8" cy="8" r="2.2" />
-            <path d="M8 1.5v1.6M8 12.9v1.6M1.5 8h1.6M12.9 8h1.6M3.4 3.4l1.1 1.1M11.5 11.5l1.1 1.1M3.4 12.6l1.1-1.1M11.5 4.5l1.1-1.1" />
+            <path d="M13.08 6.17L14.84 6.50L14.84 9.50L13.08 9.83L12.89 10.30L13.90 11.77L11.77 13.90L10.30 12.89L9.83 13.08L9.50 14.84L6.50 14.84L6.17 13.08L5.70 12.89L4.23 13.90L2.10 11.77L3.11 10.30L2.92 9.83L1.16 9.50L1.16 6.50L2.92 6.17L3.11 5.70L2.10 4.23L4.23 2.10L5.70 3.11L6.17 2.92L6.50 1.16L9.50 1.16L9.83 2.92L10.30 3.11L11.77 2.10L13.90 4.23L12.89 5.70Z" />
+            <circle cx="8" cy="8" r="2.3" />
           </svg>
         </button>
       </div>

@@ -36,7 +36,7 @@ async function shell(over: Record<string, any> = {}, client = true) {
   const store = createAppStore(api, { saveDelayMs: 0 });
   await store.getState().connect(form);
   render(<AppShell store={store} />);
-  await screen.findByRole('heading', { name: 'North' });
+  await waitFor(() => expect(store.getState().project.name).not.toBe(''));
   return { api, store };
 }
 afterEach(() => {
@@ -95,6 +95,11 @@ describe('the app shell', () => {
     await userEvent.click(await screen.findByRole('button', { name: 'Start a quest' }));
     await waitFor(() => expect(api.newQuest).toHaveBeenCalled());
     expect(tab('Quests')).toHaveAttribute('aria-selected', 'true');
+  });
+
+  it('welcomes a project not saved yet without its placeholder name', async () => {
+    await shell({ projectState: async () => okv({ ...state, name: 'Untitled Project', filePath: null }) });
+    expect(await screen.findByRole('heading', { name: 'Welcome' })).toBeInTheDocument();
   });
 
   it('saves with Ctrl+S from the world too', async () => {

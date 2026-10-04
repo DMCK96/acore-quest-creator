@@ -68,7 +68,8 @@ export function AppShell({ store }: { store: AppStore }): React.JSX.Element {
           hasClient={hasClient}
           active={workspace === 'world'}
           projectKey={projectKey(filePath)}
-          projectName={projectName}
+          // A project not saved yet is welcomed without its placeholder name
+          projectName={filePath ? projectName : ''}
           onOpenSettings={() => setShowSettings(true)}
           onShowQuests={() => setWorkspace('quests')}
           onStartQuest={() => {

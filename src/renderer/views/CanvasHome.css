@@ -137,21 +137,23 @@
 }
 
 .react-flow__minimap {
-  background: var(--bg-inset) !important;
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
+  background: var(--glass-bg-strong) !important;
+  backdrop-filter: blur(var(--glass-blur));
+  border: 1px solid var(--glass-border);
+  border-radius: var(--radius-lg);
+  overflow: hidden;
 }
 
 .react-flow__controls {
-  box-shadow: none !important;
-  border: 1px solid var(--border);
+  box-shadow: var(--glass-shadow) !important;
+  border: 1px solid var(--glass-border);
   border-radius: var(--radius);
   overflow: hidden;
 }
 
 .react-flow__controls-button {
-  background: var(--bg-panel-raised) !important;
-  border-bottom: 1px solid var(--border) !important;
+  background: var(--glass-bg-strong) !important;
+  border-bottom: 1px solid var(--border-soft) !important;
   color: var(--text) !important;
   fill: var(--text) !important;
 }
