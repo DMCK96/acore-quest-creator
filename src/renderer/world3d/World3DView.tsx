@@ -808,7 +808,7 @@ function WorldStage({
           onClose={() => setChoosing(false)}
         />
       )}
-      {!unavailable && group && <GroupCard view={group} onClose={closeGroup} />}
+      {!unavailable && group && <GroupCard view={group} onEdit={api ? () => menu.editGroup(group.id) : undefined} onClose={closeGroup} />}
       {!unavailable && selected && !several && <SelectedSpawn spawn={selected} note={note} onClose={clearSelection} onRemove={selected.added ? () => void removePlaced(selected) : undefined} />}
       {!unavailable && several && summary && (
         <section className="world3d__selected" aria-label="Selection">
