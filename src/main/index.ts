@@ -215,6 +215,23 @@ function createWindow(session: ProjectSession, recovery: Recovery, projects: Pro
 
   win.on('ready-to-show', () => win.show());
 
+  // No File/Edit/View bar: the app bar carries its own commands. Removing the menu also drops its
+  // shortcuts, so unpackaged builds get DevTools and reload back by hand.
+  win.removeMenu();
+  if (!app.isPackaged) {
+    win.webContents.on('before-input-event', (event, input) => {
+      if (input.type !== 'keyDown') return;
+      const key = input.key.toLowerCase();
+      if (input.key === 'F12' || (input.control && input.shift && key === 'i')) {
+        win.webContents.toggleDevTools();
+        event.preventDefault();
+      } else if (input.control && key === 'r') {
+        win.webContents.reload();
+        event.preventDefault();
+      }
+    });
+  }
+
   // The title carries the project name and the unsaved marker, so the page's own <title> is ignored.
   const showTitle = (): void => win.setTitle(windowTitle(session.meta().name, session.dirty()));
   win.on('page-title-updated', (event) => event.preventDefault());
