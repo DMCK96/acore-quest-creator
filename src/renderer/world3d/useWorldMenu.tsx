@@ -103,17 +103,13 @@ export function useWorldMenu(deps: WorldMenuDeps): {
     setMarked(false);
   }, [questId]);
 
-  const titleOf = (id: number): string => (id === d.current.quest?.id ? d.current.quest.title : `quest ${id}`);
-  const openQuest = (): { id: number; title: string } | null => (d.current.quest ? { id: d.current.quest.id, title: d.current.quest.title } : null);
-
   const open = (target: MenuTarget, client: { x: number; y: number }): void => {
     const { api, map, placing, quest, onNewQuest } = d.current;
     const entries = clipEntries();
-    const ok = pasteable(entries, openQuest(), titleOf);
     const groups = buildMenu(target, {
       map,
       connected: api !== null,
-      clipboard: { count: entries.length, blocked: ok.entries.length === 0 ? ok.blocked : null },
+      clipboard: { count: entries.length, blocked: null },
       placing,
       drawing,
       quest: quest ?? null,
@@ -167,22 +163,17 @@ export function useWorldMenu(deps: WorldMenuDeps): {
   };
 
   const paste = async (entries: readonly ClipEntry[], at: At, verb = 'Paste'): Promise<void> => {
-    const { setNote, map } = d.current;
-    const ok = pasteable(entries, openQuest(), titleOf);
-    if (ok.entries.length === 0) {
-      setNote(ok.blocked);
-      return;
-    }
+    const { map } = d.current;
+    const ok = pasteable(entries);
+    if (ok.entries.length === 0) return;
     const laid = await Promise.all(layoutAt(ok.entries, at, map).map(async (l) => ({ kind: l.entry.kind, entry: l.entry.entry, own: l.entry.own, at: await floored(l.at) })));
     await putAll(laid, laid.length === 1 ? `${verb} a spawn` : `${verb} ${laid.length} spawns`);
-    const left = entries.length - ok.entries.length;
-    if (left > 0) setNote(`${left} of them could not be pasted: ${ok.blocked}`);
   };
 
   const copy = (): void => {
     const spawns = d.current.world.current?.selectedSpawns() ?? [];
     if (spawns.length === 0) return;
-    copySpawns(spawns, d.current.quest?.id ?? null);
+    copySpawns(spawns);
     d.current.setNote(`Copied ${plural(spawns.length, 'spawn')}`);
   };
 
@@ -192,7 +183,7 @@ export function useWorldMenu(deps: WorldMenuDeps): {
     if (!world || spawns.length === 0) return;
     const mean = (pick: (p: Placement) => number): number => spawns.reduce((sum, s) => sum + pick(s.placement), 0) / spawns.length;
     const off = duplicateOffset(world.camera().direction);
-    await paste(entriesOf(spawns, d.current.quest?.id ?? null), { x: mean((p) => p.x) + off.x, y: mean((p) => p.y) + off.y, z: mean((p) => p.z) }, 'Duplicate');
+    await paste(entriesOf(spawns), { x: mean((p) => p.x) + off.x, y: mean((p) => p.y) + off.y, z: mean((p) => p.z) }, 'Duplicate');
   };
 
   /** Whether a spawn is still there to act on; says so when it is not */
