@@ -35,7 +35,7 @@ The Time-Lost Proto-Drake flies one of four flight paths, and on each path it ma
 1. For each path, place the NPCs that walk it: a drake and Vyragosa. Give them the path.
 2. Select the drake and Vyragosa of one path, and choose **Group these spawns…**. Name it for the path, set **Up at once** to 1, give the drake a **Percentage** of 10 and leave Vyragosa on **Equal share** (she gets the remaining 90). **Save**. Do this for the other three paths.
 3. Select one spawn from any of the four path groups, or right-click the ground, and make one more group. Choose **Add a group…** four times to add the path groups. Name it, set **Up at once** to 1, and leave all four on **Equal share**. **Save**.
-4. Set the respawn time of all the spawns to 45 minutes (2700 seconds, what Conquest of AzerothCore uses) with **Respawn time of _n_ spawns…**.
+4. Set the respawn time of all the spawns to 45 minutes (a 2700-second respawn) with **Respawn time of _n_ spawns…**.
 
 One path is up at a time, and on it, the drake 10% of the time and Vyragosa the rest. When the one that is up dies and its respawn time has passed, the server rolls again and can pick any path.
 
@@ -55,7 +55,7 @@ The server will not spawn a group that breaks these, so the app will not write o
 ## See and change groups
 
 - Select a pooled spawn and the other members of its group are ringed, with lines to each. A card in the view shows the group's name, how many are up at a time, and each member's chance. The same goes for groups the database already has.
-- **Find…** has a **Spawn group** option: search groups by name, and **Go** takes the camera to it. A group inside a group lists its own members under it.
+- **Find…** has a **Spawn group** option: search groups by name, and **Go** takes the camera to it. The list is flat and sorted by name: a group inside a group has its own line like any other, showing how many of its members are up at a time.
 - Right-click a pooled spawn and open **Spawn group ▸**: **Edit group…** opens the dialog, **Show group** rings its members, and **Remove from group** takes this spawn out. Removing a spawn you placed also takes it out of its group, and removing the last member of a group you made deletes the group.
 - A group the database already has can be edited too. The project patch rewrites its rows and the revert patch writes the originals back.
 
