@@ -9,13 +9,13 @@ import { entitiesSummary } from '../../src/core/modules/summaries';
 import { presentModules } from '../../src/core/modules/catalog';
 
 const store = { ...EMPTY_ENTITIES,
-  npcs: [{ ...newNpc(12000001), name: 'Hela', madeFor: 60001 }, { ...newNpc(12000002), name: 'Borin' }, { ...newNpc(12000003), name: 'Vendor' }],
+  npcs: [{ ...newNpc(12000001), name: 'Hela' }, { ...newNpc(12000002), name: 'Borin' }, { ...newNpc(12000003), name: 'Vendor' }],
   objects: [{ ...newObject(9100001), name: 'Crate' }], items: [{ ...newItem(9200001), name: 'Seal' }] };
 const others = [{ questId: 60002, title: 'Second', uses: { npcs: [12000002], objects: [], items: [] } }];
 
 describe('the quest\'s NPCs, objects & items over the project store', () => {
-  it('lists what was made for the quest and what it names, with the other quests that use each', async () => {
-    await mountBody('entities', { creature_questender: [{ id: 12000002 }] }, { entities: store, quests: others });
+  it('lists what the quest names, with the other quests that use each', async () => {
+    await mountBody('entities', { creature_queststarter: [{ id: 12000001 }], creature_questender: [{ id: 12000002 }] }, { entities: store, quests: others });
     expect(screen.getByRole('listitem', { name: 'Hela' })).toBeTruthy();
     const borin = screen.getByRole('listitem', { name: 'Borin' });
     expect(within(borin).getByText('Also used by Second')).toBeTruthy();
@@ -44,11 +44,11 @@ describe('the quest\'s NPCs, objects & items over the project store', () => {
     expect(onChange).toHaveBeenCalledWith('quest_template.RequiredItems', expect.arrayContaining([expect.objectContaining({ item: 9200001, count: 1 })]));
   });
 
-  it('makes new ones for the quest', async () => {
+  it('makes new ones with no quest attached', async () => {
     const openEditor = vi.fn(async () => null);
     await mountBody('entities', {}, { entities: store, quests: [], openEditor });
     await userEvent.click(screen.getByRole('button', { name: 'Add NPC' }));
-    expect(openEditor).toHaveBeenCalledWith({ kind: 'newNpc', madeFor: 60001 });
+    expect(openEditor).toHaveBeenCalledWith({ kind: 'newNpc' });
   });
 });
 

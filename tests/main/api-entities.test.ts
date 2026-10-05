@@ -6,7 +6,6 @@ import { defaultProjectMeta } from '../../src/main/project/project-file';
 import type { ProjectController } from '../../src/main/project/controller';
 import { ENTITIES_FIELD, newNpc, newSpawn, writeEntities } from '../../src/core/entities/model';
 import { forkDb } from '../helpers/fixtures';
-import { madeFor } from '../helpers/entities';
 
 const box = { encrypt: (s: string) => Uint8Array.from(Buffer.from(s)), decrypt: (b: Uint8Array) => Buffer.from(b).toString() };
 
@@ -30,7 +29,7 @@ describe('new NPCs through the API', () => {
     expect(first.value).toEqual([11000231, 11000232]);
     const opened: any = await api.newQuest();
     const aggregate = opened.value.aggregate;
-    await api.putProjectEntities(madeFor({ npcs: [{ ...newNpc(11000235), name: 'A', displayId: 1, spawns: [newSpawn(5300700)] }], objects: [], items: [] }, aggregate.questId));
+    await api.putProjectEntities({ npcs: [{ ...newNpc(11000235), name: 'A', displayId: 1, spawns: [newSpawn(5300700)] }], objects: [], items: [] });
     await api.updateQuest(aggregate);
     expect(((await api.allocateIds('creature', 1)) as any).value).toEqual([11000236]);
     expect(((await api.allocateIds('creatureSpawn', 1)) as any).value).toEqual([5300701]);
@@ -53,7 +52,7 @@ describe('new NPCs through the API', () => {
     const opened: any = await api.newQuest();
     const aggregate = opened.value.aggregate;
     aggregate.values['quest_template.LogTitle'] = 'Meet Hela';
-    await api.putProjectEntities(madeFor({ npcs: [{ ...newNpc(11000240), name: 'Scout Hela', displayId: 1234, spawns: [{ ...newSpawn(5300800), x: 5 }] }], objects: [], items: [] }, aggregate.questId));
+    await api.putProjectEntities({ npcs: [{ ...newNpc(11000240), name: 'Scout Hela', displayId: 1234, spawns: [{ ...newSpawn(5300800), x: 5 }] }], objects: [], items: [] });
     aggregate.values.creature_queststarter = [{ id: 11000240 }];
     aggregate.values.creature_questender = [{ id: 11000240 }];
     await api.updateQuest(aggregate);
@@ -88,7 +87,8 @@ describe('new NPCs through the API', () => {
     db.insert('item_template', { entry: '2589', name: 'Linen Cloth', InventoryType: '0' });
     const opened: any = await api.newQuest();
     const aggregate = opened.value.aggregate;
-    await api.putProjectEntities(madeFor({ npcs: [{ ...newNpc(11000240), name: 'Holder', displayId: 1, equipment: { mainHand: 2589, offHand: 0, ranged: 0 } }], objects: [], items: [] }, aggregate.questId));
+    await api.putProjectEntities({ npcs: [{ ...newNpc(11000240), name: 'Holder', displayId: 1, equipment: { mainHand: 2589, offHand: 0, ranged: 0 } }], objects: [], items: [] });
+    aggregate.values.creature_queststarter = [{ id: 11000240 }];
     await api.updateQuest(aggregate);
     const issues: any = await api.validate(aggregate.questId);
     expect(issues.value.map((i: any) => i.message)).toContain('NPC "Holder": the main hand item 2589 is not held in a hand, so it would not show.');

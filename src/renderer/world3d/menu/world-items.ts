@@ -8,15 +8,13 @@ export const COPY_FIRST = 'Copy something first';
 
 const counted = (label: string, n: number): string => (n > 1 ? `${label} ${n}` : label);
 
-/** New NPC here… and New object here…, or with `forQuest` the quest's own; they need the ground and the database */
-export function newHere(target: MenuTarget, context: MenuContext, forQuest: boolean): MenuItem[] {
+/** New NPC here… and New object here…, with or without a quest open; they need the ground and the database */
+export function newHere(target: MenuTarget, context: MenuContext): MenuItem[] {
   const make = (label: string, what: 'creature' | 'object'): MenuItem =>
     !target.ground ? item(label, { disabledReason: NEEDS_GROUND })
     : !context.connected ? item(label, { disabledReason: NEEDS_DATABASE })
-    : item(label, { action: { kind: 'newEntity', what, at: target.ground, forQuest } });
-  return forQuest
-    ? [make('New quest NPC here…', 'creature'), make('New quest object here…', 'object')]
-    : [make('New NPC here…', 'creature'), make('New object here…', 'object')];
+    : item(label, { action: { kind: 'newEntity', what, at: target.ground } });
+  return [make('New NPC here…', 'creature'), make('New object here…', 'object')];
 }
 
 export function worldItems(target: MenuTarget, context: MenuContext): MenuGroup | null {
@@ -47,7 +45,7 @@ export function worldItems(target: MenuTarget, context: MenuContext): MenuGroup 
     : !context.connected ? item(label, { disabledReason: NEEDS_DATABASE })
     : item(label, { action: { kind: 'placeHere', what, at: ground } });
   items.push(place('Place NPC here…', 'creature'), place('Place object here…', 'object'));
-  items.push(...newHere(target, context, false));
+  items.push(...newHere(target, context));
   const { count, blocked } = context.clipboard;
   const paste = count > 0 ? `Paste here (${count})` : 'Paste here';
   items.push(

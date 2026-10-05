@@ -25,7 +25,7 @@ const itemFacts = (item: CustomItem): string => {
 };
 
 /**
- * The project's NPCs, objects and items this quest uses (made for it, or named by it) as a list, each
+ * The project's NPCs, objects and items this quest uses (the ones it names, and NPCs crediting it) as a list, each
  * with the other quests that use it; making or changing one happens in its editor, and any other in
  * the project can be added to the quest in a part it plays.
  */
@@ -67,13 +67,13 @@ export function EntitiesBody({ open, onChange }: ModuleBodyProps): React.JSX.Ele
       </p>
       {error && <p className="scene-warning">{error}</p>}
       <div className="scripts-body__add">
-        <button type="button" className="btn btn--primary" onClick={() => void request({ kind: 'newNpc', madeFor: open.questId })}>
+        <button type="button" className="btn btn--primary" onClick={() => void request({ kind: 'newNpc' })}>
           Add NPC
         </button>
-        <button type="button" className="btn btn--primary" onClick={() => void request({ kind: 'newObject', madeFor: open.questId })}>
+        <button type="button" className="btn btn--primary" onClick={() => void request({ kind: 'newObject' })}>
           Add object
         </button>
-        <button type="button" className="btn btn--primary" onClick={() => void request({ kind: 'newItem', madeFor: open.questId })}>
+        <button type="button" className="btn btn--primary" onClick={() => void request({ kind: 'newItem' })}>
           Add item
         </button>
         <button type="button" className="btn" onClick={() => setAdding(true)}>

@@ -2,8 +2,8 @@ import { ENTITIES_FIELD, readProjectEntities, type ProjectEntities } from './mod
 
 /**
  * Projects before version 4 kept new NPCs, objects and items inside each quest. This moves them into
- * the project's one store: each remembers the quest it came from (`madeFor`), an object's quest-only
- * use and a fight's credit name that quest, and the quests lose the field. Pure: nothing passed in is
+ * the project's one store: an object's quest-only use and a fight's credit name the quest it came from,
+ * and the quests lose the field. Pure: nothing passed in is
  * changed.
  */
 
@@ -29,13 +29,12 @@ function creditedFight(fight: unknown, questId: number): unknown {
 function fromQuest(raw: unknown, questId: number): ProjectEntities {
   const record = isRecord(raw) ? raw : {};
   return readProjectEntities({
-    npcs: list(record.npcs).map((n) => ({ ...n, madeFor: questId, fight: creditedFight(n.fight, questId) })),
+    npcs: list(record.npcs).map((n) => ({ ...n, fight: creditedFight(n.fight, questId) })),
     objects: list(record.objects).map((o) => ({
       ...o,
-      madeFor: questId,
       onlyDuringQuest: o.onlyDuringQuest === true ? questId : typeof o.onlyDuringQuest === 'number' ? o.onlyDuringQuest : null,
     })),
-    items: list(record.items).map((i) => ({ ...i, madeFor: questId })),
+    items: list(record.items),
   });
 }
 

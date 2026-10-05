@@ -72,9 +72,9 @@ describe('creating and editing from the World view', () => {
     rightClick({ ground: at, hit: null, selection: [] });
     await userEvent.click(screen.getByRole('menuitem', { name: 'New NPC here…' }));
     await waitFor(() => expect(create).toHaveBeenCalled());
-    const [kind, preset, madeFor] = create.mock.calls[0] as any[];
+    const [kind, preset, ...rest] = create.mock.calls[0] as any[];
     expect(kind).toBe('npc');
-    expect(madeFor).toBeNull();
+    expect(rest).toEqual([]);
     expect(preset.spawns).toEqual([expect.objectContaining({ guid: 6000007, map: 0, x: 10, y: 20 })]);
   });
 

@@ -5,7 +5,9 @@ import userEvent from '@testing-library/user-event';
 import { mountBody } from './module-harness';
 import { ENTITIES_FIELD, newItem, newNpc, newObject, newSpawn, writeEntities } from '../../src/core/entities/model';
 
-const values = { [ENTITIES_FIELD]: writeEntities({ npcs: [{ ...newNpc(12000001), name: 'Hela', displayId: 3167, minLevel: 10, maxLevel: 12, spawns: [newSpawn(900)] }], objects: [{ ...newObject(9100001), name: 'Crate', displayId: 1 }], items: [] }) };
+const values = { [ENTITIES_FIELD]: writeEntities({ npcs: [{ ...newNpc(12000001), name: 'Hela', displayId: 3167, minLevel: 10, maxLevel: 12, spawns: [newSpawn(900)] }], objects: [{ ...newObject(9100001), name: 'Crate', displayId: 1 }], items: [] }),
+  // The quest uses what it names
+  creature_queststarter: [{ id: 12000001 }], gameobject_questender: [{ id: 9100001 }] };
 
 describe('NPCs, objects & items module', () => {
   it('lists each NPC and object in one row with Edit', async () => {
@@ -26,9 +28,9 @@ describe('NPCs, objects & items module', () => {
     await mountBody('entities', {}, { openEditor });
     expect(screen.queryByRole('combobox', { name: /Copy/ })).toBeNull();
     await userEvent.click(screen.getByRole('button', { name: 'Add NPC' }));
-    expect(openEditor).toHaveBeenCalledWith({ kind: 'newNpc', madeFor: 60001 });
+    expect(openEditor).toHaveBeenCalledWith({ kind: 'newNpc' });
     await userEvent.click(screen.getByRole('button', { name: 'Add object' }));
-    expect(openEditor).toHaveBeenCalledWith({ kind: 'newObject', madeFor: 60001 });
+    expect(openEditor).toHaveBeenCalledWith({ kind: 'newObject' });
   });
 
   it('says why when a new one cannot be made', async () => {
@@ -39,17 +41,17 @@ describe('NPCs, objects & items module', () => {
 
   it('lists items and adds them through the editor', async () => {
     const openEditor = vi.fn(async () => null);
-    await mountBody('entities', { [ENTITIES_FIELD]: writeEntities({ npcs: [], objects: [], items: [{ ...newItem(990300), name: 'Pearl', quality: 'epic' }] }) }, { openEditor });
+    await mountBody('entities', { [ENTITIES_FIELD]: writeEntities({ npcs: [], objects: [], items: [{ ...newItem(990300), name: 'Pearl', quality: 'epic' }] }), 'quest_template.RewardItems': [{ item: 990300, amount: 1 }] }, { openEditor });
     const pearl = screen.getByRole('listitem', { name: 'Pearl' });
     expect(within(pearl).getByText('Epic · Quest')).toBeTruthy();
     await userEvent.click(within(pearl).getByRole('button', { name: 'Edit' }));
     expect(openEditor).toHaveBeenCalledWith({ kind: 'item', entry: 990300 });
     await userEvent.click(screen.getByRole('button', { name: 'Add item' }));
-    expect(openEditor).toHaveBeenCalledWith({ kind: 'newItem', madeFor: 60001 });
+    expect(openEditor).toHaveBeenCalledWith({ kind: 'newItem' });
   });
 
   it('says on a row what an NPC or object still needs', async () => {
-    await mountBody('entities', { [ENTITIES_FIELD]: writeEntities({ npcs: [{ ...newNpc(12000001), name: 'Hela' }], objects: [newObject(9100001)], items: [] }) }, { openEditor: vi.fn(async () => null) });
+    await mountBody('entities', { [ENTITIES_FIELD]: writeEntities({ npcs: [{ ...newNpc(12000001), name: 'Hela' }], objects: [newObject(9100001)], items: [] }), creature_queststarter: [{ id: 12000001 }], gameobject_questender: [{ id: 9100001 }] }, { openEditor: vi.fn(async () => null) });
     expect(within(screen.getByRole('listitem', { name: 'Hela' })).getByText('Level 1 · not placed · still needs a look')).toBeTruthy();
     expect(within(screen.getByRole('listitem', { name: 'New object 9100001' })).getByText('Usable object · not placed · still needs a name and a look')).toBeTruthy();
   });

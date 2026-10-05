@@ -182,7 +182,8 @@ describe('ProjectController', () => {
     for (const quest of v3.quests) quest.aggregate.values.entities = { npcs: [npc], objects: [], items: [] };
     const { c, session } = setup({}, memFs({ [P]: JSON.stringify(v3) }));
     expect(await c.open(P)).toEqual({ done: true, warnings: ['NPC 12000001 was in quests 60001 and 60002; the one from quest 60001 was kept.'] });
-    expect(session.entities.get().npcs.map((n) => n.madeFor)).toEqual([60001]);
+    expect(session.entities.get().npcs.map((n) => n.name)).toEqual(['Hela']);
+    expect(session.entities.get().npcs[0]).not.toHaveProperty('madeFor');
   });
 
   it('Open with the dialog cancelled does nothing', async () => {

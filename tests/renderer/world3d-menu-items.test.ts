@@ -44,9 +44,9 @@ describe('the menu on the ground', () => {
     expect(item(buildMenu(ground([npc(), npc({ guid: 2 })]), context()), 'Start path here')).toBeUndefined();
   });
 
-  it('with a quest open: new quest NPCs and objects here, and its spawns to show', () => {
+  it('with a quest open: its spawns to show', () => {
     expect(labels(buildMenu(ground(), context({ quest }))).find(([id]) => id === 'quest')).toEqual(
-      ['quest', ['New quest NPC here…', 'New quest object here…', 'Show quest spawns', 'Show chain spawns']],
+      ['quest', ['Show quest spawns', 'Show chain spawns']],
     );
   });
 

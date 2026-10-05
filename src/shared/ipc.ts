@@ -302,7 +302,7 @@ export interface CanvasNode {
   offCanvasLinks: number;
   /** Shares no edge with any other quest on the canvas; also counted in `warnings`. */
   notConnected: boolean;
-  /** The project's new NPCs, objects and items the quest uses (made for it, or named by it) */
+  /** The project's new NPCs, objects and items the quest uses (the ones it names, and NPCs crediting it) */
   uses: QuestUse;
 }
 

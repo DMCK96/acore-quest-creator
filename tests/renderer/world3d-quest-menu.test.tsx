@@ -48,7 +48,7 @@ async function workspace(overrides: Record<string, unknown> = {}) {
   vi.stubGlobal('fetch', async () => new Response(new Uint8Array([1]), { status: 200 }));
   const api = makeMockApi({ worldLayer: vi.fn(async () => okv(EMPTY)), ...overrides });
   const open = sampleOpen({ questId: 60001 });
-  const entities = { npcs: [{ ...newNpc(12000001, 60001), name: 'Hela', spawns: [{ ...newSpawn(900), map: 0, x: 1, y: 2, z: 3 }] }], objects: [], items: [] };
+  const entities = { npcs: [{ ...newNpc(12000001), name: 'Hela', spawns: [{ ...newSpawn(900), map: 0, x: 1, y: 2, z: 3 }] }], objects: [], items: [] };
   const setEntities = vi.fn();
   const onQuestField = vi.fn();
   const onNewQuest = vi.fn();

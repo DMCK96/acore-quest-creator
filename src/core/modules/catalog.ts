@@ -141,7 +141,7 @@ const DECLARED: readonly Declared[] = [
   {
     id: 'entities',
     label: 'NPCs, objects & items',
-    description: 'The project\'s new NPCs, objects and items this quest uses, and new ones made for it.',
+    description: 'The project\'s new NPCs, objects and items this quest uses, and a place to make new ones.',
     kind: 'optional',
     // The NPCs, objects and items are the project's: the quest owns no field of them
     owns: [],

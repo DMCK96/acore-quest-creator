@@ -7,11 +7,10 @@ describe('the project store model', () => {
     expect(EMPTY_ENTITIES).toEqual({ npcs: [], objects: [], items: [] });
   });
 
-  it('records the quest a new entity was made for, null outside a quest', () => {
-    expect(newNpc(12000001).madeFor).toBeNull();
-    expect(newNpc(12000001, 60001).madeFor).toBe(60001);
-    expect(newObject(9100001, 60002).madeFor).toBe(60002);
-    expect(newItem(9200001).madeFor).toBeNull();
+  it('makes NPCs, objects and items with no quest attached', () => {
+    expect(newNpc(12000001)).not.toHaveProperty('madeFor');
+    expect(newObject(9100001)).not.toHaveProperty('madeFor');
+    expect(newItem(9200001)).not.toHaveProperty('madeFor');
     expect(newObject(9100001).onlyDuringQuest).toBeNull();
   });
 
@@ -23,9 +22,11 @@ describe('the project store model', () => {
     expect(readProjectEntities(null)).toEqual(EMPTY_ENTITIES);
   });
 
-  it('fills madeFor with null for entries saved without it', () => {
-    const { madeFor: _m, ...old } = newNpc(1);
-    expect(readProjectEntities({ npcs: [old] }).npcs[0]!.madeFor).toBeNull();
+  it('drops madeFor from a project saved with it, keeping everything else', () => {
+    const old = { ...newNpc(1), name: 'Hela', madeFor: 60001 };
+    const read = readProjectEntities({ npcs: [old] }).npcs[0]!;
+    expect(read).not.toHaveProperty('madeFor');
+    expect(read.name).toBe('Hela');
   });
 
   it('a fight credit step names the quest it credits, 0 when read from before', () => {

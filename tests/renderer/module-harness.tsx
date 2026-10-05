@@ -29,7 +29,7 @@ export async function mountBody(
   over: Record<string, FieldValue> = {},
   opts: {
     api?: Api; onChange?: Mock; links?: QuestLinks | null; readOnly?: ReadOnlyReason[]; sharedItems?: Record<string, number[]>; openMap?: (request: any) => void; openEditor?: OpenEditor;
-    /** The project store; by default read from `over`'s old `entities` field, each made for the quest */
+    /** The project store; by default read from `over`'s old `entities` field */
     entities?: ProjectEntities; quests?: ProjectQuestUse[]; setEntities?: Mock;
   } = {},
 ): Promise<{ onChange: Mock; api: Api }> {
@@ -39,10 +39,7 @@ export async function mountBody(
   const api = opts.api ?? makeMockApi();
   const onChange = opts.onChange ?? vi.fn();
   const withEditor = (ui: React.ReactNode): React.ReactNode => (opts.openEditor ? <EntityEditorProvider open={opts.openEditor}>{ui}</EntityEditorProvider> : ui);
-  const old = readEntities(over);
-  const entities = opts.entities ?? {
-    npcs: old.npcs.map((e) => ({ ...e, madeFor: 60001 })), objects: old.objects.map((e) => ({ ...e, madeFor: 60001 })), items: old.items.map((e) => ({ ...e, madeFor: 60001 })),
-  };
+  const entities = opts.entities ?? readEntities(over);
   const project = { entities, setEntities: opts.setEntities ?? vi.fn(), quests: opts.quests ?? [], create: vi.fn(async () => ({ error: 'not here' })), remove: vi.fn(async () => null) };
   render(
     <ProjectEntitiesProvider value={project}>

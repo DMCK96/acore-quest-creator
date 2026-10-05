@@ -8,7 +8,6 @@ import type { ProjectController } from '../../src/main/project/controller';
 import { ENTITIES_FIELD, newNpc, newSpawn, writeEntities } from '../../src/core/entities/model';
 import { addAction, addPoint, newPatrol } from '../../src/core/map/patrol';
 import { forkDb } from '../helpers/fixtures';
-import { madeFor } from '../helpers/entities';
 
 const box = { encrypt: (s: string) => Uint8Array.from(Buffer.from(s)), decrypt: (b: Uint8Array) => Buffer.from(b).toString() };
 
@@ -29,7 +28,8 @@ describe('patrols through the API', () => {
     const aggregate = opened.value.aggregate;
     aggregate.values['quest_template.LogTitle'] = 'Walk the walls';
     const patrol = addPoint(addPoint(newPatrol(53007010), { x: 1, y: 2, z: 3 }), { x: 4, y: 5, z: 6 });
-    await api.putProjectEntities(madeFor({ npcs: [{ ...newNpc(11000240), name: 'Walker', displayId: 1, spawns: [{ ...newSpawn(5300701), patrol }] }], objects: [], items: [] }, aggregate.questId));
+    await api.putProjectEntities({ npcs: [{ ...newNpc(11000240), name: 'Walker', displayId: 1, spawns: [{ ...newSpawn(5300701), patrol }] }], objects: [], items: [] });
+    aggregate.values.creature_queststarter = [{ id: 11000240 }];
     await api.updateQuest(aggregate);
     const out: any = await api.exportQuest(aggregate.questId);
     const applied: string = `${out.value.projectSql}\n${out.value.sql}`;
@@ -54,7 +54,7 @@ describe('patrol path ids', () => {
     expect(((await api.patrolPathId(5300701)) as any).value).toBe(60000001);
     const opened: any = await api.newQuest();
     const aggregate = opened.value.aggregate;
-    await api.putProjectEntities(madeFor({ npcs: [{ ...newNpc(11000240), spawns: [{ ...newSpawn(5300702), patrol: newPatrol(53007020) }, { ...newSpawn(5300703), patrol: newPatrol(70000000) }] }], objects: [], items: [] }, aggregate.questId));
+    await api.putProjectEntities({ npcs: [{ ...newNpc(11000240), spawns: [{ ...newSpawn(5300702), patrol: newPatrol(53007020) }, { ...newSpawn(5300703), patrol: newPatrol(70000000) }] }], objects: [], items: [] });
     await api.updateQuest(aggregate);
     expect(((await api.patrolPathId(5300702)) as any).value).toBe(53007020);   // its own pinned id comes back
     expect(((await api.patrolPathId(7000000)) as any).value).toBe(70000001);   // guid*10 = 70000000 is a project path
@@ -69,7 +69,8 @@ describe('patrol point actions through the API', () => {
     aggregate.values['quest_template.LogTitle'] = 'Walk the walls';
     const patrol = addAction(addPoint(addPoint(newPatrol(53007010), { x: 1, y: 2, z: 3 }), { x: 4, y: 5, z: 6 }), 1,
       { id: 'a1', afterSecs: 0, kind: 'say', chance: 100, lines: [{ text: 'All quiet.', style: 'say' }] });
-    await api.putProjectEntities(madeFor({ npcs: [{ ...newNpc(11000240), name: 'Walker', displayId: 1, spawns: [{ ...newSpawn(5300701), patrol }] }], objects: [], items: [] }, aggregate.questId));
+    await api.putProjectEntities({ npcs: [{ ...newNpc(11000240), name: 'Walker', displayId: 1, spawns: [{ ...newSpawn(5300701), patrol }] }], objects: [], items: [] });
+    aggregate.values.creature_queststarter = [{ id: 11000240 }];
     await api.updateQuest(aggregate);
     const out: any = await api.exportQuest(aggregate.questId);
     const applied: string = `${out.value.projectSql}\n${out.value.sql}`;

@@ -12,7 +12,7 @@ describe('searching the project\'s entities', () => {
       searchEntities: vi.fn(async (_kind: string, text: string) => { order.push(`search ${text}`); return okv([]); }),
     });
     const store = createAppStore(api, { saveDelayMs: 60_000 });
-    await store.getState().createEntity('npc', {}, null);
+    await store.getState().createEntity('npc', {});
     const now = store.getState().entities;
     store.getState().setEntities({ ...now, npcs: [{ ...now.npcs[0]!, name: 'Scout Hela' }] });
     await searchingFresh(api, () => store.getState().flushEntities()).searchEntities('creature', 'Scout');
