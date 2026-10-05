@@ -1,5 +1,5 @@
 import type { ViewCreature, ViewObject, ViewSpawns } from '../db/view-spawns';
-import { originOf, type CustomNpc, type CustomObject, type ProjectEntities } from './model';
+import { OBJECT_TYPE_VALUE, originOf, type CustomNpc, type CustomObject, type ProjectEntities } from './model';
 
 /**
  * The open quest's own new NPCs and objects as the 3D view draws them: each spawn with its entity's
@@ -47,6 +47,7 @@ export function ownViewSpawns(entities: { npcs: readonly CustomNpc[]; objects: r
       rotation: spawn.rotation ?? [0, 0, Math.sin(spawn.o / 2), Math.cos(spawn.o / 2)],
       displayId: object.displayId,
       scale: object.size,
+      objectType: OBJECT_TYPE_VALUE[object.type],
       own: true,
       event: null,
       events: [],

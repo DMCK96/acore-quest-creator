@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { questUses } from '@core/entities/links';
-import { EntityList } from '../../entities/EntityList';
+import { EDIT_NEEDS_DATABASE, EntityList, editableWith } from '../../entities/EntityList';
 import { useEntityEditor, type EditorRequest } from '../../entities/EntityEditorContext';
 import { useProjectEntities } from '../../state/project-entities';
 import { useApi } from '../../state/names';
@@ -21,7 +21,8 @@ export function EntitiesBody({ open, onChange }: ModuleBodyProps): React.JSX.Ele
   const quests = project?.quests ?? [];
   const use = questUses({ questId: open.questId, aggregate: open.aggregate }, store);
   const openEditor = useEntityEditor();
-  const drifted = useExistingDrift(useApi(), project?.tracked ?? []);
+  const api = useApi();
+  const drifted = useExistingDrift(api, project?.tracked ?? []);
   const [error, setError] = useState<string | null>(null);
   const [adding, setAdding] = useState(false);
 
@@ -51,7 +52,8 @@ export function EntitiesBody({ open, onChange }: ModuleBodyProps): React.JSX.Ele
           Add from project…
         </button>
       </div>
-      <EntityList tracked={project?.tracked ?? []} quests={quests} openQuestId={open.questId} drifted={drifted} onEdit={(ref) => void request(ref)} />
+      <EntityList tracked={project?.tracked ?? []} quests={quests} openQuestId={open.questId} drifted={drifted}
+        canEdit={editableWith(store, api !== null)} editBlockedReason={EDIT_NEEDS_DATABASE} onEdit={(ref) => void request(ref)} />
       {adding && <AddFromProject store={store} use={use} values={open.aggregate.values} onChange={onChange} onClose={() => setAdding(false)} />}
     </div>
   );

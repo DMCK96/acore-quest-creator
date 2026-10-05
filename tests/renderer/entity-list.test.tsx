@@ -2,7 +2,12 @@
 import { describe, expect, it, vi } from 'vitest';
 import { render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { EntityList, changeSummary } from '../../src/renderer/entities/EntityList';
+import { EntityList, changeSummary, editableWith } from '../../src/renderer/entities/EntityList';
+import { EntitiesBody } from '../../src/renderer/modules/bodies/EntitiesBody';
+import { NamesProvider } from '../../src/renderer/state/names';
+import { ProjectEntitiesProvider } from '../../src/renderer/state/project-entities';
+import { EMPTY_ENTITIES, newNpc } from '../../src/core/entities/model';
+import { makeMockApi } from './mock-api';
 import type { TrackedEntity } from '../../src/core/entities/entity';
 
 const none = { npcs: [], objects: [], items: [] };
@@ -42,6 +47,36 @@ describe('EntityList', () => {
     const other = screen.getByRole('listitem', { name: 'Stormwind Guard' });
     expect(within(other).getByRole('button', { name: 'Edit' })).toHaveProperty('disabled', true);
     expect(within(other).getByRole('button', { name: 'Go to' })).toHaveProperty('disabled', true);
+  });
+
+  it('says why a row cannot be edited, on its disabled Edit', () => {
+    render(<EntityList tracked={[hela, guard]} quests={quests} canEdit={(e) => e.origin === 'new'} editBlockedReason="Needs the world database" onEdit={vi.fn()} />);
+    const edit = within(screen.getByRole('listitem', { name: 'Stormwind Guard' })).getByRole('button', { name: 'Edit' });
+    expect(edit).toHaveProperty('disabled', true);
+    expect(edit.getAttribute('title')).toBe('Needs the world database');
+    expect(edit).toHaveAccessibleDescription('Needs the world database');
+    const fine = within(screen.getByRole('listitem', { name: 'Hela' })).getByRole('button', { name: 'Edit' });
+    expect(fine.getAttribute('title')).toBeNull();
+  });
+
+  it('offline, only an existing entity the project does not hold yet needs the world database to edit', () => {
+    const store = { ...EMPTY_ENTITIES, npcs: [{ ...newNpc(1500), origin: { kind: 'existing' as const, original: {}, sharedLoot: 0, spawnCount: 1, locked: [] } }] };
+    const adopted: TrackedEntity = { ...guard, entry: 1500, name: 'Brought in' };
+    expect([hela, guard, adopted, seal].map(editableWith(store, false))).toEqual([true, false, true, true]);
+    expect([hela, guard, adopted, seal].map(editableWith(store, true))).toEqual([true, true, true, true]);
+  });
+
+  it("the quest's list disables Edit on an existing entity not brought in yet while there is no world database", () => {
+    const value = { entities: EMPTY_ENTITIES, setEntities: vi.fn(), quests, tracked: [hela, guard], create: vi.fn(), remove: vi.fn() } as any;
+    const open = { questId: 60001, aggregate: { values: {} } } as any;
+    const body = <ProjectEntitiesProvider value={value}><EntitiesBody {...({ open, onChange: vi.fn(), links: [], onOpenQuest: vi.fn() } as any)} /></ProjectEntitiesProvider>;
+    const view = render(body);
+    const edit = () => within(screen.getByRole('listitem', { name: 'Stormwind Guard' })).getByRole('button', { name: 'Edit' });
+    expect(edit()).toHaveProperty('disabled', true);
+    expect(edit()).toHaveAccessibleDescription('Needs the world database');
+    view.unmount();
+    render(<NamesProvider api={makeMockApi()}>{body}</NamesProvider>);
+    expect(edit()).toHaveProperty('disabled', false);
   });
 
   it('with a quest open, puts its entities first and leaves it out of "used by"', () => {

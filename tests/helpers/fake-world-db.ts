@@ -210,7 +210,7 @@ export class FakeWorldDb implements WorldDb {
     const objectPools = await poolOf('pool_gameobject');
     const objects = (await this.selectRows('gameobject', {})).filter(inBox).sort(byGuid).slice(0, limit).map((r) => {
       const t = templates.get(r.id ?? null);
-      return toViewObject({ ...r, entry: r.id ?? null, name: t?.name ?? null, display_id: t?.displayId ?? null, size: t?.size ?? null, pool_entry: objectPools.get(r.guid) ?? null });
+      return toViewObject({ ...r, entry: r.id ?? null, name: t?.name ?? null, type: t?.type ?? null, display_id: t?.displayId ?? null, size: t?.size ?? null, pool_entry: objectPools.get(r.guid) ?? null });
     });
 
     return { creatures, objects };

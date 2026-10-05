@@ -57,7 +57,7 @@ export async function readTemplateLook(db: WorldDb, kind: WorldSpawnKind, entry:
   const key = { entry: String(entry) };
   if (kind === 'gameobject') {
     const [row] = await db.selectRows('gameobject_template', key);
-    return row ? { name: row.name ?? '', look: { displayId: num(row.displayId), scale: num(row.size, 1) || 1, equipment: [0, 0, 0], preset: null } } : null;
+    return row ? { name: row.name ?? '', look: { displayId: num(row.displayId), scale: num(row.size, 1) || 1, equipment: [0, 0, 0], preset: null, objectType: num(row.type, -1) } } : null;
   }
   const [row] = await db.selectRows('creature_template', key);
   if (!row) return null;

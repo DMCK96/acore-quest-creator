@@ -49,6 +49,8 @@ export type SpawnInfo = {
   group: number | null;
   /** Seconds before it respawns */
   respawnSecs: number;
+  /** An object's template type (3 is a chest); absent for an NPC or when it is not known */
+  objectType?: number;
 };
 
 /** An object's facing: its turn about Z, from 0 to a whole turn */
@@ -420,7 +422,7 @@ class SpawnManager {
         guid: a.guid, entry: a.entry, name: a.name, map: a.map, x: a.placement.x, y: a.placement.y, z: a.placement.z,
         // Turned about Z by its facing unless it was tilted
         rotation: a.placement.rotation ?? [0, 0, Math.sin(a.placement.orientation / 2), Math.cos(a.placement.orientation / 2)],
-        displayId: a.look.displayId, scale: a.look.scale, own: false, added: true, event: null, events: [], removedBy: [], group: null,
+        displayId: a.look.displayId, scale: a.look.scale, objectType: a.look.objectType ?? -1, own: false, added: true, event: null, events: [], removedBy: [], group: null,
         respawnSecs: a.respawnSecs ?? 300,
       }),
     );
@@ -483,7 +485,8 @@ class SpawnManager {
         return { ...base, pathId: c.pathId ?? 0, wander: c.wander, placement: { x: c.x, y: c.y, z: c.z, orientation: c.orientation, rotation: null } };
       }
       const o = data as ViewObject;
-      return { ...base, pathId: 0, wander: 0, placement: { x: o.x, y: o.y, z: o.z, orientation: facingOf(o.rotation), rotation: o.rotation } };
+      const objectType = o.objectType ?? -1;
+      return { ...base, pathId: 0, wander: 0, placement: { x: o.x, y: o.y, z: o.z, orientation: facingOf(o.rotation), rotation: o.rotation }, ...(objectType >= 0 ? { objectType } : {}) };
     }
     return null;
   }

@@ -3,7 +3,8 @@ import type { Api, ApiError, Movement, Placement, RoutePoint, WorldChange, World
 import type { SpawnLocation } from '@core/entities/entity';
 import { trapTab } from '../components/trap-tab';
 import { useProjectEntities } from '../state/project-entities';
-import { EntityList } from '../entities/EntityList';
+import { EDIT_NEEDS_DATABASE, EntityList, editableWith } from '../entities/EntityList';
+import { useApi } from '../state/names';
 import { useExistingDrift } from '../entities/use-existing-drift';
 import '../views/ProjectDialog.css';
 
@@ -31,6 +32,8 @@ export function ProjectChanges({
   layerSeq?: number;
 }): React.JSX.Element {
   const project = useProjectEntities();
+  // Editing an existing entity not in the project yet brings it in from the world database
+  const connected = useApi() !== null;
   const count = project?.tracked.length ?? 0;
   // Existing entities whose rows the database changed since they were brought in: read when opened and after an undo
   const drifted = useExistingDrift(api, project?.tracked ?? [], layerSeq);
@@ -106,6 +109,8 @@ export function ProjectChanges({
               tracked={project.tracked}
               quests={project.quests}
               drifted={drifted}
+              canEdit={editableWith(project.entities, connected)}
+              editBlockedReason={EDIT_NEEDS_DATABASE}
               onEdit={(ref) => onEdit?.(ref.kind, ref.entry)}
               onGoTo={(e) => e.goTo && onGoTo?.(e.goTo)}
             />

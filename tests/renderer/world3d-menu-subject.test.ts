@@ -32,6 +32,23 @@ describe('the clicked thing as an entity', () => {
     expect(spawnedEntityOf(object(143981, false), store)).toMatchObject({ kind: 'object', origin: 'existing', lootable: null });
   });
 
+  it("a database object not in the project is lootable by its template type: a chest yes, another type the editor models no, any other or unknown cannot be changed", () => {
+    const object = (objectType?: number) => info({ kind: 'object', entry: 143981, pathId: 0, ...(objectType === undefined ? {} : { objectType }) });
+    expect(spawnedEntityOf(object(3), store)).toMatchObject({ origin: 'existing', lootable: true });
+    for (const type of [2, 5, 9, 10]) expect(spawnedEntityOf(object(type), store)).toMatchObject({ lootable: false });
+    for (const type of [0, 19, -1, undefined]) expect(spawnedEntityOf(object(type), store)).toMatchObject({ lootable: null });
+    // The project's copy wins over the database's type
+    const adopted = { ...store, objects: [{ ...newObject(143981), type: 'goober' as const, origin: { kind: 'existing' as const, original: {}, sharedLoot: 0, spawnCount: 1, locked: [] } }] };
+    expect(spawnedEntityOf(object(3), adopted)).toMatchObject({ lootable: false });
+  });
+
+  it('a spawn subject says whether the project holds the entity', () => {
+    const on = (spawn: MenuSpawn) => subjectOf({ ground: at, hit: { type: 'spawn', spawn }, selection: [spawn] }, store);
+    expect(on(info({ kind: 'object', entry: 143981, objectType: 3 }))).toMatchObject({ stored: false });
+    expect(on(info({ kind: 'object', entry: 9100001, own: true }))).toMatchObject({ stored: true });
+    expect(on(info({ entry: 12000001, own: true }))).toMatchObject({ stored: true });
+  });
+
   it('builds ground, spawn and route point subjects from a right-click target', () => {
     expect(subjectOf({ ground: at, hit: null, selection: [] }, store)).toEqual({ type: 'ground', at, selection: [] });
     const spawn = subjectOf({ ground: at, hit: { type: 'spawn', spawn: info() }, selection: [info()] }, store);

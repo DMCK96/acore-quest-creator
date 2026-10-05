@@ -50,6 +50,8 @@ export interface WorldLook {
   /** An NPC's held item ids: main hand, off hand, ranged; all 0 for an object */
   equipment: [number, number, number];
   preset: ViewPreset | null;
+  /** An object's template `type` (3 is a chest); absent for an NPC and in layers saved before it was kept */
+  objectType?: number;
 }
 
 /** A spawn of an existing NPC or object placed in the 3D view: a new row, written by the world patch */

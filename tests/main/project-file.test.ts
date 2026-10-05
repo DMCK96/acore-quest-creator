@@ -95,7 +95,7 @@ describe('project file: the world layer', () => {
             items: { head: 0, shoulders: 7, body: 0, chest: 8, waist: 0, legs: 9, feet: 0, wrists: 0, hands: 0, back: 0, tabard: 0 } } } },
       { kind: 'gameobject' as const, guid: 80332, entry: 2000, name: 'Tent', map: 0,
         placement: { x: 8, y: 9, z: 1, orientation: 0, rotation: [0, 0, 0, 1] as [number, number, number, number] },
-        look: { displayId: 99, scale: 1.5, equipment: [0, 0, 0] as [number, number, number], preset: null } },
+        look: { displayId: 99, scale: 1.5, equipment: [0, 0, 0] as [number, number, number], preset: null, objectType: 3 } },
     ],
   };
 

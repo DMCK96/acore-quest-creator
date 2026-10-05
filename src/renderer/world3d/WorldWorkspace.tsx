@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import type { CanvasNode, GroupView, OpenResult, QuestSpawnGroup } from '@shared/ipc';
 import type { FieldValue } from '@core/registry/types';
-import { EMPTY_ENTITIES, newSpawn } from '@core/entities/model';
+import { EMPTY_ENTITIES, newSpawn, type CustomObject } from '@core/entities/model';
 import type { Placement } from '@core/world/layer';
 import { EntityEditorHost, type EditorState } from '../entities/EntityEditorHost';
 import { useHistorySteps } from '../state/history-context';
@@ -128,20 +128,52 @@ export function WorldWorkspace({
     else setEditor({ kind, entry, isNew: false });
   };
 
-  /** Make lootable… / Stop being lootable on a project object, asking first when it would stop doing something else */
+  /**
+   * Make lootable… / Stop being lootable on an object, asking first when it would stop doing something
+   * else. A database object the project does not hold yet is read first (to ask and to see its type is
+   * not locked), then brought in and changed in one step.
+   */
   const setLootable = async (entry: number, on: boolean): Promise<void> => {
-    const object = storeRef.current.objects.find((o) => o.entry === entry);
-    if (!project || !object) return;
+    if (!project) return;
+    let object = storeRef.current.objects.find((o) => o.entry === entry);
+    let adopting: CustomObject | null = null;
+    if (!object) {
+      if (!api) return;
+      const read = await api.readExistingEntity('object', entry);
+      if (!read.ok) {
+        setNote(read.error.message);
+        return;
+      }
+      adopting = read.value as CustomObject;
+      object = adopting;
+    }
     const name = object.name.trim() || 'this object';
+    if (object.origin.kind === 'existing' && object.origin.locked.includes('type')) {
+      setNote(`${name}'s type cannot be changed: it is one this editor does not change.`);
+      return;
+    }
     if (on && object.pages.length > 0 && !window.confirm(`Make ${name} lootable? Its pages are not shown once it can be looted.`)) return;
     if (on && object.pages.length === 0 && object.onlyDuringQuest !== null && object.type === 'goober'
       && !window.confirm(`Make ${name} lootable? Its quest-only use stops; only its loot can be quest-only.`)) return;
-    const next = { ...storeRef.current, objects: storeRef.current.objects.map((o) => (o.entry === entry ? { ...o, type: on ? 'chest' as const : 'goober' as const } : o)) };
+    const type = on ? 'chest' as const : 'goober' as const;
+    let changed = false;
     await runStep(async () => {
+      if (adopting) {
+        const error = await project.ensure({ kind: 'object', entry });
+        if (error) {
+          setNote(error);
+          return;
+        }
+      }
+      // Brought in just now: the store this view holds has not caught up yet, so the object read is added to it
+      const base = storeRef.current;
+      const objects = base.objects.some((o) => o.entry === entry) || !adopting ? base.objects : [...base.objects, adopting];
+      const next = { ...base, objects: objects.map((o) => (o.entry === entry ? { ...o, type } : o)) };
       storeRef.current = next;
       project.setEntities(next);
+      changed = true;
     }, on ? `Made ${name} lootable` : `Stopped ${name} being lootable`);
-    if (on) setEditor({ kind: 'object', entry, isNew: false, tab: 'contents' });
+    if (on && changed) setEditor({ kind: 'object', entry, isNew: false, tab: 'contents' });
   };
   // The spawns of the open quest or its chain, listed after the menu showed them
   const [preset, setPreset] = useState<FindPreset | null>(null);

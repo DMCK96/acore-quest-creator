@@ -34,6 +34,9 @@ const at = { x: 10, y: 20, z: 30 };
 const crate = { ...newObject(9100001), name: 'Crate', displayId: 1, spawns: [{ ...newSpawn(7000001), x: 1, y: 2, z: 3 }] };
 const crateSpawn = { kind: 'object' as const, guid: 7000001, entry: 9100001, name: 'Crate', own: true, added: false, pathId: 0, wander: 0, map: 0, placement: { x: 1, y: 2, z: 3, orientation: 0, rotation: null } };
 
+const dbGoober = { ...newObject(181000), name: 'Lever', displayId: 2, origin: { kind: 'existing' as const, original: {}, sharedLoot: 0, spawnCount: 1, locked: [] as ('type' | 'loot' | 'fight')[] } };
+const dbGooberSpawn = { kind: 'object' as const, guid: 55, entry: 181000, name: 'Lever', own: false, added: false, pathId: 0, wander: 0, map: 0, group: null, respawnSecs: 300, objectType: 10, placement: { x: 1, y: 2, z: 3, orientation: 0, rotation: null } };
+
 function mount(entities: ProjectEntities = EMPTY_ENTITIES) {
   vi.stubGlobal('fetch', async () => new Response(new Uint8Array([1]), { status: 200 }));
   const api = makeMockApi({ worldLayer: vi.fn(async () => okv({ spawns: [], routes: [], added: [] })), allocateIds: vi.fn(async () => okv([6000007])),
@@ -42,7 +45,9 @@ function mount(entities: ProjectEntities = EMPTY_ENTITIES) {
   const setEntities = vi.fn((next: ProjectEntities) => { state.entities = next; });
   const create = vi.fn(async () => ({ entry: 12000007 }));
   const adopt = vi.fn(async (kind: string, entry: number) => {
-    state.entities = { ...state.entities, npcs: [...state.entities.npcs, { ...newNpc(entry), name: 'Stormwind Guard', origin: { kind: 'existing' as const, original: {}, sharedLoot: 0, spawnCount: 1, locked: [] } }] };
+    const origin = { kind: 'existing' as const, original: {}, sharedLoot: 0, spawnCount: 1, locked: [] };
+    if (kind === 'object') state.entities = { ...state.entities, objects: [...state.entities.objects, { ...dbGoober, entry, origin }] };
+    else state.entities = { ...state.entities, npcs: [...state.entities.npcs, { ...newNpc(entry), name: 'Stormwind Guard', origin }] };
     return { entry };
   });
   const ensure = vi.fn(async (ref: { kind: string; entry: number }) => {
@@ -133,6 +138,41 @@ describe('creating and editing from the World view', () => {
     rightClick({ ground: at, hit: { type: 'spawn', spawn: crateSpawn }, selection: [crateSpawn] });
     await userEvent.click(screen.getByRole('menuitem', { name: 'Stop being lootable' }));
     await waitFor(() => expect(setEntities).toHaveBeenCalledWith({ ...EMPTY_ENTITIES, objects: [{ ...chest, type: 'goober' }] }));
+  });
+
+  it('Make lootable on a database goober brings it into the project, then makes it a chest, as one step', async () => {
+    const { api, adopt, ensure, setEntities } = mount();
+    (api.readExistingEntity as any).mockResolvedValue(okv(dbGoober));
+    await waitFor(() => expect(worlds).toHaveLength(1));
+    rightClick({ ground: at, hit: { type: 'spawn', spawn: dbGooberSpawn }, selection: [dbGooberSpawn] });
+    await userEvent.click(screen.getByRole('menuitem', { name: 'Make lootable…' }));
+    await waitFor(() => expect(setEntities).toHaveBeenCalledWith({ ...EMPTY_ENTITIES, objects: [{ ...dbGoober, type: 'chest' }] }));
+    expect(ensure).toHaveBeenCalledWith({ kind: 'object', entry: 181000 });
+    expect(adopt).toHaveBeenCalledWith('object', 181000);
+    expect(adopt.mock.invocationCallOrder[0]!).toBeLessThan(setEntities.mock.invocationCallOrder[0]!);
+  });
+
+  it('Make lootable on a database object whose type is locked brings nothing in and says why', async () => {
+    const { api, adopt, setEntities } = mount();
+    (api.readExistingEntity as any).mockResolvedValue(okv({ ...dbGoober, origin: { ...dbGoober.origin, locked: ['type'] } }));
+    await waitFor(() => expect(worlds).toHaveLength(1));
+    rightClick({ ground: at, hit: { type: 'spawn', spawn: dbGooberSpawn }, selection: [dbGooberSpawn] });
+    await userEvent.click(screen.getByRole('menuitem', { name: 'Make lootable…' }));
+    await waitFor(() => expect(screen.getByText(/Lever's type cannot be changed/)).toBeTruthy());
+    expect(adopt).not.toHaveBeenCalled();
+    expect(setEntities).not.toHaveBeenCalled();
+  });
+
+  it('Make lootable on a database object asks first when it has pages, and brings nothing in on no', async () => {
+    const { api, adopt, setEntities } = mount();
+    (api.readExistingEntity as any).mockResolvedValue(okv({ ...dbGoober, type: 'text', pages: [{ id: 1, text: 'x' }] }));
+    const confirm = vi.spyOn(window, 'confirm').mockReturnValue(false);
+    await waitFor(() => expect(worlds).toHaveLength(1));
+    rightClick({ ground: at, hit: { type: 'spawn', spawn: dbGooberSpawn }, selection: [dbGooberSpawn] });
+    await userEvent.click(screen.getByRole('menuitem', { name: 'Make lootable…' }));
+    await waitFor(() => expect(confirm).toHaveBeenCalledWith('Make Lever lootable? Its pages are not shown once it can be looted.'));
+    expect(adopt).not.toHaveBeenCalled();
+    expect(setEntities).not.toHaveBeenCalled();
   });
 
   it('Edit object opens the editor on a project object', async () => {

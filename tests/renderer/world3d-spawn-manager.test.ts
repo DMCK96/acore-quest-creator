@@ -8,7 +8,7 @@ const creature = (guid: number, displayId: number, extra: object = {}) => ({
   guid, entry: 1, name: 'n', map: 0, x: 0, y: 0, z: 0, orientation: 0, displayId, scale: 1, wander: 0, path: null, equipment: [0, 0, 0] as [number, number, number], own: false, event: null, events: [], removedBy: [], pathId: 0, preset: null, group: null, respawnSecs: 300, ...extra,
 });
 const object = (guid: number, displayId: number, extra: object = {}) => ({
-  guid, entry: 2, name: 'o', map: 0, x: 0, y: 0, z: 0, rotation: [0, 0, 0, 1] as [number, number, number, number], displayId, scale: 1, own: false, event: null, events: [], removedBy: [], group: null, respawnSecs: 300, ...extra,
+  guid, entry: 2, name: 'o', map: 0, x: 0, y: 0, z: 0, rotation: [0, 0, 0, 1] as [number, number, number, number], displayId, scale: 1, objectType: 5, own: false, event: null, events: [], removedBy: [], group: null, respawnSecs: 300, ...extra,
 });
 const box = { minX: 0, maxX: 1, minY: 0, maxY: 1 };
 
@@ -558,6 +558,20 @@ describe('the world layer in the view', () => {
     expect(m.info('object', 5)!.respawnSecs).toBe(10);
     expect(m.info('creature', 7)!.respawnSecs).toBe(300);
     expect(m.info('creature', 8)!.respawnSecs).toBe(45);
+  });
+
+  it("describes an object's template type: the database's, a placed spawn's look, or none when that look predates it", async () => {
+    const m = manager({ creatures: [], objects: [object(5, 2, { x: 0.5, y: 0.5, objectType: 3 })], capped: { creatures: false, objects: false } });
+    await m.loadArea(1, 0, box);
+    expect(m.info('object', 5)!.objectType).toBe(3);
+    const look = { displayId: 2, scale: 1, equipment: [0, 0, 0] as [number, number, number], preset: null };
+    const placement = { x: 0.5, y: 0.5, z: 0, orientation: 0, rotation: null };
+    await m.setWorldLayer({ spawns: [], routes: [], added: [
+      { kind: 'gameobject', guid: 6, entry: 2, name: 'o', map: 0, placement, look: { ...look, objectType: 10 } },
+      { kind: 'gameobject', guid: 7, entry: 2, name: 'o', map: 0, placement, look },
+    ] });
+    expect(m.info('object', 6)!.objectType).toBe(10);
+    expect(m.info('object', 7)!.objectType).toBeUndefined();
   });
 
   it('picks a route point of the selected NPC by its ball', async () => {
