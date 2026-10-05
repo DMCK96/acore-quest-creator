@@ -236,6 +236,13 @@ function CanvasInner({ store }: { store: AppStore }): React.JSX.Element {
                 multiSelectionKeyCode={MULTI_SELECT_KEYS}
                 selectNodesOnDrag={false}
                 deleteKeyCode={null}
+                // React Flow keeps a multi-selection when a quest already in it is clicked plainly;
+                // a plain click selects just that quest instead (the card itself opens it)
+                onNodeClick={(event, node) => {
+                  if (event.ctrlKey || event.metaKey || event.shiftKey) return;
+                  const id = Number(node.id);
+                  setSelectedIds((was) => (was.size === 1 && was.has(id) ? was : new Set([id])));
+                }}
                 // The nodes are controlled by the store, so a drag only shows if each step lands there.
                 onNodesChange={(changes) => {
                   const picks = changes.flatMap((c) => (c.type === 'select' ? [c] : []));
