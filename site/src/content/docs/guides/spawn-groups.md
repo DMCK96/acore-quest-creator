@@ -24,7 +24,7 @@ Groups are made in [the World](/acore-quest-creator/guides/the-world/), from the
 4. **Add a group…** adds another group on the same map as a member.
 5. **Save**.
 
-If a spawn you chose is already in another group, the dialog offers **Move _name_ here**. A spawn can be in only one group.
+If a spawn you chose is already in another group, the dialog offers **Move _name_ here**. A spawn can be in only one group. The group it leaves is checked as well, as it would be without that spawn, and its reasons are listed under its name. If the move leaves that group with no members, the dialog says so, and saving deletes it in the same step.
 
 Saving is one undo step, and the group is listed in **Project changes** as **Group changed**. It goes out with the project patch, and the revert patch takes it away again.
 

@@ -286,13 +286,15 @@ describe('the right-click menu in the 3D view', () => {
   });
 
   it('Group these spawns makes a new group of the selection, saved as one step', async () => {
-    const { api, world } = await view({ worldNewGroupId: vi.fn(async () => okv(900001)), worldCheckGroup: vi.fn(async () => okv([])), worldSetGroup: vi.fn(async () => okv(EMPTY)) });
+    const { api, world } = await view({ worldNewGroupId: vi.fn(async () => okv(900001)), worldCheckGroup: vi.fn(async () => okv({ reasons: [], notes: [] })), worldSetGroup: vi.fn(async () => okv(EMPTY)) });
     const other = { ...guard, guid: 80331, entry: 68, name: 'Other' };
     world.selectedSpawns.mockReturnValue([guard, other]);
     rightClick(world, { ground: at, hit: { type: 'spawn', spawn: guard }, selection: [guard, other] });
     await userEvent.click(screen.getByRole('menuitem', { name: 'Group these spawns…' }));
     const dialog = await screen.findByRole('dialog', { name: 'Spawn group' });
     await userEvent.type(within(dialog).getByLabelText('Name'), 'Camp');
+    // Save waits for the check of the latest change
+    await waitFor(() => expect(within(dialog).getByRole('button', { name: 'Save' })).toHaveProperty('disabled', false));
     await userEvent.click(within(dialog).getByRole('button', { name: 'Save' }));
     await waitFor(() => expect(api.worldSetGroup).toHaveBeenCalledWith({ id: 900001, name: 'Camp', map: 0, maxActive: 1, origin: { kind: 'new' },
       members: [{ type: 'spawn', kind: 'npc', guid: 80330, entry: 1423, chance: 0 }, { type: 'spawn', kind: 'npc', guid: 80331, entry: 68, chance: 0 }] }, []));

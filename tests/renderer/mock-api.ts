@@ -120,7 +120,7 @@ export function makeMockApi(overrides: Partial<Record<keyof Api, (...args: any[]
     worldGroupView: vi.fn(async () => okv(null)),
     worldGroupsOnMap: vi.fn(async () => okv([])),
     worldNewGroupId: vi.fn(async () => okv(900001)),
-    worldCheckGroup: vi.fn(async () => okv([])),
+    worldCheckGroup: vi.fn(async () => okv({ reasons: [], notes: [] })),
     worldSetGroup: vi.fn(async () => okv({ spawns: [], routes: [], added: [] })),
     worldDeleteGroup: vi.fn(async () => okv({ spawns: [], routes: [], added: [] })),
     worldDropMember: vi.fn(async () => okv({ spawns: [], routes: [], added: [] })),

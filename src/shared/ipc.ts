@@ -38,6 +38,12 @@ export interface GroupView {
 /** Spawns a group save moves out of the group they were in */
 export type GroupMove = { kind: 'npc' | 'object'; guid: number };
 
+/** A spawn group check: the reasons it cannot be saved, and notes that do not block it */
+export interface GroupCheck {
+  reasons: string[];
+  notes: string[];
+}
+
 /** What a world revert takes back: one spawn, one route, or one NPC's movement. */
 export type WorldRevertTarget =
   | { kind: 'spawn'; spawnKind: WorldSpawnKind; guid: number }
@@ -476,8 +482,11 @@ export interface Api {
   worldGroupsOnMap(map: number): Promise<Result<{ id: number; name: string; maxActive: number; members: number; groups: number[] }[]>>;
   /** An id no spawn group uses yet. */
   worldNewGroupId(): Promise<Result<number>>;
-  /** Why the server would refuse or misread a group; none when it is fine. `moves` are spawns the save takes out of their group. */
-  worldCheckGroup(group: SpawnGroup, moves: GroupMove[]): Promise<Result<string[]>>;
+  /**
+   * Why the server would refuse or misread a group, or a group its `moves` (spawns the save takes out of
+   * their group) leave; none when it is fine. Notes name left groups the save empties and deletes.
+   */
+  worldCheckGroup(group: SpawnGroup, moves: GroupMove[]): Promise<Result<GroupCheck>>;
   /** Saves a spawn group in the world layer as one step, moving `moves` out of the group they were in; refused with why when it is not valid. */
   worldSetGroup(group: SpawnGroup, moves: GroupMove[]): Promise<Result<WorldLayer>>;
   /** Deletes a spawn group: a new one is forgotten, an existing one is removed on export. */

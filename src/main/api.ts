@@ -1187,14 +1187,121 @@ export function createApi(deps: ApiDeps): Api {
     for (const group of groupsOf(layer).filter((g) => !g.removed)) {
       const reasons = validateGroup(group, await groupContext(live.db, layer, store, [], group));
       issues.push(...reasons.map((reason): Issue => ({ severity: 'error', code: 'GROUP', message: `${group.name}: ${reason}` })));
+      // Applying a new group deletes the rows of a pool with its id, so one the database has gained since is refused
+      if (group.origin.kind === 'new' && (await rowsOrNone(live.db, 'pool_template', { entry: [String(group.id)] })).length > 0) {
+        issues.push({ severity: 'error', code: 'GROUP', message:
+          `Spawn group "${group.name || `Group ${group.id}`}": the database now has a pool with id ${group.id}; open the group and save it again to give it a new id.` });
+      }
     }
     return issues;
   }
+
+  type GroupMoveArg = { kind: 'npc' | 'object'; guid: number };
+  type LeftGroup = { after: SpawnGroup; read: SpawnGroup | null; mother: SpawnGroup | null };
 
   /** A spawn group as the layer has it, else as the database's pool; null when there is neither */
   async function groupOf(db: WorldDb, id: number): Promise<SpawnGroup | null> {
     const known = groupsOf(deps.session.world.get()).find((g) => g.id === id);
     return known ?? (await readGroup(db, id));
+  }
+
+  /**
+   * A group sent by the renderer as main saves or checks it: its origin is the layer copy's, else the
+   * database pool's (with the rows it was read from), else new; the origin and `removed` it was sent with
+   * are not trusted. A new group (the layer's, or one sent as new) whose id the database has taken for a
+   * pool since gets the next free id.
+   */
+  async function trustedGroup(db: WorldDb, sent: SpawnGroup): Promise<SpawnGroup> {
+    const { removed: _removed, origin: claimed, ...fields } = sent;
+    const copy = groupsOf(deps.session.world.get()).find((g) => g.id === sent.id);
+    if (copy && copy.origin.kind === 'existing') return { ...fields, origin: copy.origin };
+    const pool = await readGroup(db, sent.id);
+    if (copy || claimed.kind === 'new') return { ...fields, id: pool ? await freeGroupId(db) : sent.id, origin: { kind: 'new' } };
+    return { ...fields, origin: pool ? pool.origin : { kind: 'new' } };
+  }
+
+  /**
+   * A sent group as main would save it; why the server would refuse it or a group its moves leave (each
+   * reason of a left group named by it); notes on left groups the moves empty, which the save deletes;
+   * and the left groups themselves
+   */
+  async function checkGroup(
+    db: WorldDb,
+    sent: SpawnGroup,
+    moves: readonly GroupMoveArg[],
+  ): Promise<{ group: SpawnGroup; reasons: string[]; notes: string[]; left: LeftGroup[] }> {
+    const layer = deps.session.world.get();
+    const store = projectEntities();
+    const group = await trustedGroup(db, sent);
+    // A layer group given a new id is checked by the id the layer knows it by
+    const asKnown = groupsOf(layer).some((g) => g.id === sent.id) ? { ...group, id: sent.id } : group;
+    const reasons = validateGroup(asKnown, await groupContext(db, layer, store, moves, asKnown));
+    const notes: string[] = [];
+    const left = await leftGroups(db, layer, new Set([sent.id, group.id]), moves);
+    for (const { after } of left) {
+      const name = after.name || `Group ${after.id}`;
+      if (after.members.length === 0) notes.push(`${name} would then be empty and is deleted.`);
+      else reasons.push(...validateGroup(after, await groupContext(db, layer, store, moves, after)).map((reason) => `${name} would then: ${reason}`));
+    }
+    return { group, reasons, notes, left };
+  }
+
+  /**
+   * The groups `moves` take spawns out of, but those in `skip`: each as it would be after (without them, and
+   * no more of it up than it has members), with the database copy to read into the layer when the layer has
+   * none, and for one left empty the database group holding it that must let go of it
+   */
+  async function leftGroups(db: WorldDb, layer: WorldLayer, skip: ReadonlySet<number>, moves: readonly GroupMoveArg[]): Promise<LeftGroup[]> {
+    const found = new Map<number, { group: SpawnGroup; read: SpawnGroup | null }>();
+    for (const move of moves) {
+      const held = groupsOf(layer).find((g) => !g.removed && g.members.some((m) => m.type === 'spawn' && m.kind === move.kind && m.guid === move.guid));
+      if (held) {
+        if (!skip.has(held.id)) found.set(held.id, { group: held, read: null });
+        continue;
+      }
+      const [row] = await rowsOrNone(db, move.kind === 'npc' ? 'pool_creature' : 'pool_gameobject', { guid: [String(move.guid)] });
+      const pool = row ? Number(row.pool_entry) : null;
+      // A database group the layer has changed is known by the layer's copy, which does not hold it
+      if (pool === null || skip.has(pool) || found.has(pool) || groupsOf(layer).some((g) => g.id === pool)) continue;
+      const read = await readGroup(db, pool);
+      if (read) found.set(pool, { group: read, read });
+    }
+    const out: LeftGroup[] = [];
+    for (const { group, read } of found.values()) {
+      const members = group.members.filter((m) => !(m.type === 'spawn' && moves.some((mv) => mv.kind === m.kind && mv.guid === m.guid)));
+      const after = { ...group, members, maxActive: members.length === 0 ? group.maxActive : Math.max(1, Math.min(group.maxActive, members.length)) };
+      out.push({ after, read, mother: members.length === 0 ? await motherToRead(db, layer, group.id) : null });
+    }
+    return out;
+  }
+
+  /** The database group holding group `id`, when the layer has no copy of it and no layer group holds `id` */
+  async function motherToRead(db: WorldDb, layer: WorldLayer, id: number): Promise<SpawnGroup | null> {
+    const heldInLayer = groupsOf(layer).some((g) => !g.removed && g.members.some((m) => m.type === 'group' && m.id === id));
+    const [row] = heldInLayer ? [] : await rowsOrNone(db, 'pool_pool', { pool_id: String(id) });
+    const motherId = row ? Number(row.mother_pool) : null;
+    return motherId !== null && !groupsOf(layer).some((g) => g.id === motherId) ? await readGroup(db, motherId) : null;
+  }
+
+  /** Points every layer group that holds group `from` at group `to` instead */
+  function renumberGroup(layer: WorldLayer, from: number, to: number): WorldLayer {
+    const groups = groupsOf(layer).map((g) =>
+      g.members.some((m) => m.type === 'group' && m.id === from)
+        ? { ...g, members: g.members.map((m) => (m.type === 'group' && m.id === from ? { ...m, id: to } : m)) }
+        : g,
+    );
+    return { ...layer, groups };
+  }
+
+  /** An id no spawn group uses yet: past the database's pools and the layer's groups */
+  async function freeGroupId(db: WorldDb): Promise<number> {
+    let dbMax = 0;
+    try {
+      dbMax = (await db.selectMax?.('pool_template', 'entry')) ?? 0;
+    } catch {
+      dbMax = 0;
+    }
+    return Math.max(dbMax, ...groupsOf(deps.session.world.get()).map((g) => g.id), 0) + 1;
   }
 
   /** Where a spawn stands: as moved or placed in the layer, as the project has it, else as the database has it */
@@ -2183,44 +2290,42 @@ export function createApi(deps: ApiDeps): Api {
         return [...byId.values()].sort((a, b) => a.name.localeCompare(b.name) || a.id - b.id);
       }),
 
-    worldNewGroupId: () =>
+    worldNewGroupId: () => run(async () => freeGroupId(connected().db)),
+
+    worldCheckGroup: (sent, moves) =>
       run(async () => {
-        const db = connected().db;
-        let dbMax = 0;
-        try {
-          dbMax = (await db.selectMax?.('pool_template', 'entry')) ?? 0;
-        } catch {
-          dbMax = 0;
-        }
-        return Math.max(dbMax, ...groupsOf(deps.session.world.get()).map((g) => g.id), 0) + 1;
+        const { reasons, notes } = await checkGroup(connected().db, sent, moves);
+        return { reasons, notes };
       }),
 
-    worldCheckGroup: (group, moves) =>
-      run(async () => validateGroup(group, await groupContext(connected().db, deps.session.world.get(), projectEntities(), moves, group))),
-
-    worldSetGroup: (group, moves) =>
+    worldSetGroup: (sent, moves) =>
       run(() => asOneStep(async () => {
         const db = connected().db;
-        const reasons = validateGroup(group, await groupContext(db, deps.session.world.get(), projectEntities(), moves, group));
+        const { group, reasons, left } = await checkGroup(db, sent, moves);
         if (reasons.length > 0) {
           throw fail('VALIDATION', 'This spawn group cannot be saved.', { issues: reasons.map((message): Issue => ({ severity: 'error', code: 'GROUP', message })) });
         }
-        // The database group each moved spawn leaves is read into the layer first, so it is kept there without it
-        const start = deps.session.world.get();
-        const read: SpawnGroup[] = [];
-        for (const move of moves) {
-          const held = groupsOf(start).some((g) => !g.removed && g.members.some((m) => m.type === 'spawn' && m.kind === move.kind && m.guid === move.guid));
-          if (held) continue;
-          const [row] = await rowsOrNone(db, move.kind === 'npc' ? 'pool_creature' : 'pool_gameobject', { guid: [String(move.guid)] });
-          const pool = row ? Number(row.pool_entry) : null;
-          if (pool === null || pool === group.id || groupsOf(start).some((g) => g.id === pool) || read.some((g) => g.id === pool)) continue;
-          const found = await readGroup(db, pool);
-          if (found) read.push(found);
-        }
-        // Nothing is awaited from here to the layer being put back, so an edit made meanwhile is kept
+        // Nothing is awaited from here to the layer being put back, so an edit made meanwhile is kept.
+        // The database group each moved spawn leaves is read into the layer first, so it is kept there without it.
+        const absent = (layer: WorldLayer, id: number) => !groupsOf(layer).some((g) => g.id === id);
         let next = deps.session.world.get();
-        for (const found of read) if (!groupsOf(next).some((g) => g.id === found.id)) next = putGroup(next, found);
+        for (const { read, mother } of left) {
+          if (read && absent(next, read.id)) next = putGroup(next, read);
+          if (mother && absent(next, mother.id)) next = putGroup(next, mother);
+        }
         for (const move of moves) next = dropMember(next, move.kind, move.guid);
+        for (const { after } of left) {
+          const now = groupsOf(next).find((g) => g.id === after.id);
+          if (!now || now.members.length === 0) {
+            // Emptied: deleted, as Delete group would, and let go of by the group holding it
+            next = dropGroupMember(next, after.id);
+            if (now) next = deleteGroup(next, now);
+          } else {
+            next = putGroup(next, { ...now, maxActive: Math.max(1, Math.min(now.maxActive, now.members.length)) });
+          }
+        }
+        // A new group given a new id leaves its old one, and a group holding it follows it there
+        if (group.id !== sent.id) next = renumberGroup(revertGroup(next, sent.id), sent.id, group.id);
         next = putGroup(next, group);
         deps.session.world.put(next);
         return next;
@@ -2232,11 +2337,7 @@ export function createApi(deps: ApiDeps): Api {
         const group = await groupOf(db, id);
         if (!group) throw fail('BAD_REQUEST', `There is no spawn group ${id}.`);
         // A database group that holds it, and that the layer has not changed, is read in so it can let go of it
-        const start = deps.session.world.get();
-        const heldInLayer = groupsOf(start).some((g) => !g.removed && g.members.some((m) => m.type === 'group' && m.id === id));
-        const [row] = heldInLayer ? [] : await rowsOrNone(db, 'pool_pool', { pool_id: String(id) });
-        const motherId = row ? Number(row.mother_pool) : null;
-        const mother = motherId !== null && !groupsOf(start).some((g) => g.id === motherId) ? await readGroup(db, motherId) : null;
+        const mother = await motherToRead(db, deps.session.world.get(), id);
         // Nothing is awaited from here to the layer being put back, so it is one step
         let next = deps.session.world.get();
         if (mother && !groupsOf(next).some((g) => g.id === mother.id)) next = putGroup(next, mother);
