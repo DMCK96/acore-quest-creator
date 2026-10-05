@@ -54,6 +54,7 @@ import type { FieldValue } from '@core/registry/types';
 import type { Difference } from '@core/roundtrip/compare';
 import type { ForeignScene } from '@core/scripts/decompile';
 import type { CustomItem, CustomNpc, CustomObject } from '@core/entities/model';
+import type { EntityRef } from '@core/entities/entity';
 import type { ColumnInfo } from '@core/db/types';
 import type { TestCommands } from '@core/testing/gm';
 import type { FidelityReport } from '@core/roundtrip/verify';
@@ -441,6 +442,8 @@ export interface Api {
    * Deletes one of the project's NPCs, objects or items and empties every quest's giver card that named
    * it, as one undo step; gives the store and the quests it changed, as they now are.
    */
+  readExistingEntity(kind: 'npc' | 'object' | 'item', entry: number): Promise<Result<CustomNpc | CustomObject | CustomItem>>;
+  existingDrift(): Promise<Result<EntityRef[]>>;
   deleteEntity(kind: 'npc' | 'object' | 'item', entry: number): Promise<Result<{ entities: ProjectEntities; quests: { questId: number; aggregate: QuestAggregate }[] }>>;
   /** The project's edits to spawns and routes outside any quest. */
   worldLayer(): Promise<Result<WorldLayer>>;
@@ -686,6 +689,8 @@ const REQUEST_SCHEMAS: Record<keyof Api, z.ZodType<unknown[]>> = {
   projectEntities: z.tuple([]),
   // Each entry is checked against the entity schemas by the main process
   putProjectEntities: z.tuple([z.object({ npcs: z.array(z.unknown()), objects: z.array(z.unknown()), items: z.array(z.unknown()) })]),
+  readExistingEntity: z.tuple([z.enum(['npc', 'object', 'item']), z.number().int().min(1)]),
+  existingDrift: z.tuple([]),
   deleteEntity: z.tuple([z.enum(['npc', 'object', 'item']), z.number().int().min(1)]),
   worldLayer: z.tuple([]),
   worldMoveSpawn: z.tuple([worldKindArg, z.number().int(), placementArg]),

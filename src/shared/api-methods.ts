@@ -43,6 +43,8 @@ export const API_METHODS = [
   'projectEntities',
   'putProjectEntities',
   'deleteEntity',
+  'readExistingEntity',
+  'existingDrift',
   'worldLayer',
   'worldMoveSpawn',
   'worldAddSpawn',

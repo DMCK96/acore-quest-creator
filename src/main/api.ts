@@ -84,6 +84,7 @@ import { emptyGiversOf } from '../core/modules/givers';
 import { narrowTo, objectivesOf, questItemsOf, questRefs, questUses, relationOwners } from '../core/entities/links';
 import { newOnly, projectEntitiesSchema, readProjectEntities, type ProjectEntities, type QuestEntities } from '../core/entities/model';
 import { itemFromRows, npcFromRows, objectFromRows } from '../core/entities/from-rows';
+import { existingDrifted, readExistingRows } from './entities/existing';
 import { entityIssues } from '../core/entities/validate';
 import { gmCommands } from '../core/testing/gm';
 import { TerrainFormatError, gridFileName, parseMapFile, terrainHeight, type TerrainFile } from '../core/game/terrain';
@@ -1870,6 +1871,26 @@ export function createApi(deps: ApiDeps): Api {
         if (!parsed.success) throw fail('BAD_REQUEST', 'The NPCs, objects and items sent are not valid.');
         deps.session.entities.put(parsed.data);
         return true as const;
+      }),
+
+    readExistingEntity: (kind, entry) =>
+      run(async () => {
+        const db = connected().db;
+        const read = await readExistingRows(db, kind, entry);
+        if (!read) throw fail('BAD_REQUEST', 'Not in the database any more');
+        const counts = { sharedLoot: read.sharedLoot, spawnCount: read.spawnCount };
+        return kind === 'npc' ? npcFromRows(entry, read.rows, counts) : kind === 'object' ? objectFromRows(entry, read.rows, counts) : itemFromRows(entry, read.rows);
+      }),
+
+    existingDrift: () =>
+      run(async () => {
+        const db = connected().db;
+        const store = projectEntities();
+        const out: { kind: 'npc' | 'object' | 'item'; entry: number }[] = [];
+        for (const n of store.npcs) if (n.origin.kind === 'existing' && (await existingDrifted(db, n, 'npc'))) out.push({ kind: 'npc', entry: n.entry });
+        for (const o of store.objects) if (o.origin.kind === 'existing' && (await existingDrifted(db, o, 'object'))) out.push({ kind: 'object', entry: o.entry });
+        for (const i of store.items) if (i.origin.kind === 'existing' && (await existingDrifted(db, i, 'item'))) out.push({ kind: 'item', entry: i.entry });
+        return out;
       }),
 
     deleteEntity: (kind, entry) =>

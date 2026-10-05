@@ -102,6 +102,8 @@ export function makeMockApi(overrides: Partial<Record<keyof Api, (...args: any[]
     viewSpawns: vi.fn(async () => okv({ creatures: [], objects: [], capped: { creatures: false, objects: false } })),
     projectEntities: vi.fn(async () => okv({ npcs: [], objects: [], items: [] })),
     putProjectEntities: vi.fn(async () => okv(true as const)),
+    readExistingEntity: vi.fn(async () => okv(null as never)),
+    existingDrift: vi.fn(async () => okv([])),
     deleteEntity: vi.fn(async () => okv({ entities: { npcs: [], objects: [], items: [] }, quests: [] })),
     worldLayer: vi.fn(async () => okv({ spawns: [], routes: [], added: [] })),
     worldMoveSpawn: vi.fn(async () => okv({ spawns: [], routes: [], added: [] })),
