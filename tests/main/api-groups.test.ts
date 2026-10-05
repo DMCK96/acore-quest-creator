@@ -62,6 +62,9 @@ describe('spawn groups through the API', () => {
   it('lists the groups on a map and gives a free id', async () => {
     const { api } = await setup();
     expect(((await api.worldGroupsOnMap(571)) as any).value.map((g: any) => g.name)).toEqual(['Path 1', 'Path 2', 'Time-Lost Proto Drake / Vyragosa']);
+    const listed: any = (await api.worldGroupsOnMap(571) as any).value;
+    expect(listed.find((g: any) => g.id === 32491).groups).toEqual([32492, 32493]);
+    expect(listed.find((g: any) => g.id === 32492).groups).toEqual([]);
     expect(((await api.worldNewGroupId()) as any).value).toBe(32494);
   });
 

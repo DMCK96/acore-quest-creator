@@ -108,7 +108,7 @@ export async function readGroup(db: WorldDb, id: number, seen: ReadonlySet<numbe
 }
 
 /** Every pool in the database with its map and member count, read in a few passes rather than one pool at a time */
-export async function listPools(db: WorldDb): Promise<{ id: number; name: string; maxActive: number; members: number; map: number | null }[]> {
+export async function listPools(db: WorldDb): Promise<{ id: number; name: string; maxActive: number; members: number; map: number | null; groups: number[] }[]> {
   const templates = await rowsOf(db, 'pool_template', {});
   if (templates.length === 0) return [];
   const creatures = [...(await rowsOf(db, 'pool_creature', {}))].sort(byNumber('guid'));
@@ -144,7 +144,7 @@ export async function listPools(db: WorldDb): Promise<{ id: number; name: string
   };
   return templates.map((t) => {
     const id = num(t.entry);
-    return { id, name: t.description ?? '', maxActive: num(t.max_limit), members: count.get(id) ?? 0, map: mapOf(id, new Set()) };
+    return { id, name: t.description ?? '', maxActive: num(t.max_limit), members: count.get(id) ?? 0, map: mapOf(id, new Set()), groups: [...(childrenOf.get(id) ?? [])] };
   });
 }
 

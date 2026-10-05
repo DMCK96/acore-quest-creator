@@ -84,7 +84,7 @@ export function FindDialog({
   const kind: Kind = mode === 'group' ? 'creature' : mode;
   const [text, setText] = useState('');
   const { hits, error, searched } = useEntityHits(kind === 'creature' ? 'creature' : 'gameobject', grouping ? '' : text);
-  const [groups, setGroups] = useState<{ id: number; name: string; maxActive: number; members: number }[] | null>(null);
+  const [groups, setGroups] = useState<GroupRow[] | null>(null);
   const [groupProblem, setGroupProblem] = useState<string | null>(null);
 
   // The map's spawn groups, read once when the kind is picked
@@ -109,7 +109,19 @@ export function FindDialog({
     else if (r.value) onGoToGroup?.(r.value);
     else setGroupProblem('That spawn group is no longer there.');
   };
-  const shownGroups = (groups ?? []).filter((g) => g.name.toLowerCase().includes(text.trim().toLowerCase()));
+  // Top level: the groups no listed group holds, plus a match whose mother does not match. A mother lists the member groups under it.
+  const needle = text.trim().toLowerCase();
+  const matches = (g: GroupRow): boolean => g.name.toLowerCase().includes(needle) || String(g.id) === needle;
+  const listed = new Map((groups ?? []).map((g) => [g.id, g]));
+  const mothers = new Map<number, GroupRow[]>();
+  for (const g of groups ?? []) for (const id of g.groups) mothers.set(id, [...(mothers.get(id) ?? []), g]);
+  const shownGroups = (groups ?? []).filter((g) => {
+    const above = mothers.get(g.id) ?? [];
+    if (above.length === 0) return matches(g) || underMatches(g, listed, matches, new Set());
+    return matches(g) && !above.some((m) => matches(m));
+  });
+  const nested = (g: GroupRow): GroupRow[] => g.groups.flatMap((id) => (listed.has(id) ? [listed.get(id)!] : []))
+    .filter((c) => matches(g) || matches(c) || underMatches(c, listed, matches, new Set()));
   const [chosen, setChosen] = useState<{ entry: number; name: string } | null>(null);
   const [spawns, setSpawns] = useState<FoundSpawn[] | null>(null);
   const [capped, setCapped] = useState(false);
@@ -194,12 +206,7 @@ export function FindDialog({
               <>
                 <ul className="place-dialog__list" aria-label="Matches">
                   {shownGroups.map((g) => (
-                    <li key={g.id}>
-                      <button type="button" className="place-dialog__hit" onClick={() => void goToGroup(g.id)}>
-                        {`${g.name} · ${g.maxActive} of ${g.members} at a time`}
-                        <span className="place-dialog__detail">#{g.id}</span>
-                      </button>
-                    </li>
+                    <GroupItem key={g.id} group={g} nested={nested} go={(id) => void goToGroup(id)} path={[g.id]} />
                   ))}
                 </ul>
                 {groups && shownGroups.length === 0 && <p className="place-dialog__note">No spawn group on this map matches.</p>}
@@ -273,6 +280,35 @@ function SpawnRow({ spawn, from, onGo }: { spawn: FoundSpawn; from: { map: numbe
       <button type="button" className="btn" disabled={!drawn} aria-label={`Go to spawn ${spawn.guid}`} onClick={onGo}>
         Go
       </button>
+    </li>
+  );
+}
+
+type GroupRow = { id: number; name: string; maxActive: number; members: number; groups: number[] };
+
+/** Whether a group inside `g`, at any depth, matches the search */
+function underMatches(g: GroupRow, listed: Map<number, GroupRow>, matches: (g: GroupRow) => boolean, seen: Set<number>): boolean {
+  if (seen.has(g.id)) return false;
+  seen.add(g.id);
+  return g.groups.some((id) => {
+    const c = listed.get(id);
+    return !!c && (matches(c) || underMatches(c, listed, matches, seen));
+  });
+}
+
+function GroupItem({ group, nested, go, path }: { group: GroupRow; nested: (g: GroupRow) => GroupRow[]; go: (id: number) => void; path: number[] }): React.JSX.Element {
+  const inside = nested(group).filter((c) => !path.includes(c.id));
+  return (
+    <li>
+      <button type="button" className="place-dialog__hit" onClick={() => go(group.id)}>
+        {`${group.name} · ${group.maxActive} of ${group.members} at a time`}
+        <span className="place-dialog__detail">#{group.id}</span>
+      </button>
+      {inside.length > 0 && (
+        <ul className="place-dialog__list" aria-label={`Groups in ${group.name}`} style={{ marginLeft: 16 }}>
+          {inside.map((c) => <GroupItem key={c.id} group={c} nested={nested} go={go} path={[...path, c.id]} />)}
+        </ul>
+      )}
     </li>
   );
 }

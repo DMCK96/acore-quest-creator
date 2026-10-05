@@ -55,7 +55,7 @@ The server will not spawn a group that breaks these, so the app will not write o
 ## See and change groups
 
 - Select a pooled spawn and the other members of its group are ringed, with lines to each. A card in the view shows the group's name, how many are up at a time, and each member's chance. The same goes for groups the database already has.
-- **Find…** has a **Spawn group** option: search groups by name, and **Go** takes the camera to it. The list is flat and sorted by name: a group inside a group has its own line like any other, showing how many of its members are up at a time.
+- **Find…** has a **Spawn group** option: search groups by name, and **Go** takes the camera to it. Each line shows how many of the group's members are up at a time, and a group inside a group is listed indented under the group that holds it. Searching a name finds a group inside another too, shown under its mother.
 - Right-click a pooled spawn and open **Spawn group ▸**: **Edit group…** opens the dialog, **Show group** rings its members, and **Remove from group** takes this spawn out. Removing a spawn you placed also takes it out of its group, and removing the last member of a group you made deletes the group.
 - A group the database already has can be edited too. The project patch rewrites its rows and the revert patch writes the originals back.
 

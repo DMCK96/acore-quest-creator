@@ -2170,15 +2170,17 @@ export function createApi(deps: ApiDeps): Api {
       run(async () => {
         const db = connected().db;
         const layer = groupsOf(deps.session.world.get());
-        const byId = new Map<number, { id: number; name: string; maxActive: number; members: number }>();
+        const byId = new Map<number, { id: number; name: string; maxActive: number; members: number; groups: number[] }>();
         for (const pool of await pools(db)) {
-          if (pool.map === map) byId.set(pool.id, { id: pool.id, name: pool.name, maxActive: pool.maxActive, members: pool.members });
+          if (pool.map === map) byId.set(pool.id, { id: pool.id, name: pool.name, maxActive: pool.maxActive, members: pool.members, groups: pool.groups });
         }
         // The layer's copy wins; one removed there, or moved to another map, is left out
         for (const g of layer) {
           byId.delete(g.id);
-          if (!g.removed && g.map === map) byId.set(g.id, { id: g.id, name: g.name, maxActive: g.maxActive, members: g.members.length });
+          if (!g.removed && g.map === map) byId.set(g.id, { id: g.id, name: g.name, maxActive: g.maxActive, members: g.members.length, groups: g.members.flatMap((m) => (m.type === 'group' ? [m.id] : [])) });
         }
+        // Only member groups the map lists are named, so a listed group never points at one that is not there
+        for (const g of byId.values()) g.groups = g.groups.filter((id) => byId.has(id));
         return [...byId.values()].sort((a, b) => a.name.localeCompare(b.name) || a.id - b.id);
       }),
 

@@ -473,7 +473,7 @@ export interface Api {
   /** A spawn group described for the view: its members by name and where they stand. */
   worldGroupView(id: number): Promise<Result<GroupView | null>>;
   /** The spawn groups on a map (the database's and the layer's), by name. */
-  worldGroupsOnMap(map: number): Promise<Result<{ id: number; name: string; maxActive: number; members: number }[]>>;
+  worldGroupsOnMap(map: number): Promise<Result<{ id: number; name: string; maxActive: number; members: number; groups: number[] }[]>>;
   /** An id no spawn group uses yet. */
   worldNewGroupId(): Promise<Result<number>>;
   /** Why the server would refuse or misread a group; none when it is fine. `moves` are spawns the save takes out of their group. */
