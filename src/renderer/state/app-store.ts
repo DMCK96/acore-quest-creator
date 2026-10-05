@@ -9,6 +9,8 @@ import type {
   CanvasNode,
   ConnectSummary,
   ExportResult,
+  GroupCheck,
+  GroupMove,
   HistoryList,
   HistoryResult,
   NodePosition,
@@ -17,6 +19,7 @@ import type {
   ProfileSave,
   ProjectState,
   QuestLinks,
+  QuestPoolSummary,
   RecentProject,
   RecoveryEntry,
   Result,
@@ -24,6 +27,7 @@ import type {
   Viewport,
 } from '@shared/ipc';
 import { EMPTY_WORLD, type WorldLayer } from '@core/world/layer';
+import type { SpawnGroup } from '@core/world/groups';
 import { EMPTY_ENTITIES, newItem, newNpc, newObject, type CustomItem, type CustomNpc, type CustomObject, type ProjectEntities } from '@core/entities/model';
 import { toggleRole } from '@core/modules/quest-roles';
 import type { ModuleId } from '@core/modules/model';
@@ -55,6 +59,8 @@ export interface AppState {
   saving: boolean;
   dirty: boolean;
   nodes: CanvasNode[];
+  /** Every quest rotation (quest pool), the world layer's copy over the database's; loaded with the graph */
+  questPools: QuestPoolSummary[];
   viewport: Viewport;
   project: ProjectState;
   /** Goes up by one each time a different project is loaded (New, Open, Restore). */
@@ -154,6 +160,21 @@ export interface AppState {
   dismissError(): void;
   backToPicker(): Promise<void>;
   loadNodes(): Promise<void>;
+  loadQuestPools(): Promise<void>;
+  /**
+   * Saves a quest rotation as one step: first each of its quests not of `makeKind` is made it (that bit
+   * set, the other cleared) through the quest's own edit, then the rotation itself. False when it was
+   * refused (the reason is in `error`)
+   */
+  saveRotation(group: SpawnGroup, moves: GroupMove[], makeKind: 'daily' | 'weekly' | null): Promise<boolean>;
+  /** A new rotation of these quests, one offered each reset, with a free id; null when no id could be had */
+  newRotation(questIds: number[]): Promise<SpawnGroup | null>;
+  /** A rotation as the world layer has it, else as the database does; null when it is not there */
+  readRotation(id: number): Promise<SpawnGroup | null>;
+  /** Why a rotation cannot be saved as it stands, with `moves` taking its quests out of other rotations */
+  checkRotation(group: SpawnGroup, moves: GroupMove[]): Promise<GroupCheck>;
+  /** Deletes a quest rotation as one step; false when it was refused */
+  deleteRotation(id: number, name?: string): Promise<boolean>;
   moveNode(questId: number, x: number, y: number): void;
   setViewport(v: Viewport): void;
   flushMoves(): Promise<void>;
@@ -203,6 +224,11 @@ export interface AppState {
 }
 
 export type AppStore = UseBoundStore<StoreApi<AppState>>;
+
+/** quest_template.Flags, and its bits for a quest offered again each day or each week */
+const FLAGS_FIELD = 'quest_template.Flags';
+const QUEST_FLAG_DAILY = 0x1000;
+const QUEST_FLAG_WEEKLY = 0x8000;
 
 /**
  * A table this user may not read is not a table the fork lacks: one is fixed with a `GRANT`, the
@@ -290,6 +316,7 @@ export function createAppStore(api: Api, opts: { saveDelayMs?: number } = {}): A
     saving: false,
     dirty: false,
     nodes: [],
+    questPools: [],
     viewport: { x: 0, y: 0, zoom: 1 },
     project: { name: '', filePath: null, dirty: false, idRangeStart: 60000, idRangeEnd: 99999, outputDir: '', viewport: { x: 0, y: 0, zoom: 1 } },
     projectEpoch: 0,
@@ -717,14 +744,109 @@ export function createAppStore(api: Api, opts: { saveDelayMs?: number } = {}): A
 
     async loadNodes() {
       const token = ++nodesToken;
-      const [nodesResult, read] = await Promise.all([api.listNodes(), readProject()]);
+      const [nodesResult, read, pools] = await Promise.all([api.listNodes(), readProject(), api.questPools()]);
       if (token !== nodesToken) return;
       if (nodesResult.ok) set({ nodes: nodesResult.value });
+      if (pools.ok) set({ questPools: pools.value });
       const projectResult = read.result;
       if (projectResult.ok && read.token === projectToken) {
         lastSavedViewport = projectResult.value.viewport;
         set({ viewport: projectResult.value.viewport, project: projectResult.value });
       }
+    },
+
+    async loadQuestPools() {
+      const pools = await api.questPools();
+      if (pools.ok) set({ questPools: pools.value });
+    },
+
+    async saveRotation(group, moves, makeKind) {
+      let saved = false;
+      await get().historyStep(async () => {
+        if (makeKind) {
+          const [set1, clear] = makeKind === 'daily' ? [QUEST_FLAG_DAILY, QUEST_FLAG_WEEKLY] : [QUEST_FLAG_WEEKLY, QUEST_FLAG_DAILY];
+          const remade = (flags: unknown): number | null => {
+            const was = Number(flags ?? 0) || 0;
+            const now = (was | set1) & ~clear;
+            return now === was ? null : now;
+          };
+          for (const member of group.members) {
+            if (member.type !== 'quest') continue;
+            const open = get().open;
+            if (open?.questId === member.questId) {
+              const now = remade(open.aggregate.values[FLAGS_FIELD]);
+              if (now !== null) get().setValue(FLAGS_FIELD, now);
+              continue;
+            }
+            // Only a quest of the project is edited; one only the database has keeps its flags
+            if (!get().nodes.some((n) => n.questId === member.questId)) continue;
+            const read = await api.openQuest(member.questId);
+            if (!read.ok) {
+              set({ error: read.error.message });
+              return;
+            }
+            const aggregate = read.value.aggregate;
+            const now = remade(aggregate.values[FLAGS_FIELD]);
+            if (now === null) continue;
+            const put = await api.updateQuest({ ...aggregate, values: { ...aggregate.values, [FLAGS_FIELD]: now } });
+            if (!put.ok) {
+              set({ error: put.error.message });
+              return;
+            }
+          }
+          // The open quest's edit goes now, so it is in this step before the rotation is checked
+          await get().flushSave();
+        }
+        const result = await api.worldSetGroup(group, moves);
+        if (!result.ok) {
+          set({ error: result.error.message });
+          return;
+        }
+        saved = true;
+        set({ worldLayer: { layer: result.value, seq: ++layerSeq }, layer: result.value });
+      }, `Saved rotation ${group.name || group.id}`);
+      await get().loadNodes();
+      return saved;
+    },
+
+    async newRotation(questIds) {
+      const id = await api.worldNewGroupId();
+      if (!id.ok) {
+        set({ error: id.error.message });
+        return null;
+      }
+      return { id: id.value, name: '', map: 0, maxActive: 1, members: questIds.map((questId) => ({ type: 'quest' as const, questId })), origin: { kind: 'new' }, event: null };
+    },
+
+    async readRotation(id) {
+      const found = await api.worldGroup(id);
+      if (!found.ok) {
+        set({ error: found.error.message });
+        return null;
+      }
+      if (!found.value) set({ error: 'That rotation is no longer there.' });
+      return found.value;
+    },
+
+    async checkRotation(group, moves) {
+      const found = await api.worldCheckGroup(group, moves);
+      if (!found.ok) throw new Error(found.error.message);
+      return found.value;
+    },
+
+    async deleteRotation(id, name) {
+      let deleted = false;
+      await get().historyStep(async () => {
+        const result = await api.worldDeleteGroup(id);
+        if (!result.ok) {
+          set({ error: result.error.message });
+          return;
+        }
+        deleted = true;
+        set({ worldLayer: { layer: result.value, seq: ++layerSeq }, layer: result.value });
+      }, `Deleted rotation ${name || id}`);
+      await get().loadQuestPools();
+      return deleted;
     },
 
     moveNode(questId, x, y) {
@@ -1063,7 +1185,11 @@ export function createAppStore(api: Api, opts: { saveDelayMs?: number } = {}): A
       });
     }
     if (result.positions || result.quests.length > 0) await store.getState().loadNodes();
-    else await store.getState().loadProjectState();
+    else {
+      // A rotation's tags follow the world layer the undo left
+      if (result.world) await store.getState().loadQuestPools();
+      await store.getState().loadProjectState();
+    }
   }
 
   /**

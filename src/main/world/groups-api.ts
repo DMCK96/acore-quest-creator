@@ -16,7 +16,7 @@ import { readPlacement } from './world-api';
  */
 
 type Kind = 'npc' | 'object';
-type Move = { kind: Kind; guid: number };
+type Move = { kind: Kind; guid: number } | { kind: 'quest'; questId: number };
 
 const num = (value: string | null | undefined, fallback = 0): number => {
   if (value === null || value === undefined || value === '') return fallback;
@@ -353,7 +353,7 @@ export async function groupContext(
       return types.get(guid) ?? null;
     },
     groupOfSpawn(kind, guid) {
-      if (moves.some((m) => m.kind === kind && m.guid === guid)) return null;
+      if (moves.some((m) => m.kind === kind && 'guid' in m && m.guid === guid)) return null;
       const held = layerHolder(layer, (m) => m.type === 'spawn' && m.kind === kind && m.guid === guid);
       if (held !== null) return held;
       const pool = dbSpawnGroup.get(`${kind}:${guid}`) ?? null;
@@ -372,6 +372,7 @@ export async function groupContext(
       return dbQuests.get(questId) ?? null;
     },
     groupOfQuest(questId) {
+      if (moves.some((m) => m.kind === 'quest' && m.questId === questId)) return null;
       const held = layerHolder(layer, (m) => m.type === 'quest' && m.questId === questId);
       if (held !== null) return held;
       const pool = dbQuestGroup.get(questId) ?? null;

@@ -145,6 +145,7 @@ export function validateGroup(group: SpawnGroup, context: GroupContext): string[
   if (cycle) problems.push('A group cannot contain itself.');
   const parent = context.groupOfGroup(group.id);
   if (questPool) {
+    if (members.filter((m) => m.type === 'quest').length < 2) problems.push('A rotation needs at least two quests.');
     if (anyDaily && anyWeekly) problems.push('Daily and weekly quests cannot share a rotation.');
     if (parent !== null) problems.push('A quest rotation cannot be inside another group.');
     if (group.event) problems.push('A quest rotation cannot follow an event.');

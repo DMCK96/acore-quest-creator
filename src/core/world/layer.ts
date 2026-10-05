@@ -255,6 +255,16 @@ export function dropMember(layer: WorldLayer, kind: 'npc' | 'object', guid: numb
   return { ...layer, groups };
 }
 
+/** Takes a quest out of every rotation in the layer; a new rotation left with none goes */
+export function dropQuestMember(layer: WorldLayer, questId: number): WorldLayer {
+  const groups = groupsOf(layer).flatMap((g) => {
+    const members = g.members.filter((m) => !(m.type === 'quest' && m.questId === questId));
+    if (members.length === g.members.length) return [g];
+    return members.length === 0 && g.origin.kind === 'new' ? [] : [{ ...g, members }];
+  });
+  return { ...layer, groups };
+}
+
 /**
  * Takes a group out of every layer group that holds it, as deleting it must: no more of a holder can be
  * up than it has members, and a new holder left with none goes

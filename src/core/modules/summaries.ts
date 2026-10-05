@@ -142,6 +142,16 @@ export function timerSummary(values: Values): string[] {
   return [`${Math.floor(seconds / 60)}m ${seconds % 60}s`];
 }
 
+/**
+ * The rotation (quest pool) a quest is in, as the Behaviour module's summary and the quest's graph tag
+ * name it: `Daily rotation: <name>` or `Weekly rotation: <name>`; null when it is in none
+ */
+export function rotationLine(questId: number, pools: readonly { id: number; name: string; daily: boolean; questIds: readonly number[] }[]): string | null {
+  const pool = pools.find((p) => p.questIds.includes(questId));
+  if (!pool) return null;
+  return `${pool.daily ? 'Daily' : 'Weekly'} rotation: ${pool.name || `Rotation ${pool.id}`}`;
+}
+
 /** The registry labels of the owned fields that hold something, for modules with no richer summary. */
 export function labelsSummary(owns: readonly string[], values: Values): string[] {
   return owns.filter((id) => !isUnset(id, values[id])).map((id) => fieldById(id)?.label ?? id);

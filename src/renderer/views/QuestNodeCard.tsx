@@ -32,9 +32,15 @@ export function QuestNodeCard({
   onEdit,
   onRemove,
   onAddChain,
+  rotation,
+  onRotation,
 }: {
   node: CanvasNode;
   selected: boolean;
+  /** The quest rotation this quest is in, if any */
+  rotation?: { name: string; daily: boolean } | null;
+  /** The rotation tag's click: open the rotation */
+  onRotation?: () => void;
   /** A single click: preview the quest. */
   onOpen?: () => void;
   /** A double click: edit the quest. */
@@ -64,6 +70,8 @@ export function QuestNodeCard({
       onClick={(e) => {
         const at = pressedAt.current;
         if (at && Math.hypot(e.clientX - at.x, e.clientY - at.y) > DRAG_SLOP_PX) return;
+        // Ctrl, Cmd or Shift with a click adds the quest to the selection; it does not open it
+        if (e.ctrlKey || e.metaKey || e.shiftKey) return;
         onOpen?.();
       }}
       onDoubleClick={() => (onEdit ?? onOpen)?.()}
@@ -87,6 +95,20 @@ export function QuestNodeCard({
             {START_BADGE[badge].text}
           </span>
         ))}
+        {rotation && (
+          <button
+            type="button"
+            className="chip chip--rotation nodrag"
+            onClick={(e) => {
+              e.stopPropagation();
+              onRotation?.();
+            }}
+            onDoubleClick={(e) => e.stopPropagation()}
+            onKeyDown={(e) => e.stopPropagation()}
+          >
+            {`${rotation.daily ? 'Daily' : 'Weekly'} rotation: ${rotation.name}`}
+          </button>
+        )}
         {node.groups.map((g) => (
           <span key={g.group} className="chip chip--group" title={`Exclusive group ${g.group}`}>
             {GROUP_LABEL[g.kind]}

@@ -89,6 +89,12 @@ describe('quest rotations and events', () => {
     expect(validateGroup(rotation({ event: { id: 4, during: true } }), ctx())).toContain('A quest rotation cannot follow an event.');
   });
 
+  it('a rotation needs at least two quests', () => {
+    expect(validateGroup(rotation({ members: [daily(60001)] }), ctx())).toContain('A rotation needs at least two quests.');
+    expect(validateGroup(rotation(), ctx())).not.toContain('A rotation needs at least two quests.');
+    expect(validateGroup(path(), ctx())).not.toContain('A rotation needs at least two quests.');
+  });
+
   it('events: top-level spawn groups only, and the event must exist', () => {
     expect(validateGroup(path({ event: { id: 4, during: true } }), ctx())).toEqual([]);
     expect(validateGroup(path({ event: { id: 4, during: false } }), ctx({ groupOfGroup: () => 32491 }))).toContain('Only a group that is not inside another can follow an event.');

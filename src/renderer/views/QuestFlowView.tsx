@@ -6,6 +6,7 @@ import { EntityEditorProvider, type EditorRequest, type OpenEditor } from '../en
 import { EntityEditorHost, type EditorState } from '../entities/EntityEditorHost';
 import { MODULES, moduleById, offeredModules, presentModules } from '@core/modules/catalog';
 import { routeIssues, worstSeverity } from '@core/modules/issues';
+import { rotationLine } from '@core/modules/summaries';
 import type { AppStore } from '../state/app-store';
 import { useApi, useNameBook } from '../state/names';
 import { FidelityBanner } from '../components/FidelityBanner';
@@ -38,6 +39,7 @@ export function QuestFlowView({ store }: { store: AppStore }): React.JSX.Element
   const hasServerData = store((s) => Boolean(s.summary?.serverData?.dir));
   const hasClient = store((s) => Boolean(s.summary?.clientDir));
   const backToChain = store((s) => s.backToChain);
+  const questPools = store((s) => s.questPools);
   const names = useNameBook();
   const [menuOpen, setMenuOpen] = useState(false);
   /** What the map was opened to do, and the panel to go back to when it closes. */
@@ -87,6 +89,8 @@ export function QuestFlowView({ store }: { store: AppStore }): React.JSX.Element
   const shown = presentModules(values, addedModules, tracking);
   const offered = offeredModules(values, addedModules, tracking);
   const routed = routeIssues(issues);
+  const inRotation = rotationLine(open.questId, questPools);
+  const rotation = inRotation ? [inRotation] : [];
   const chips: ReadinessChip[] = shown.flatMap((id) => {
     const severity = worstSeverity(routed.byModule[id]);
     return severity ? [{ id, severity }] : [];
@@ -101,7 +105,7 @@ export function QuestFlowView({ store }: { store: AppStore }): React.JSX.Element
 
   const box = (id: (typeof shown)[number]): React.JSX.Element => (
     <ModuleBox key={id} def={moduleById(id)} values={values} names={names} entities={mine} severity={worstSeverity(routed.byModule[id])}
-      selected={openPanel === id} onOpen={() => setOpenPanel(id)} />
+      selected={openPanel === id} extra={id === 'behaviour' ? rotation : []} onOpen={() => setOpenPanel(id)} />
   );
 
   const openMap = (request: MapRequest | string | null): void => {
