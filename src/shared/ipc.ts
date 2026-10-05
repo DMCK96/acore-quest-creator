@@ -39,6 +39,15 @@ export interface GroupView {
 export type GroupMove = { kind: 'npc' | 'object'; guid: number };
 
 /** A spawn group check: the reasons it cannot be saved, and notes that do not block it */
+/** A quest pool (rotation) in the database: its quests, how many are offered each reset, and whether they are daily (else weekly). */
+export interface QuestPoolSummary {
+  id: number;
+  name: string;
+  maxActive: number;
+  daily: boolean;
+  questIds: number[];
+}
+
 export interface GroupCheck {
   reasons: string[];
   notes: string[];
@@ -493,6 +502,10 @@ export interface Api {
   worldDeleteGroup(id: number): Promise<Result<WorldLayer>>;
   /** Takes a spawn out of every group in the world layer. */
   worldDropMember(kind: 'npc' | 'object', guid: number): Promise<Result<WorldLayer>>;
+  /** Every quest pool (rotation) in the database with its member quests, and whether its quests are daily. */
+  questPools(): Promise<Result<QuestPoolSummary[]>>;
+  /** The game events in the database, by id, with their descriptions as names. */
+  gameEvents(): Promise<Result<{ id: number; name: string }[]>>;
   /** The project's undo history: its steps, the last one applied, and the saved one. */
   historyList(): Promise<Result<HistoryList>>;
   /** Puts the last step back as it was before it, and says what changed. */
@@ -727,6 +740,8 @@ const REQUEST_SCHEMAS: Record<keyof Api, z.ZodType<unknown[]>> = {
   worldSetGroup: z.tuple([spawnGroupArg, groupMovesArg]),
   worldDeleteGroup: z.tuple([z.number().int().min(1)]),
   worldDropMember: z.tuple([z.enum(['npc', 'object']), z.number().int().min(1)]),
+  questPools: z.tuple([]),
+  gameEvents: z.tuple([]),
   historyList: z.tuple([]),
   historyUndo: z.tuple([]),
   historyRedo: z.tuple([]),

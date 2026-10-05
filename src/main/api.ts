@@ -35,8 +35,8 @@ import { loadSchema } from '../core/schema/load';
 import { refCheckerFor, validateQuest, type Issue, type RefChecker } from '../core/validate/validate';
 import { TOOL_VERSION } from '../core/version';
 import { addSpawn, deleteGroup, dropGroupMember, dropMember, groupsOf, hasWorldChanges, isAdded, moveSpawn, movementsOf, putGroup, respawnsOf, revertGroup, revertMovement, revertRespawn, revertRoute, revertSpawn, setMovement, setRespawn, setRoute, worldStatements, type RoutePoint, type SpawnDefaults, type WorldLayer } from '../core/world/layer';
-import { memberKey, validateGroup, type SpawnGroup } from '../core/world/groups';
-import { groupContext, groupDrifted, listPools, readGroup } from './world/groups-api';
+import { isQuestPool, memberKey, validateGroup, type SpawnGroup } from '../core/world/groups';
+import { databaseQuestFacts, groupContext, groupDrifted, listPools, projectQuestFacts, readGroup } from './world/groups-api';
 import { IDLE } from '../core/world/movement';
 import { describeStep } from './project/step-labels';
 import type { HistoryStep } from './project/history';
@@ -1090,9 +1090,10 @@ export function createApi(deps: ApiDeps): Api {
    * part writes, puts the existing ones' original rows back and puts the world back.
    */
   /**
-   * Every pool with its map, read once per connection (a new connection has its own database object)
-   * rather than on each Find or group dialog open: on a large database that is tens of thousands of
-   * rows. Read again after an export, since the patch is about to change the pools.
+   * Every pool with its map (and a quest pool with its quests), read once per connection (a new
+   * connection has its own database object) rather than on each Find, group dialog open or graph
+   * load: on a large database that is tens of thousands of rows. Read again after an export, since
+   * the patch is about to change the pools.
    */
   let poolCache: { db: WorldDb; pools: ReturnType<typeof listPools> } | null = null;
   const pools = (db: WorldDb): ReturnType<typeof listPools> => {
@@ -1185,7 +1186,7 @@ export function createApi(deps: ApiDeps): Api {
     const store = projectEntities();
     const issues: Issue[] = [];
     for (const group of groupsOf(layer).filter((g) => !g.removed)) {
-      const reasons = validateGroup(group, await groupContext(live.db, layer, store, [], group));
+      const reasons = validateGroup(group, await groupContext(live.db, layer, store, [], group, quests.list()));
       issues.push(...reasons.map((reason): Issue => ({ severity: 'error', code: 'GROUP', message: `${group.name}: ${reason}` })));
       // Applying a new group deletes the rows of a pool with its id, so one the database has gained since is refused
       if (group.origin.kind === 'new' && (await rowsOrNone(live.db, 'pool_template', { entry: [String(group.id)] })).length > 0) {
@@ -1235,13 +1236,13 @@ export function createApi(deps: ApiDeps): Api {
     const group = await trustedGroup(db, sent);
     // A layer group given a new id is checked by the id the layer knows it by
     const asKnown = groupsOf(layer).some((g) => g.id === sent.id) ? { ...group, id: sent.id } : group;
-    const reasons = validateGroup(asKnown, await groupContext(db, layer, store, moves, asKnown));
+    const reasons = validateGroup(asKnown, await groupContext(db, layer, store, moves, asKnown, quests.list()));
     const notes: string[] = [];
     const left = await leftGroups(db, layer, new Set([sent.id, group.id]), moves);
     for (const { after } of left) {
       const name = after.name || `Group ${after.id}`;
       if (after.members.length === 0) notes.push(`${name} would then be empty and is deleted.`);
-      else reasons.push(...validateGroup(after, await groupContext(db, layer, store, moves, after)).map((reason) => `${name} would then: ${reason}`));
+      else reasons.push(...validateGroup(after, await groupContext(db, layer, store, moves, after, quests.list())).map((reason) => `${name} would then: ${reason}`));
     }
     return { group, reasons, notes, left };
   }
@@ -2293,10 +2294,10 @@ export function createApi(deps: ApiDeps): Api {
         for (const pool of await pools(db)) {
           if (pool.map === map) byId.set(pool.id, { id: pool.id, name: pool.name, maxActive: pool.maxActive, members: pool.members, groups: pool.groups });
         }
-        // The layer's copy wins; one removed there, or moved to another map, is left out
+        // The layer's copy wins; one removed there, or moved to another map, is left out, as is a rotation (it has no map)
         for (const g of layer) {
           byId.delete(g.id);
-          if (!g.removed && g.map === map) byId.set(g.id, { id: g.id, name: g.name, maxActive: g.maxActive, members: g.members.length, groups: g.members.flatMap((m) => (m.type === 'group' ? [m.id] : [])) });
+          if (!g.removed && !isQuestPool(g) && g.map === map) byId.set(g.id, { id: g.id, name: g.name, maxActive: g.maxActive, members: g.members.length, groups: g.members.flatMap((m) => (m.type === 'group' ? [m.id] : [])) });
         }
         // Only member groups the map lists are named, so a listed group never points at one that is not there
         for (const g of byId.values()) g.groups = g.groups.filter((id) => byId.has(id));
@@ -2304,6 +2305,46 @@ export function createApi(deps: ApiDeps): Api {
       }),
 
     worldNewGroupId: () => run(async () => freeGroupId(connected().db)),
+
+    questPools: () =>
+      run(async () => {
+        const db = connected().db;
+        const byId = new Map<number, { id: number; name: string; maxActive: number; daily: boolean; questIds: number[] }>();
+        for (const pool of await pools(db)) {
+          if (pool.quests.length > 0) byId.set(pool.id, { id: pool.id, name: pool.name, maxActive: pool.maxActive, daily: pool.daily, questIds: [...pool.quests] });
+        }
+        // The layer's copy wins; one removed there, or no longer a rotation, is left out
+        const layerPools = groupsOf(deps.session.world.get());
+        for (const g of layerPools) byId.delete(g.id);
+        const rotations = layerPools.filter((g) => !g.removed && isQuestPool(g));
+        if (rotations.length > 0) {
+          const own = quests.list();
+          const questIds = rotations.flatMap((g) => g.members.flatMap((m) => (m.type === 'quest' ? [m.questId] : [])));
+          const fromDb = await databaseQuestFacts(db, questIds.filter((id) => !own.some((q) => q.questId === id)));
+          const facts = (id: number) => {
+            const mine = own.find((q) => q.questId === id);
+            return mine ? projectQuestFacts(mine) : (fromDb.get(id) ?? null);
+          };
+          for (const g of rotations) {
+            const ids = g.members.flatMap((m) => (m.type === 'quest' ? [m.questId] : []));
+            const kinds = ids.map(facts);
+            // Daily unless its quests are weekly, as the database's are read
+            const daily = kinds.some((k) => k?.daily) || !kinds.some((k) => k?.weekly);
+            byId.set(g.id, { id: g.id, name: g.name, maxActive: g.maxActive, daily, questIds: ids });
+          }
+        }
+        return [...byId.values()].sort((a, b) => a.name.localeCompare(b.name) || a.id - b.id);
+      }),
+
+    gameEvents: () =>
+      run(async () => {
+        const db = connected().db;
+        if ((await db.columns('game_event')).length === 0) return [];
+        return (await db.selectRows('game_event', {}))
+          .map((row) => ({ id: Number(row.eventEntry), name: row.description ?? '' }))
+          .filter((e) => Number.isInteger(e.id) && e.id > 0)
+          .sort((a, b) => a.id - b.id);
+      }),
 
     worldCheckGroup: (sent, moves) =>
       run(async () => {

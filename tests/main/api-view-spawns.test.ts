@@ -88,6 +88,32 @@ describe('spawns for the 3D view', () => {
     expect(out.value.objects).toEqual([{ guid: 7, entry: 143981, name: 'Mailbox', map: 0, x: -8920, y: -160, z: 82, rotation: [0, 0, 0.5, 0.8660254], displayId: 1949, scale: 1.5, objectType: 19, own: false, event: null, events: [], removedBy: [], group: null, respawnSecs: 0 }]);
   });
 
+  it('gives a spawn the event its top-level group follows, as one it appears for or one that takes it away', async () => {
+    const api = await setup((db) => {
+      db.insert('creature_template', { entry: '68', name: 'Stormwind City Guard' });
+      for (const guid of ['1', '2', '3', '4']) db.insert('creature', { guid, id1: '68', map: '0', position_x: '-8900', position_y: '-150', position_z: '82', orientation: '0' });
+      db.insert('game_event', { eventEntry: '12', description: 'Darkmoon Faire' });
+      db.insert('game_event', { eventEntry: '7', description: 'Lunar Festival' });
+      db.insert('pool_template', { entry: '32492', max_limit: '1', description: 'Camp' });
+      db.insert('pool_template', { entry: '32493', max_limit: '1', description: 'Away' });
+      db.insert('pool_template', { entry: '40000', max_limit: '1', description: 'Mother' });
+      db.insert('pool_template', { entry: '40001', max_limit: '1', description: 'Child' });
+      db.insert('pool_creature', { guid: '1', pool_entry: '32492', chance: '0' });
+      db.insert('pool_creature', { guid: '2', pool_entry: '32493', chance: '0' });
+      db.insert('pool_creature', { guid: '3', pool_entry: '40001', chance: '0' });
+      db.insert('pool_pool', { pool_id: '40001', mother_pool: '40000', chance: '0' });
+      db.insert('game_event_pool', { eventEntry: '12', pool_entry: '32492' });
+      db.insert('game_event_pool', { eventEntry: '-12', pool_entry: '32493' });
+      db.insert('game_event_pool', { eventEntry: '7', pool_entry: '40000' });
+    });
+    const out: any = await api.viewSpawns(0, AREA);
+    const by = (guid: number) => out.value.creatures.find((c: any) => c.guid === guid);
+    expect(by(1)).toMatchObject({ group: 32492, events: [{ id: 12, name: 'Darkmoon Faire' }], removedBy: [] });
+    expect(by(2)).toMatchObject({ group: 32493, events: [], removedBy: [{ id: 12, name: 'Darkmoon Faire' }] });
+    expect(by(3)).toMatchObject({ group: 40001, events: [{ id: 7, name: 'Lunar Festival' }] });
+    expect(by(4)).toMatchObject({ group: null, events: [], removedBy: [] });
+  });
+
   it('says when it capped a kind at 2000', async () => {
     const api = await setup((db) => {
       db.insert('gameobject_template', { entry: '1', type: '5', displayId: '1', name: 'Rock', size: '1' });

@@ -143,7 +143,8 @@ export const EVENT_ROW = '\u001f';
 
 /**
  * A spawn's events from its `event_list` column (every `game_event_creature` / `_gameobject` row
- * for it): those it appears for, and those that take it away (a negative entry), each by id
+ * for it): those it appears for, and those that take it away (a negative entry), each by id; with the
+ * event its top-level group follows, from its `pool_event_entry` and `pool_event_name` columns
  */
 const eventListOf = (row: Row): { events: ViewEvent[]; removedBy: ViewEvent[] } => {
   const events: ViewEvent[] = [];
@@ -156,8 +157,21 @@ const eventListOf = (row: Row): { events: ViewEvent[]; removedBy: ViewEvent[] } 
     if (entry > 0) events.push({ id: entry, name });
     else if (entry < 0) removedBy.push({ id: -entry, name });
   }
+  // The event its top-level group follows (game_event_pool) counts as one of its own
+  const poolEntry = num(row.pool_event_entry);
+  const poolEvent = { id: Math.abs(poolEntry), name: row.pool_event_name ?? '' };
+  const into = poolEntry > 0 ? events : poolEntry < 0 ? removedBy : null;
+  if (into && !into.some((e) => e.id === poolEvent.id)) into.push(poolEvent);
   const byId = (a: ViewEvent, b: ViewEvent) => a.id - b.id;
   return { events: events.sort(byId), removedBy: removedBy.sort(byId) };
+};
+
+/** Its first event: its own (`event_entry`), or its top-level group's when that one comes first */
+const firstEventOf = (row: Row): ViewEvent | null => {
+  const own = eventOf(row);
+  const poolEntry = num(row.pool_event_entry);
+  if (poolEntry > 0 && (own === null || poolEntry < own.id)) return { id: poolEntry, name: row.pool_event_name ?? '' };
+  return own;
 };
 
 const num = (value: string | null | undefined, fallback = 0): number => {
@@ -186,7 +200,7 @@ export function toViewCreature(row: Row, path: ViewPoint[] | null, equipment: [n
     pathId: num(row.path_id),
     equipment,
     own: false,
-    event: eventOf(row),
+    event: firstEventOf(row),
     ...eventListOf(row),
     preset,
     group: groupOf(row),
@@ -208,7 +222,7 @@ export function toViewObject(row: Row): ViewObject {
     scale: num(row.size, 1),
     objectType: num(row.type, -1),
     own: false,
-    event: eventOf(row),
+    event: firstEventOf(row),
     ...eventListOf(row),
     group: groupOf(row),
     respawnSecs: num(row.spawntimesecs, DEFAULT_RESPAWN_SECS),

@@ -133,6 +133,9 @@ function escapeLike(text: string): string {
   return text.replace(/[\\%_]/g, (c) => `\\${c}`);
 }
 
+/** How many pools up the view follows a spawn's group to find the top-level one an event is on (the server's nest no deeper) */
+const VIEW_POOL_DEPTH = 4;
+
 const INTEGER_TEXT = /^-?\d+$/;
 const DECIMAL_TEXT = /^-?\d+(\.\d+)?$/;
 const FLOAT_TYPES: ReadonlySet<string> = new Set(['float', 'double', 'decimal']);
@@ -432,9 +435,20 @@ class MysqlWorldDb implements WorldDb {
    * (`pool_creature` or `pool_gameobject`). A database without the table has none.
    */
   private async viewPoolJoin(table: 'pool_creature' | 'pool_gameobject'): Promise<{ columns: string; joins: string }> {
-    return (await this.columns(table)).length > 0
-      ? { columns: ', pc.pool_entry AS pool_entry', joins: ` LEFT JOIN ${table} pc ON pc.guid = s.guid` }
-      : { columns: '', joins: '' };
+    if ((await this.columns(table)).length === 0) return { columns: '', joins: '' };
+    const pool = { columns: ', pc.pool_entry AS pool_entry', joins: ` LEFT JOIN ${table} pc ON pc.guid = s.guid` };
+    const hasEvents = (await this.columns('game_event_pool')).length > 0 && (await this.columns('game_event')).length > 0;
+    if (!hasEvents) return pool;
+    // The event of the spawn's top-level group: up the pool_pool chain (each pool has at most one
+    // mother), then its game_event_pool row (signed: negative takes the spawns away) and that event's name
+    const nested = (await this.columns('pool_pool')).length > 0;
+    const chain = nested ? Array.from({ length: VIEW_POOL_DEPTH }, (_, i) => `pp${i + 1}`) : [];
+    const chainJoins = chain.map((alias, i) => ` LEFT JOIN pool_pool ${alias} ON ${alias}.pool_id = ${i === 0 ? 'pc.pool_entry' : `${chain[i - 1]}.mother_pool`}`).join('');
+    const top = `COALESCE(${[...chain.map((alias) => `${alias}.mother_pool`).reverse(), 'pc.pool_entry'].join(', ')})`;
+    return {
+      columns: `${pool.columns}, gp.eventEntry AS pool_event_entry, gpe.description AS pool_event_name`,
+      joins: `${pool.joins}${chainJoins} LEFT JOIN game_event_pool gp ON gp.pool_entry = ${top} LEFT JOIN game_event gpe ON gpe.eventEntry = ABS(gp.eventEntry)`,
+    };
   }
 
   /**

@@ -191,6 +191,16 @@ export class FakeWorldDb implements WorldDb {
     const poolOf = async (table: string): Promise<Map<string | null, string | null>> =>
       this.tables.has(table) ? new Map((await this.selectRows(table, {})).map((p) => [p.guid, p.pool_entry])) : new Map();
     const creaturePools = await poolOf('pool_creature');
+    // The event a spawn's top-level group follows: up the pool_pool chain, then game_event_pool
+    const mothers = this.tables.has('pool_pool') ? new Map((await this.selectRows('pool_pool', {})).map((p) => [p.pool_id, p.mother_pool])) : new Map<string | null, string | null>();
+    const poolEvents = this.tables.has('game_event_pool') ? new Map((await this.selectRows('game_event_pool', {})).map((p) => [p.pool_entry, p.eventEntry])) : new Map<string | null, string | null>();
+    const eventNames = this.tables.has('game_event') ? new Map((await this.selectRows('game_event', {})).map((e) => [e.eventEntry, e.description])) : new Map<string | null, string | null>();
+    const poolEvent = (pool: string | null | undefined): { pool_event_entry: string | null; pool_event_name: string | null } => {
+      let top = pool ?? null;
+      for (let depth = 0; top !== null && mothers.has(top) && depth < 16; depth++) top = mothers.get(top) ?? null;
+      const entry = top === null ? null : (poolEvents.get(top) ?? null);
+      return { pool_event_entry: entry, pool_event_name: entry === null ? null : (eventNames.get(String(Math.abs(Number(entry)))) ?? null) };
+    };
     const creatures = (await this.selectRows('creature', {})).filter(inBox).sort(byGuid).slice(0, limit).map((r) => {
       const entry = r[entryColumn] ?? null;
       const model = models.get(entry ?? '');
@@ -199,7 +209,7 @@ export class FakeWorldDb implements WorldDb {
       const points = pathId && pathId !== '0' ? waypoints.filter((w) => w.id === pathId) : [];
       const equip = r.equipment_id && r.equipment_id !== '0' ? equips.find((e) => e.CreatureID === entry && e.ID === r.equipment_id) : undefined;
       return toViewCreature(
-        { ...r, entry, name: names.get(entry) ?? null, display_id: model?.CreatureDisplayID ?? null, display_scale: model?.DisplayScale ?? null, path_id: pathId ?? null, pool_entry: creaturePools.get(r.guid) ?? null },
+        { ...r, entry, name: names.get(entry) ?? null, display_id: model?.CreatureDisplayID ?? null, display_scale: model?.DisplayScale ?? null, path_id: pathId ?? null, pool_entry: creaturePools.get(r.guid) ?? null, ...poolEvent(creaturePools.get(r.guid)) },
         points.length > 0 ? orderPath(points) : null,
         equip ? [Number(equip.ItemID1 ?? 0), Number(equip.ItemID2 ?? 0), Number(equip.ItemID3 ?? 0)] : [0, 0, 0],
         presets.length > 0 ? pickPreset(presets, Number(entry), Number(model?.CreatureDisplayID ?? 0)) : null,
@@ -210,7 +220,7 @@ export class FakeWorldDb implements WorldDb {
     const objectPools = await poolOf('pool_gameobject');
     const objects = (await this.selectRows('gameobject', {})).filter(inBox).sort(byGuid).slice(0, limit).map((r) => {
       const t = templates.get(r.id ?? null);
-      return toViewObject({ ...r, entry: r.id ?? null, name: t?.name ?? null, type: t?.type ?? null, display_id: t?.displayId ?? null, size: t?.size ?? null, pool_entry: objectPools.get(r.guid) ?? null });
+      return toViewObject({ ...r, entry: r.id ?? null, name: t?.name ?? null, type: t?.type ?? null, display_id: t?.displayId ?? null, size: t?.size ?? null, pool_entry: objectPools.get(r.guid) ?? null, ...poolEvent(objectPools.get(r.guid)) });
     });
 
     return { creatures, objects };
