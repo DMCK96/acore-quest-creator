@@ -118,6 +118,19 @@ describe('a spawn', () => {
     expect(item(buildMenu(on(crate()), context()), 'Make lootable…')).toBeUndefined();
   });
 
+  it('a database chest or usable object offers loot by its template type, and needs the database until the project holds it', () => {
+    const dbChest = crate({ objectType: 3 });
+    const dbGoober = crate({ objectType: 10 });
+    expect(item(buildMenu(on(dbChest), context()), 'Stop being lootable')!.action).toEqual({ kind: 'setLootable', spawn: dbChest, on: false });
+    expect(item(buildMenu(on(dbGoober), context()), 'Make lootable…')!.action).toEqual({ kind: 'setLootable', spawn: dbGoober, on: true });
+    const offline = item(buildMenu(on(dbGoober), context({ connected: false })), 'Make lootable…')!;
+    expect(offline.disabledReason).toBe('Needs the world database');
+    expect(offline.action).toBeUndefined();
+    expect(item(buildMenu(on(crate({ objectType: 19 })), context()), 'Make lootable…')).toBeUndefined();
+    // A project object is changed in the project alone: offline is fine
+    expect(item(buildMenu(on(chest), context({ connected: false })), 'Make lootable…')!.action).toEqual({ kind: 'setLootable', spawn: chest, on: true });
+  });
+
   it('an NPC: wander, and remove path only when it walks one; an object has no movement', () => {
     expect(item(buildMenu(on(npc()), context()), 'Change wander distance…')!.action).toEqual({ kind: 'wander', spawn: npc() });
     expect(item(buildMenu(on(npc()), context()), 'Remove path')).toBeUndefined();

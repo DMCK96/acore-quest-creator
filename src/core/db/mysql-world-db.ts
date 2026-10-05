@@ -397,7 +397,7 @@ class MysqlWorldDb implements WorldDb {
     const objectRows = await query(
       'reading gameobject',
       `SELECT s.guid, s.id AS entry, s.map, s.position_x, s.position_y, s.position_z, s.rotation0, s.rotation1, s.rotation2, s.rotation3, s.spawntimesecs, ` +
-        `t.name, t.displayId AS display_id, t.size${objectEvents.columns}${objectPools.columns} FROM gameobject s LEFT JOIN gameobject_template t ON t.entry = s.id${objectEvents.joins}${objectPools.joins} ` +
+        `t.name, t.type, t.displayId AS display_id, t.size${objectEvents.columns}${objectPools.columns} FROM gameobject s LEFT JOIN gameobject_template t ON t.entry = s.id${objectEvents.joins}${objectPools.joins} ` +
         `WHERE ${boxed} ORDER BY s.guid LIMIT ?`,
       [...boxParams, take],
     );

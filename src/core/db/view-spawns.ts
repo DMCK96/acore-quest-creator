@@ -95,6 +95,8 @@ export interface ViewObject {
   rotation: [number, number, number, number];
   displayId: number;
   scale: number;
+  /** Its template's `type` (3 is a chest), or -1 when it is not known */
+  objectType: number;
   own: boolean;
   /** One placed in the 3D view, kept in the world layer until it is exported */
   added?: boolean;
@@ -204,6 +206,7 @@ export function toViewObject(row: Row): ViewObject {
     rotation: [num(row.rotation0), num(row.rotation1), num(row.rotation2), num(row.rotation3, 1)],
     displayId: num(row.display_id),
     scale: num(row.size, 1),
+    objectType: num(row.type, -1),
     own: false,
     event: eventOf(row),
     ...eventListOf(row),

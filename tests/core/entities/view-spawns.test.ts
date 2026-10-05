@@ -19,7 +19,8 @@ describe('the open quest\'s own spawns for the 3D view', () => {
   it('turns a new object\'s spawns into view objects, turned by their facing', () => {
     const chest = { ...newObject(900200), name: 'Old Chest', displayId: 259, size: 1.5, spawns: [{ ...newSpawn(800010), map: 0, x: 1, y: 1, z: 1, o: Math.PI }] };
     const [o] = ownViewSpawns({ npcs: [], objects: [chest] }).objects;
-    expect(o).toMatchObject({ guid: 800010, entry: 900200, name: 'Old Chest', displayId: 259, scale: 1.5, own: true });
+    expect(o).toMatchObject({ guid: 800010, entry: 900200, name: 'Old Chest', displayId: 259, scale: 1.5, own: true, objectType: 10 });
+    expect(ownViewSpawns({ npcs: [], objects: [{ ...chest, type: 'chest' }] }).objects[0]!.objectType).toBe(3);
     expect(o!.rotation[2]).toBeCloseTo(1, 6);
     expect(o!.rotation[3]).toBeCloseTo(0, 6);
   });

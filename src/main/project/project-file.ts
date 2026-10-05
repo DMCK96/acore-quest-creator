@@ -155,7 +155,7 @@ export function serializeProject(doc: ProjectDocument): string {
       })),
       added: doc.world.added.map((a) => ({
         kind: a.kind, guid: a.guid, entry: a.entry, name: a.name, map: a.map, placement: placement(a.placement),
-        look: { displayId: a.look.displayId, scale: a.look.scale, equipment: a.look.equipment, preset: a.look.preset },
+        look: { displayId: a.look.displayId, scale: a.look.scale, equipment: a.look.equipment, preset: a.look.preset, ...(a.look.objectType !== undefined ? { objectType: a.look.objectType } : {}) },
         ...(a.respawnSecs !== undefined ? { respawnSecs: a.respawnSecs } : {}),
       })),
       // Left out while there are none, so a project with no movement edits saves as it did before
@@ -285,6 +285,8 @@ const worldSchema = z.object({
           scale: z.number(),
           equipment: z.tuple([z.number(), z.number(), z.number()]),
           preset: presetSchema.nullable(),
+          // Absent for an NPC, and from a project saved before an object's type was kept
+          objectType: z.number().int().optional(),
         }),
         // Absent from a project saved before a placed spawn's respawn time could be set
         respawnSecs: z.number().int().optional(),

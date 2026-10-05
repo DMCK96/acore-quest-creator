@@ -186,7 +186,8 @@ describe('the world layer through the API', () => {
       const { api, session } = await setup(templates);
       await Promise.all([api.worldAddSpawn('creature', 1423, 0, at), api.worldAddSpawn('creature', 1423, 0, at), api.worldAddSpawn('gameobject', 143981, 0, at)]);
       expect(session.world.get().added.map((a) => [a.kind, a.guid]).sort()).toEqual([['creature', 80333], ['creature', 80334], ['gameobject', 6]]);
-      expect(session.world.get().added.find((a) => a.kind === 'gameobject')!.look).toMatchObject({ displayId: 1949, scale: 1 });
+      expect(session.world.get().added.find((a) => a.kind === 'gameobject')!.look).toMatchObject({ displayId: 1949, scale: 1, objectType: 19 });
+      expect(session.world.get().added.find((a) => a.kind === 'creature')!.look.objectType).toBeUndefined();
     });
 
     it('refuses an NPC or object the database does not have', async () => {

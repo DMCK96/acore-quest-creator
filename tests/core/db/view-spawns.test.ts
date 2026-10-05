@@ -88,11 +88,11 @@ describe('an object spawn for the 3D view', () => {
       guid: '5', entry: '143981', name: 'Mailbox', map: '0',
       position_x: '-9000', position_y: '-100', position_z: '80',
       rotation0: '0', rotation1: '0', rotation2: '0.5', rotation3: '0.8660254',
-      display_id: '1949', size: '1.5', spawntimesecs: '45',
+      display_id: '1949', size: '1.5', spawntimesecs: '45', type: '19',
     });
     expect(o).toEqual({
       guid: 5, entry: 143981, name: 'Mailbox', map: 0, x: -9000, y: -100, z: 80,
-      rotation: [0, 0, 0.5, 0.8660254], displayId: 1949, scale: 1.5, own: false, event: null, events: [], removedBy: [], group: null, respawnSecs: 45,
+      rotation: [0, 0, 0.5, 0.8660254], displayId: 1949, scale: 1.5, objectType: 19, own: false, event: null, events: [], removedBy: [], group: null, respawnSecs: 45,
     });
   });
 
@@ -101,6 +101,8 @@ describe('an object spawn for the 3D view', () => {
     expect(o.rotation).toEqual([0, 0, 0, 1]);
     expect([o.scale, o.name, o.displayId]).toEqual([1, '', 0]);
     expect(o.respawnSecs).toBe(300);
+    // No template row: its type is not known
+    expect(o.objectType).toBe(-1);
   });
 });
 
