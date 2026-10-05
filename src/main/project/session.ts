@@ -39,6 +39,8 @@ export interface ProjectSession {
   world: {
     get(): WorldLayer;
     put(layer: WorldLayer): void;
+    /** Replaces the layer without a history step or a dirty mark (filling in what was read from the database) */
+    fill(layer: WorldLayer): void;
   };
   /** The project's new NPCs, objects and items; a put is a change */
   entities: {
@@ -186,6 +188,9 @@ export function createProjectSession(initial: ProjectMeta, newId: () => string =
           history.record({ kind: 'world', before: was, after: structuredClone(layer) });
           change();
         });
+      },
+      fill(layer) {
+        world = structuredClone(layer);
       },
     },
     entities: {

@@ -39,7 +39,7 @@ import { IDLE } from '../core/world/movement';
 import { describeStep } from './project/step-labels';
 import type { HistoryStep } from './project/history';
 import type { HistoryPart, HistoryResult, QuestEdit, StepSummary } from '../shared/history';
-import { addedDrifted, countWalkers, routeWalkerName, movementDrifted, readMovement, readPlacement, readRoute, readTemplateLook, routeDrifted, spawnDrifted, worldSchema } from './world/world-api';
+import { addedDrifted, countWalkers, routeWalkerName, movementDrifted, readMovement, readPlacement, readRoute, readTemplateLook, readWalkerEntries, routeDrifted, spawnDrifted, worldSchema } from './world/world-api';
 import type {
   Api,
   ApiError,
@@ -659,12 +659,12 @@ export function createApi(deps: ApiDeps): Api {
 
   /** The schema exports render with: the registry's tables, plus the ones quest scripting writes. */
   /** A route as the database has it, with how many spawns walk it; refused when it is gone */
-  const routeFromDatabase = async (pathId: number): Promise<{ original: RoutePoint[]; walkers: number; name?: string }> => {
+  const routeFromDatabase = async (pathId: number): Promise<{ original: RoutePoint[]; walkers: number; walkerEntries: { entry: number; name: string }[]; name?: string }> => {
     const db = connected().db;
     const original = await readRoute(db, pathId);
     if (original.length === 0) throw fail('BAD_REQUEST', `Route ${pathId} is no longer in the database.`);
     const name = await routeWalkerName(db, pathId);
-    return { original, walkers: await countWalkers(db, pathId), ...(name ? { name } : {}) };
+    return { original, walkers: await countWalkers(db, pathId), walkerEntries: await readWalkerEntries(db, pathId), ...(name ? { name } : {}) };
   };
 
   const exportSchema = (live: Session): SchemaInfo => ({
@@ -1847,7 +1847,20 @@ export function createApi(deps: ApiDeps): Api {
         return { entities: deps.session.entities.get(), quests: changed };
       })),
 
-    worldLayer: () => run(async () => deps.session.world.get()),
+    worldLayer: () =>
+      run(async () => {
+        const layer = deps.session.world.get();
+        const stale = layer.routes.filter((r) => r.original.length > 0 && !r.walkerEntries);
+        if (stale.length === 0 || !session) return layer;
+        const db = connected().db;
+        const filled = new Map<number, { entry: number; name: string }[]>();
+        for (const r of stale) filled.set(r.pathId, await readWalkerEntries(db, r.pathId));
+        // Re-read the layer: an edit made while the database was read is kept
+        const current = deps.session.world.get();
+        const next = { ...current, routes: current.routes.map((r) => (!r.walkerEntries && filled.has(r.pathId) ? { ...r, walkerEntries: filled.get(r.pathId)! } : r)) };
+        deps.session.world.fill(next);
+        return next;
+      }),
 
     worldAddSpawn: (kind, entry, map, at, wanted) =>
       run(async () => {

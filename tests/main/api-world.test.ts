@@ -63,6 +63,24 @@ describe('the world layer through the API', () => {
     expect(out.error.message).toBe('Spawn 4242 is no longer in the database.');
   });
 
+  it('records which NPCs walk a route at its first edit', async () => {
+    const { api } = await setup(world);
+    const out: any = await api.worldSetRoute(802, [{ x: 1, y: 2, z: 3, rest: {} }]);
+    expect(out.value.routes[0].walkerEntries).toEqual([{ entry: 1423, name: 'Stormwind Guard' }]);
+  });
+
+  it('fills in the walkers of a route edited before they were recorded, without an undo step or a save', async () => {
+    const { api, session } = await setup(world);
+    session.world.put({ spawns: [], added: [], routes: [{ pathId: 801, walkers: 1, original: [{ x: 10, y: 0, z: 1, rest: {} }], current: [] }] });
+    const steps = ((await api.historyList()) as any).value.steps.length;
+    session.markSaved('C:\p.json');
+    expect(session.dirty()).toBe(false);
+    const out: any = await api.worldLayer();
+    expect(out.value.routes[0].walkerEntries).toEqual([{ entry: 1423, name: 'Stormwind Guard' }]);
+    expect(((await api.historyList()) as any).value.steps.length).toBe(steps);
+    expect(session.dirty()).toBe(false);
+  });
+
   it('keeps the name of an NPC that walks a route, for naming the change', async () => {
     const { api } = await setup(world);
     const out: any = await api.worldSetRoute(801, [{ x: 1, y: 2, z: 3, rest: {} }, { x: 4, y: 5, z: 6, rest: {} }]);
