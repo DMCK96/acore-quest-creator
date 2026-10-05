@@ -58,6 +58,8 @@ export interface WorldAddedSpawn {
   map: number;
   placement: Placement;
   look: WorldLook;
+  /** Seconds before it respawns; a spawn made in the game's 300 when absent */
+  respawnSecs?: number;
 }
 
 /** How an NPC moves, changed in the view: wander, movement type and its spawn's own path */
@@ -79,6 +81,17 @@ export interface WorldMovementEdit {
   current: Movement;
 }
 
+/** How long a database spawn takes to respawn (`spawntimesecs`), changed in the view */
+export interface WorldRespawnEdit {
+  kind: WorldSpawnKind;
+  guid: number;
+  entry: number;
+  name: string;
+  map: number;
+  original: number;
+  current: number;
+}
+
 export interface WorldLayer {
   spawns: WorldSpawnEdit[];
   routes: WorldRouteEdit[];
@@ -86,15 +99,19 @@ export interface WorldLayer {
   added: WorldAddedSpawn[];
   /** NPCs' movement; a project saved before it could be changed has none */
   movements?: WorldMovementEdit[];
+  /** Database spawns' respawn times; a project saved before they could be changed has none */
+  respawns?: WorldRespawnEdit[];
 }
 
 export const EMPTY_WORLD: WorldLayer = { spawns: [], routes: [], added: [] };
 
 export const movementsOf = (layer: WorldLayer): WorldMovementEdit[] => layer.movements ?? [];
 
+export const respawnsOf = (layer: WorldLayer): WorldRespawnEdit[] => layer.respawns ?? [];
+
 /** Whether the layer holds anything to export */
 export const hasWorldChanges = (layer: WorldLayer): boolean =>
-  layer.spawns.length > 0 || layer.routes.length > 0 || layer.added.length > 0 || movementsOf(layer).length > 0;
+  layer.spawns.length > 0 || layer.routes.length > 0 || layer.added.length > 0 || movementsOf(layer).length > 0 || respawnsOf(layer).length > 0;
 
 /** What a point added in the 3D view has in the columns the view does not edit */
 export const NEW_POINT_REST: Record<string, string | null> = {
@@ -226,6 +243,24 @@ export function revertMovement(layer: WorldLayer, guid: number): WorldLayer {
   };
 }
 
+/** Sets a spawn's respawn time: a placed spawn's own, else an edit that keeps its first original and is dropped when set back to it */
+export function setRespawn(layer: WorldLayer, edit: Omit<WorldRespawnEdit, 'current'>, secs: number): WorldLayer {
+  if (isAdded(layer, edit.kind, edit.guid)) {
+    return { ...layer, added: layer.added.map((a) => (a.kind === edit.kind && a.guid === edit.guid ? { ...a, respawnSecs: secs } : a)) };
+  }
+  const all = respawnsOf(layer);
+  const known = all.find((r) => r.kind === edit.kind && r.guid === edit.guid);
+  const entry: WorldRespawnEdit = known ? { ...known, current: secs } : { ...edit, current: secs };
+  const rest = all.filter((r) => r !== known);
+  const respawns = entry.current === entry.original ? rest : known ? all.map((r) => (r === known ? entry : r)) : [...all, entry];
+  return { ...layer, respawns };
+}
+
+/** Takes back a database spawn's respawn time */
+export function revertRespawn(layer: WorldLayer, kind: WorldSpawnKind, guid: number): WorldLayer {
+  return { ...layer, respawns: respawnsOf(layer).filter((r) => !(r.kind === kind && r.guid === guid)) };
+}
+
 /** Takes back a route; a path made in the view takes back the movement that walks it too */
 export function revertRoute(layer: WorldLayer, pathId: number): WorldLayer {
   const made = layer.routes.some((r) => r.pathId === pathId && r.original.length === 0);
@@ -291,7 +326,7 @@ function addedRow(spawn: WorldAddedSpawn, base: Record<string, string | null>): 
     position_y: text(at.y),
     position_z: text(at.z),
     orientation: text(at.orientation),
-    spawntimesecs: RESPAWN_SECS,
+    spawntimesecs: text(spawn.respawnSecs ?? Number(RESPAWN_SECS)),
     Comment: PLACED_COMMENT,
   };
   if (spawn.kind === 'creature') {
@@ -359,17 +394,20 @@ export function worldStatements(
   const base = pointBase(pointDefaults);
   const added = layer.added.map((a) => addedStatements(a, spawnDefaults[a.kind]));
   const movements = movementsOf(layer).map((m) => movementStatements(m, addonDefaults));
+  const respawn = (r: WorldRespawnEdit, secs: number): PatchStatement => ({ kind: 'update', table: r.kind, key: { guid: text(r.guid) }, set: { spawntimesecs: text(secs) } });
   return {
     apply: [
       ...layer.spawns.map((s) => placementStatement(s, s.current)),
       ...added.flatMap((a) => a.apply),
       ...movements.flatMap((m) => m.apply),
+      ...respawnsOf(layer).map((r) => respawn(r, r.current)),
       ...layer.routes.flatMap((r) => routeStatements(r.pathId, r.current, base)),
     ],
     revert: [
       ...layer.spawns.map((s) => placementStatement(s, s.original)),
       ...added.flatMap((a) => a.revert),
       ...movements.flatMap((m) => m.revert),
+      ...respawnsOf(layer).map((r) => respawn(r, r.original)),
       ...layer.routes.flatMap((r) => routeStatements(r.pathId, r.original, base)),
     ],
   };

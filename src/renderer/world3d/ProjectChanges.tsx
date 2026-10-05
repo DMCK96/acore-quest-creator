@@ -53,6 +53,7 @@ export function ProjectChanges({
     const result = await api.worldRevert(
       change.type === 'route' ? { kind: 'route', pathId: change.pathId }
       : change.type === 'movement' ? { kind: 'movement', guid: change.guid }
+      : change.type === 'respawn' ? { kind: 'respawn', spawnKind: change.kind, guid: change.guid }
       : { kind: 'spawn', spawnKind: change.kind, guid: change.guid },
     );
     if (!result.ok) {
@@ -126,7 +127,7 @@ export function ProjectChanges({
             </thead>
             <tbody>
               {changes.map((change) => (
-                <ChangeRow key={change.type === 'route' ? `route:${change.pathId}` : change.type === 'movement' ? `movement:${change.guid}` : `${change.type}:${change.kind}:${change.guid}`} change={change} onRevert={() => void revert(change)} />
+                <ChangeRow key={change.type === 'route' ? `route:${change.pathId}` : change.type === 'movement' ? `movement:${change.guid}` : change.type === 'respawn' ? `respawn:${change.kind}:${change.guid}` : `${change.type}:${change.kind}:${change.guid}`} change={change} onRevert={() => void revert(change)} />
               ))}
             </tbody>
           </table>
@@ -236,6 +237,23 @@ function ChangeRow({ change, onRevert }: { change: WorldChange; onRevert(): void
         <td>{moves(change.current)}</td>
         <td>
           <button type="button" className="btn" aria-label={`Revert movement of ${name}`} onClick={onRevert}>
+            Revert
+          </button>
+        </td>
+      </tr>
+    );
+  }
+  if (change.type === 'respawn') {
+    const name = change.name || `${change.kind === 'creature' ? 'NPC' : 'Object'} ${change.entry}`;
+    return (
+      <tr>
+        <td>
+          {name} · respawn · spawn {change.guid} {drift}
+        </td>
+        <td>{change.original} s</td>
+        <td>{change.current} s</td>
+        <td>
+          <button type="button" className="btn" aria-label={`Revert respawn of ${name}`} onClick={onRevert}>
             Revert
           </button>
         </td>

@@ -297,6 +297,19 @@ describe('movement through the API', () => {
     const out: any = await api.worldRevert({ kind: 'movement', guid: 80332 });
     expect(out.value.movements ?? []).toEqual([]);
   });
+
+  it('reads a spawn\'s respawn once, records the change, lists it and reverts it', async () => {
+    const { api, db } = await setup(world);
+    db.update('creature', { guid: '80330' }, { spawntimesecs: '300' });
+    const out: any = await api.worldSetRespawn('creature', 80330, 60);
+    expect(out.value.respawns).toEqual([{ kind: 'creature', guid: 80330, entry: 1423, name: 'Stormwind Guard', map: 0, original: 300, current: 60 }]);
+    const changes: any = await api.worldChanges();
+    expect(changes.value).toContainEqual(expect.objectContaining({ type: 'respawn', guid: 80330, drifted: false }));
+    db.update('creature', { guid: '80330' }, { spawntimesecs: '900' });
+    expect(((await api.worldChanges()) as any).value.find((c: any) => c.type === 'respawn').drifted).toBe(true);
+    const back: any = await api.worldRevert({ kind: 'respawn', spawnKind: 'creature', guid: 80330 });
+    expect(back.value.respawns).toEqual([]);
+  });
 });
 
 describe('the spawns a quest uses', () => {

@@ -108,6 +108,7 @@ export function makeMockApi(overrides: Partial<Record<keyof Api, (...args: any[]
     worldRoute: vi.fn(async () => okv({ points: [], walkers: 1 })),
     worldSetRoute: vi.fn(async () => okv({ spawns: [], routes: [], added: [] })),
     worldRevert: vi.fn(async () => okv({ spawns: [], routes: [], added: [] })),
+    worldSetRespawn: vi.fn(async () => okv({ spawns: [], routes: [], added: [] })),
     worldSetMovement: vi.fn(async () => okv({ spawns: [], routes: [], added: [] })),
     worldNewPathId: vi.fn(async () => okv(1)),
     questSpawnList: vi.fn(async () => okv([])),
