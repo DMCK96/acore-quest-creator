@@ -5,6 +5,7 @@ import { createProjectSession } from '../../src/main/project/session';
 import { defaultProjectMeta } from '../../src/main/project/project-file';
 import type { ProjectController } from '../../src/main/project/controller';
 import { forkDb } from '../helpers/fixtures';
+import { newNpc, newSpawn } from '../../src/core/entities/model';
 
 const box = { encrypt: (s: string) => Uint8Array.from(Buffer.from(s)), decrypt: (b: Uint8Array) => Buffer.from(b).toString() };
 
@@ -165,5 +166,25 @@ describe('spawn groups through the API', () => {
     await api.worldSetGroup({ id: 32494, name: 'Solo', map: 0, maxActive: 1, origin: { kind: 'new' }, members: [{ type: 'spawn', kind: 'npc', guid: 80330, entry: 32491, chance: 0 }] } as any, []);
     const out: any = await api.worldDropMember('npc', 80330);
     expect(out.value.groups ?? []).toEqual([]);
+  });
+
+  it('a project spawn removed outside the 3D menu (its NPC deleted, or the spawn taken off it) leaves its group in the same step', async () => {
+    const { api } = await setup();
+    const hela = { ...newNpc(12000001), name: 'Hela', spawns: [{ ...newSpawn(900), map: 571 }] };
+    const odin = { ...newNpc(12000002), name: 'Odin', spawns: [{ ...newSpawn(901), map: 571 }, { ...newSpawn(902), map: 571 }] };
+    await api.putProjectEntities({ npcs: [hela, odin], objects: [], items: [] });
+    const spawn = (guid: number, entry: number) => ({ type: 'spawn', kind: 'npc', guid, entry, chance: 0 });
+    const saved: any = await api.worldSetGroup({ id: 32494, name: 'Gods', map: 571, maxActive: 1, origin: { kind: 'new' },
+      members: [spawn(900, 12000001), spawn(901, 12000002), spawn(902, 12000002)] } as any, []);
+    expect(saved.ok).toBe(true);
+    await api.deleteEntity('npc', 12000001);
+    const members = async () => (((await api.worldLayer()) as any).value.groups ?? []).flatMap((g: any) => g.members.map((m: any) => m.guid));
+    expect(await members()).toEqual([901, 902]);
+    await api.putProjectEntities({ npcs: [{ ...odin, spawns: [odin.spawns[0]!] }], objects: [], items: [] });
+    expect(await members()).toEqual([901]);
+    // Each was one step: one undo brings the spawn back into the group with it
+    await api.historyUndo();
+    expect(await members()).toEqual([901, 902]);
+    expect(((await api.projectEntities()) as any).value.npcs[0].spawns).toHaveLength(2);
   });
 });

@@ -529,9 +529,11 @@ export function createAppStore(api: Api, opts: { saveDelayMs?: number } = {}): A
         set({ error: sent.error.message });
         // What the main process holds is the truth: the edit it refused is not kept here
         await get().loadEntities();
-      await get().loadLayer();
+        await get().loadLayer();
         return;
       }
+      // A spawn taken off an NPC or object left its spawn group
+      await get().loadLayer();
       await get().loadProjectState();
     },
 
@@ -557,6 +559,8 @@ export function createAppStore(api: Api, opts: { saveDelayMs?: number } = {}): A
         return result.error.message;
       }
       set({ entities: result.value.entities, entitiesSeq: ++entitiesSeq });
+      // Its spawns left their spawn groups in the same step
+      await get().loadLayer();
       const open = get().open;
       const mine = open ? result.value.quests.find((q) => q.questId === open.questId) : undefined;
       if (open && mine) set({ open: { ...open, aggregate: mine.aggregate }, dirty: false });

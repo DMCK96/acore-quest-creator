@@ -378,6 +378,22 @@ export function createApi(deps: ApiDeps): Api {
     }
   };
   const historyList = () => history.list(describeStep);
+  /**
+   * Puts the project's NPCs, objects and items; a spawn of theirs that is gone (its NPC deleted, or the
+   * spawn taken off it) leaves its spawn group too. Run inside a step, so both are undone together.
+   */
+  const putEntities = (next: ProjectEntities): void => {
+    const guids = (store: ProjectEntities, kind: 'npc' | 'object') => new Set((kind === 'npc' ? store.npcs : store.objects).flatMap((e) => e.spawns.map((s) => s.guid)));
+    const before = deps.session.entities.get();
+    deps.session.entities.put(next);
+    const layer = deps.session.world.get();
+    let after = layer;
+    for (const kind of ['npc', 'object'] as const) {
+      const kept = guids(next, kind);
+      for (const guid of guids(before, kind)) if (!kept.has(guid)) after = dropMember(after, kind, guid);
+    }
+    if (!isDeepStrictEqual(groupsOf(after), groupsOf(layer))) deps.session.world.put(after);
+  };
   /** The spawns and new quests the steps would bring back that the database has taken since */
   const takenBy = async (steps: HistoryStep[], direction: 'undo' | 'redo'): Promise<Taken> => {
     const spawns = new Set<string>();
@@ -1895,7 +1911,7 @@ export function createApi(deps: ApiDeps): Api {
       run(async () => {
         const parsed = projectEntitiesSchema.safeParse(next);
         if (!parsed.success) throw fail('BAD_REQUEST', 'The NPCs, objects and items sent are not valid.');
-        deps.session.entities.put(parsed.data);
+        await asOneStep(async () => putEntities(parsed.data));
         return true as const;
       }),
 
@@ -1920,7 +1936,7 @@ export function createApi(deps: ApiDeps): Api {
         const store = projectEntities();
         const list = kind === 'npc' ? 'npcs' : kind === 'object' ? 'objects' : 'items';
         if (!(store[list] as { entry: number }[]).some((e) => e.entry === entry)) throw fail('BAD_REQUEST', `There is no such ${kind === 'npc' ? 'NPC' : kind} in the project.`);
-        deps.session.entities.put({ ...store, [list]: (store[list] as { entry: number }[]).filter((e) => e.entry !== entry) } as ProjectEntities);
+        putEntities({ ...store, [list]: (store[list] as { entry: number }[]).filter((e) => e.entry !== entry) } as ProjectEntities);
         // An item is never a giver; an NPC or object comes off every quest's giver cards
         const changed: { questId: number; aggregate: QuestAggregate }[] = [];
         if (kind !== 'item') {
