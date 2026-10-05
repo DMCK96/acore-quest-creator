@@ -66,12 +66,17 @@ async function workspace(overrides: Record<string, unknown> = {}) {
   return { api, world: worlds[0], onQuestField, onNewQuest, setEntities };
 }
 const rightClick = (world: any, target: any) => act(() => world.options.onContextMenu(target, { x: 40, y: 40 }));
+/** Opens the Quests submenu and picks one of its items */
+const pickQuest = async (name: string) => {
+  await userEvent.click(screen.getByRole('menuitem', { name: 'Quests' }));
+  await userEvent.click(screen.getByRole('menuitem', { name }));
+};
 
 describe('quest actions in the World workspace', () => {
-  it('Quest giver on a right-clicked NPC adds it to the open quest’s givers', async () => {
+  it('Quests ▸ Set as quest giver on a right-clicked NPC adds it to the open quest’s givers', async () => {
     const { world, onQuestField } = await workspace();
     rightClick(world, { ground: at, hit: { type: 'spawn', spawn: guard }, selection: [guard] });
-    await userEvent.click(screen.getByRole('menuitemcheckbox', { name: 'Quest giver' }));
+    await pickQuest('Set as quest giver');
     expect(onQuestField).toHaveBeenCalledWith('creature_queststarter', [{ id: 1423 }]);
     expect(onQuestField).toHaveBeenCalledWith('gameobject_queststarter', []);
   });
@@ -79,15 +84,15 @@ describe('quest actions in the World workspace', () => {
   it('making an NPC the quest giver is one step', async () => {
     const { api, world, onQuestField } = await workspace();
     rightClick(world, { ground: at, hit: { type: 'spawn', spawn: guard }, selection: [guard] });
-    await userEvent.click(screen.getByRole('menuitemcheckbox', { name: 'Quest giver' }));
+    await pickQuest('Set as quest giver');
     await waitFor(() => expect(api.historyEnd).toHaveBeenCalledTimes(1));
     expect(vi.mocked(api.historyBegin).mock.invocationCallOrder[0]!).toBeLessThan(onQuestField.mock.invocationCallOrder[0]!);
   });
 
-  it('Kill objective fills the first free slot', async () => {
+  it('Add as kill objective fills the first free slot', async () => {
     const { world, onQuestField } = await workspace();
     rightClick(world, { ground: at, hit: { type: 'spawn', spawn: guard }, selection: [guard] });
-    await userEvent.click(screen.getByRole('menuitemcheckbox', { name: 'Kill objective' }));
+    await pickQuest('Add as kill objective');
     expect(onQuestField).toHaveBeenCalledWith('quest_template.RequiredNpcOrGo', [
       { target: { target: 'creature', id: 1423 }, count: 1 }, { target: null, count: 0 }, { target: null, count: 0 }, { target: null, count: 0 }]);
   });
@@ -95,7 +100,7 @@ describe('quest actions in the World workspace', () => {
   it('Start the next quest in this chain hands the host the NPC and the open quest', async () => {
     const { world, onNewQuest } = await workspace();
     rightClick(world, { ground: at, hit: { type: 'spawn', spawn: guard }, selection: [guard] });
-    await userEvent.click(screen.getByRole('menuitem', { name: 'Start the next quest in this chain' }));
+    await pickQuest('Start the next quest in this chain');
     expect(onNewQuest).toHaveBeenCalledWith({ entry: 1423, name: 'Guard' }, 60001);
   });
 

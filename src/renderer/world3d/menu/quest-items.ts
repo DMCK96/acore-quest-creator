@@ -1,10 +1,9 @@
 import { hasRole, type RoleTarget } from '@core/modules/quest-roles';
 import { item, type MenuContext, type MenuGroup, type MenuItem, type MenuTarget } from './model';
-import { NEEDS_DATABASE, NEEDS_GROUND, newHere } from './world-items';
+import { newHere } from './world-items';
 
-/** The open quest's items: spawn its NPCs here, give a spawn a part in it, start a new quest, show its spawns */
+/** The open quest's items: new quest NPCs here, a spawn's part in it or a quest started from it, show its spawns */
 
-export const OPEN_A_QUEST = 'Open a quest first';
 export const OBJECTIVES_FULL = 'All four objectives are in use';
 
 export function questItems(target: MenuTarget, context: MenuContext): MenuGroup | null {
@@ -13,18 +12,6 @@ export function questItems(target: MenuTarget, context: MenuContext): MenuGroup 
   const { hit, ground } = target;
   const items: MenuItem[] = [];
   if (!hit) {
-    if (!quest) items.push(item('Spawn quest NPC here', { disabledReason: OPEN_A_QUEST }));
-    else if (!ground) items.push(item('Spawn quest NPC here', { disabledReason: NEEDS_GROUND }));
-    else {
-      // Keyed by what each is, as two may share a name
-      const children = quest.entities.map((entity) => ({
-        ...(!entity.own && !context.connected
-          ? item(entity.name, { disabledReason: NEEDS_DATABASE })
-          : item(entity.name, { action: { kind: 'spawnQuestEntity', target: entity, at: ground } })),
-        id: `${entity.kind}-${entity.entry}`,
-      }));
-      items.push(item('Spawn quest NPC here', { children }));
-    }
     if (quest) items.push(...newHere(target, context, true));
     if (quest) {
       items.push(item('Show quest spawns', { action: { kind: 'showSpawns', scope: 'quest' } }));
@@ -32,19 +19,28 @@ export function questItems(target: MenuTarget, context: MenuContext): MenuGroup 
       if (context.marked) items.push(item('Hide quest spawns', { action: { kind: 'hideSpawns' } }));
     }
   } else if (hit.type === 'spawn') {
+    // A spawn's part in the open quest, and quests started from it, sit under one Quests submenu
     const spawn = hit.spawn;
+    const children: MenuItem[] = [];
     if (quest) {
       const as: RoleTarget = { kind: spawn.kind === 'object' ? 'gameobject' : 'creature', id: spawn.entry };
-      for (const [role, label] of [['giver', 'Quest giver'], ['ender', 'Quest ender'], ['objective', spawn.kind === 'object' ? 'Use objective' : 'Kill objective']] as const) {
-        const checked = hasRole(quest.roles, role, as);
-        const full = role === 'objective' && !checked && quest.roles.objectives.every((t) => t !== null);
-        items.push(full ? item(label, { checked, disabledReason: OBJECTIVES_FULL }) : item(label, { checked, action: { kind: 'toggleRole', role, spawn, on: !checked } }));
+      const objective = spawn.kind === 'object' ? 'use objective' : 'kill objective';
+      const roles = [
+        ['giver', 'Set as quest giver', 'Remove as quest giver'],
+        ['ender', 'Set as quest ender', 'Remove as quest ender'],
+        ['objective', `Add as ${objective}`, `Remove as ${objective}`],
+      ] as const;
+      for (const [role, set, unset] of roles) {
+        const has = hasRole(quest.roles, role, as);
+        const full = role === 'objective' && !has && quest.roles.objectives.every((t) => t !== null);
+        children.push(full ? item(set, { disabledReason: OBJECTIVES_FULL }) : item(has ? unset : set, { action: { kind: 'toggleRole', role, spawn, on: !has } }));
       }
     }
     if (spawn.kind === 'creature' && context.project) {
-      items.push(item('Start a new quest from this NPC', { action: { kind: 'newQuest', spawn, after: false } }));
-      if (quest) items.push(item('Start the next quest in this chain', { action: { kind: 'newQuest', spawn, after: true } }));
+      children.push(item('Start a new quest from this NPC', { action: { kind: 'newQuest', spawn, after: false } }));
+      if (quest) children.push(item('Start the next quest in this chain', { action: { kind: 'newQuest', spawn, after: true } }));
     }
+    if (children.length > 0) items.push(item('Quests', { children }));
   }
   return items.length > 0 ? { id: 'quest', items } : null;
 }

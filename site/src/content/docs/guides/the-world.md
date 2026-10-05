@@ -78,14 +78,15 @@ These work for the NPCs of the database and for your quest's own.
 
 ### Your quest
 
-With a quest open:
+Right-click an NPC or object and open **Quests**:
 
-- **Spawn quest NPC here** lists the quest's own NPCs and objects, then the existing ones it names, and puts one where you right-clicked.
-- On an NPC or object, **Quest giver**, **Quest ender** and **Kill objective** (**Use objective** for an object) show whether it already plays that part, and add or remove it. See [quest givers and enders](/acore-quest-creator/guides/givers-and-enders/).
-- On an NPC, **Start a new quest from this NPC** makes a quest it gives and takes back. **Start the next quest in this chain** does the same and puts the new quest after the open one.
-- **Show quest spawns** and **Show chain spawns** ring every spawn the quest (or its whole chain) uses and list them in the Find dialog by quest and part, so you can jump to any of them. **Hide quest spawns** takes the rings away.
+- With a quest open, **Set as quest giver**, **Set as quest ender** and **Add as kill objective** (**Add as use objective** for an object) give it that part in the quest. When it already has the part, the item reads **Remove as…** and takes it away. See [quest givers and enders](/acore-quest-creator/guides/givers-and-enders/).
+- On an NPC, **Start a new quest from this NPC** makes a quest it gives and takes back. With a quest open, **Start the next quest in this chain** does the same and puts the new quest after the open one.
+
+On the ground, with a quest open:
 
 - **New quest NPC here…** and **New quest object here…** make a new NPC or object for the open quest, standing where you right-clicked.
+- **Show quest spawns** and **Show chain spawns** ring every spawn the quest (or its whole chain) uses and list them in the Find dialog by quest and part, so you can jump to any of them. **Hide quest spawns** takes the rings away.
 
 ### New NPCs and objects
 

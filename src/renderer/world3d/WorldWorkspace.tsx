@@ -8,7 +8,7 @@ import { useHistorySteps } from '../state/history-context';
 import { useProjectEntities } from '../state/project-entities';
 import { ownViewSpawns } from '@core/entities/view-spawns';
 import { toggleRole } from '@core/modules/quest-roles';
-import { useApi, useNameBook } from '../state/names';
+import { useApi } from '../state/names';
 import { ownEdit } from '../map/own-3d-edit';
 import { chainOf, questMenuInfo } from './quest-context';
 import { OBJECTIVES_FULL } from './menu/quest-items';
@@ -77,7 +77,6 @@ const WELCOME_FADE_MS = 500;
 export function WorldWorkspace({
   hasClient, active = true, projectKey, projectName, onOpenSettings, onShowQuests, onStartQuest, quest, onQuestField, onNewQuest, goTo: goToRequest,
 }: WorldWorkspaceProps): React.JSX.Element {
-  const names = useNameBook();
   // The open quest's values as last changed here, so edits made one after another build on each other
   const values = useRef(quest?.open.aggregate.values);
   values.current = quest?.open.aggregate.values;
@@ -87,7 +86,7 @@ export function WorldWorkspace({
   };
   const project = useProjectEntities();
   const store = project?.entities ?? EMPTY_ENTITIES;
-  const info = useMemo(() => (quest ? questMenuInfo(quest.open, quest.nodes, names, store) : undefined), [quest, names, store]);
+  const info = useMemo(() => (quest ? questMenuInfo(quest.open, quest.nodes) : undefined), [quest]);
   const chainIds = useMemo(() => (quest ? chainOf(quest.nodes, quest.open.questId) : undefined), [quest]);
   // The project's NPCs and objects; edits to their spawns go to the whole store
   const storeRef = useRef(store);

@@ -18,7 +18,6 @@ import { World3DView } from '../world3d/World3DView';
 import { ownEdit } from './own-3d-edit';
 import { ownViewSpawns } from '@core/entities/view-spawns';
 import { toggleRole } from '@core/modules/quest-roles';
-import { useNameBook } from '../state/names';
 import { questMenuInfo } from '../world3d/quest-context';
 import { OBJECTIVES_FULL } from '../world3d/menu/quest-items';
 import { LeafletMap, type MapMarkerView, type MapView } from './LeafletMap';
@@ -106,9 +105,8 @@ export function QuestMapView({
     project?.setEntities(next);
   };
   const mine = useMemo(() => narrowTo(store, questUses({ questId: open.questId, aggregate: open.aggregate }, store)), [store, open]);
-  const names = useNameBook();
-  // The quest as the 3D view's right-click menu sees it: its own NPCs to paste and spawn, its givers and objectives
-  const questInfo = useMemo(() => questMenuInfo(open, [], names, store), [open, names, store]);
+  // The quest as the 3D view's right-click menu sees it: its givers, enders and objectives
+  const questInfo = useMemo(() => questMenuInfo(open, []), [open]);
   const [maps, setMaps] = useState<MapInfo[]>(CONTINENTS);
   const [refs, setRefs] = useState<QuestMapRef[]>([]);
   const [dots, setDots] = useState<SpawnDot[]>([]);

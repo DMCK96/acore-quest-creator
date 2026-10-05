@@ -8,21 +8,20 @@ const crate = (over: Partial<MenuSpawn> = {}): MenuSpawn => npc({ kind: 'object'
 const context = (over: Partial<MenuContext> = {}): MenuContext => ({ map: 0, connected: true, clipboard: { count: 0, blocked: null }, placing: false, drawing: null, quest: null, project: true, marked: false, lootable: () => null, ...over });
 const ground = (selection: MenuSpawn[] = []): MenuTarget => ({ ground: at, hit: null, selection });
 const onSpawn = (spawn: MenuSpawn): MenuTarget => ({ ground: at, hit: { type: 'spawn', spawn }, selection: [spawn] });
-const quest = { id: 60001, title: 'Wolves', roles: { givers: [{ kind: 'creature' as const, id: 1423 }], enders: [], objectives: [null, null, null, null] },
-  entities: [{ kind: 'creature' as const, entry: 12000001, name: 'Hela', own: true }, { kind: 'creature' as const, entry: 1423, name: 'Guard', own: false }], chained: true };
+const quest = { id: 60001, title: 'Wolves', roles: { givers: [{ kind: 'creature' as const, id: 1423 }], enders: [], objectives: [null, null, null, null] }, chained: true };
 
-const flat = (groups: ReturnType<typeof buildMenu>): MenuItem[] => groups.flatMap((g) => g.items);
+// Submenus' items too
+const all = (items: MenuItem[]): MenuItem[] => items.flatMap((i) => [i, ...all(i.children ?? [])]);
+const flat = (groups: ReturnType<typeof buildMenu>): MenuItem[] => all(groups.flatMap((g) => g.items));
 const item = (groups: ReturnType<typeof buildMenu>, label: string) => flat(groups).find((i) => i.label === label);
 const labels = (groups: ReturnType<typeof buildMenu>) => groups.map((g) => [g.id, g.items.map((i) => i.label)]);
 
 describe('the menu on the ground', () => {
-  it('offers placing, paste and coordinates; a quest group only says to open a quest', () => {
+  it('offers placing, paste and coordinates; no quest group without a quest', () => {
     expect(labels(buildMenu(ground(), context()))).toEqual([
       ['world', ['Place NPC here…', 'Place object here…', 'New NPC here…', 'New object here…', 'Paste here', 'Copy coordinates']],
-      ['quest', ['Spawn quest NPC here']],
     ]);
     expect(item(buildMenu(ground(), context()), 'Paste here')!.disabledReason).toBe('Copy something first');
-    expect(item(buildMenu(ground(), context()), 'Spawn quest NPC here')!.disabledReason).toBe('Open a quest first');
   });
 
   it('pastes what was copied at the clicked point, or says why it cannot', () => {
@@ -45,10 +44,10 @@ describe('the menu on the ground', () => {
     expect(item(buildMenu(ground([npc(), npc({ guid: 2 })]), context()), 'Start path here')).toBeUndefined();
   });
 
-  it('with a quest open, lists its NPCs and objects to spawn here, own first', () => {
-    const spawnHere = item(buildMenu(ground(), context({ quest })), 'Spawn quest NPC here')!;
-    expect(spawnHere.children!.map((c) => c.label)).toEqual(['Hela', 'Guard']);
-    expect(spawnHere.children![0]!.action).toEqual({ kind: 'spawnQuestEntity', target: quest.entities[0], at });
+  it('with a quest open: new quest NPCs and objects here, and its spawns to show', () => {
+    expect(labels(buildMenu(ground(), context({ quest }))).find(([id]) => id === 'quest')).toEqual(
+      ['quest', ['New quest NPC here…', 'New quest object here…', 'Show quest spawns', 'Show chain spawns']],
+    );
   });
 
   it('shows and hides quest spawns', () => {
@@ -83,14 +82,20 @@ describe('the menu on a spawn', () => {
     expect(buildMenu(onSpawn(crate()), context()).map((g) => g.id)).not.toContain('movement');
   });
 
-  it('with a quest open: roles as checks, objective as kill or use', () => {
+  it('with a quest open: a Quests submenu sets or removes its parts, objective as kill or use', () => {
     const groups = buildMenu(onSpawn(npc()), context({ quest }));
-    expect(item(groups, 'Quest giver')).toMatchObject({ checked: true, action: { kind: 'toggleRole', role: 'giver', on: false } });
-    expect(item(groups, 'Quest ender')).toMatchObject({ checked: false, action: { kind: 'toggleRole', role: 'ender', on: true } });
-    expect(item(groups, 'Kill objective')).toMatchObject({ checked: false });
-    expect(item(buildMenu(onSpawn(crate()), context({ quest })), 'Use objective')).toBeDefined();
+    expect(groups.find((g) => g.id === 'quest')!.items.map((i) => [i.label, i.children?.map((c) => c.label)])).toEqual([
+      ['Quests', ['Remove as quest giver', 'Set as quest ender', 'Add as kill objective', 'Start a new quest from this NPC', 'Start the next quest in this chain']],
+    ]);
+    expect(item(groups, 'Remove as quest giver')!.action).toEqual({ kind: 'toggleRole', role: 'giver', spawn: npc(), on: false });
+    expect(item(groups, 'Set as quest ender')!.action).toEqual({ kind: 'toggleRole', role: 'ender', spawn: npc(), on: true });
+    expect(item(buildMenu(onSpawn(crate()), context({ quest })), 'Add as use objective')).toBeDefined();
     const full = { ...quest, roles: { ...quest.roles, objectives: [1, 2, 3, 4].map((id) => ({ kind: 'creature' as const, id })) } };
-    expect(item(buildMenu(onSpawn(npc()), context({ quest: full })), 'Kill objective')!.disabledReason).toBe('All four objectives are in use');
+    expect(item(buildMenu(onSpawn(npc()), context({ quest: full })), 'Add as kill objective')!.disabledReason).toBe('All four objectives are in use');
+  });
+
+  it('an object with no quest open has no Quests submenu', () => {
+    expect(buildMenu(onSpawn(crate()), context()).map((g) => g.id)).not.toContain('quest');
   });
 
   it('starts a new quest from an NPC, and the next in the chain when a quest is open', () => {
@@ -110,12 +115,6 @@ describe('the menu while busy', () => {
     const groups = buildMenu(ground([npc()]), context({ drawing: { guid: 80330, points: 2 } }));
     expect(groups.map((g) => g.id)).toEqual(['state']);
     expect(groups[0]!.items.map((i) => i.label)).toEqual(['Finish path', 'Undo last point', 'Cancel path']);
-  });
-
-  it('gives two quest NPCs of the same name items of their own', () => {
-    const twins = { ...quest, entities: [{ kind: 'creature' as const, entry: 1, name: 'Wolf', own: true }, { kind: 'creature' as const, entry: 2, name: 'Wolf', own: false }] };
-    const children = item(buildMenu(ground(), context({ quest: twins })), 'Spawn quest NPC here')!.children!;
-    expect(new Set(children.map((c) => c.id)).size).toBe(2);
   });
 
   it('without the world database, a world NPC\u2019s movement items say so; a quest\u2019s own NPC keeps them', () => {

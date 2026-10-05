@@ -26,8 +26,6 @@ export interface QuestMenuInfo {
   title: string;
   /** Entries by role in the open quest */
   roles: QuestRoles;
-  /** What "Spawn quest NPC here" lists: own first, then existing, each once */
-  entities: { kind: 'creature' | 'object'; entry: number; name: string; own: boolean }[];
   /** The chain has quests besides this one */
   chained: boolean;
 }
@@ -67,7 +65,6 @@ export type MenuAction =
   | { kind: 'startPath'; spawn: MenuSpawn; at: At }
   | { kind: 'wander'; spawn: MenuSpawn }
   | { kind: 'removePath'; spawn: MenuSpawn }
-  | { kind: 'spawnQuestEntity'; target: QuestMenuInfo['entities'][number]; at: At }
   | { kind: 'toggleRole'; role: Role; spawn: MenuSpawn; on: boolean }
   | { kind: 'newQuest'; spawn: MenuSpawn; after: boolean }
   | { kind: 'showSpawns'; scope: 'quest' | 'chain' }

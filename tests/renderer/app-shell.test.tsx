@@ -158,6 +158,7 @@ describe('the app shell', () => {
     await waitFor(() => expect(created).toHaveLength(1));
     const guard = { kind: 'creature', guid: 80330, entry: 1423, name: 'Guard', own: false, added: false, pathId: 0, wander: 0, map: 0, placement: { x: 1, y: 2, z: 3, orientation: 0, rotation: null } };
     act(() => created[0]!.options.onContextMenu({ ground: { x: 1, y: 2, z: 3 }, hit: { type: 'spawn', spawn: guard }, selection: [guard] }, { x: 10, y: 10 }));
+    await userEvent.click(screen.getByRole('menuitem', { name: 'Quests' }));
     await userEvent.click(screen.getByRole('menuitem', { name: 'Start the next quest in this chain' }));
     await waitFor(() => expect(store.getState().open?.questId).toBe(60003));
     await waitFor(() => expect(store.getState().open!.aggregate.values['quest_template_addon.PrevQuestID']).toBe(60001));
@@ -174,6 +175,7 @@ describe('the app shell', () => {
     await waitFor(() => expect(created).toHaveLength(1));
     const guard = { kind: 'creature', guid: 80330, entry: 1423, name: 'Guard', own: false, added: false, pathId: 0, wander: 0, map: 0, placement: { x: 1, y: 2, z: 3, orientation: 0, rotation: null } };
     act(() => created[0]!.options.onContextMenu({ ground: { x: 1, y: 2, z: 3 }, hit: { type: 'spawn', spawn: guard }, selection: [guard] }, { x: 10, y: 10 }));
+    await userEvent.click(screen.getByRole('menuitem', { name: 'Quests' }));
     await userEvent.click(screen.getByRole('menuitem', { name: 'Start the next quest in this chain' }));
     await new Promise((resolve) => setTimeout(resolve, 50));
     const values = store.getState().open?.aggregate.values ?? {};

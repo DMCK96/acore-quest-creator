@@ -290,9 +290,6 @@ export function useWorldMenu(deps: WorldMenuDeps): {
         await commit(after, `Removed the path of ${spawn.name}`);
         return;
       }
-      case 'spawnQuestEntity':
-        await putAll([{ kind: action.target.kind, entry: action.target.entry, own: action.target.own, at: await floored(facingCamera(action.at, action.target.kind)) }]);
-        return;
       case 'toggleRole': {
         const target: RoleTarget = { kind: action.spawn.kind === 'object' ? 'gameobject' : 'creature', id: action.spawn.entry };
         let why: string | null = null;
