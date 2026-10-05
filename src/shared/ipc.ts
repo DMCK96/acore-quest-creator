@@ -502,6 +502,8 @@ export interface Api {
   entitySpawns(kind: 'creature' | 'gameobject', entry: number): Promise<Result<SpawnDot[]>>;
   /** Every spawn of one NPC or object (up to a few hundred, `capped` when there are more), for jumping to them in the 3D view. */
   findSpawns(kind: 'creature' | 'gameobject', entry: number): Promise<Result<{ spawns: SpawnDot[]; capped: boolean }>>;
+  /** Where one spawn stands: as moved or placed in the project, else as the database has it; null when it is gone. For Go to. */
+  spawnPlacement(kind: 'npc' | 'object', guid: number): Promise<Result<{ x: number; y: number; z: number } | null>>;
   /** The existing spawns of the quest's givers, enders and objectives. */
   questMapRefs(questId: number): Promise<Result<QuestMapRef[]>>;
   /** Every spawn each quest uses (its givers', enders' and objectives', and its own), for the 3D view to list and mark. */
@@ -725,6 +727,7 @@ const REQUEST_SCHEMAS: Record<keyof Api, z.ZodType<unknown[]>> = {
   exportProject: z.tuple([]),
   entitySpawns: z.tuple([z.enum(['creature', 'gameobject']), z.number().int()]),
   findSpawns: z.tuple([z.enum(['creature', 'gameobject']), z.number().int()]),
+  spawnPlacement: z.tuple([z.enum(['npc', 'object']), z.number().int()]),
   questMapRefs: z.tuple([z.number()]),
   questSpawnList: z.tuple([z.array(z.number().int().min(1)).max(50)]),
   allocateIds: z.tuple([z.enum(['creature', 'gameobject', 'creatureSpawn', 'gameobjectSpawn', 'page', 'item']), z.number().int().min(1).max(50)]),

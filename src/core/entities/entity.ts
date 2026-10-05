@@ -56,14 +56,14 @@ export interface ObjectSpawn extends SpawnedEntity {
 /** What the project changes about an entity */
 export type EntityChange = 'new' | 'spawns' | 'movement' | 'path' | 'details' | 'group';
 
-/** A spawn the view can go to */
+/** A spawn the view can go to; where it stands is left out when it was not read (the view reads it before going) */
 export interface SpawnLocation {
   kind: 'creature' | 'object';
   guid: number;
   map: number;
-  x: number;
-  y: number;
-  z: number;
+  x?: number;
+  y?: number;
+  z?: number;
 }
 
 /** An entity the project tracks: what it changes, the quests that use it and where to find it */

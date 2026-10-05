@@ -26,6 +26,7 @@ import { GroupCard, groupDrawingOf } from './GroupCard';
 import { looksOf } from '@core/entities/view-spawns';
 import '../views/ProjectDialog.css';
 import './world3d.css';
+import { goToTarget } from './go-to-spawn';
 
 /** The camera's controls, as the help in the corner lists them. */
 const CONTROLS: [string, string][] = [
@@ -840,7 +841,11 @@ function WorldStage({
               ? (spawn) => {
                   setChangesOpen(false);
                   const entity = project?.tracked.find((t) => t.goTo === spawn);
-                  onGoToSpawn({ kind: spawn.kind, guid: spawn.guid, entry: entity?.entry ?? 0, name: entity?.name ?? '', map: spawn.map, x: spawn.x, y: spawn.y, z: spawn.z, event: null, added: false });
+                  // A spawn changed without being moved is read for where it stands first
+                  void goToTarget(api, spawn, entity).then((target) => {
+                    if ('error' in target) setNote(target.error);
+                    else onGoToSpawn(target);
+                  });
                 }
               : undefined
           }

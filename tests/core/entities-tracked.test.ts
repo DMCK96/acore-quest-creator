@@ -84,7 +84,7 @@ describe('trackedEntities', () => {
     const member = { type: 'spawn' as const, kind: 'npc' as const, guid: 39203, entry: 32491, chance: 0 };
     const layer: WorldLayer = { ...EMPTY_WORLD, groups: [{ id: 900001, name: 'Path 1', map: 571, maxActive: 1, members: [member], origin: { kind: 'new' } }] };
     expect(trackedEntities({ store: EMPTY_ENTITIES, layer, quests: [] })).toEqual([
-      { kind: 'npc', entry: 32491, name: 'NPC 32491', origin: 'existing', changes: ['group'], usedBy: [], goTo: null },
+      { kind: 'npc', entry: 32491, name: 'NPC 32491', origin: 'existing', changes: ['group'], usedBy: [], goTo: { kind: 'creature', guid: 39203, map: 571 } },
     ]);
   });
 
@@ -120,6 +120,33 @@ describe('trackedEntities', () => {
       const layer: WorldLayer = { ...EMPTY_WORLD, groups: [{ id: 5000, name: 'Guards', map: 0, maxActive: 1, removed: true,
         members: [spawn(100, 1001)], origin: existing([row(100), row(300), row(400)]) }] };
       expect(changed(layer)).toEqual([1001, 1003]);
+    });
+  });
+
+  describe('Go to for a spawn changed without being moved', () => {
+    const goTo = (layer: WorldLayer) => trackedEntities({ store: EMPTY_ENTITIES, layer, quests: [] })[0]!.goTo;
+
+    it('a movement change goes to the spawn it was made on', () => {
+      expect(goTo({ ...EMPTY_WORLD, movements: [{ guid: 80331, entry: 1423, name: 'Stormwind Guard', map: 0, addonRow: true, original: idle, current: { type: 'wander', wander: 5, pathId: null } }] }))
+        .toEqual({ kind: 'creature', guid: 80331, map: 0 });
+    });
+
+    it('a path made in the view goes to the spawn whose movement walks it', () => {
+      const path = { ...EMPTY_WORLD, routes: [{ pathId: 803300, walkers: 1, original: [], current: [{ x: 1, y: 1, z: 1, rest: {} }] }] };
+      const movement = { guid: 80330, entry: 1423, name: 'Stormwind Guard', map: 1, addonRow: false, original: idle, current: { type: 'path' as const, wander: 0, pathId: 803300 } };
+      expect(trackedEntities({ store: EMPTY_ENTITIES, layer: { ...path, movements: [movement] }, quests: [] })[0]!.goTo).toEqual({ kind: 'creature', guid: 80330, map: 1 });
+    });
+
+    it('a respawn change goes to its spawn', () => {
+      expect(goTo({ ...EMPTY_WORLD, respawns: [{ kind: 'gameobject', guid: 70, entry: 1731, name: 'Copper Vein', map: 0, original: 300, current: 60 }] }))
+        .toEqual({ kind: 'object', guid: 70, map: 0 });
+    });
+
+    it('a moved spawn is gone to where it stands, before any spawn without a place', () => {
+      const layer: WorldLayer = { ...EMPTY_WORLD,
+        movements: [{ guid: 80331, entry: 1423, name: 'Stormwind Guard', map: 0, addonRow: true, original: idle, current: { type: 'wander', wander: 5, pathId: null } }],
+        spawns: [{ kind: 'creature', guid: 80330, entry: 1423, name: 'Stormwind Guard', map: 0, original: place(1), current: place(2) }] };
+      expect(goTo(layer)).toEqual({ kind: 'creature', guid: 80330, map: 0, x: 2, y: 0, z: 0 });
     });
   });
 });

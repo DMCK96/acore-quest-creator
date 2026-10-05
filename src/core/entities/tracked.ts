@@ -39,7 +39,8 @@ export function trackedEntities(input: {
     if (!t) touched.set(key, (t = { kind, entry, name: '', changes: new Set(), goTo: null }));
     if (!t.name && name) t.name = name;
     t.changes.add(change);
-    if (change === 'spawns' && !t.goTo && goTo) t.goTo = goTo;
+    // A spawn the project moved or placed is gone to where it stands; any other changed spawn is the fallback
+    if (goTo && (!t.goTo || (t.goTo.x === undefined && goTo.x !== undefined))) t.goTo = goTo;
   };
 
   // A new one is listed as new; an existing one edited here has its details changed, merged with any layer changes
@@ -62,19 +63,20 @@ export function trackedEntities(input: {
 
   for (const s of layer.spawns) touch(spawnKindOf(s.kind), s.entry, s.name, 'spawns', locate(s.kind, s.guid, s.map, s.current));
   for (const a of layer.added) touch(spawnKindOf(a.kind), a.entry, a.name, 'spawns', locate(a.kind, a.guid, a.map, a.placement));
-  for (const r of respawnsOf(layer)) touch(spawnKindOf(r.kind), r.entry, r.name, 'spawns');
+  const spawnOf = (kind: 'npc' | 'object', guid: number, map: number): SpawnLocation => ({ kind: kind === 'npc' ? 'creature' : 'object', guid, map });
+  for (const r of respawnsOf(layer)) touch(spawnKindOf(r.kind), r.entry, r.name, 'spawns', spawnOf(spawnKindOf(r.kind), r.guid, r.map));
   const movements = movementsOf(layer);
-  for (const m of movements) touch('npc', m.entry, m.name, 'movement');
+  for (const m of movements) touch('npc', m.entry, m.name, 'movement', spawnOf('npc', m.guid, m.map));
   for (const r of layer.routes) {
     const walkers = r.original.length === 0
-      ? movements.filter((m) => m.current.pathId === r.pathId).map((m) => ({ entry: m.entry, name: m.name }))
-      : (r.walkerEntries ?? []);
-    for (const w of walkers) touch('npc', w.entry, w.name, 'path');
+      ? movements.filter((m) => m.current.pathId === r.pathId).map((m) => ({ entry: m.entry, name: m.name, at: spawnOf('npc', m.guid, m.map) }))
+      : (r.walkerEntries ?? []).map((w) => ({ ...w, at: undefined }));
+    for (const w of walkers) touch('npc', w.entry, w.name, 'path', w.at);
   }
   // Every entity with a spawn whose group membership the project changed; members only carry an entry, not a name
   const entryOf = spawnEntries(store, layer, input.entryOfSpawn);
   for (const g of groupsOf(layer)) {
-    for (const m of changedMembers(g, entryOf)) touch(m.kind, m.entry, '', 'group');
+    for (const m of changedMembers(g, entryOf)) touch(m.kind, m.entry, '', 'group', spawnOf(m.kind, m.guid, g.map));
   }
   for (const t of touched.values()) {
     const changes = CHANGE_ORDER.filter((c) => t.changes.has(c));
