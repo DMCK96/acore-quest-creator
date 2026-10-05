@@ -108,4 +108,13 @@ describe('quest rotations and events', () => {
     expect(equalShare([...path().members, daily(60001)])).toBe(90);
     expect(validateGroup(rotation({ members: [daily(60001), { type: 'group', id: 32492, chance: 0 }] }), ctx({ groups: new Map([[32492, path()]]) }))).toContain('A spawn group holds quests or spawns, not both.');
   });
+
+  it('nested groups: a member that follows an event or is a rotation is refused, from the parent side too', () => {
+    const inner = (over = {}) => path({ id: 32493, name: 'Inner', members: [drake], ...over });
+    const parent = path({ members: [{ type: 'group', id: 32493, chance: 0 }] });
+    const withChild = (child: SpawnGroup) => ctx({ groups: new Map([[32493, child]]) });
+    expect(validateGroup(parent, withChild(inner()))).toEqual([]);
+    expect(validateGroup(parent, withChild(inner({ event: { id: 4, during: true } })))).toContain('Only a group that is not inside another can follow an event.');
+    expect(validateGroup(parent, withChild(inner({ map: 0, members: [daily(60001), daily(60002)] })))).toContain('A quest rotation cannot be inside another group.');
+  });
 });

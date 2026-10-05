@@ -137,6 +137,10 @@ export function validateGroup(group: SpawnGroup, context: GroupContext): string[
       const child = context.groups.get(m.id);
       if (!child || child.removed) problems.push(`Group ${m.id} is not there any more.`);
       else if (child.map !== group.map) problems.push(`Group ${m.id} is on another map.`);
+      if (child && !child.removed) {
+        if (isQuestPool(child)) problems.push('A quest rotation cannot be inside another group.');
+        else if (child.event) problems.push('Only a group that is not inside another can follow an event.');
+      }
       const other = context.groupOfGroup(m.id);
       if (other !== null && other !== group.id) problems.push(`Group ${m.id} is already inside group ${other}.`);
       if (reaches(m.id, group.id, context.groups)) cycle = true;
