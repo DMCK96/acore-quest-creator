@@ -2,7 +2,8 @@ import { fightIsEmpty } from '../combat/model';
 import type { RawRow, Where } from '../db/types';
 import type { WorldDb } from '../db/world-db';
 import type { PatchStatement } from '../export/build-patch';
-import { itemRow } from './item-columns';
+import { ITEM_SLOT_BLOCKS, itemRow } from './item-columns';
+import { itemFromRows, npcFromRows } from './from-rows';
 import {
   existingOnly, NPC_TYPE_VALUE, OBJECT_TYPE_VALUE, RANK_VALUE,
   type CustomItem, type CustomNpc, type CustomObject, type LootRow, type OriginalRows, type Page, type ProjectEntities, type StoredOrigin,
@@ -30,6 +31,27 @@ const num = (raw: string | null | undefined): number => {
 };
 const rowsOf = (origin: Existing, table: string): Row[] => origin.original[table] ?? [];
 const matches = (row: Row, key: Record<string, string>): boolean => Object.entries(key).every(([c, v]) => num(row[c]) === num(v));
+
+const has = (row: Row, column: string): boolean => Object.prototype.hasOwnProperty.call(row, column);
+
+/**
+ * Puts back the database's own value of every column the editor left as it read it. `asRead` is the row
+ * the editor would write for the entity exactly as it was read, so a column whose written value equals it
+ * was not edited: its raw value (a creature type the editor has no name for, a blank, a zero stat) stays.
+ * Each block in `blocks` is kept or written as a whole; `derived` columns (set from more than the editor's
+ * fields, such as the quest giver bit a project quest gives) are always written.
+ */
+function keepUnedited(row: Row, asRead: Row, original: Row, blocks: readonly (readonly string[])[] = [], derived: readonly string[] = []): Row {
+  const out: Row = { ...row };
+  const inBlock = new Set(blocks.flat());
+  for (const column of Object.keys(row)) {
+    if (!inBlock.has(column) && !derived.includes(column) && has(original, column) && row[column] === asRead[column]) out[column] = original[column]!;
+  }
+  for (const block of blocks) {
+    if (block.every((column) => row[column] === asRead[column])) for (const column of block) if (has(original, column)) out[column] = original[column]!;
+  }
+  return out;
+}
 
 /** Writes one table: deletes each key, inserts the rows; the revert deletes the same keys and inserts the originals under them */
 function writeTable(out: Statements, origin: Existing, table: string, keys: Record<string, string>[], rows: Row[]): void {
@@ -66,17 +88,21 @@ function npcStatements(out: Statements, npc: CustomNpc, origin: Existing, givers
   const fightLocked = origin.locked.includes('fight');
   const originalLoot = num(original.lootid);
   const lootId = originalLoot > 0 ? originalLoot : !lootLocked && npc.loot.length > 0 ? npc.entry : 0;
-  const flags =
-    (num(original.npcflag) & ~(GOSSIP_BIT | QUEST_GIVER_BIT)) |
-    (npc.questGiver || givers.includes(npc.entry) ? QUEST_GIVER_BIT : 0) |
-    (npc.gossip ? GOSSIP_BIT : 0);
-  writeTable(out, origin, 'creature_template', [{ entry }], [{
-    ...original, entry, name: npc.name, subname: npc.subname, minlevel: text(npc.minLevel), maxlevel: text(npc.maxLevel),
-    faction: text(npc.faction), rank: text(RANK_VALUE[npc.rank]), type: text(NPC_TYPE_VALUE[npc.type]),
-    HealthModifier: text(npc.healthModifier), DamageModifier: text(npc.damageModifier), npcflag: text(flags),
-    AIName: !fightLocked && !fightIsEmpty(npc.fight) ? 'SmartAI' : (original.AIName ?? ''),
-    lootid: text(lootId),
-  }]);
+  const templateRow = (n: CustomNpc): Row => {
+    const flags =
+      (num(original.npcflag) & ~(GOSSIP_BIT | QUEST_GIVER_BIT)) |
+      (n.questGiver || givers.includes(n.entry) ? QUEST_GIVER_BIT : 0) |
+      (n.gossip ? GOSSIP_BIT : 0);
+    return {
+      ...original, entry, name: n.name, subname: n.subname, minlevel: text(n.minLevel), maxlevel: text(n.maxLevel),
+      faction: text(n.faction), rank: text(RANK_VALUE[n.rank]), type: text(NPC_TYPE_VALUE[n.type]),
+      HealthModifier: text(n.healthModifier), DamageModifier: text(n.damageModifier), npcflag: text(flags),
+      AIName: !fightLocked && !fightIsEmpty(n.fight) ? 'SmartAI' : (original.AIName ?? ''),
+      lootid: text(lootId),
+    };
+  };
+  const asRead = npcFromRows(npc.entry, origin.original, { sharedLoot: origin.sharedLoot, spawnCount: origin.spawnCount });
+  writeTable(out, origin, 'creature_template', [{ entry }], [keepUnedited(templateRow(npc), templateRow(asRead), original, [], ['npcflag', 'lootid', 'AIName'])]);
 
   const model = rowsOf(origin, 'creature_template_model').find((r) => num(r.Idx) === 0) ?? { CreatureID: entry, Idx: '0', Probability: '1' };
   writeTable(out, origin, 'creature_template_model', [{ CreatureID: entry, Idx: '0' }], [
@@ -123,7 +149,9 @@ function objectStatements(out: Statements, object: CustomObject, origin: Existin
 
 function itemStatements(out: Statements, item: CustomItem, origin: Existing): void {
   const original: Row = rowsOf(origin, 'item_template')[0] ?? {};
-  writeTable(out, origin, 'item_template', [{ entry: text(item.entry) }], [{ ...original, ...itemRow(item) }]);
+  const asRead = itemFromRows(item.entry, origin.original);
+  const row = keepUnedited({ ...original, ...itemRow(item) }, { ...original, ...itemRow(asRead) }, original, ITEM_SLOT_BLOCKS);
+  writeTable(out, origin, 'item_template', [{ entry: text(item.entry) }], [row]);
   writePages(out, origin, item.pages);
 }
 

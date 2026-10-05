@@ -135,3 +135,37 @@ describe('existingDrift', () => {
     expect(await existingDrift(db(lootGone), store())).toHaveLength(1);
   });
 });
+
+describe('existingStatements keeps what the editor did not change', () => {
+  const insertOf = (apply: { kind: string; table: string }[], table: string) => (apply.find((s) => s.kind === 'insert' && s.table === table) as any).row;
+
+  it('keeps a totem\'s creature type (11, which the editor has no name for) when only its name changes', () => {
+    const totemRow = { ...template, entry: '5913', name: 'Tremor Totem', type: '11', rank: '0' };
+    const totem = npcFromRows(5913, { creature_template: [totemRow] }, { sharedLoot: 0, spawnCount: 0 });
+    const row = insertOf(existingStatements(store({ ...totem, name: 'Quake Totem' }), []).apply, 'creature_template');
+    expect(row).toMatchObject({ name: 'Quake Totem', type: '11' });
+    // A type the author does choose is written
+    expect(insertOf(existingStatements(store({ ...totem, type: 'beast' }), []).apply, 'creature_template').type).toBe('1');
+  });
+
+  it('writes an NPC with no edits exactly as the database had it', () => {
+    const odd = { ...template, type: '0', rank: '7', faction: null, minlevel: '' };
+    const npc = npcFromRows(1423, { creature_template: [odd] }, { sharedLoot: 0, spawnCount: 0 });
+    expect(insertOf(existingStatements(store({ ...npc, loot: [] }), []).apply, 'creature_template')).toEqual(odd);
+  });
+
+  it('keeps an item\'s stat and spell slots as they were (zero stats, gaps, empty-slot cooldowns) unless edited', () => {
+    const blade = {
+      entry: '2000', name: 'Blade', class: '2', subclass: '7', displayid: '1', Quality: '2', StatsCount: '2',
+      stat_type1: '0', stat_value1: '0', stat_type2: '7', stat_value2: '0', stat_type3: '4', stat_value3: '5',
+      spellid_1: '0', spelltrigger_1: '0', spellcharges_1: '0', spellcooldown_1: '0', spellcategory_1: '0', spellcategorycooldown_1: '0',
+      spellid_2: '18384', spelltrigger_2: '1', spellcharges_2: '0', spellcooldown_2: '-1', spellcategory_2: '0', spellcategorycooldown_2: '-1',
+    };
+    const item = itemFromRows(2000, { item_template: [blade] });
+    const row = insertOf(existingStatements({ ...EMPTY_ENTITIES, items: [{ ...item, name: 'Sharp Blade' }] }, []).apply, 'item_template');
+    expect(row).toMatchObject({ ...blade, name: 'Sharp Blade' });
+    // An edited stat writes the stat block as the editor packs it
+    const edited = insertOf(existingStatements({ ...EMPTY_ENTITIES, items: [{ ...item, stats: [{ type: 4, value: 6 }] }] }, []).apply, 'item_template');
+    expect(edited).toMatchObject({ StatsCount: '1', stat_type1: '4', stat_value1: '6', stat_type3: '0', stat_value3: '0', spellid_2: '18384', spellcooldown_1: '0' });
+  });
+});
