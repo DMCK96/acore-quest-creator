@@ -1,16 +1,21 @@
 ---
 title: NPCs and objects
-description: Make new NPCs and objects for a quest, choose how they look, and give NPCs a faction and weapons.
+description: Make new NPCs and objects for your project, choose how they look, and give NPCs a faction and weapons.
 sidebar:
   order: 5
 ---
 
-The **NPCs, objects & items** module lists the new NPCs, objects and [items](/acore-quest-creator/guides/items/) a quest needs. Making a new NPC from the [Quest Giver](/acore-quest-creator/guides/givers-and-enders/) module adds this module for you.
+New NPCs, objects and [items](/acore-quest-creator/guides/items/) belong to your project, not to one quest. Any quest in the project can use them: as its giver or ender, an objective, a reward, or in a script.
 
-- **Add NPC** and **Add object** open the editor for a new one.
-- **Edit** on a listed NPC or object opens it again.
+A quest's **NPCs, objects & items** module lists the ones it uses, and the ones made for it. Making a new NPC from the [Quest Giver](/acore-quest-creator/guides/givers-and-enders/) module adds this module for you.
 
-New NPCs and objects are created in the quest as soon as you choose **Done**. **Discard** throws the changes away.
+- **Add NPC** and **Add object** make a new one for this quest and open its editor.
+- **Add from project…** lists the project's other NPCs, objects and items, and adds the one you pick to this quest.
+- **Edit** on a listed NPC or object opens it again. A line under it says which other quests use it, so you know what a change affects.
+
+A new NPC or object is in the project as soon as you add it, and every change is kept as you make it. **Discard** on a new one takes it away again. Deleting one tells you which quests use it, and takes it off their giver and ender cards. Like every change, both are undone with **Ctrl+Z**.
+
+You can also make them straight in [the World](/acore-quest-creator/guides/the-world/#new-npcs-and-objects): right-click the ground and choose **New NPC here…** or **New object here…**.
 
 ## The NPC editor
 
@@ -35,12 +40,12 @@ Objects have **Basics**, **Look**, **Placement**, and for some types **Contents*
 | Type | What it is |
 | --- | --- |
 | Usable object | Something the player clicks, such as a lever or a quest item on the ground. Can show pages of text. |
-| Chest (can be looted) | Something the player loots. Its **Contents** tab holds its loot. |
+| Lootable | Something the player loots, such as a chest. Its **Contents** tab holds its loot. |
 | Quest giver | An object that offers or takes back quests, such as a wanted poster. |
 | Readable | A book, note or plaque. See [Readable objects](/acore-quest-creator/guides/readable-objects/). |
 | Decoration | Scenery with nothing to use. |
 
-Usable objects and chests can be **Only usable while this quest is in the log**.
+Usable and lootable objects can be **Only usable while this quest is in the log**.
 
 On **Look**, **Other ways** lets you **Browse models** by name, such as `chest` or `book`.
 

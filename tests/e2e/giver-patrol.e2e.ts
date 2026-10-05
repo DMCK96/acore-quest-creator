@@ -1,8 +1,9 @@
 import { test, expect, _electron as electron, type ElectronApplication } from '@playwright/test';
-import { mkdtempSync, readdirSync, readFileSync } from 'node:fs';
+import { mkdtempSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { mysqlUrl, serverDataDir } from '../helpers/env';
+import { exportProjectPatch } from './project-patch';
 
 // The server data and game client folders come from the same .env settings the app uses.
 const DATA_DIR = serverDataDir();
@@ -102,7 +103,8 @@ test('a new quest giver is made, placed and given a patrol with a line to say, a
 
   await page.getByRole('button', { name: 'Export patch' }).click();
   await expect(page.getByText(/\.sql$/)).toBeVisible();
-  const sql = readFileSync(join(outDir, readdirSync(outDir)[0]!), 'utf8');
+  // The NPC, its patrol and its lines are the project's: they are in the project patch
+  const sql = await exportProjectPatch(page);
   expect(sql).toContain('Patrol Hela');
   expect(sql).toMatch(/INSERT INTO `creature_addon`/);
   // Three points, then back where it stands.

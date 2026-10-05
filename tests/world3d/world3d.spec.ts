@@ -581,6 +581,31 @@ test('a right-click on an NPC selects it and asks for the menu with it; a right-
   expect((await state(page)).contexts).toHaveLength(1);
 });
 
+test('a right-click on a project NPC hands the menu a project spawn; on bare ground it hands the ground', async ({ page }) => {
+  await openPage(page);
+  const SPOT = { x: START.x + 60, y: START.y - 60, z: START.z };
+  await page.evaluate(`window.__spawns = { creatures: [], objects: [], capped: { creatures: false, objects: false } }`);
+  await page.evaluate(`window.__open('azeroth', 0, ${JSON.stringify(SPOT)})`);
+  await page.waitForFunction('window.__state.ready', null, { timeout: 45000 });
+  // Project spawns come from the project store, not the database: own marks them
+  await page.evaluate(`window.__world().setOwnSpawns({ creatures: [
+    { guid: 6000001, entry: 12000001, name: 'Hela', map: 0, x: ${SPOT.x}, y: ${SPOT.y}, z: ${SPOT.z}, orientation: 0, displayId: 0, scale: 1, wander: 0, pathId: 0, path: null,
+      equipment: [0,0,0], own: true, event: null }
+  ], objects: [], capped: { creatures: false, objects: false } })`);
+  await page.waitForTimeout(1500);
+  const box = (await page.locator('canvas.world3d__canvas').boundingBox())!;
+  await page.mouse.click(box.x + box.width / 2, box.y + box.height / 2, { button: 'right' });
+  await expect.poll(async () => (await state(page)).contexts.length).toBe(1);
+  expect((await state(page)).contexts[0].target.hit).toMatchObject({ type: 'spawn', spawn: { guid: 6000001, entry: 12000001, own: true } });
+  await page.keyboard.press('Escape');
+  await page.mouse.click(box.x + box.width * 0.1, box.y + box.height * 0.85, { button: 'right' });
+  await expect.poll(async () => (await state(page)).contexts.length).toBe(2);
+  const ground = (await state(page)).contexts[1].target;
+  expect(ground.hit).toBeNull();
+  expect(ground.ground).toEqual({ x: expect.any(Number), y: expect.any(Number), z: expect.any(Number) });
+  expect((await state(page)).errors).toEqual([]);
+});
+
 test('drawing a path: clicks add points to the selected NPC’s new path, Enter finishes', async ({ page }) => {
   await openPage(page);
   const SPOT = { x: START.x + 60, y: START.y - 60, z: START.z };

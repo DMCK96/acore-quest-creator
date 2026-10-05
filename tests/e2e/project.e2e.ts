@@ -65,7 +65,7 @@ test('new, name, save, reopen from recent, and recover after a crash', async () 
   await modal.getByRole('button', { name: 'Save As…' }).click();
   await expect(page.getByLabel('Unsaved changes')).toHaveCount(0);
   const onDisk = JSON.parse(readFileSync(saved, 'utf8'));
-  expect(onDisk).toMatchObject({ format: 'acore-quest-creator/project', version: 3, name: 'E2E project' });
+  expect(onDisk).toMatchObject({ format: 'acore-quest-creator/project', version: 4, name: 'E2E project' });
   expect(onDisk.quests).toHaveLength(nodeCount);
 
   await page.getByRole('button', { name: 'Project', exact: true }).click();

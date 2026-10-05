@@ -85,15 +85,27 @@ With a quest open:
 - On an NPC, **Start a new quest from this NPC** makes a quest it gives and takes back. **Start the next quest in this chain** does the same and puts the new quest after the open one.
 - **Show quest spawns** and **Show chain spawns** ring every spawn the quest (or its whole chain) uses and list them in the Find dialog by quest and part, so you can jump to any of them. **Hide quest spawns** takes the rings away.
 
-The open quest's own NPCs and objects are drawn and edited in the World too, so a move or a path you give one is part of the quest.
+- **New quest NPC here…** and **New quest object here…** make a new NPC or object for the open quest, standing where you right-clicked.
 
-## World changes
+### New NPCs and objects
 
-Changes to spawns that are not your quest's go to the project's **world changes**: spawns moved or turned, routes changed, spawns placed, and NPCs' movement. **World changes (_n_)** in the Layers card lists each with what it was before and after. **Revert** or **Remove** takes one back; a new path and the movement that walks it go back together.
+- **New NPC here…** and **New object here…** make a new [NPC or object](/acore-quest-creator/guides/npcs-and-objects/) for the project, with a spawn where you right-clicked, and open its editor. No quest needs to be open.
+- On one of the project's own NPCs or objects, **Edit NPC…** or **Edit object…** opens its editor.
+- On one of the project's own objects, **Make lootable…** turns it into a chest and opens its loot. **Stop being lootable** turns it back.
 
-![The World changes list: a placed guard, its new path and its movement](../../../assets/screenshots/world-changes.png)
+The project's NPCs and objects are drawn and edited in the World whether or not a quest is open. A move, or a path you give one, stays with the NPC, whichever quest uses it.
 
-**Export world patch** writes the changes and a patch that undoes them. See [exporting and applying](/acore-quest-creator/guides/export-and-apply/#world-changes).
+## Project changes
+
+**Project changes (_n_)** in the Layers card lists everything the project adds to or changes in the world database, outside its quests.
+
+First come the project's new NPCs, objects and items, each with how many spawns it has and which quests use it. **Edit** opens its editor, and **Go to** takes the camera to its spawn.
+
+Then come changes to spawns already in the database: spawns moved or turned, routes changed, spawns placed, and NPCs' movement, each with what it was before and after. **Revert** or **Remove** takes one back; a new path and the movement that walks it go back together.
+
+![The Project changes list: a placed guard, its new path and its movement](../../../assets/screenshots/world-changes.png)
+
+**Export project patch** writes all of it, and a patch that undoes it. If one of the new NPCs, objects or items has an error, it lists what to fix first. See [exporting and applying](/acore-quest-creator/guides/export-and-apply/#the-project-patch).
 
 :::note
 A change shows as *Changed in the database since* when the world database no longer matches what it was when you first changed it. Check those before applying the patch.

@@ -98,6 +98,9 @@ test('a new NPC spawn is shown on the quest map and moved by dragging', async ()
   await page.screenshot({ path: 'test-results/quest-map-z11.png' });
   await map.getByRole('button', { name: 'Close' }).click();
 
-  await page.getByRole('button', { name: 'Changes' }).click();
-  await expect(page.getByRole('dialog', { name: 'Changes' }).getByRole('heading', { name: 'creature', exact: true })).toBeVisible();
+  // The drag moved the NPC's spawn in the project
+  await expect.poll(async () => page.evaluate(async () => {
+    const read = await (globalThis as any).api.projectEntities();
+    return read.value.npcs[0].spawns[0].x;
+  })).not.toBe(-8902.59);
 });

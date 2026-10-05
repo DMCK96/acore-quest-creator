@@ -76,8 +76,9 @@ test('a new NPC is created, placed, made the quest giver and exported with the q
 
   await page.getByRole('button', { name: 'Changes' }).click();
   const changes = page.getByRole('dialog', { name: 'Changes' });
-  await expect(changes.getByRole('heading', { name: 'creature_template', exact: true })).toBeVisible();
-  await expect(changes.getByRole('heading', { name: 'creature', exact: true })).toBeVisible();
+  // The quest's own rows: the NPC's template and spawn are the project patch's
+  await expect(changes.getByRole('heading', { name: 'creature_queststarter', exact: true })).toBeVisible();
+  await expect(changes.getByRole('heading', { name: 'creature_template', exact: true })).toHaveCount(0);
   await page.keyboard.press('Escape');
 
   await page.getByRole('button', { name: 'Export patch' }).click();
@@ -85,7 +86,13 @@ test('a new NPC is created, placed, made the quest giver and exported with the q
   const files = readdirSync(outDir);
   expect(files).toHaveLength(1);
   const sql = readFileSync(join(outDir, files[0]!), 'utf8');
-  expect(sql).toContain('Scout Hela');
-  expect(sql).toMatch(/INSERT INTO `creature` .*'AQC q\d+ npc\d+'/);
   expect(sql).toMatch(/INSERT INTO `creature_queststarter`/);
+  // The NPC itself is the project's: it goes in the project patch, which the quest's export offers
+  expect(sql).not.toContain('Scout Hela');
+  await expect(page.getByText('This quest uses 1 new NPCs, objects or items from the project patch.')).toBeVisible();
+  await page.getByRole('button', { name: 'Export project patch' }).click();
+  const projectPath = (await page.getByText(/^Project patch written to/).locator('code').textContent())!;
+  const project = readFileSync(projectPath, 'utf8');
+  expect(project).toContain('Scout Hela');
+  expect(project).toMatch(/INSERT INTO `creature` .*'AQC npc\d+/);
 });
