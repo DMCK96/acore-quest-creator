@@ -3,6 +3,7 @@ import { creatureName, giverName, itemName, objectName } from '@core/modules/sum
 import { removeEntry } from '@core/modules/entries';
 import { DropsPanel } from '../../groups/DropsPanel';
 import { useNameBook } from '../../state/names';
+import { GoToButton } from '../../world3d/GoToButton';
 import { useShowInWorld } from '../../world3d/ShowInWorldContext';
 import { EMPTY_ENTITIES } from '@core/entities/model';
 import { useProjectEntities } from '../../state/project-entities';
@@ -48,13 +49,7 @@ export function ObjectivesBody({ open, onChange }: ModuleBodyProps): React.JSX.E
   const goTo = (e: Entry): React.ReactNode => {
     const t = e.target as CreatureOrGoValue | null;
     if (!showInWorld || !t || t.id <= 0) return null;
-    return (
-      <button type="button" className="entry-card__btn" title="Show in World"
-        aria-label={`Go to ${giverName({ kind: t.target, id: t.id }, names, entities)}`}
-        onClick={() => showInWorld({ questId: open.questId, kind: t.target, entry: t.id })}>
-        Go to
-      </button>
-    );
+    return <GoToButton questId={open.questId} kind={t.target} entry={t.id} name={giverName({ kind: t.target, id: t.id }, names, entities)} showInWorld={showInWorld} />;
   };
   const collectTitle = (e: Entry): string =>
     e.item ? `Collect ${e.count} × ${itemName(Number(e.item), names)}` : 'Choose an item';
