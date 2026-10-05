@@ -116,6 +116,14 @@ describe('trackedEntities', () => {
       expect(changed(layer)).toEqual([]);
     });
 
+    it('an event change on an existing group marks every current member, kept ones too', () => {
+      const withEvent = (event: { id: number; during: boolean } | null, original: Record<string, string | null> | null) => ({ ...EMPTY_WORLD, groups: [{ id: 5000, name: 'Guards', map: 0, maxActive: 1, event,
+        members: [spawn(100, 1001), spawn(200, 1002)], origin: { ...existing([row(100), row(200)]), original: { ...existing([row(100), row(200)]).original, event: original } } }] }) as WorldLayer;
+      expect(changed(withEvent({ id: 4, during: true }, null))).toEqual([1001, 1002]);
+      expect(changed(withEvent({ id: 4, during: false }, { eventEntry: '4', pool_entry: '5000' }))).toEqual([1001, 1002]);
+      expect(changed(withEvent({ id: 4, during: true }, { eventEntry: '4', pool_entry: '5000' }))).toEqual([]);
+    });
+
     it('a deleted existing group marks every original member whose entry is known, and its current members', () => {
       const layer: WorldLayer = { ...EMPTY_WORLD, groups: [{ id: 5000, name: 'Guards', map: 0, maxActive: 1, event: null, removed: true,
         members: [spawn(100, 1001)], origin: existing([row(100), row(300), row(400)]) }] };

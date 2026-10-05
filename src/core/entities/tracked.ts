@@ -118,7 +118,7 @@ function spawnEntries(
 /**
  * The spawns whose membership a layer group changes: every member of a new group; the spawns added to
  * an existing group and the ones taken out of it; every spawn of a deleted one. A spawn taken out whose
- * entry is not known is left out.
+ * entry is not known is left out. When the group's event changed, every current member counts.
  */
 function changedMembers(
   group: SpawnGroup,
@@ -140,6 +140,11 @@ function changedMembers(
       const entry = entryOf(m.kind, m.guid);
       return entry === null ? [] : [{ ...m, entry }];
     });
+  // A new event for the whole group is a change to every spawn in it, not only the ones added or taken out
+  const was_ = group.origin.original.event;
+  const wasEvent = was_ ? { id: Math.abs(Number(was_.eventEntry)), during: Number(was_.eventEntry) > 0 } : null;
+  const eventChanged = (group.event?.id ?? null) !== (wasEvent?.id ?? null) || (group.event?.during ?? null) !== (wasEvent?.during ?? null);
+  if (eventChanged) return [...current, ...known(original.filter((m) => !now.has(key(m))))];
   if (group.removed) return [...current, ...known(original.filter((m) => !now.has(key(m))))];
   return [...current.filter((m) => !was.has(key(m))), ...known(original.filter((m) => !now.has(key(m))))];
 }
