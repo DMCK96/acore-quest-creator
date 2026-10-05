@@ -72,6 +72,13 @@ export interface World3DOptions {
 }
 
 /** How much is selected: NPCs, objects, and route points with how many routes they are on */
+/** A spawn group as the view draws it: its centre, its spawn members, and where each member stands */
+export type GroupDrawing = {
+  centre: { x: number; y: number; z: number };
+  members: { kind: 'creature' | 'object'; guid: number }[];
+  points: { x: number; y: number; z: number }[];
+};
+
 export type SelectionSummary = { creatures: number; objects: number; points: number; routes: number };
 
 /** Which of the world's scenery is drawn */
@@ -116,6 +123,8 @@ export interface World3D {
   undoPoint(): void;
   /** Rings the spawns a quest uses, under each that is drawn; null takes the rings away. */
   setMarked(spawns: { kind: 'creature' | 'object'; guid: number }[] | null): void;
+  /** Shows a spawn group: rings under its drawn members and thin lines from its centre to each member; null takes it away. */
+  setGroupView(view: GroupDrawing | null): void;
   /** The selected spawns, as the menu describes them. */
   selectedSpawns(): SpawnInfo[];
   /** Selects these spawns (a paste selects what it put down). */
@@ -160,6 +169,8 @@ const RING_LIFT = 0.2;
 /** The ring under a spawn a quest uses: a warm gold, apart from the selection's outline, and its size in yards */
 const MARK_COLOUR = 0xf2c14e;
 const MARK_RADIUS = 1.5;
+/** A shown spawn group's rings and lines: a cool blue, apart from the quest's gold rings */
+const GROUP_COLOUR = 0x6fb7ff;
 
 const HOST = { baseUrl: ASSET_BASE_URL, normalizePath: true };
 /** Textures and database tables are the same for every map, so every world shares them (and their workers). */
@@ -477,6 +488,36 @@ export function createWorld3D(options: World3DOptions): World3D {
       ring.updateMatrixWorld(true);
     });
   };
+  // A shown spawn group: a ring under each drawn member, re-found each frame, and lines from its centre
+  let groupMembers: { kind: 'creature' | 'object'; guid: number }[] = [];
+  const groupRings: THREE.LineLoop[] = [];
+  const groupMaterial = new THREE.LineBasicMaterial({ color: GROUP_COLOUR, depthTest: false });
+  const groupLines = new THREE.LineSegments(new THREE.BufferGeometry(), groupMaterial);
+  groupLines.renderOrder = 2;
+  groupLines.frustumCulled = false;
+  groupLines.visible = false;
+  scene.add(groupLines);
+  const followGroup = (): void => {
+    const drawn = groupMembers.flatMap((s) => manager.findSpawn(s.kind, s.guid) ?? []);
+    pooled(groupRings, drawn.length, () => {
+      const ring = new THREE.LineLoop(ringGeometry, groupMaterial);
+      ring.renderOrder = 2;
+      return ring;
+    }).forEach((ring, i) => {
+      const at = drawn[i]!.position;
+      ring.position.set(at.x, at.y, at.z + RING_LIFT);
+      ring.scale.set(MARK_RADIUS, MARK_RADIUS, 1);
+      ring.updateMatrixWorld(true);
+    });
+  };
+  const showGroup = (view: GroupDrawing | null): void => {
+    groupMembers = view ? [...view.members] : [];
+    groupLines.geometry.dispose();
+    const ends = view ? view.points.flatMap((p) => [new THREE.Vector3(view.centre.x, view.centre.y, view.centre.z + RING_LIFT), new THREE.Vector3(p.x, p.y, p.z + RING_LIFT)]) : [];
+    groupLines.geometry = new THREE.BufferGeometry().setFromPoints(ends);
+    groupLines.visible = ends.length > 0;
+    followGroup();
+  };
   const { textures, databases, characterTexture } = sharedManagers();
   // The drawn ground a short way below a point, for standing NPCs on it
   const down = new THREE.Raycaster();
@@ -539,6 +580,7 @@ export function createWorld3D(options: World3DOptions): World3D {
       manager.update(delta, camera);
       followSelected();
       followMarked();
+      followGroup();
       editor.update();
       renderer.setClearColor(manager.clearColor);
       renderer.render(scene, camera);
@@ -583,6 +625,7 @@ export function createWorld3D(options: World3DOptions): World3D {
       marked = spawns ? [...spawns] : [];
       followMarked();
     },
+    setGroupView: (view) => showGroup(view),
     selectedSpawns: () => selectedInfo(),
     selectSpawns: (spawns) => setSelection(spawns.length > 0 ? combine(EMPTY_SELECTION, { spawns }, 'replace') : EMPTY_SELECTION),
     setPendingMovement: (guid, movement) => manager.setPendingMovement(guid, movement),
@@ -620,7 +663,7 @@ export function createWorld3D(options: World3DOptions): World3D {
       cancelAnimationFrame(frame);
       observer.disconnect();
       // Nothing here may throw: this runs while React unmounts the view, and a throw would take the whole screen with it.
-      for (const step of [() => controls.dispose?.(), () => renderer.domElement.removeEventListener('keydown', onKeyDown), () => editor.dispose(), stopProblems, () => manager.dispose(), () => release(manager.root), () => outlines.forEach(release), () => rings.forEach((ring) => ring.removeFromParent()), () => marks.forEach((ring) => ring.removeFromParent()), () => ringGeometry.dispose(), () => ringMaterial.dispose(), () => markMaterial.dispose(), () => renderer.dispose()]) {
+      for (const step of [() => controls.dispose?.(), () => renderer.domElement.removeEventListener('keydown', onKeyDown), () => editor.dispose(), stopProblems, () => manager.dispose(), () => release(manager.root), () => outlines.forEach(release), () => rings.forEach((ring) => ring.removeFromParent()), () => marks.forEach((ring) => ring.removeFromParent()), () => groupRings.forEach((ring) => ring.removeFromParent()), () => groupLines.removeFromParent(), () => groupLines.geometry.dispose(), () => groupMaterial.dispose(), () => ringGeometry.dispose(), () => ringMaterial.dispose(), () => markMaterial.dispose(), () => renderer.dispose()]) {
         try {
           step();
         } catch (error) {

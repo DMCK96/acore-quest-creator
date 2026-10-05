@@ -708,3 +708,41 @@
     top: 190px;
   }
 }
+
+/* The selected pooled spawn's group: top left, under the area name */
+.world3d__group {
+  position: absolute;
+  left: 14px;
+  top: 48px;
+  max-width: min(300px, calc(100% - 28px));
+  max-height: calc(100% - 220px);
+  overflow-y: auto;
+  padding: 0.6rem 0.8rem;
+  border-radius: var(--radius-lg);
+  font-size: 12px;
+  border: 1px solid #6fb7ff;
+}
+
+.world3d__group header {
+  display: flex;
+  gap: 8px;
+  align-items: flex-start;
+  justify-content: space-between;
+}
+
+.world3d__group h3 {
+  margin: 0 0 4px;
+  font-family: var(--font-display);
+  font-size: 14px;
+  font-weight: normal;
+  color: #fff6e4;
+}
+
+.world3d__group p {
+  margin: 2px 0 0;
+}
+
+.world3d__group-members {
+  margin: 6px 0 0;
+  padding-left: 1.1em;
+}

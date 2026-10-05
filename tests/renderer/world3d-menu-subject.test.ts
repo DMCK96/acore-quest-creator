@@ -13,7 +13,7 @@ describe('the clicked thing as an entity', () => {
   it('a database NPC is existing, with its spawn existing too', () => {
     expect(spawnedEntityOf(info(), store)).toEqual({
       kind: 'npc', entry: 1423, name: 'Guard', origin: 'existing', pathId: 801, wander: 0,
-      spawn: { guid: 80330, map: 0, placement, origin: 'existing' },
+      spawn: { guid: 80330, map: 0, placement, origin: 'existing', group: null },
     });
   });
 
@@ -37,6 +37,11 @@ describe('the clicked thing as an entity', () => {
     const spawn = subjectOf({ ground: at, hit: { type: 'spawn', spawn: info() }, selection: [info()] }, store);
     expect(spawn).toMatchObject({ type: 'spawn', info: info(), at, selection: [info()], target: { kind: 'npc', entry: 1423 } });
     expect(subjectOf({ ground: null, hit: { type: 'point', guid: 80330, index: 2 }, selection: [] }, store)).toEqual({ type: 'routePoint', guid: 80330, index: 2, at: null });
+  });
+
+  it('carries the spawn group a spawn is in', () => {
+    expect(spawnedEntityOf(info({ group: 32492 } as any), store).spawn.group).toBe(32492);
+    expect(spawnedEntityOf(info(), store).spawn.group).toBeNull();
   });
 
   it('translates the 3D view and world layer kinds', () => {

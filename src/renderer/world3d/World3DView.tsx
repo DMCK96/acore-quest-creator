@@ -21,7 +21,8 @@ import type { PlaceRequest } from './placing';
 import { useWorldMenu } from './useWorldMenu';
 import type { QuestMenuInfo } from './menu/model';
 import type { Role, RoleTarget } from '@core/modules/quest-roles';
-import type { QuestSpawnGroup } from '@shared/ipc';
+import type { GroupView, QuestSpawnGroup } from '@shared/ipc';
+import { GroupCard, groupDrawingOf } from './GroupCard';
 import { looksOf } from '@core/entities/view-spawns';
 import '../views/ProjectDialog.css';
 import './world3d.css';
@@ -665,6 +666,48 @@ function WorldStage({
   // More than one spawn, or any route points: the card sums them up instead of showing one spawn
   const several = summary !== null && summary.creatures + summary.objects + summary.points > 0 && !(summary.creatures + summary.objects === 1 && summary.points === 0);
 
+  // The spawn group of a single selected pooled spawn: asked for again as the selection or the layer changes,
+  // and left closed for that spawn once its card is closed, until something else is selected
+  const [group, setGroup] = useState<GroupView | null>(null);
+  const groupClosed = useRef<string | null>(null);
+  const groupFor = useRef<string | null>(null);
+  useEffect(() => {
+    const one = selected && !several ? world.current?.selectedSpawns?.() : undefined;
+    const info = one?.length === 1 ? one[0]! : null;
+    const key = info ? `${info.kind}:${info.guid}` : null;
+    if (key !== groupFor.current) {
+      groupFor.current = key;
+      groupClosed.current = null;
+    }
+    const id = info?.group ?? null;
+    if (id === null || !api || groupClosed.current === key) {
+      setGroup(null);
+      return;
+    }
+    let live = true;
+    void api.worldGroupView(id).then((r) => live && setGroup(r.ok ? r.value : null));
+    return () => {
+      live = false;
+    };
+  }, [selected, several, api, layer]);
+  // Its members ringed and joined to its centre in the view while the card is up
+  const groupDrawn = useRef(false);
+  useEffect(() => {
+    const current = world.current;
+    if (!current) return;
+    if (group) {
+      current.setGroupView(groupDrawingOf(group));
+      groupDrawn.current = true;
+    } else if (groupDrawn.current) {
+      current.setGroupView(null);
+      groupDrawn.current = false;
+    }
+  }, [group]);
+  const closeGroup = (): void => {
+    groupClosed.current = groupFor.current;
+    setGroup(null);
+  };
+
   const unavailable = !hasClient
     ? 'Choose the game client folder in the connection settings to see the world in 3D.'
     : !directory
@@ -765,6 +808,7 @@ function WorldStage({
           onClose={() => setChoosing(false)}
         />
       )}
+      {!unavailable && group && <GroupCard view={group} onClose={closeGroup} />}
       {!unavailable && selected && !several && <SelectedSpawn spawn={selected} note={note} onClose={clearSelection} onRemove={selected.added ? () => void removePlaced(selected) : undefined} />}
       {!unavailable && several && summary && (
         <section className="world3d__selected" aria-label="Selection">

@@ -24,12 +24,14 @@ export interface Entity extends EntityRef {
   origin: EntityOrigin;
 }
 
-/** One place an entity stands: its guid, map and where, and whether the project placed it */
+/** One place an entity stands: its guid, map and where, whether the project placed it, and its spawn group */
 export interface SpawnPoint {
   guid: number;
   map: number;
   placement: Placement;
   origin: EntityOrigin;
+  /** The spawn group (pool) it is in, or null */
+  group: number | null;
 }
 
 /** An entity that stands somewhere: an NPC or an object, with the spawn that was clicked */
