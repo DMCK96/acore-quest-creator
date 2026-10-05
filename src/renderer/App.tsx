@@ -5,12 +5,14 @@ import { AppShell } from './views/AppShell';
 import { NamesProvider, localNamesOf } from './state/names';
 import { RewardTablesProvider } from './state/reward-tables';
 import { HistoryProvider } from './state/history-context';
+import { searchingFresh } from './state/project-entities';
 import './App.css';
 
 const inApp = (screen: AppState['screen']): boolean => screen === 'pick' || screen === 'preview' || screen === 'edit';
 
 export function App(): React.JSX.Element {
   const store = useMemo(() => createAppStore(window.api), []);
+  const api = useMemo(() => searchingFresh(window.api, () => store.getState().flushEntities()), [store]);
   const screen = store((s) => s.screen);
   const connection = store((s) => s.connection);
   // The project's new NPCs and objects, named in pickers before the main process has them.
@@ -39,7 +41,7 @@ export function App(): React.JSX.Element {
     <>
       {inApp(screen) && (
         <div className={leaving ? 'app-arriving' : undefined} style={{ display: 'contents' }}>
-          <NamesProvider api={window.api} epoch={connection} local={local}>
+          <NamesProvider api={api} epoch={connection} local={local}>
             <RewardTablesProvider api={window.api} epoch={connection}>
               <HistoryProvider store={store}>
                 <AppShell store={store} />

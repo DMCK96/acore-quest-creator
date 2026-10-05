@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import type { Api, Movement, Placement, RoutePoint, WorldChange, WorldLayer } from '@shared/ipc';
+import type { Api, ApiError, Movement, Placement, RoutePoint, WorldChange, WorldLayer } from '@shared/ipc';
 import type { CustomNpc, CustomObject, Spawn } from '@core/entities/model';
 import { trapTab } from '../components/trap-tab';
 import { otherUsers, useProjectEntities, type ProjectQuestUse } from '../state/project-entities';
@@ -35,6 +35,8 @@ export function ProjectChanges({
   const [changes, setChanges] = useState<WorldChange[] | null>(null);
   const [exported, setExported] = useState<{ applyPath: string; revertPath: string } | null>(null);
   const [error, setError] = useState<string | null>(null);
+  // What must be fixed before the patch can be written, one line each
+  const [issues, setIssues] = useState<string[]>([]);
 
   const load = async (): Promise<void> => {
     const result = await api.worldChanges();
@@ -64,9 +66,13 @@ export function ProjectChanges({
 
   const exportAll = async (): Promise<void> => {
     setError(null);
+    setIssues([]);
     const result = await api.exportProject();
     if (result.ok) setExported({ applyPath: result.value.applyPath, revertPath: result.value.revertPath });
-    else setError(result.error.message);
+    else {
+      setError(result.error.message);
+      setIssues(errorsOf(result.error));
+    }
   };
 
   return (
@@ -126,6 +132,13 @@ export function ProjectChanges({
           </table>
         )}
         {error && <p className="world-changes__error">{error}</p>}
+        {issues.length > 0 && (
+          <ul className="world-changes__error" aria-label="To fix">
+            {issues.map((issue, i) => (
+              <li key={i}>{issue}</li>
+            ))}
+          </ul>
+        )}
         {exported && (
           <div className="world-changes__exported">
             <p>Written:</p>
@@ -145,6 +158,9 @@ export function ProjectChanges({
     </div>
   );
 }
+
+/** The errors a refusal lists (its warnings are left out: they do not stop the export) */
+const errorsOf = (error: ApiError): string[] => (error.issues ?? []).filter((i) => i.severity === 'error').map((i) => i.message);
 
 const KIND_LABEL = { npc: 'NPC', object: 'Object', item: 'Item' } as const;
 const USE_KEY = { npc: 'npcs', object: 'objects', item: 'items' } as const;

@@ -55,4 +55,13 @@ describe('Project changes', () => {
     expect(api.exportProject).toHaveBeenCalled();
     expect(await screen.findByText(/a_project\.sql/)).toBeTruthy();
   });
+
+  it('lists what to fix when the export is refused', async () => {
+    const issues = [{ severity: 'error', code: 'NPC_NO_LOOK', message: 'Hela has no look.' }, { severity: 'warning', code: 'W', message: 'Just a warning.' }];
+    mount(makeMockApi({ worldChanges: vi.fn(async () => okv([])),
+      exportProject: vi.fn(async () => ({ ok: false, error: { code: 'VALIDATION', message: "Fix the errors on the project's NPCs, objects and items first.", issues } })) }));
+    await userEvent.click(await screen.findByRole('button', { name: 'Export project patch' }));
+    const list = await screen.findByRole('list', { name: 'To fix' });
+    expect(within(list).getAllByRole('listitem').map((li) => li.textContent)).toEqual(['Hela has no look.']);
+  });
 });

@@ -1,6 +1,7 @@
 import { createContext, useContext, useMemo, type ReactNode } from 'react';
 import type { ProjectEntities } from '@core/entities/model';
 import { questUses, type QuestUse } from '@core/entities/links';
+import type { Api } from '@shared/ipc';
 import type { AppStore } from './app-store';
 
 /** A project quest as the NPC, object and item views need it: its name and what it uses */
@@ -60,4 +61,18 @@ export function ProjectEntitiesFromStore({ store, children }: { store: AppStore;
     return { entities, setEntities, quests, create: createEntity, remove: deleteEntity };
   }, [store, nodes, open, entities]);
   return <ProjectEntitiesProvider value={value}>{children}</ProjectEntitiesProvider>;
+}
+
+/**
+ * The api the pickers search with: an NPC, object or item edit still waiting to be sent is sent first,
+ * so a search typed straight after naming one finds it by its new name.
+ */
+export function searchingFresh(api: Api, flush: () => Promise<void>): Api {
+  return {
+    ...api,
+    searchEntities: async (kind, text) => {
+      await flush();
+      return api.searchEntities(kind, text);
+    },
+  };
 }
