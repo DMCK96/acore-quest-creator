@@ -65,6 +65,18 @@ describe('rotations on the Quests graph', () => {
     expect(api.worldNewGroupId).toHaveBeenCalled();
   });
 
+  it('Shift+click adds to the selection like Ctrl+click, without opening the quest', async () => {
+    const { api } = await canvas();
+    const [wolves, boars] = await screen.findAllByTestId('quest-node');
+    const tools = screen.getByRole('toolbar', { name: 'Quest tools' });
+    fireEvent.keyDown(document.body, { key: 'Shift', shiftKey: true });
+    fireEvent.click(wolves!, { shiftKey: true });
+    fireEvent.click(boars!, { shiftKey: true });
+    fireEvent.keyUp(document.body, { key: 'Shift' });
+    expect(await within(tools).findByRole('button', { name: 'Rotate these quests…' })).toBeTruthy();
+    expect(api.openQuest).not.toHaveBeenCalled();
+  });
+
   it('a single click on a card still opens its preview', async () => {
     const { api } = await canvas();
     const [wolves] = await screen.findAllByTestId('quest-node');

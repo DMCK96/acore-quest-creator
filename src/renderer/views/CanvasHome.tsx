@@ -27,6 +27,8 @@ import './CanvasHome.css';
 
 /** Drags and pans are queued locally and flushed together after the user pauses. */
 const FLUSH_DEBOUNCE_MS = 300;
+/** The keys that, held with a click, add a quest to the selection rather than replace it */
+const MULTI_SELECT_KEYS = ['Control', 'Meta', 'Shift'];
 
 interface QuestNodeData extends Record<string, unknown> {
   node: CanvasNode;
@@ -82,7 +84,7 @@ function CanvasInner({ store }: { store: AppStore }): React.JSX.Element {
   // viewport has loaded, then mounts exactly once — never re-keyed, so nodes a test (or the user)
   // is holding a reference to never get silently detached from a remount.
   const [ready, setReady] = useState(false);
-  // The quests selected on the graph (Ctrl or Cmd+click adds one, Shift+drag boxes several)
+  // The quests selected on the graph (Ctrl, Cmd or Shift+click adds one, Shift+drag boxes several)
   const [selectedIds, setSelectedIds] = useState<ReadonlySet<number>>(new Set());
   // The rotation being made or changed, and whether it is one already saved (which can be deleted)
   const [rotationEdit, setRotationEdit] = useState<{ group: SpawnGroup; existing: boolean } | null>(null);
@@ -230,7 +232,8 @@ function CanvasInner({ store }: { store: AppStore }): React.JSX.Element {
                 zoomOnDoubleClick={false}
                 defaultViewport={viewport}
                 nodesConnectable={false}
-                // A click selects (Ctrl or Cmd adds); a drag moves without selecting. Nothing is deleted by key.
+                // A click selects (Ctrl, Cmd or Shift adds); a drag moves without selecting. Nothing is deleted by key.
+                multiSelectionKeyCode={MULTI_SELECT_KEYS}
                 selectNodesOnDrag={false}
                 deleteKeyCode={null}
                 // The nodes are controlled by the store, so a drag only shows if each step lands there.
