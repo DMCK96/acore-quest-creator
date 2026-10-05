@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
-  EMPTY_WORLD, NEW_POINT_REST, addSpawn, hasWorldChanges, isAdded, moveSpawn, movementsOf, revertMovement, revertRoute, revertSpawn, setMovement, setRoute, worldStatements,
+  EMPTY_WORLD, NEW_POINT_REST, addSpawn, deleteGroup, dropMember, groupsOf, hasWorldChanges, putGroup, revertGroup, isAdded, moveSpawn, movementsOf, revertMovement, revertRoute, revertSpawn, setMovement, setRoute, worldStatements,
   type Placement, type RoutePoint, type WorldAddedSpawn, type WorldMovementEdit, type WorldSpawnEdit,
 } from '../../../src/core/world/layer';
 import { IDLE } from '../../../src/core/world/movement';
@@ -267,5 +267,73 @@ describe('world layer: a new path and the movement that walks it', () => {
   it('reverting an existing route leaves movements alone', () => {
     const layer = setRoute(setMovement(EMPTY_WORLD, walker, { type: 'wander', wander: 3, pathId: 801 }), route, [point(5), point(6)]);
     expect(movementsOf(revertRoute(layer, 801))).toHaveLength(1);
+  });
+});
+
+describe('spawn groups in the layer', () => {
+  const drake = { type: 'spawn' as const, kind: 'npc' as const, guid: 39203, entry: 32491, chance: 10 };
+  const vyragosa = { type: 'spawn' as const, kind: 'npc' as const, guid: 39207, entry: 32630, chance: 0 };
+  const fresh = { id: 900001, name: 'Path 1', map: 571, maxActive: 1, members: [drake, vyragosa], origin: { kind: 'new' as const } };
+  const original = {
+    template: { entry: '32492', max_limit: '1', description: 'Path 1' },
+    members: [
+      { table: 'pool_creature' as const, row: { guid: '39203', pool_entry: '32492', chance: '10', description: 'Path 1' } },
+      { table: 'pool_creature' as const, row: { guid: '39207', pool_entry: '32492', chance: '0', description: 'Path 1' } },
+    ],
+    event: null,
+  };
+  const existing = { ...fresh, id: 32492, origin: { kind: 'existing' as const, original } };
+
+  it('puts, replaces and reverts a group; deleting a new one forgets it, an existing one is kept as removed', () => {
+    const one = putGroup(EMPTY_WORLD, fresh);
+    expect(groupsOf(putGroup(one, { ...fresh, maxActive: 2 }))).toEqual([{ ...fresh, maxActive: 2 }]);
+    expect(groupsOf(deleteGroup(one, fresh))).toEqual([]);
+    expect(groupsOf(deleteGroup(EMPTY_WORLD, existing))).toEqual([{ ...existing, removed: true }]);
+    expect(groupsOf(revertGroup(one, 900001))).toEqual([]);
+    expect(hasWorldChanges(one)).toBe(true);
+  });
+
+  it('dropping a spawn takes it out of its groups, and a new group left empty goes', () => {
+    const one = putGroup(EMPTY_WORLD, { ...fresh, members: [drake] });
+    expect(groupsOf(dropMember(one, 'npc', 39203))).toEqual([]);
+    const two = putGroup(EMPTY_WORLD, existing);
+    expect(groupsOf(dropMember(two, 'npc', 39203))[0]!.members).toEqual([vyragosa]);
+  });
+
+  it('writes a new group with its members, and the revert takes them away', () => {
+    const mother = { id: 900002, name: 'Drake', map: 571, maxActive: 1, members: [{ type: 'group' as const, id: 900001, chance: 0 }], origin: { kind: 'new' as const } };
+    const { apply, revert } = worldStatements(putGroup(putGroup(EMPTY_WORLD, fresh), mother));
+    expect(apply).toEqual(expect.arrayContaining([
+      { kind: 'delete', table: 'pool_template', key: { entry: '900001' } },
+      { kind: 'delete', table: 'pool_creature', key: { pool_entry: '900001' } },
+      { kind: 'insert', table: 'pool_template', row: { entry: '900001', max_limit: '1', description: 'Path 1' } },
+      { kind: 'insert', table: 'pool_creature', row: { guid: '39203', pool_entry: '900001', chance: '10', description: 'Path 1' } },
+      { kind: 'insert', table: 'pool_creature', row: { guid: '39207', pool_entry: '900001', chance: '0', description: 'Path 1' } },
+      { kind: 'insert', table: 'pool_pool', row: { pool_id: '900001', mother_pool: '900002', chance: '0', description: 'Drake' } },
+    ]));
+    expect(revert).toEqual(expect.arrayContaining([
+      { kind: 'delete', table: 'pool_template', key: { entry: '900001' } },
+      { kind: 'delete', table: 'pool_pool', key: { mother_pool: '900002' } },
+    ]));
+    expect(revert.some((s) => s.kind === 'insert')).toBe(false);
+  });
+
+  it('an edited existing group is rewritten and its original rows come back on revert; a removed one only goes', () => {
+    const edited = worldStatements(putGroup(EMPTY_WORLD, { ...existing, members: [{ ...drake, chance: 50 }, { ...vyragosa, chance: 50 }] }));
+    expect(edited.apply).toContainEqual({ kind: 'insert', table: 'pool_creature', row: { guid: '39203', pool_entry: '32492', chance: '50', description: 'Path 1' } });
+    expect(edited.revert).toEqual(expect.arrayContaining([
+      { kind: 'insert', table: 'pool_template', row: original.template },
+      { kind: 'insert', table: 'pool_creature', row: original.members[0]!.row },
+    ]));
+    const removed = worldStatements(deleteGroup(EMPTY_WORLD, existing));
+    expect(removed.apply.some((s) => s.kind === 'insert')).toBe(false);
+    expect(removed.apply).toContainEqual({ kind: 'delete', table: 'pool_template', key: { entry: '32492' } });
+    expect(removed.revert).toContainEqual({ kind: 'insert', table: 'pool_template', row: original.template });
+  });
+
+  it('never touches game_event_pool', () => {
+    const tied = { ...existing, origin: { kind: 'existing' as const, original: { ...original, event: { eventEntry: '12', pool_entry: '32492' } } } };
+    const { apply, revert } = worldStatements(putGroup(EMPTY_WORLD, tied));
+    expect([...apply, ...revert].some((s) => s.table === 'game_event_pool')).toBe(false);
   });
 });
