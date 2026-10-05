@@ -139,6 +139,8 @@ export interface QuestSpawnGroup {
   spawns: QuestSpawn[];
   capped: boolean;
   cut: number;
+  /** The world database was not read: only the project's own spawns and the World layer's are listed */
+  offline?: boolean;
 }
 
 /** What `spellFacts` answers: the spells found, or why spell names are not available. */

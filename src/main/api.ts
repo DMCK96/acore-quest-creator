@@ -2529,7 +2529,8 @@ export function createApi(deps: ApiDeps): Api {
 
     questSpawnList: (questIds) =>
       run(async () => {
-        const db = connected().db;
+        // Without the world database, only the project's own spawns and the layer's are listed
+        const db = session?.db;
         const groups: QuestSpawnGroup[] = [];
         for (const questId of questIds) {
           const aggregate = questOf(questId).aggregate;
@@ -2543,23 +2544,43 @@ export function createApi(deps: ApiDeps): Api {
             seen.add(key);
             spawns.push(spawn);
           };
+          const wanted = wantedOf(aggregate);
+          // A project NPC or object takes the first part the quest names it in (giver, ender, objective), else 'own'
+          const partOf = (kind: 'creature' | 'gameobject', entry: number): QuestSpawn['role'] =>
+            wanted.find((w) => w.kind === kind && w.entry === entry)?.role ?? 'own';
           // The quest's own NPCs and objects, where it puts them
           for (const [kind, owners] of [['creature', npcs], ['gameobject', objects]] as const) {
             for (const owner of owners) {
-              for (const s of owner.spawns) add({ kind, guid: s.guid, entry: owner.entry, name: owner.name, map: s.map, x: s.x, y: s.y, z: s.z, role: 'own' });
+              const role = partOf(kind, owner.entry);
+              for (const s of owner.spawns) add({ kind, guid: s.guid, entry: owner.entry, name: owner.name, map: s.map, x: s.x, y: s.y, z: s.z, role });
             }
           }
           const own = new Set([...npcs.map((n) => `creature:${n.entry}`), ...objects.map((o) => `gameobject:${o.entry}`)]);
           let cut = 0;
-          if (db.spawnsOfEntries) {
-            for (const want of wantedOf(aggregate)) {
-              if (own.has(`${want.kind}:${want.entry}`)) continue;
+          // Existing NPCs and objects: where the World's layer moved them, and the spawns placed there
+          const layer = deps.session.world.get();
+          for (const want of wanted) {
+            if (own.has(`${want.kind}:${want.entry}`)) continue;
+            if (db?.spawnsOfEntries) {
               const dots: SpawnDot[] = await db.spawnsOfEntries(want.kind, [want.entry], QUEST_SPAWNS_PER_ENTRY + 1);
               if (dots.length > QUEST_SPAWNS_PER_ENTRY) cut += 1;
-              for (const dot of dots.slice(0, QUEST_SPAWNS_PER_ENTRY)) add({ ...dot, role: want.role });
+              for (const dot of dots.slice(0, QUEST_SPAWNS_PER_ENTRY)) {
+                const at = layer.spawns.find((m) => m.kind === dot.kind && m.guid === dot.guid)?.current;
+                add({ ...dot, ...(at ? { x: at.x, y: at.y, z: at.z } : {}), role: want.role });
+              }
+            } else {
+              // Offline, the database spawns the layer moved are still known
+              for (const m of layer.spawns) {
+                if (m.kind !== want.kind || m.entry !== want.entry) continue;
+                add({ kind: m.kind, guid: m.guid, entry: m.entry, name: m.name, map: m.map, x: m.current.x, y: m.current.y, z: m.current.z, role: want.role });
+              }
+            }
+            for (const a of layer.added) {
+              if (a.kind !== want.kind || a.entry !== want.entry) continue;
+              add({ kind: a.kind, guid: a.guid, entry: a.entry, name: a.name, map: a.map, x: a.placement.x, y: a.placement.y, z: a.placement.z, role: want.role });
             }
           }
-          groups.push({ questId, title: typeof title === 'string' && title !== '' ? title : `Quest ${questId}`, spawns, capped: cut > 0, cut });
+          groups.push({ questId, title: typeof title === 'string' && title !== '' ? title : `Quest ${questId}`, spawns, capped: cut > 0, cut, ...(db ? {} : { offline: true }) });
         }
         return groups;
       }),

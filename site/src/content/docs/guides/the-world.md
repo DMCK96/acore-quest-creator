@@ -25,7 +25,9 @@ Open a quest from the **Quests** tab and then switch to the World, and the camer
 Two buttons do the same on demand:
 
 - **Show in World**, in the quest editor and in the graph preview, switches to the World and takes the camera to the quest.
-- **Go to _name_**, beside each giver, ender and objective that names an NPC or object with a spawn, takes the camera to that one's nearest spawn. Without the world database, it only finds spawns that are in your project.
+- **Go to _name_**, beside each giver, ender and objective that names an NPC or object with a spawn, takes the camera to that one's nearest spawn.
+
+Without the world database, both buttons find only your project's own NPCs and objects and the spawns you moved or placed in the World. For anything else they say *Needs the world database*.
 
 To move the camera:
 
