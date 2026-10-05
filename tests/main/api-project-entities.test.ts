@@ -63,7 +63,7 @@ describe('the project store through the API', () => {
     aggregate.values.creature_queststarter = [{ id: hela.entry }];
     await api.updateQuest(aggregate);
     const groups: any = await api.questSpawnList([opened.value.questId]);
-    expect(groups.value[0].spawns).toEqual([expect.objectContaining({ guid: 5300700, entry: 11000240, role: 'own' })]);
+    expect(groups.value[0].spawns).toEqual([expect.objectContaining({ guid: 5300700, entry: 11000240, role: 'giver' })]);
     expect(aggregate.values).not.toHaveProperty('entities');
     const nodes: any = await api.listNodes();
     expect(nodes.value[0].uses).toEqual({ npcs: [11000240], objects: [], items: [] });

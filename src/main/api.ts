@@ -2543,16 +2543,21 @@ export function createApi(deps: ApiDeps): Api {
             seen.add(key);
             spawns.push(spawn);
           };
+          const wanted = wantedOf(aggregate);
+          // A project NPC or object takes the first part the quest names it in (giver, ender, objective), else 'own'
+          const partOf = (kind: 'creature' | 'gameobject', entry: number): QuestSpawn['role'] =>
+            wanted.find((w) => w.kind === kind && w.entry === entry)?.role ?? 'own';
           // The quest's own NPCs and objects, where it puts them
           for (const [kind, owners] of [['creature', npcs], ['gameobject', objects]] as const) {
             for (const owner of owners) {
-              for (const s of owner.spawns) add({ kind, guid: s.guid, entry: owner.entry, name: owner.name, map: s.map, x: s.x, y: s.y, z: s.z, role: 'own' });
+              const role = partOf(kind, owner.entry);
+              for (const s of owner.spawns) add({ kind, guid: s.guid, entry: owner.entry, name: owner.name, map: s.map, x: s.x, y: s.y, z: s.z, role });
             }
           }
           const own = new Set([...npcs.map((n) => `creature:${n.entry}`), ...objects.map((o) => `gameobject:${o.entry}`)]);
           let cut = 0;
           if (db.spawnsOfEntries) {
-            for (const want of wantedOf(aggregate)) {
+            for (const want of wanted) {
               if (own.has(`${want.kind}:${want.entry}`)) continue;
               const dots: SpawnDot[] = await db.spawnsOfEntries(want.kind, [want.entry], QUEST_SPAWNS_PER_ENTRY + 1);
               if (dots.length > QUEST_SPAWNS_PER_ENTRY) cut += 1;

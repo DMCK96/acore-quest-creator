@@ -6,6 +6,7 @@ import { defaultProjectMeta } from '../../src/main/project/project-file';
 import type { ProjectController } from '../../src/main/project/controller';
 import { forkDb } from '../helpers/fixtures';
 import { newNpc, newSpawn, writeEntities } from '../../src/core/entities/model';
+import { questPlace } from '../../src/renderer/world3d/quest-place';
 
 const box = { encrypt: (s: string) => Uint8Array.from(Buffer.from(s)), decrypt: (b: Uint8Array) => Buffer.from(b).toString() };
 
@@ -363,8 +364,25 @@ describe('the spawns a quest uses', () => {
     const [group] = out.value;
     expect(group).toMatchObject({ questId, title: 'Guards', capped: false });
     const roles = group.spawns.map((s: any) => `${s.role}:${s.kind}:${s.guid}`).sort();
-    expect(roles).toEqual(['giver:creature:80330', 'giver:creature:80331', 'giver:creature:80332', 'objective:gameobject:5', 'own:creature:900'].sort());
-    expect(group.spawns.find((s: any) => s.role === 'own')).toMatchObject({ entry: 12000001, name: 'Hela', map: 0, x: 1, y: 2, z: 3 });
+    expect(roles).toEqual(['giver:creature:80330', 'giver:creature:80331', 'giver:creature:80332', 'objective:gameobject:5', 'giver:creature:900'].sort());
+    expect(group.spawns.find((s: any) => s.guid === 900)).toMatchObject({ entry: 12000001, name: 'Hela', map: 0, x: 1, y: 2, z: 3 });
+  });
+
+  it('gives a project NPC that gives the quest the giver part, so the quest is where its giver is', async () => {
+    const { api } = await setup(world);
+    const created: any = await api.newQuest();
+    const values = {
+      ...created.value.aggregate.values,
+      creature_queststarter: [{ id: 12000001 }],
+      'quest_template.RequiredNpcOrGo': [{ target: { target: 'creature', id: 1423 }, count: 1 }],
+    };
+    await api.updateQuest({ ...created.value.aggregate, values });
+    await api.putProjectEntities({ npcs: [{ ...newNpc(12000001), name: 'Hela', spawns: [{ ...newSpawn(900), map: 0, x: 1, y: 2, z: 3 }] }], objects: [], items: [] });
+    const out: any = await api.questSpawnList([created.value.questId]);
+    const spawns = out.value[0].spawns;
+    expect(spawns.find((s: any) => s.guid === 900).role).toBe('giver');
+    expect(spawns.filter((s: any) => s.role === 'objective').map((s: any) => s.guid).sort()).toEqual([80330, 80331, 80332]);
+    expect(questPlace(out.value, { map: 0, x: -9480, y: 70, z: 56 })).toMatchObject({ guid: 900 });
   });
 
   it('reads a template-only addon as the seed of the spawn row a new path writes, and keeps the raw wander for the revert', async () => {
