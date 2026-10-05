@@ -20,7 +20,7 @@ const tracked = [
 ] as any[];
 const mount = (extra: any[] = [], api = makeMockApi({
   worldChanges: vi.fn(async () => okv([])),
-  exportProject: vi.fn(async () => okv({ applyPath: 'C:\\out\\a_project.sql', revertPath: 'C:\\out\\a_project_revert.sql', sql: '' })),
+  exportProject: vi.fn(async () => okv({ applyPath: 'C:\\out\\a_project.sql', revertPath: 'C:\\out\\a_project_revert.sql', sql: '', warnings: [] })),
 })) => {
   const onEdit = vi.fn();
   const onGoTo = vi.fn();
@@ -66,6 +66,16 @@ describe('Project changes', () => {
     await userEvent.click(await screen.findByRole('button', { name: 'Export project patch' }));
     expect(api.exportProject).toHaveBeenCalled();
     expect(await screen.findByText(/a_project\.sql/)).toBeTruthy();
+  });
+
+  it("shows the export's warnings beside where it wrote the patch", async () => {
+    const warning = '"Stormwind Guard" changed in the database since it was edited here; applying the patch overwrites that.';
+    mount([], makeMockApi({
+      worldChanges: vi.fn(async () => okv([])),
+      exportProject: vi.fn(async () => okv({ applyPath: 'C:\out\a_project.sql', revertPath: 'C:\out\a_project_revert.sql', sql: '', warnings: [warning] })),
+    }));
+    await userEvent.click(await screen.findByRole('button', { name: 'Export project patch' }));
+    expect(await screen.findByText(warning)).toBeTruthy();
   });
 
   it('lists what to fix when the export is refused', async () => {

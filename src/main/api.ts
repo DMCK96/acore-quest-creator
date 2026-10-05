@@ -82,6 +82,7 @@ import { compilePatrols, hasPointActions } from '../core/patrol/compile';
 import { ENTITY_KEYS, ENTITY_TABLES, readEntityContext } from '../core/entities/context';
 import { emptyGiversOf } from '../core/modules/givers';
 import { narrowTo, objectivesOf, questItemsOf, questRefs, questUses, relationOwners } from '../core/entities/links';
+import { existingDrift, existingStatements } from '../core/entities/existing';
 import { newOnly, projectEntitiesSchema, readProjectEntities, type ProjectEntities, type QuestEntities } from '../core/entities/model';
 import { itemFromRows, npcFromRows, objectFromRows } from '../core/entities/from-rows';
 import { existingDrifted, readExistingRows } from './entities/existing';
@@ -1069,8 +1070,9 @@ export function createApi(deps: ApiDeps): Api {
   }
 
   /**
-   * The project patch: every new NPC, object and item and their SmartAI rows, then the world layer's
-   * edits, with a revert that deletes what the first part writes and puts the world back.
+   * The project patch: every new NPC, object and item and their SmartAI rows, the edited existing
+   * ones over their own rows, then the world layer's edits, with a revert that deletes what the first
+   * part writes, puts the existing ones' original rows back and puts the world back.
    */
   async function projectPatch(live: Session): Promise<{ apply: PatchStatement[]; revert: PatchStatement[]; schema: SchemaInfo; warnings: string[] }> {
     const store = projectEntities();
@@ -1103,11 +1105,14 @@ export function createApi(deps: ApiDeps): Api {
       const addonDefaults = writesAddon ? defaultColumnValues('creature_addon', ws) : undefined;
       world = worldStatements(layer, defaultColumnValues('waypoint_data', ws), spawnDefaults, addonDefaults);
     }
+    // Existing entities edited here: their own rows, written over and put back
+    const existing = existingStatements(store, givers);
     const of = (list: readonly PatchStatement[], kind: PatchStatement['kind']) => list.filter((st) => st.kind === kind);
     // Deletes first; the entities before the SmartAI rows that act on them; the world's edits last
     const apply = [
       ...of(entityStatements, 'delete'), ...of(scriptRows, 'delete'),
       ...of(entityStatements, 'insert'),
+      ...existing.apply,
       ...of(scriptRows, 'set-flag'), ...of(entityStatements, 'update'), ...of(scriptRows, 'update'), ...of(scriptRows, 'insert'),
       ...world.apply,
     ];
@@ -1124,6 +1129,7 @@ export function createApi(deps: ApiDeps): Api {
       seen.add(text);
       revert.push({ kind: 'delete', table: st.table, key });
     }
+    revert.push(...existing.revert);
     revert.push(...world.revert);
     return { apply, revert, schema, warnings: [...compiledEntities.warnings, ...scripts.compiled.warnings] };
   }
@@ -2252,6 +2258,10 @@ export function createApi(deps: ApiDeps): Api {
         }
         await guardProject(live);
         const { apply, revert, schema } = await projectPatch(live);
+        // Applying writes the rows as edited here, so whatever the database changed since is overwritten
+        const warnings = (await existingDrift(live.db, store)).map(
+          (e) => `"${e.name}" changed in the database since it was edited here; applying the patch overwrites that.`,
+        );
         const date = patchDate(deps.now());
         const sql = renderPatch(apply, schema, { toolVersion: TOOL_VERSION, date, label: 'Project changes' });
         const revertSql = renderPatch(revert, schema, { toolVersion: TOOL_VERSION, date, label: 'Project changes: revert' });
@@ -2265,7 +2275,7 @@ export function createApi(deps: ApiDeps): Api {
         const revertPath = join(outputDir, `${date}_${sequence}_project_revert.sql`);
         await deps.fs.writeFile(applyPath, sql);
         await deps.fs.writeFile(revertPath, revertSql);
-        return { applyPath, revertPath, sql };
+        return { applyPath, revertPath, sql, warnings };
       }),
 
     entitySpawns: (kind, entry) =>
