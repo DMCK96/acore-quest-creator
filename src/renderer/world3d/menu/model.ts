@@ -1,13 +1,11 @@
 import type { SpawnInfo } from '../scene/spawn/SpawnManager';
 import type { QuestRoles, Role } from '@core/modules/quest-roles';
-import { worldItems } from './world-items';
-import { movementItems } from './movement-items';
-import { questItems } from './quest-items';
+import type { MenuGroupId } from './section';
 
 /**
  * The 3D view's right-click menu as data: what was right-clicked (the target), what the view and the
- * open quest allow (the context), and the groups of items each domain offers for them. Building it is
- * pure; the view runs the action an item carries.
+ * open quest allow (the context), and the items and groups the sections (see `section.ts`) build from
+ * them. Building it is pure; the view runs the action an item carries.
  */
 
 export type At = { x: number; y: number; z: number };
@@ -43,8 +41,6 @@ export interface MenuContext {
   project: boolean;
   /** Quest spawns are marked in the view */
   marked: boolean;
-  /** Whether a project object can be looted; null for an entry that is not one of the project's objects */
-  lootable(entry: number): boolean | null;
 }
 
 export type MenuAction =
@@ -82,11 +78,9 @@ export interface MenuItem {
 }
 
 export interface MenuGroup {
-  id: 'state' | 'world' | 'movement' | 'quest';
+  id: MenuGroupId;
   items: MenuItem[];
 }
-
-export type MenuProvider = (target: MenuTarget, context: MenuContext) => MenuGroup | null;
 
 /** A stable id from a label, without counts: "Paste here (3)" is `paste-here` */
 export const itemId = (label: string): string =>
@@ -99,25 +93,3 @@ export const itemId = (label: string): string =>
     .replace(/^-|-$/g, '');
 
 export const item = (label: string, rest: Omit<MenuItem, 'id' | 'label'> = {}): MenuItem => ({ id: itemId(label), label, ...rest });
-
-/** What the view is busy with comes first: stop placing, or finish the path being drawn */
-function stateItems(_target: MenuTarget, context: MenuContext): MenuGroup | null {
-  if (context.drawing) {
-    return {
-      id: 'state',
-      items: [
-        item('Finish path', { action: { kind: 'finishPath' } }),
-        item('Undo last point', { action: { kind: 'undoPoint' } }),
-        item('Cancel path', { action: { kind: 'cancelPath' } }),
-      ],
-    };
-  }
-  if (context.placing) return { id: 'state', items: [item('Stop placing', { action: { kind: 'stopPlacing' } })] };
-  return null;
-}
-
-export function buildMenu(target: MenuTarget, context: MenuContext): MenuGroup[] {
-  // While a path is drawn, clicks add points: nothing else is offered until it is finished
-  const providers: MenuProvider[] = context.drawing ? [stateItems] : [stateItems, worldItems, movementItems, questItems];
-  return providers.map((provide) => provide(target, context)).filter((group): group is MenuGroup => group !== null && group.items.length > 0);
-}
