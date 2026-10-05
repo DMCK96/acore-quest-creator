@@ -420,8 +420,11 @@ const POOL_KEYS: [PatchStatement['table'], string][] = [
   ['pool_pool', 'mother_pool'],
 ];
 
-/** A group's rows: the four deletes by its id, then what to write. Never touches game_event_pool. */
-function groupStatements(g: SpawnGroup): { apply: PatchStatement[]; revert: PatchStatement[] } {
+/**
+ * A group's rows: the four deletes by its id, and what to write on apply and on revert. Kept apart so
+ * every group's deletes can go before any group's inserts. Never touches game_event_pool.
+ */
+function groupStatements(g: SpawnGroup): { deletes: PatchStatement[]; apply: PatchStatement[]; revert: PatchStatement[] } {
   const id = String(g.id);
   const deletes: PatchStatement[] = POOL_KEYS.map(([table, column]) => ({ kind: 'delete', table, key: { [column]: id } }));
   const inserts: PatchStatement[] = [{ kind: 'insert', table: 'pool_template', row: { entry: id, max_limit: String(g.maxActive), description: g.name } }];
@@ -440,7 +443,7 @@ function groupStatements(g: SpawnGroup): { apply: PatchStatement[]; revert: Patc
           ...g.origin.original.members.map((m): PatchStatement => ({ kind: 'insert', table: m.table, row: m.row })),
         ]
       : [];
-  return { apply: g.removed ? deletes : [...deletes, ...inserts], revert: [...deletes, ...back] };
+  return { deletes, apply: g.removed ? [] : inserts, revert: back };
 }
 
 /**
@@ -467,6 +470,9 @@ export function worldStatements(
       ...added.flatMap((a) => a.apply),
       ...movements.flatMap((m) => m.apply),
       ...respawnsOf(layer).map((r) => respawn(r, r.current)),
+      // A spawn or group belongs to one pool only, so a member moved between groups must leave its
+      // old group (every group's deletes) before it joins the new one (any group's inserts)
+      ...groups.flatMap((g) => g.deletes),
       ...groups.flatMap((g) => g.apply),
       ...layer.routes.flatMap((r) => routeStatements(r.pathId, r.current, base)),
     ],
@@ -475,6 +481,7 @@ export function worldStatements(
       ...added.flatMap((a) => a.revert),
       ...movements.flatMap((m) => m.revert),
       ...respawnsOf(layer).map((r) => respawn(r, r.original)),
+      ...groups.flatMap((g) => g.deletes),
       ...groups.flatMap((g) => g.revert),
       ...layer.routes.flatMap((r) => routeStatements(r.pathId, r.original, base)),
     ],

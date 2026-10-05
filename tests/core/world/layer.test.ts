@@ -331,6 +331,36 @@ describe('spawn groups in the layer', () => {
     expect(removed.revert).toContainEqual({ kind: 'insert', table: 'pool_template', row: original.template });
   });
 
+  /** A tiny pool database that refuses a second row with the same primary key, as the server does */
+  function runPools(start: { table: string; row: Record<string, string | null> }[], statements: { kind: string; table: string; key?: Record<string, string>; row?: Record<string, string | null> }[]) {
+    const pk: Record<string, string> = { pool_template: 'entry', pool_creature: 'guid', pool_gameobject: 'guid', pool_pool: 'pool_id' };
+    let rows = start.map((r) => ({ ...r }));
+    for (const s of statements) {
+      if (!(s.table in pk)) continue;
+      if (s.kind === 'delete') rows = rows.filter((r) => !(r.table === s.table && Object.entries(s.key!).every(([c, v]) => r.row[c] === v)));
+      else if (s.kind === 'insert') {
+        const k = pk[s.table]!;
+        if (rows.some((r) => r.table === s.table && r.row[k] === s.row![k])) throw new Error(`Duplicate entry '${s.row![k]}' for key ${s.table}.PRIMARY`);
+        rows.push({ table: s.table, row: s.row! });
+      }
+    }
+    return rows;
+  }
+
+  it('moving a spawn from an existing group into another applies and reverts without a duplicate key, in either order', () => {
+    const db = [{ table: 'pool_template', row: original.template }, ...original.members];
+    const left = { ...existing, members: [vyragosa], maxActive: 1 };
+    const taker = { ...fresh, members: [drake] };
+    for (const layer of [putGroup(putGroup(EMPTY_WORLD, left), taker), putGroup(putGroup(EMPTY_WORLD, taker), left)]) {
+      const { apply, revert } = worldStatements(layer);
+      const after = runPools(db, apply);
+      expect(after.filter((r) => r.table === 'pool_creature' && r.row.guid === '39203').map((r) => r.row.pool_entry)).toEqual(['900001']);
+      const back = runPools(after, revert);
+      expect(back).toEqual(expect.arrayContaining(db));
+      expect(back).toHaveLength(db.length);
+    }
+  });
+
   it('never touches game_event_pool', () => {
     const tied = { ...existing, origin: { kind: 'existing' as const, original: { ...original, event: { eventEntry: '12', pool_entry: '32492' } } } };
     const { apply, revert } = worldStatements(putGroup(EMPTY_WORLD, tied));
