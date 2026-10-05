@@ -1,3 +1,4 @@
+import { popPlace, pushPlace, type CameraPlace } from './camera-history';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import type { CanvasNode, GroupView, OpenResult, QuestSpawnGroup } from '@shared/ipc';
 import type { FieldValue } from '@core/registry/types';
@@ -213,24 +214,56 @@ export function WorldWorkspace({
   const goTo = (point: Point, map = mapRef.current): void => {
     if (map !== mapRef.current) setMapId(map);
     setAt(point);
+    placeRef.current = point;
     setTyped({ x: String(point.x), y: String(point.y), z: String(point.z) });
     writeLastPlace({ map, ...point });
   };
-  const chooseMap = (id: number): void => goTo(worldMapById(id)!.start, id);
+  // Where the camera has been before each jump, for Back
+  const [back, setBack] = useState<CameraPlace[]>([]);
+  const placeRef = useRef<Point>({ x: first.x, y: first.y, z: first.z });
+  const areaRef = useRef(area);
+  areaRef.current = area;
+  /** Every jump of the app's: remembers the place the camera leaves, then goes to the point */
+  const jump = (point: Point, map = mapRef.current, label?: string): void => {
+    const here = { map: mapRef.current, ...placeRef.current, label: label ?? areaRef.current ?? worldMapById(mapRef.current)?.name ?? '' };
+    setBack((stack) => pushPlace(stack, here));
+    goTo(point, map);
+  };
+  const goBack = (): void => {
+    const { place, stack } = popPlace(back);
+    if (!place) return;
+    setBack(stack);
+    goTo({ x: place.x, y: place.y, z: place.z }, place.map);
+  };
+  const backRef = useRef(goBack);
+  backRef.current = goBack;
+  // Picking a map in the Coordinates form already jumped (and remembered where from); the Go that
+  // follows is part of the same move, so it does not remember the map's start as a place to go back to
+  const mapPicked = useRef(false);
+  const chooseMap = (id: number): void => {
+    if (id === mapRef.current) return;
+    mapPicked.current = true;
+    jump(worldMapById(id)!.start, id);
+  };
+  const goFromForm = (point: Point): void => {
+    if (mapPicked.current) goTo(point);
+    else jump(point);
+    mapPicked.current = false;
+  };
   // Show on the undo note: the camera goes to where the step happened
   useEffect(() => {
     if (!goToRequest || !worldMapById(goToRequest.map)) return;
-    goTo({ x: goToRequest.x, y: goToRequest.y, z: goToRequest.z }, goToRequest.map);
+    jump({ x: goToRequest.x, y: goToRequest.y, z: goToRequest.z }, goToRequest.map);
     // Only a new request moves the camera
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [goToRequest?.nonce]);
   const teleport = (spot: TeleportSpot): void => {
     setTeleporting(false);
-    goTo({ x: spot.x, y: spot.y, z: spot.z }, spot.map);
+    jump({ x: spot.x, y: spot.y, z: spot.z }, spot.map);
   };
   const find = (spawn: FoundSpawn): void => {
     setFinding(false);
-    goTo({ x: spawn.x, y: spawn.y, z: spawn.z }, spawn.map);
+    jump({ x: spawn.x, y: spawn.y, z: spawn.z }, spawn.map);
     setFocus((previous) => ({
       kind: spawn.kind, guid: spawn.guid, entry: spawn.entry, name: spawn.name, x: spawn.x, y: spawn.y, z: spawn.z,
       event: spawn.event, added: spawn.note === 'placed', nonce: (previous?.nonce ?? 0) + 1,
@@ -242,7 +275,7 @@ export function WorldWorkspace({
     const placed = view.members.filter((m) => m.at);
     if (placed.length > 0) {
       const mean = (axis: 'x' | 'y' | 'z'): number => placed.reduce((sum, m) => sum + m.at![axis], 0) / placed.length;
-      goTo({ x: mean('x'), y: mean('y'), z: mean('z') }, view.map);
+      jump({ x: mean('x'), y: mean('y'), z: mean('z') }, view.map);
     }
     const first = view.members.find((m) => m.type === 'spawn' && m.at);
     const [prefix, guid] = first?.key.split(':') ?? [];
@@ -264,6 +297,13 @@ export function WorldWorkspace({
   useEffect(() => {
     if (!active) return;
     const onKeyDown = (e: KeyboardEvent): void => {
+      if (e.key === 'ArrowLeft' && e.altKey && !e.ctrlKey && !e.metaKey && !e.shiftKey) {
+        const el = e.target instanceof HTMLElement ? e.target : null;
+        if (el && (el.isContentEditable || ['INPUT', 'TEXTAREA', 'SELECT'].includes(el.tagName))) return;
+        e.preventDefault();
+        backRef.current();
+        return;
+      }
       if (e.key !== 'Escape') return;
       const open = panels.current;
       if (open.preset) setPreset(null);
@@ -323,7 +363,10 @@ export function WorldWorkspace({
         active={active}
         showArea={false}
         onArea={setArea}
-        onPlaceChange={(place) => writeLastPlace({ map: mapRef.current, ...place })}
+        onPlaceChange={(place) => {
+          placeRef.current = place;
+          writeLastPlace({ map: mapRef.current, ...place });
+        }}
         own={own}
         onOwnEdit={
           project
@@ -350,7 +393,7 @@ export function WorldWorkspace({
         onCreateEntity={createEntity}
         onEditEntity={(kind, entry) => void editEntity(kind, entry)}
         onGoToSpawn={({ map, ...target }) => {
-          goTo({ x: target.x, y: target.y, z: target.z }, map);
+          jump({ x: target.x, y: target.y, z: target.z }, map);
           setFocus((previous) => ({ ...target, nonce: (previous?.nonce ?? 0) + 1 }));
         }}
         onSetLootable={setLootable}
@@ -374,13 +417,19 @@ export function WorldWorkspace({
         <h2 className="world-place__title">{area ?? mapName}</h2>
         {area && <p className="world-place__map section-label">{mapName}</p>}
         <div className="world-place__actions">
+          <button type="button" className="btn btn--icon" aria-label="Back" title={back.length > 0 ? `Back to ${back[back.length - 1].label}` : 'Back'} disabled={back.length === 0} onClick={goBack}>
+            ←
+          </button>
           <button type="button" className="btn" onClick={() => setTeleporting(true)}>
             Teleport
           </button>
           <button type="button" className="btn" onClick={() => setFinding(true)}>
             Find…
           </button>
-          <button type="button" className="btn" aria-expanded={coordinates} onClick={() => setCoordinates((open) => !open)}>
+          <button type="button" className="btn" aria-expanded={coordinates} onClick={() => {
+              mapPicked.current = false;
+              setCoordinates((open) => !open);
+            }}>
             Coordinates
           </button>
         </div>
@@ -390,7 +439,7 @@ export function WorldWorkspace({
             onSubmit={(e) => {
               e.preventDefault();
               if (!valid) return;
-              goTo(parsed);
+              goFromForm(parsed);
               setCoordinates(false);
             }}
           >
