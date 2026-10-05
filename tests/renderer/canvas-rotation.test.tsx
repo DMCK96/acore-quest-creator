@@ -1,7 +1,8 @@
 // @vitest-environment jsdom
 import { describe, it, expect, vi } from 'vitest';
-import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import { createEvent, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
+import { readFileSync } from 'node:fs';
 import { createAppStore } from '../../src/renderer/state/app-store';
 import { CanvasHome } from '../../src/renderer/views/CanvasHome';
 import { makeMockApi, okv, errv, sampleOpen, nodeOf } from './mock-api';
@@ -69,6 +70,41 @@ describe('rotations on the Quests graph', () => {
     const [wolves] = await screen.findAllByTestId('quest-node');
     fireEvent.click(wolves!, { clientX: 10, clientY: 10 });
     await waitFor(() => expect(api.openQuest).toHaveBeenCalledWith(60001));
+  });
+
+  it('outlines the selection only while two or more quests are selected, so a plain click leaves only the open highlight', async () => {
+    const { api } = await canvas();
+    const [wolves, boars] = await screen.findAllByTestId('quest-node');
+    const flow = screen.getByTestId('rf__wrapper');
+    fireEvent.click(wolves!, { clientX: 10, clientY: 10 });
+    await waitFor(() => expect(api.openQuest).toHaveBeenCalledWith(60001));
+    expect(flow).not.toHaveClass('canvas--multi');
+    fireEvent.keyDown(document.body, { key: 'Control', ctrlKey: true });
+    fireEvent.click(boars!, { ctrlKey: true });
+    fireEvent.keyUp(document.body, { key: 'Control' });
+    await waitFor(() => expect(flow).toHaveClass('canvas--multi'));
+    // A click on the empty graph clears the selection, and the outline with it
+    fireEvent.click(flow.querySelector('.react-flow__pane')!);
+    await waitFor(() => expect(flow).not.toHaveClass('canvas--multi'));
+    // The outline is drawn only under the multi-selection class
+    const css = readFileSync('src/renderer/views/QuestNodeCard.css', 'utf-8');
+    const outlined = css.match(/([^{}]+)\{[^}]*outline:\s*2px solid/)?.[1]?.trim();
+    expect(outlined).toBe('.canvas--multi .react-flow__node.selected .quest-card');
+  });
+
+  it('the click that ends a drag neither opens nor outlines the quest', async () => {
+    const { api } = await canvas();
+    const [wolves] = await screen.findAllByTestId('quest-node');
+    // React Flow's drag reads the event's `view`, which jsdom's events lack; the browser ends a drag with a click
+    const withView = (event: Event): Event => Object.defineProperty(event, 'view', { value: window });
+    fireEvent(wolves!, withView(createEvent.mouseDown(wolves!, { clientX: 10, clientY: 10, buttons: 1 })));
+    fireEvent(window, withView(createEvent.mouseMove(window, { clientX: 80, clientY: 60, buttons: 1 })));
+    fireEvent(window, withView(createEvent.mouseUp(window, { clientX: 80, clientY: 60 })));
+    fireEvent.click(wolves!, { clientX: 80, clientY: 60 });
+    await new Promise((r) => setTimeout(r, 20));
+    expect(api.openQuest).not.toHaveBeenCalled();
+    expect(wolves!.getAttribute('aria-current')).toBeNull();
+    expect(screen.getByTestId('rf__wrapper')).not.toHaveClass('canvas--multi');
   });
 
   it('shows a rotation tag on each quest in a pool, which opens the dialog', async () => {

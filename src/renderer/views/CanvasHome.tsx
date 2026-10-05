@@ -224,6 +224,9 @@ function CanvasInner({ store }: { store: AppStore }): React.JSX.Element {
                 nodes={flowNodes}
                 edges={toFlowEdges(nodes)}
                 nodeTypes={nodeTypes}
+                // The selection is outlined only while it holds several quests: one selected by a plain
+                // click is the open quest, which has its own highlight that the outline could contradict
+                className={selected.length >= 2 ? 'canvas--multi' : undefined}
                 zoomOnDoubleClick={false}
                 defaultViewport={viewport}
                 nodesConnectable={false}
