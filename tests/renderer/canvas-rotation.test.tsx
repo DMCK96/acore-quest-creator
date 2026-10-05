@@ -1,10 +1,11 @@
 // @vitest-environment jsdom
 import { describe, it, expect, vi } from 'vitest';
-import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import { createEvent, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
+import { readFileSync } from 'node:fs';
 import { createAppStore } from '../../src/renderer/state/app-store';
 import { CanvasHome } from '../../src/renderer/views/CanvasHome';
-import { makeMockApi, okv, sampleOpen, nodeOf } from './mock-api';
+import { makeMockApi, okv, errv, sampleOpen, nodeOf } from './mock-api';
 
 const drift = { missingTables: [], unregistered: [], missingColumns: [], typeMismatches: [] };
 const rec = { id: 1, name: 'w', role: 'world' as const, host: 'h', port: 1, user: 'u', database: 'd' };
@@ -64,11 +65,58 @@ describe('rotations on the Quests graph', () => {
     expect(api.worldNewGroupId).toHaveBeenCalled();
   });
 
+  it('Shift+click adds to the selection like Ctrl+click, without opening the quest', async () => {
+    const { api } = await canvas();
+    const [wolves, boars] = await screen.findAllByTestId('quest-node');
+    const tools = screen.getByRole('toolbar', { name: 'Quest tools' });
+    fireEvent.keyDown(document.body, { key: 'Shift', shiftKey: true });
+    fireEvent.click(wolves!, { shiftKey: true });
+    fireEvent.click(boars!, { shiftKey: true });
+    fireEvent.keyUp(document.body, { key: 'Shift' });
+    expect(await within(tools).findByRole('button', { name: 'Rotate these quests…' })).toBeTruthy();
+    expect(api.openQuest).not.toHaveBeenCalled();
+  });
+
   it('a single click on a card still opens its preview', async () => {
     const { api } = await canvas();
     const [wolves] = await screen.findAllByTestId('quest-node');
     fireEvent.click(wolves!, { clientX: 10, clientY: 10 });
     await waitFor(() => expect(api.openQuest).toHaveBeenCalledWith(60001));
+  });
+
+  it('outlines the selection only while two or more quests are selected, so a plain click leaves only the open highlight', async () => {
+    const { api } = await canvas();
+    const [wolves, boars] = await screen.findAllByTestId('quest-node');
+    const flow = screen.getByTestId('rf__wrapper');
+    fireEvent.click(wolves!, { clientX: 10, clientY: 10 });
+    await waitFor(() => expect(api.openQuest).toHaveBeenCalledWith(60001));
+    expect(flow).not.toHaveClass('canvas--multi');
+    fireEvent.keyDown(document.body, { key: 'Control', ctrlKey: true });
+    fireEvent.click(boars!, { ctrlKey: true });
+    fireEvent.keyUp(document.body, { key: 'Control' });
+    await waitFor(() => expect(flow).toHaveClass('canvas--multi'));
+    // A click on the empty graph clears the selection, and the outline with it
+    fireEvent.click(flow.querySelector('.react-flow__pane')!);
+    await waitFor(() => expect(flow).not.toHaveClass('canvas--multi'));
+    // The outline is drawn only under the multi-selection class
+    const css = readFileSync('src/renderer/views/QuestNodeCard.css', 'utf-8');
+    const outlined = css.match(/([^{}]+)\{[^}]*outline:\s*2px solid/)?.[1]?.trim();
+    expect(outlined).toBe('.canvas--multi .react-flow__node.selected .quest-card');
+  });
+
+  it('the click that ends a drag neither opens nor outlines the quest', async () => {
+    const { api } = await canvas();
+    const [wolves] = await screen.findAllByTestId('quest-node');
+    // React Flow's drag reads the event's `view`, which jsdom's events lack; the browser ends a drag with a click
+    const withView = (event: Event): Event => Object.defineProperty(event, 'view', { value: window });
+    fireEvent(wolves!, withView(createEvent.mouseDown(wolves!, { clientX: 10, clientY: 10, buttons: 1 })));
+    fireEvent(window, withView(createEvent.mouseMove(window, { clientX: 80, clientY: 60, buttons: 1 })));
+    fireEvent(window, withView(createEvent.mouseUp(window, { clientX: 80, clientY: 60 })));
+    fireEvent.click(wolves!, { clientX: 80, clientY: 60 });
+    await new Promise((r) => setTimeout(r, 20));
+    expect(api.openQuest).not.toHaveBeenCalled();
+    expect(wolves!.getAttribute('aria-current')).toBeNull();
+    expect(screen.getByTestId('rf__wrapper')).not.toHaveClass('canvas--multi');
   });
 
   it('shows a rotation tag on each quest in a pool, which opens the dialog', async () => {
@@ -118,6 +166,24 @@ describe('rotations on the Quests graph', () => {
     await store.getState().saveRotation(rotation(), [], 'daily');
     expect(store.getState().open?.aggregate.values['quest_template.Flags']).toBe(0x1000);
     expect((api.updateQuest as any).mock.calls.at(-1)[0]).toMatchObject({ questId: 60002, values: { 'quest_template.Flags': 0x1000 } });
+  });
+
+  it('a refused rotation save puts back the flags it changed, so it leaves no step', async () => {
+    const { api, store } = await canvas({ worldSetGroup: vi.fn(async () => errv('VALIDATION', 'This spawn group cannot be saved.')) });
+    await screen.findAllByTestId('quest-node');
+    expect(await store.getState().saveRotation(rotation(), [], 'daily')).toBe(false);
+    // Boars was made daily for the save, then put back to weekly when the save was refused
+    const boars = (api.updateQuest as any).mock.calls.filter((c: any[]) => c[0].questId === 60002).map((c: any[]) => c[0].values['quest_template.Flags']);
+    expect(boars).toEqual([0x1000, 0x8000]);
+    expect(store.getState().error).toBe('This spawn group cannot be saved.');
+  });
+
+  it('a refused rotation save puts back the flags of the open quest', async () => {
+    const { store } = await canvas({ worldSetGroup: vi.fn(async () => errv('VALIDATION', 'This spawn group cannot be saved.')) });
+    await screen.findAllByTestId('quest-node');
+    await store.getState().openQuest(60001);
+    expect(await store.getState().saveRotation(rotation(), [], 'weekly')).toBe(false);
+    expect(store.getState().open?.aggregate.values['quest_template.Flags']).toBe(0x1000);
   });
 
   it('deletes a rotation as one step', async () => {
