@@ -1,7 +1,7 @@
 import { createContext, useContext, useMemo, type ReactNode } from 'react';
 import type { ProjectEntities } from '@core/entities/model';
 import { trackedEntities } from '@core/entities/tracked';
-import type { TrackedEntity } from '@core/entities/entity';
+import type { EntityRef, TrackedEntity } from '@core/entities/entity';
 import type { WorldLayer } from '@core/world/layer';
 import { questRefs, questUses, type QuestUse } from '@core/entities/links';
 import type { Api } from '@shared/ipc';
@@ -32,6 +32,25 @@ export interface ProjectEntitiesValue {
   create: ReturnType<AppStore['getState']>['createEntity'];
   /** Deletes one, emptying the giver cards that named it, as one step; the error to show, or null */
   remove(kind: 'npc' | 'object' | 'item', entry: number): Promise<string | null>;
+  /** Brings one the database already has into the store as one step (one there already is left be) */
+  adopt: ReturnType<AppStore['getState']>['adoptEntity'];
+  /** Makes sure one is in the store, adopting it from the database when it is not; the error to show, or null */
+  ensure(ref: EntityRef): Promise<string | null>;
+}
+
+/** Whether the store has an NPC, object or item */
+export function storeHas(entities: ProjectEntities, ref: EntityRef): boolean {
+  const list = ref.kind === 'npc' ? entities.npcs : ref.kind === 'object' ? entities.objects : entities.items;
+  return list.some((e) => e.entry === ref.entry);
+}
+
+/** `ensure` built from the store's current state and `adopt` */
+export function ensureWith(current: () => ProjectEntities, adopt: ProjectEntitiesValue['adopt']): ProjectEntitiesValue['ensure'] {
+  return async (ref) => {
+    if (storeHas(current(), ref)) return null;
+    const adopted = await adopt(ref.kind, ref.entry);
+    return 'error' in adopted ? adopted.error : null;
+  };
 }
 
 const ProjectEntitiesContext = createContext<ProjectEntitiesValue | null>(null);
@@ -69,9 +88,10 @@ export function ProjectEntitiesFromStore({ store, children }: { store: AppStore;
       if (at >= 0) quests[at] = mine;
       else quests.push(mine);
     }
-    const { setEntities, createEntity, deleteEntity, setLayer } = store.getState();
+    const { setEntities, createEntity, deleteEntity, adoptEntity, setLayer } = store.getState();
     const tracked = trackedEntities({ store: entities, layer, quests });
-    return { entities, setEntities, quests, layer, setLayer, tracked, create: createEntity, remove: deleteEntity };
+    const ensure = ensureWith(() => store.getState().entities, adoptEntity);
+    return { entities, setEntities, quests, layer, setLayer, tracked, create: createEntity, remove: deleteEntity, adopt: adoptEntity, ensure };
   }, [store, nodes, open, entities, layer]);
   return <ProjectEntitiesProvider value={value}>{children}</ProjectEntitiesProvider>;
 }

@@ -41,7 +41,7 @@ export async function mountBody(
   const onChange = opts.onChange ?? vi.fn();
   const withEditor = (ui: React.ReactNode): React.ReactNode => (opts.openEditor ? <EntityEditorProvider open={opts.openEditor}>{ui}</EntityEditorProvider> : ui);
   const entities = opts.entities ?? readEntities(over);
-  const project = { entities, setEntities: opts.setEntities ?? vi.fn(), quests: opts.quests ?? [], layer: { spawns: [], routes: [], added: [] }, setLayer: vi.fn(), tracked: opts.tracked ?? [], create: vi.fn(async () => ({ error: 'not here' })), remove: vi.fn(async () => null) };
+  const project = { entities, setEntities: opts.setEntities ?? vi.fn(), quests: opts.quests ?? [], layer: { spawns: [], routes: [], added: [] }, setLayer: vi.fn(), tracked: opts.tracked ?? [], create: vi.fn(async () => ({ error: 'not here' })), remove: vi.fn(async () => null), adopt: vi.fn(async () => ({ error: 'not here' })), ensure: vi.fn(async () => null) };
   render(
     <ProjectEntitiesProvider value={project}>
     <NamesProvider api={api}>

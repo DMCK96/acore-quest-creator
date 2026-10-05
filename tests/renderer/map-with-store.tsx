@@ -11,7 +11,7 @@ import { ProjectEntitiesProvider } from '../../src/renderer/state/project-entiti
 export function MapWithStore(props: ComponentProps<typeof QuestMapView>): React.JSX.Element {
   const { open, onChange } = props;
   const entities = readEntities(open.aggregate.values);
-  const value = { entities, setEntities: (next: ProjectEntities) => onChange(ENTITIES_FIELD, writeEntities(next)), quests: [], layer: { spawns: [], routes: [], added: [] }, setLayer: () => {}, tracked: [], create: async () => ({ error: 'not here' }), remove: async () => null };
+  const value = { entities, setEntities: (next: ProjectEntities) => onChange(ENTITIES_FIELD, writeEntities(next)), quests: [], layer: { spawns: [], routes: [], added: [] }, setLayer: () => {}, tracked: [], create: async () => ({ error: 'not here' }), remove: async () => null, adopt: async () => ({ error: 'not here' }), ensure: async () => null };
   return (
     <ProjectEntitiesProvider value={value}>
       <QuestMapView {...props} />
@@ -21,5 +21,5 @@ export function MapWithStore(props: ComponentProps<typeof QuestMapView>): React.
 
 /** A provider value over a fixed store, its changes going to `setEntities` */
 export function storeOf(entities: ProjectEntities, setEntities: (next: ProjectEntities) => void = () => {}) {
-  return { entities, setEntities, quests: [], layer: { spawns: [], routes: [], added: [] }, setLayer: () => {}, tracked: [], create: async () => ({ error: 'not here' }), remove: async () => null };
+  return { entities, setEntities, quests: [], layer: { spawns: [], routes: [], added: [] }, setLayer: () => {}, tracked: [], create: async () => ({ error: 'not here' }), remove: async () => null, adopt: async () => ({ error: 'not here' }), ensure: async () => null };
 }

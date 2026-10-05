@@ -14,9 +14,12 @@ export function ObjectBasics({
   object,
   onChange,
   quests = [],
+  typeLocked = false,
 }: {
   object: CustomObject;
   onChange(next: CustomObject): void;
+  /** An existing object of a type this editor does not have: its type is kept, not offered */
+  typeLocked?: boolean;
   /** The quests it can be limited to */
   quests?: readonly { questId: number; title: string }[];
 }): React.JSX.Element {
@@ -27,8 +30,12 @@ export function ObjectBasics({
   return (
     <div className="scripts-body">
       <TextField label="Name" value={object.name} onChange={(name) => onChange({ ...object, name })} />
-      <SelectField label="Type" value={object.type} options={OBJECT_TYPES} onChange={(type) => onChange({ ...object, type })} />
-      {(object.type === 'goober' || object.type === 'chest') && (
+      {typeLocked ? (
+        <p className="scene-hint">Its type is one this editor does not change.</p>
+      ) : (
+        <SelectField label="Type" value={object.type} options={OBJECT_TYPES} onChange={(type) => onChange({ ...object, type })} />
+      )}
+      {!typeLocked && (object.type === 'goober' || object.type === 'chest') && (
         <SelectField label="Only while on the quest" value={object.onlyDuringQuest === null ? '' : String(object.onlyDuringQuest)}
           options={[['', 'Anyone'] as const, ...choices.map((q) => [String(q.questId), q.title] as const)]}
           onChange={(v) => onChange({ ...object, onlyDuringQuest: v === '' ? null : Number(v) })} />

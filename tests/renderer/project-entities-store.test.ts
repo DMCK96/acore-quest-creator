@@ -65,6 +65,17 @@ describe('the renderer\'s project store', () => {
     await store.getState().connectProfile(1);
     expect(store.getState().entities.npcs.map((n) => n.name)).toEqual(['Hela']);
   });
+
+  it('adopts an existing NPC into the store as one put, and refuses one already there', async () => {
+    const guard = { ...newNpc(1423), name: 'Stormwind Guard', origin: { kind: 'existing', original: {}, sharedLoot: 0, spawnCount: 3, locked: [] } };
+    const api = makeMockApi({ readExistingEntity: vi.fn(async () => okv(guard)) });
+    const store = createAppStore(api);
+    expect(await store.getState().adoptEntity('npc', 1423)).toEqual({ entry: 1423 });
+    expect(store.getState().entities.npcs).toEqual([guard]);
+    expect(api.putProjectEntities).toHaveBeenCalledWith({ npcs: [guard], objects: [], items: [] });
+    expect(await store.getState().adoptEntity('npc', 1423)).toEqual({ entry: 1423 });
+    expect(api.readExistingEntity).toHaveBeenCalledTimes(1);
+  });
 });
 
 describe('opening an older project', () => {
