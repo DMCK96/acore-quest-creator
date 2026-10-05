@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { existingDrift, existingStatements } from '../../src/core/entities/existing';
+import { existingDrift, existingStatements, newLootIds } from '../../src/core/entities/existing';
 import { npcFromRows, objectFromRows, itemFromRows } from '../../src/core/entities/from-rows';
 import { EMPTY_ENTITIES } from '../../src/core/entities/model';
 
@@ -167,5 +167,44 @@ describe('existingStatements keeps what the editor did not change', () => {
     // An edited stat writes the stat block as the editor packs it
     const edited = insertOf(existingStatements({ ...EMPTY_ENTITIES, items: [{ ...item, stats: [{ type: 4, value: 6 }] }] }, []).apply, 'item_template');
     expect(edited).toMatchObject({ StatsCount: '1', stat_type1: '4', stat_value1: '6', stat_type3: '0', stat_value3: '0', spellid_2: '18384', spellcooldown_1: '0' });
+  });
+});
+
+describe('a new loot id for an existing NPC or chest', () => {
+  const fake = (tables: Record<string, Record<string, string | null>[]>) => ({
+    selectRows: async (table: string, where: Record<string, string | readonly string[]>) =>
+      (tables[table] ?? []).filter((r) => Object.entries(where).every(([c, v]) => (Array.isArray(v) ? v : [v]).includes(r[c] ?? ''))),
+    selectMax: async (table: string, column: string) => Math.max(0, ...(tables[table] ?? []).map((r) => Number(r[column]))),
+  });
+  const bareRow = { ...template, lootid: '0' };
+  const bare = npcFromRows(1423, { creature_template: [bareRow] }, { sharedLoot: 0, spawnCount: 1 });
+  const looted = { ...bare, loot: [{ item: 774, chance: 10, min: 1, max: 1, questOnly: false }] };
+  const theirs = { ...loot, Entry: '1423', Item: '9999' };
+
+  it('takes a free loot id when the entry is already some other list, so apply never overwrites it and revert never deletes it', async () => {
+    const db = fake({ creature_template: [bareRow, { ...template, entry: '1500', lootid: '1423' }], creature_loot_template: [theirs, { ...loot, Entry: '3000' }] });
+    const { ids, warnings } = await newLootIds(db, store(looted));
+    expect(ids.get('npc:1423')).toBe(3001);
+    expect(warnings).toHaveLength(1);
+    const { apply, revert } = existingStatements(store(looted), [], ids);
+    expect((apply.find((s) => s.kind === 'insert' && s.table === 'creature_template') as any).row.lootid).toBe('3001');
+    expect([...apply, ...revert].some((s) => s.table === 'creature_loot_template' && (s as any).key?.Entry === '1423')).toBe(false);
+    expect(revert).toContainEqual({ kind: 'delete', table: 'creature_loot_template', key: { Entry: '3001' } });
+  });
+
+  it('keeps the entry as the loot id when no list has it, or when it is this NPC\'s own from an earlier apply', async () => {
+    expect((await newLootIds(fake({ creature_template: [bareRow], creature_loot_template: [] }), store(looted))).ids.size).toBe(0);
+    const applied = fake({ creature_template: [{ ...bareRow, lootid: '1423' }], creature_loot_template: [{ ...loot, Entry: '1423' }] });
+    expect((await newLootIds(applied, store(looted))).ids.size).toBe(0);
+  });
+
+  it('does the same for a chest given its first loot', async () => {
+    const chestRow = { entry: '2843', type: '3', displayId: '10', name: 'Chest', size: '1', Data0: '57', Data1: '0', Data8: '0' };
+    const chest = objectFromRows(2843, { gameobject_template: [chestRow] }, { sharedLoot: 0, spawnCount: 1 });
+    const withLoot = { ...EMPTY_ENTITIES, objects: [{ ...chest, loot: [{ item: 774, chance: 10, min: 1, max: 1, questOnly: false }] }] };
+    const db = fake({ gameobject_template: [chestRow], gameobject_loot_template: [{ ...loot, Entry: '2843' }, { ...loot, Entry: '5000' }] });
+    const { ids } = await newLootIds(db, withLoot);
+    expect(ids.get('object:2843')).toBe(5001);
+    expect((existingStatements(withLoot, [], ids).apply.find((s) => s.kind === 'insert' && s.table === 'gameobject_template') as any).row.Data1).toBe('5001');
   });
 });

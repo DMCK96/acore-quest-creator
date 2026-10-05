@@ -82,7 +82,7 @@ import { compilePatrols, hasPointActions } from '../core/patrol/compile';
 import { ENTITY_KEYS, ENTITY_TABLES, readEntityContext } from '../core/entities/context';
 import { emptyGiversOf } from '../core/modules/givers';
 import { narrowTo, objectivesOf, questItemsOf, questRefs, questUses, relationOwners } from '../core/entities/links';
-import { existingDrift, existingStatements } from '../core/entities/existing';
+import { existingDrift, existingStatements, newLootIds } from '../core/entities/existing';
 import { newOnly, projectEntitiesSchema, readProjectEntities, type ProjectEntities, type QuestEntities } from '../core/entities/model';
 import { itemFromRows, npcFromRows, objectFromRows } from '../core/entities/from-rows';
 import { existingDrifted, readExistingRows } from './entities/existing';
@@ -1074,7 +1074,7 @@ export function createApi(deps: ApiDeps): Api {
    * ones over their own rows, then the world layer's edits, with a revert that deletes what the first
    * part writes, puts the existing ones' original rows back and puts the world back.
    */
-  async function projectPatch(live: Session): Promise<{ apply: PatchStatement[]; revert: PatchStatement[]; schema: SchemaInfo; warnings: string[] }> {
+  async function projectPatch(live: Session): Promise<{ apply: PatchStatement[]; revert: PatchStatement[]; schema: SchemaInfo; warnings: string[]; lootWarnings: string[] }> {
     const store = projectEntities();
     const layer: WorldLayer = deps.session.world.get();
     const all = quests.list();
@@ -1106,7 +1106,9 @@ export function createApi(deps: ApiDeps): Api {
       world = worldStatements(layer, defaultColumnValues('waypoint_data', ws), spawnDefaults, addonDefaults);
     }
     // Existing entities edited here: their own rows, written over and put back
-    const existing = existingStatements(store, givers);
+    // One given its first loot takes a free loot id when its entry is already someone else's list
+    const loot = await newLootIds(live.db, store);
+    const existing = existingStatements(store, givers, loot.ids);
     const of = (list: readonly PatchStatement[], kind: PatchStatement['kind']) => list.filter((st) => st.kind === kind);
     // Deletes first; the entities before the SmartAI rows that act on them; the world's edits last
     const apply = [
@@ -1131,7 +1133,7 @@ export function createApi(deps: ApiDeps): Api {
     }
     revert.push(...existing.revert);
     revert.push(...world.revert);
-    return { apply, revert, schema, warnings: [...compiledEntities.warnings, ...scripts.compiled.warnings] };
+    return { apply, revert, schema, warnings: [...compiledEntities.warnings, ...scripts.compiled.warnings, ...loot.warnings], lootWarnings: loot.warnings };
   }
 
   /** The project's NPCs, objects and items checked; throws when they have errors */
@@ -2257,11 +2259,12 @@ export function createApi(deps: ApiDeps): Api {
           throw fail('BAD_REQUEST', 'There are no NPCs, objects, items or world changes to export.');
         }
         await guardProject(live);
-        const { apply, revert, schema } = await projectPatch(live);
+        const { apply, revert, schema, lootWarnings } = await projectPatch(live);
         // Applying writes the rows as edited here, so whatever the database changed since is overwritten
-        const warnings = (await existingDrift(live.db, store)).map(
-          (e) => `"${e.name}" changed in the database since it was edited here; applying the patch overwrites that.`,
-        );
+        const warnings = [
+          ...(await existingDrift(live.db, store)).map((e) => `"${e.name}" changed in the database since it was edited here; applying the patch overwrites that.`),
+          ...lootWarnings,
+        ];
         const date = patchDate(deps.now());
         const sql = renderPatch(apply, schema, { toolVersion: TOOL_VERSION, date, label: 'Project changes' });
         const revertSql = renderPatch(revert, schema, { toolVersion: TOOL_VERSION, date, label: 'Project changes: revert' });

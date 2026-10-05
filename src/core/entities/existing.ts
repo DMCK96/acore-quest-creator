@@ -81,13 +81,65 @@ function writePages(out: Statements, origin: Existing, pages: readonly Page[]): 
   writeTable(out, origin, 'page_text', ids.map((id) => ({ ID: text(id) })), rows);
 }
 
-function npcStatements(out: Statements, npc: CustomNpc, origin: Existing, givers: readonly number[]): void {
+/** A free loot id given to an existing NPC or chest whose entry is already another loot list, by 'npc:<entry>' or 'object:<entry>' */
+export type LootIds = ReadonlyMap<string, number>;
+
+/** Whether an existing NPC or chest has no loot list of its own yet and is given one, under a new loot id */
+function wantsNewLoot(kind: 'npc' | 'object', entity: CustomNpc | CustomObject): boolean {
+  if (entity.origin.kind !== 'existing' || entity.origin.locked.includes('loot') || entity.loot.length === 0) return false;
+  if (kind === 'npc') return num(rowsOf(entity.origin, 'creature_template')[0]?.lootid) === 0;
+  const object = entity as CustomObject;
+  if (entity.origin.locked.includes('type') || object.type !== 'chest') return false;
+  const original = rowsOf(entity.origin, 'gameobject_template')[0] ?? {};
+  return num(original.type) !== OBJECT_TYPE_VALUE.chest || num(original.Data1) === 0;
+}
+
+const LOOT_TABLE = { npc: 'creature_loot_template', object: 'gameobject_loot_template' } as const;
+
+/**
+ * The loot ids existing NPCs and chests get when they are given their first loot. Their entry is used
+ * unless some other loot list already has that id (a list the database's own row of this entity does not
+ * point at, so not one an earlier apply of this patch wrote); then the next free id is taken, so the patch
+ * never writes over another list and its revert never deletes it.
+ */
+export async function newLootIds(
+  db: Pick<WorldDb, 'selectRows'> & Partial<Pick<WorldDb, 'selectMax'>>, store: ProjectEntities,
+): Promise<{ ids: Map<string, number>; warnings: string[] }> {
+  const ids = new Map<string, number>();
+  const warnings: string[] = [];
+  const taken: Record<'npc' | 'object', Set<number>> = { npc: new Set(), object: new Set() };
+  const edited = existingOnly(store);
+  const wanting = [
+    ...edited.npcs.filter((e) => wantsNewLoot('npc', e)).map((entity) => ({ kind: 'npc' as const, entity })),
+    ...edited.objects.filter((e) => wantsNewLoot('object', e)).map((entity) => ({ kind: 'object' as const, entity })),
+  ];
+  for (const { kind, entity } of wanting) {
+    const table = LOOT_TABLE[kind];
+    const id = text(entity.entry);
+    const rows = await db.selectRows(table, { Entry: id });
+    if (rows.length === 0) continue;
+    const own = kind === 'npc'
+      ? (await db.selectRows('creature_template', { entry: id })).some((r) => num(r.lootid) === entity.entry)
+      : (await db.selectRows('gameobject_template', { entry: id })).some((r) => num(r.type) === OBJECT_TYPE_VALUE.chest && num(r.Data1) === entity.entry);
+    if (own) continue;
+    let next = Math.max(entity.entry, ...taken[kind]) + 1;
+    const max = db.selectMax ? await db.selectMax(table, 'Entry') : null;
+    if (max !== null) next = Math.max(next, max + 1);
+    while (taken[kind].has(next) || (max === null && (await db.selectRows(table, { Entry: text(next) })).length > 0)) next += 1;
+    taken[kind].add(next);
+    ids.set(`${kind}:${entity.entry}`, next);
+    warnings.push(`"${entity.name || entity.entry}" gets loot id ${next}: loot list ${entity.entry} already belongs to something else.`);
+  }
+  return { ids, warnings };
+}
+
+function npcStatements(out: Statements, npc: CustomNpc, origin: Existing, givers: readonly number[], lootIds: LootIds): void {
   const entry = text(npc.entry);
   const original: Row = rowsOf(origin, 'creature_template')[0] ?? { entry };
   const lootLocked = origin.locked.includes('loot');
   const fightLocked = origin.locked.includes('fight');
   const originalLoot = num(original.lootid);
-  const lootId = originalLoot > 0 ? originalLoot : !lootLocked && npc.loot.length > 0 ? npc.entry : 0;
+  const lootId = originalLoot > 0 ? originalLoot : !lootLocked && npc.loot.length > 0 ? (lootIds.get(`npc:${npc.entry}`) ?? npc.entry) : 0;
   const templateRow = (n: CustomNpc): Row => {
     const flags =
       (num(original.npcflag) & ~(GOSSIP_BIT | QUEST_GIVER_BIT)) |
@@ -121,7 +173,7 @@ function npcStatements(out: Statements, npc: CustomNpc, origin: Existing, givers
   if (!lootLocked && lootId > 0) writeTable(out, origin, 'creature_loot_template', [{ Entry: text(lootId) }], lootRows(lootId, npc.loot));
 }
 
-function objectStatements(out: Statements, object: CustomObject, origin: Existing): void {
+function objectStatements(out: Statements, object: CustomObject, origin: Existing, lootIds: LootIds): void {
   const entry = text(object.entry);
   const original: Row = rowsOf(origin, 'gameobject_template')[0] ?? { entry };
   const row: Row = { ...original, entry, name: object.name, displayId: text(object.displayId), size: text(object.size) };
@@ -138,7 +190,7 @@ function objectStatements(out: Statements, object: CustomObject, origin: Existin
     if (object.type === 'chest') {
       // A chest's loot stays under the list it has; one with none gets its own entry when loot is added
       const originalLoot = num(row.Data1);
-      lootId = originalLoot > 0 ? originalLoot : !origin.locked.includes('loot') && object.loot.length > 0 ? object.entry : 0;
+      lootId = originalLoot > 0 ? originalLoot : !origin.locked.includes('loot') && object.loot.length > 0 ? (lootIds.get(`object:${object.entry}`) ?? object.entry) : 0;
       Object.assign(row, { Data1: text(lootId), Data8: quest });
     }
   }
@@ -156,11 +208,11 @@ function itemStatements(out: Statements, item: CustomItem, origin: Existing): vo
 }
 
 /** The apply and revert rows of every existing entity in the store; new ones are compiled elsewhere */
-export function existingStatements(store: ProjectEntities, givers: readonly number[]): Statements {
+export function existingStatements(store: ProjectEntities, givers: readonly number[], lootIds: LootIds = new Map()): Statements {
   const out: Statements = { apply: [], revert: [] };
   const edited = existingOnly(store);
-  for (const npc of edited.npcs) if (npc.origin.kind === 'existing') npcStatements(out, npc, npc.origin, givers);
-  for (const object of edited.objects) if (object.origin.kind === 'existing') objectStatements(out, object, object.origin);
+  for (const npc of edited.npcs) if (npc.origin.kind === 'existing') npcStatements(out, npc, npc.origin, givers, lootIds);
+  for (const object of edited.objects) if (object.origin.kind === 'existing') objectStatements(out, object, object.origin, lootIds);
   for (const item of edited.items) if (item.origin.kind === 'existing') itemStatements(out, item, item.origin);
   return out;
 }
