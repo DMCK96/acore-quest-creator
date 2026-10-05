@@ -5,8 +5,10 @@ import { IDLE, type Movement } from '@core/world/movement';
 import type { Role, RoleTarget } from '@core/modules/quest-roles';
 import type { World3D } from './world3d';
 import type { SpawnEdit, SpawnRef } from './edits';
-import { buildMenu, type At, type MenuAction, type MenuGroup, type MenuSpawn, type MenuTarget, type QuestMenuInfo } from './menu/model';
-import { NEEDS_GROUND } from './menu/world-items';
+import type { ProjectEntities } from '@core/entities/model';
+import type { At, MenuAction, MenuGroup, MenuSpawn, MenuTarget, QuestMenuInfo } from './menu/model';
+import { buildMenu, NEEDS_GROUND } from './menu/section';
+import { subjectOf } from './menu/subject';
 import { clipEntries, copySpawns, duplicateOffset, entriesOf, layoutAt, pasteable, type ClipEntry } from './clipboard';
 import { placementAt } from './placing';
 import { WorldContextMenu } from './WorldContextMenu';
@@ -54,8 +56,8 @@ export interface WorldMenuDeps {
   onEditEntity?(kind: 'creature' | 'object', entry: number): void;
   /** Makes a project object lootable, or no longer */
   onSetLootable?(entry: number, on: boolean): Promise<void>;
-  /** Whether a project object can be looted; null for one that is not the project's */
-  lootable?(entry: number): boolean | null;
+  /** The project's NPCs, objects and items: whether a right-clicked spawn's NPC or object is the project's own */
+  entities: ProjectEntities;
 }
 
 type Put = { kind: 'creature' | 'object'; entry: number; own: boolean; at: Placement };
@@ -106,7 +108,7 @@ export function useWorldMenu(deps: WorldMenuDeps): {
   const open = (target: MenuTarget, client: { x: number; y: number }): void => {
     const { api, map, placing, quest, onNewQuest } = d.current;
     const entries = clipEntries();
-    const groups = buildMenu(target, {
+    const groups = buildMenu(subjectOf(target, d.current.entities), {
       map,
       connected: api !== null,
       clipboard: { count: entries.length, blocked: null },
@@ -115,7 +117,6 @@ export function useWorldMenu(deps: WorldMenuDeps): {
       quest: quest ?? null,
       project: onNewQuest !== undefined,
       marked,
-      lootable: (entry) => d.current.lootable?.(entry) ?? null,
     });
     if (groups.length > 0) setMenu({ groups, at: client });
   };

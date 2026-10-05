@@ -18,7 +18,7 @@ import { ownEdit } from './own-3d-edit';
 import { ownViewSpawns } from '@core/entities/view-spawns';
 import { toggleRole } from '@core/modules/quest-roles';
 import { questMenuInfo } from '../world3d/quest-context';
-import { OBJECTIVES_FULL } from '../world3d/menu/quest-items';
+import { OBJECTIVES_FULL } from '../world3d/menu/section';
 import { LeafletMap, type MapMarkerView, type MapView } from './LeafletMap';
 import './map.css';
 

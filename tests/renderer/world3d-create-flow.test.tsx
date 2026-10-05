@@ -6,7 +6,7 @@ import { NamesProvider } from '../../src/renderer/state/names';
 import { ProjectEntitiesProvider } from '../../src/renderer/state/project-entities';
 import { makeMockApi, okv } from './mock-api';
 import { clearClipboard } from '../../src/renderer/world3d/clipboard';
-import { EMPTY_ENTITIES, newObject, newSpawn, type ProjectEntities } from '../../src/core/entities/model';
+import { EMPTY_ENTITIES, newNpc, newObject, newSpawn, type ProjectEntities } from '../../src/core/entities/model';
 import { markWelcomeSeen } from '../../src/renderer/world3d/welcome-seen';
 import { writeLastPlace } from '../../src/renderer/world3d/last-place';
 
@@ -66,6 +66,19 @@ afterEach(() => {
 });
 
 describe('creating and editing from the World view', () => {
+  it('a database NPC offers no Edit; a project NPC does', async () => {
+    const hela = { ...newNpc(12000001), name: 'Hela', displayId: 1, spawns: [{ ...newSpawn(6000001), x: 1, y: 2, z: 3 }] };
+    mount({ ...EMPTY_ENTITIES, npcs: [hela] });
+    await waitFor(() => expect(worlds).toHaveLength(1));
+    const guard = { kind: 'creature' as const, guid: 80330, entry: 1423, name: 'Guard', own: false, added: false, pathId: 0, wander: 0, map: 0, placement: { x: 1, y: 2, z: 3, orientation: 0, rotation: null } };
+    rightClick({ ground: at, hit: { type: 'spawn', spawn: guard }, selection: [guard] });
+    expect(screen.queryByRole('menuitem', { name: 'Edit NPC…' })).toBeNull();
+    await userEvent.keyboard('{Escape}');
+    const own = { ...guard, guid: 6000001, entry: 12000001, name: 'Hela', own: true };
+    rightClick({ ground: at, hit: { type: 'spawn', spawn: own }, selection: [own] });
+    expect(screen.getByRole('menuitem', { name: 'Edit NPC…' })).toBeTruthy();
+  });
+
   it('New NPC here makes an NPC with one spawn where it was clicked, outside any quest, then opens its editor', async () => {
     const { create } = mount();
     await waitFor(() => expect(worlds).toHaveLength(1));

@@ -14,6 +14,7 @@ import { EMPTY_WORLD, movementsOf, type Placement, type WorldLayer } from '@core
 import type { SpawnEdit, SpawnRef } from './edits';
 import { ProjectChanges } from './ProjectChanges';
 import { useProjectEntities } from '../state/project-entities';
+import { EMPTY_ENTITIES } from '@core/entities/model';
 import { PlaceDialog, type Chosen } from './PlaceDialog';
 import { OrbMark } from '../components/OrbMark';
 import type { PlaceRequest } from './placing';
@@ -142,8 +143,6 @@ interface ViewProps {
   onGoToSpawn?(target: Omit<FocusTarget, 'nonce'> & { map: number }): void;
   /** The right-click menu's Make lootable… / Stop being lootable */
   onSetLootable?(entry: number, on: boolean): Promise<void>;
-  /** Whether a project object can be looted; null for one that is not the project's */
-  lootable?(entry: number): boolean | null;
   /** Starts a new quest given and taken back by an NPC; `after` puts it after the open quest in its chain. */
   onNewQuest?(giver: { entry: number; name: string }, after: boolean): void;
   /** Told the spawns of the open quest or its chain, when they are shown, to list them. */
@@ -209,7 +208,7 @@ class Contained extends Component<{ children: ReactNode }, { failure: string | n
 
 function WorldStage({
   map, start, hasClient, own, onSelect, onOwnEdit, focus, active = true, showArea = true, onArea, onPlaceChange, quest, chainIds, onQuestRole, onNewQuest, onShowSpawns,
-  onCreateEntity, onEditEntity, onSetLootable, lootable, onGoToSpawn,
+  onCreateEntity, onEditEntity, onSetLootable, onGoToSpawn,
 }: ViewProps): React.JSX.Element {
   const container = useRef<HTMLDivElement>(null);
   const world = useRef<World3D | null>(null);
@@ -348,7 +347,7 @@ function WorldStage({
     onCreateEntity,
     onEditEntity,
     onSetLootable,
-    lootable,
+    entities: projectEntities ?? EMPTY_ENTITIES,
   });
   const menuRef = useRef(menu);
   menuRef.current = menu;

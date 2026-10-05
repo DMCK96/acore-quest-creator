@@ -11,7 +11,7 @@ import { toggleRole } from '@core/modules/quest-roles';
 import { useApi } from '../state/names';
 import { ownEdit } from '../map/own-3d-edit';
 import { chainOf, questMenuInfo } from './quest-context';
-import { OBJECTIVES_FULL } from './menu/quest-items';
+import { OBJECTIVES_FULL } from './menu/section';
 import { WORLD_MAPS, worldMapById } from '@core/map/world-maps';
 import type { TeleportSpot } from '@core/map/teleports';
 import { World3DView, type FocusTarget } from './World3DView';
@@ -133,10 +133,6 @@ export function WorldWorkspace({
       project.setEntities(next);
     }, on ? `Made ${name} lootable` : `Stopped ${name} being lootable`);
     if (on) setEditor({ kind: 'object', entry, isNew: false, tab: 'contents' });
-  };
-  const lootable = (entry: number): boolean | null => {
-    const object = storeRef.current.objects.find((o) => o.entry === entry);
-    return object ? object.type === 'chest' : null;
   };
   // The spawns of the open quest or its chain, listed after the menu showed them
   const [preset, setPreset] = useState<FindPreset | null>(null);
@@ -299,7 +295,6 @@ export function WorldWorkspace({
           setFocus((previous) => ({ ...target, nonce: (previous?.nonce ?? 0) + 1 }));
         }}
         onSetLootable={setLootable}
-        lootable={lootable}
       />
       {note && (
         <p className="world3d__note" role="status">
