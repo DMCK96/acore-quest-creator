@@ -187,6 +187,10 @@ export class FakeWorldDb implements WorldDb {
     const waypoints = await this.selectRows('waypoint_data', {});
     const equips = await this.selectRows('creature_equip_template', {});
     const presets = this.tables.has('creature_display_preset') ? await this.selectRows('creature_display_preset', {}) : [];
+    // The spawn group each spawn is in, as the view query's pool join gives it
+    const poolOf = async (table: string): Promise<Map<string | null, string | null>> =>
+      this.tables.has(table) ? new Map((await this.selectRows(table, {})).map((p) => [p.guid, p.pool_entry])) : new Map();
+    const creaturePools = await poolOf('pool_creature');
     const creatures = (await this.selectRows('creature', {})).filter(inBox).sort(byGuid).slice(0, limit).map((r) => {
       const entry = r[entryColumn] ?? null;
       const model = models.get(entry ?? '');
@@ -195,7 +199,7 @@ export class FakeWorldDb implements WorldDb {
       const points = pathId && pathId !== '0' ? waypoints.filter((w) => w.id === pathId) : [];
       const equip = r.equipment_id && r.equipment_id !== '0' ? equips.find((e) => e.CreatureID === entry && e.ID === r.equipment_id) : undefined;
       return toViewCreature(
-        { ...r, entry, name: names.get(entry) ?? null, display_id: model?.CreatureDisplayID ?? null, display_scale: model?.DisplayScale ?? null, path_id: pathId ?? null },
+        { ...r, entry, name: names.get(entry) ?? null, display_id: model?.CreatureDisplayID ?? null, display_scale: model?.DisplayScale ?? null, path_id: pathId ?? null, pool_entry: creaturePools.get(r.guid) ?? null },
         points.length > 0 ? orderPath(points) : null,
         equip ? [Number(equip.ItemID1 ?? 0), Number(equip.ItemID2 ?? 0), Number(equip.ItemID3 ?? 0)] : [0, 0, 0],
         presets.length > 0 ? pickPreset(presets, Number(entry), Number(model?.CreatureDisplayID ?? 0)) : null,
@@ -203,9 +207,10 @@ export class FakeWorldDb implements WorldDb {
     });
 
     const templates = new Map((await this.selectRows('gameobject_template', {})).map((t) => [t.entry, t]));
+    const objectPools = await poolOf('pool_gameobject');
     const objects = (await this.selectRows('gameobject', {})).filter(inBox).sort(byGuid).slice(0, limit).map((r) => {
       const t = templates.get(r.id ?? null);
-      return toViewObject({ ...r, entry: r.id ?? null, name: t?.name ?? null, display_id: t?.displayId ?? null, size: t?.size ?? null });
+      return toViewObject({ ...r, entry: r.id ?? null, name: t?.name ?? null, display_id: t?.displayId ?? null, size: t?.size ?? null, pool_entry: objectPools.get(r.guid) ?? null });
     });
 
     return { creatures, objects };

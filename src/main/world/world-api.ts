@@ -142,7 +142,7 @@ export async function routeDrifted(db: WorldDb, edit: WorldRouteEdit): Promise<b
 /** The tables a world patch writes, as the export renders them */
 export async function worldSchema(db: WorldDb, hash: string): Promise<SchemaInfo> {
   const tables: SchemaInfo['tables'] = {};
-  for (const table of ['creature', 'gameobject', 'waypoint_data', 'creature_addon']) tables[table] = await db.columns(table);
+  for (const table of ['creature', 'gameobject', 'waypoint_data', 'creature_addon', 'pool_template', 'pool_creature', 'pool_gameobject', 'pool_pool']) tables[table] = await db.columns(table);
   return { tables, forbidden: [], hash };
 }
 

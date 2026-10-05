@@ -23,6 +23,8 @@ const LOOKUP_TABLES = [
   'creature_addon', 'waypoint_data', 'creature_template_addon',
   // Weapons of new NPCs (slice M).
   'creature_equip_template',
+  // Spawn groups: the server's pools (3D view).
+  'pool_template', 'pool_creature', 'pool_gameobject', 'pool_pool',
 ] as const;
 
 /** An empty in-memory world DB whose tables carry the fork's real DDL. */

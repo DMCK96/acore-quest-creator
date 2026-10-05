@@ -77,6 +77,8 @@ export interface ViewCreature {
   removedBy: ViewEvent[];
   /** The display preset that dresses it, when the database has one for it */
   preset: ViewPreset | null;
+  /** The spawn group (pool) it is in, or null when it is in none */
+  group: number | null;
 }
 
 export interface ViewObject {
@@ -100,6 +102,8 @@ export interface ViewObject {
   events: ViewEvent[];
   /** Every event that takes it away while it runs, by id */
   removedBy: ViewEvent[];
+  /** The spawn group (pool) it is in, or null when it is in none */
+  group: number | null;
 }
 
 export interface ViewSpawns {
@@ -153,6 +157,9 @@ const num = (value: string | null | undefined, fallback = 0): number => {
   return Number.isFinite(n) ? n : fallback;
 };
 
+/** A spawn's group from its `pool_entry` column; null when it is in none (or the query had no pools) */
+const groupOf = (row: Row): number | null => (row.pool_entry === null || row.pool_entry === undefined || row.pool_entry === '' ? null : num(row.pool_entry));
+
 export function toViewCreature(row: Row, path: ViewPoint[] | null, equipment: [number, number, number], preset: ViewPreset | null = null): ViewCreature {
   return {
     guid: num(row.guid),
@@ -173,6 +180,7 @@ export function toViewCreature(row: Row, path: ViewPoint[] | null, equipment: [n
     event: eventOf(row),
     ...eventListOf(row),
     preset,
+    group: groupOf(row),
   };
 }
 
@@ -191,6 +199,7 @@ export function toViewObject(row: Row): ViewObject {
     own: false,
     event: eventOf(row),
     ...eventListOf(row),
+    group: groupOf(row),
   };
 }
 

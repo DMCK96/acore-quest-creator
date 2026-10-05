@@ -3,7 +3,7 @@ import { buildMenu, type MenuContext, type MenuItem, type MenuSpawn, type MenuTa
 
 const at = { x: 1, y: 2, z: 3 };
 // `own`: a spawn of one of the project's own NPCs or objects
-const spawn = (over: Partial<MenuSpawn> = {}): MenuSpawn => ({ kind: 'creature', guid: 6000001, entry: 12000001, name: 'Hela', own: true, added: false, pathId: 0, wander: 0, map: 0,
+const spawn = (over: Partial<MenuSpawn> = {}): MenuSpawn => ({ kind: 'creature', guid: 6000001, entry: 12000001, name: 'Hela', own: true, added: false, pathId: 0, wander: 0, map: 0, group: null,
   placement: { x: 1, y: 2, z: 3, orientation: 0, rotation: null }, ...over });
 const context = (over: Partial<MenuContext> = {}): MenuContext => ({ map: 0, connected: true, clipboard: { count: 0, blocked: null }, placing: false, drawing: null, quest: null, project: true, marked: false, lootable: () => null, ...over });
 const ground: MenuTarget = { ground: at, hit: null, selection: [] };

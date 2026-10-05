@@ -35,6 +35,9 @@ import { loadSchema } from '../core/schema/load';
 import { refCheckerFor, validateQuest, type Issue, type RefChecker } from '../core/validate/validate';
 import { TOOL_VERSION } from '../core/version';
 import { addSpawn, hasWorldChanges, isAdded, moveSpawn, movementsOf, revertMovement, revertRoute, revertSpawn, setMovement, setRoute, worldStatements, type RoutePoint, type SpawnDefaults, type WorldLayer } from '../core/world/layer';
+import { deleteGroup, dropMember, groupsOf, putGroup, revertGroup } from '../core/world/layer';
+import { memberKey, validateGroup, type SpawnGroup } from '../core/world/groups';
+import { groupContext, groupDrifted, listPools, readGroup } from './world/groups-api';
 import { IDLE } from '../core/world/movement';
 import { describeStep } from './project/step-labels';
 import type { HistoryStep } from './project/history';
@@ -46,6 +49,7 @@ import type {
   CanvasNode,
   ClientStatus,
   ErrorCode,
+  GroupView,
   NodeGroup,
   NodeLink,
   NodePosition,
@@ -1126,6 +1130,54 @@ export function createApi(deps: ApiDeps): Api {
     if (issues.some((i) => i.severity === 'error')) {
       throw fail('VALIDATION', "Fix the errors on the project's NPCs, objects and items first.", { issues });
     }
+    const groupIssues = await layerGroupIssues(live);
+    if (groupIssues.length > 0) throw fail('VALIDATION', 'Fix the spawn groups first.', { issues: groupIssues });
+  }
+
+  /** Why each spawn group in the world layer (but the removed ones) would be refused, each named by its group */
+  async function layerGroupIssues(live: Session): Promise<Issue[]> {
+    const layer = deps.session.world.get();
+    const store = projectEntities();
+    const issues: Issue[] = [];
+    for (const group of groupsOf(layer).filter((g) => !g.removed)) {
+      const reasons = validateGroup(group, await groupContext(live.db, layer, store, [], group));
+      issues.push(...reasons.map((reason): Issue => ({ severity: 'error', code: 'GROUP', message: `${group.name}: ${reason}` })));
+    }
+    return issues;
+  }
+
+  /** A spawn group as the layer has it, else as the database's pool; null when there is neither */
+  async function groupOf(db: WorldDb, id: number): Promise<SpawnGroup | null> {
+    const known = groupsOf(deps.session.world.get()).find((g) => g.id === id);
+    return known ?? (await readGroup(db, id));
+  }
+
+  /** Where a spawn stands: as moved or placed in the layer, as the project has it, else as the database has it */
+  async function spawnAt(db: WorldDb, kind: 'npc' | 'object', guid: number): Promise<{ x: number; y: number; z: number } | null> {
+    const table = kind === 'npc' ? 'creature' : 'gameobject';
+    const layer = deps.session.world.get();
+    const at =
+      layer.spawns.find((s) => s.kind === table && s.guid === guid)?.current ??
+      layer.added.find((a) => a.kind === table && a.guid === guid)?.placement ??
+      (kind === 'npc' ? projectEntities().npcs : projectEntities().objects).flatMap((e) => e.spawns).find((s) => s.guid === guid) ??
+      (await readPlacement(db, table, guid))?.placement;
+    return at ? { x: at.x, y: at.y, z: at.z } : null;
+  }
+
+  /** Every spawn under a group, through its member groups, where it stands */
+  async function groupSpots(db: WorldDb, id: number, seen: Set<number>): Promise<{ x: number; y: number; z: number }[]> {
+    if (seen.has(id)) return [];
+    seen.add(id);
+    const group = await groupOf(db, id);
+    const spots: { x: number; y: number; z: number }[] = [];
+    for (const m of group?.members ?? []) {
+      if (m.type === 'group') spots.push(...(await groupSpots(db, m.id, seen)));
+      else {
+        const at = await spawnAt(db, m.kind, m.guid);
+        if (at) spots.push(at);
+      }
+    }
+    return spots;
   }
 
   /**
@@ -1968,10 +2020,11 @@ export function createApi(deps: ApiDeps): Api {
         const next =
           target.kind === 'spawn' ? revertSpawn(layer, target.spawnKind, target.guid)
           : target.kind === 'route' ? revertRoute(layer, target.pathId)
+          : target.kind === 'group' ? revertGroup(layer, target.id)
           : revertMovement(layer, target.guid);
         const changed =
           next.spawns.length !== layer.spawns.length || next.routes.length !== layer.routes.length || next.added.length !== layer.added.length ||
-          movementsOf(next).length !== movementsOf(layer).length;
+          movementsOf(next).length !== movementsOf(layer).length || groupsOf(next).length !== groupsOf(layer).length;
         if (changed) deps.session.world.put(next);
         return next;
       }),
@@ -1987,7 +2040,114 @@ export function createApi(deps: ApiDeps): Api {
           ...(await Promise.all(
             movementsOf(layer).map(async (m) => ({ ...m, type: 'movement' as const, drifted: await movementDrifted(db, m, isAdded(layer, 'creature', m.guid)) })),
           )),
+          ...(await Promise.all(groupsOf(layer).map(async (g) => ({ ...g, type: 'group' as const, drifted: await groupDrifted(db, g) })))),
         ];
+      }),
+
+    worldGroup: (id) => run(async () => groupOf(connected().db, id)),
+
+    worldGroupView: (id) =>
+      run(async () => {
+        const db = connected().db;
+        const group = await groupOf(db, id);
+        if (!group) return null;
+        const store = projectEntities();
+        const members: GroupView['members'] = [];
+        for (const m of group.members) {
+          if (m.type === 'group') {
+            const child = await groupOf(db, m.id);
+            // A group member stands at the centre of every spawn under it
+            const spots = await groupSpots(db, m.id, new Set([group.id]));
+            const mean = (axis: 'x' | 'y' | 'z') => spots.reduce((sum, s) => sum + s[axis], 0) / spots.length;
+            members.push({
+              key: memberKey(m), type: 'group', name: child?.name ?? `Group ${m.id}`, chance: m.chance,
+              at: spots.length > 0 ? { x: mean('x'), y: mean('y'), z: mean('z') } : null,
+            });
+            continue;
+          }
+          const table = m.kind === 'npc' ? 'creature' : 'gameobject';
+          const own = (m.kind === 'npc' ? store.npcs : store.objects).find((e) => e.entry === m.entry);
+          const placedName = deps.session.world.get().added.find((a) => a.kind === table && a.guid === m.guid)?.name;
+          const name = own?.name ?? placedName ?? (await db.lookupNames(table, [m.entry])).get(m.entry) ?? '';
+          members.push({ key: memberKey(m), type: 'spawn', name, chance: m.chance, at: await spawnAt(db, m.kind, m.guid) });
+        }
+        return { id: group.id, name: group.name, map: group.map, maxActive: group.maxActive, members };
+      }),
+
+    worldGroupsOnMap: (map) =>
+      run(async () => {
+        const db = connected().db;
+        const layer = groupsOf(deps.session.world.get());
+        const byId = new Map<number, { id: number; name: string; maxActive: number; members: number }>();
+        for (const pool of await listPools(db)) {
+          if (pool.map === map) byId.set(pool.id, { id: pool.id, name: pool.name, maxActive: pool.maxActive, members: pool.members });
+        }
+        // The layer's copy wins; one removed there, or moved to another map, is left out
+        for (const g of layer) {
+          byId.delete(g.id);
+          if (!g.removed && g.map === map) byId.set(g.id, { id: g.id, name: g.name, maxActive: g.maxActive, members: g.members.length });
+        }
+        return [...byId.values()].sort((a, b) => a.name.localeCompare(b.name) || a.id - b.id);
+      }),
+
+    worldNewGroupId: () =>
+      run(async () => {
+        const db = connected().db;
+        let dbMax = 0;
+        try {
+          dbMax = (await db.selectMax?.('pool_template', 'entry')) ?? 0;
+        } catch {
+          dbMax = 0;
+        }
+        return Math.max(dbMax, ...groupsOf(deps.session.world.get()).map((g) => g.id), 0) + 1;
+      }),
+
+    worldCheckGroup: (group, moves) =>
+      run(async () => validateGroup(group, await groupContext(connected().db, deps.session.world.get(), projectEntities(), moves, group))),
+
+    worldSetGroup: (group, moves) =>
+      run(() => asOneStep(async () => {
+        const db = connected().db;
+        const reasons = validateGroup(group, await groupContext(db, deps.session.world.get(), projectEntities(), moves, group));
+        if (reasons.length > 0) {
+          throw fail('VALIDATION', 'This spawn group cannot be saved.', { issues: reasons.map((message): Issue => ({ severity: 'error', code: 'GROUP', message })) });
+        }
+        // The database group each moved spawn leaves is read into the layer first, so it is kept there without it
+        const start = deps.session.world.get();
+        const read: SpawnGroup[] = [];
+        for (const move of moves) {
+          const held = groupsOf(start).some((g) => !g.removed && g.members.some((m) => m.type === 'spawn' && m.kind === move.kind && m.guid === move.guid));
+          if (held) continue;
+          const [row] = await rowsOrNone(db, move.kind === 'npc' ? 'pool_creature' : 'pool_gameobject', { guid: [String(move.guid)] });
+          const pool = row ? Number(row.pool_entry) : null;
+          if (pool === null || pool === group.id || groupsOf(start).some((g) => g.id === pool) || read.some((g) => g.id === pool)) continue;
+          const found = await readGroup(db, pool);
+          if (found) read.push(found);
+        }
+        // Nothing is awaited from here to the layer being put back, so an edit made meanwhile is kept
+        let next = deps.session.world.get();
+        for (const found of read) if (!groupsOf(next).some((g) => g.id === found.id)) next = putGroup(next, found);
+        for (const move of moves) next = dropMember(next, move.kind, move.guid);
+        next = putGroup(next, group);
+        deps.session.world.put(next);
+        return next;
+      })),
+
+    worldDeleteGroup: (id) =>
+      run(async () => {
+        const group = await groupOf(connected().db, id);
+        if (!group) throw fail('BAD_REQUEST', `There is no spawn group ${id}.`);
+        const next = deleteGroup(deps.session.world.get(), group);
+        deps.session.world.put(next);
+        return next;
+      }),
+
+    worldDropMember: (kind, guid) =>
+      run(async () => {
+        const layer = deps.session.world.get();
+        const next = dropMember(layer, kind, guid);
+        if (!isDeepStrictEqual(groupsOf(next), groupsOf(layer))) deps.session.world.put(next);
+        return next;
       }),
 
     historyList: () => run(async () => historyList()),

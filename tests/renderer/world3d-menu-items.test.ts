@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { buildMenu, type MenuContext, type MenuItem, type MenuSpawn, type MenuTarget } from '../../src/renderer/world3d/menu/model';
 
 const at = { x: 1, y: 2, z: 3 };
-const npc = (over: Partial<MenuSpawn> = {}): MenuSpawn => ({ kind: 'creature', guid: 80330, entry: 1423, name: 'Guard', own: false, added: false, pathId: 0, wander: 0, map: 0,
+const npc = (over: Partial<MenuSpawn> = {}): MenuSpawn => ({ kind: 'creature', guid: 80330, entry: 1423, name: 'Guard', own: false, added: false, pathId: 0, wander: 0, map: 0, group: null,
   placement: { x: 1, y: 2, z: 3, orientation: 0, rotation: null }, ...over });
 const crate = (over: Partial<MenuSpawn> = {}): MenuSpawn => npc({ kind: 'object', guid: 5, entry: 143981, name: 'Crate', ...over });
 const context = (over: Partial<MenuContext> = {}): MenuContext => ({ map: 0, connected: true, clipboard: { count: 0, blocked: null }, placing: false, drawing: null, quest: null, project: true, marked: false, lootable: () => null, ...over });
