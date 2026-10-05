@@ -20,6 +20,8 @@ import { toggleRole } from '@core/modules/quest-roles';
 import { questMenuInfo } from '../world3d/quest-context';
 import { OBJECTIVES_FULL } from '../world3d/menu/section';
 import { LeafletMap, type MapMarkerView, type MapView } from './LeafletMap';
+import { EntityEditorHost, type EditorState } from '../entities/EntityEditorHost';
+import { EntityEditorProvider, useEntityEditor, type OpenEditor } from '../entities/EntityEditorContext';
 import './map.css';
 
 /**
@@ -125,6 +127,22 @@ export function QuestMapView({
   const [searchKind, setSearchKind] = useState<'creature' | 'gameobject'>('creature');
   const [searchEntry, setSearchEntry] = useState(0);
   const [message, setMessage] = useState<string | null>(null);
+  /** The NPC or object editor, opened from the 3D view's right-click menu */
+  const [editor, setEditor] = useState<EditorState | null>(null);
+  /** Edit NPC… / Edit object…: an existing one is brought into the project first */
+  const editEntity = async (what: 'creature' | 'object' | 'item', entry: number): Promise<void> => {
+    const error = await openHere({ kind: what === 'creature' ? 'npc' : what, entry });
+    if (error) setMessage(error);
+  };
+  // The map covers the quest editor, so an editor asked for here (a picker's Edit…) opens over the map
+  const outer = useEntityEditor();
+  const openHere: OpenEditor = async (request) => {
+    if (request.kind !== 'npc' && request.kind !== 'object' && request.kind !== 'item') return outer ? outer(request) : null;
+    if (!project) return null;
+    const error = await project.ensure({ kind: request.kind, entry: request.entry });
+    if (!error) setEditor({ kind: request.kind, entry: request.entry, isNew: false });
+    return error;
+  };
   /** The map the author chose, and where the map was last asked to look; until then, the quest's positions. */
   const [mapId, setMapId] = useState<number | null>(null);
   const [view, setView] = useState<MapView | null>(null);
@@ -433,13 +451,17 @@ export function QuestMapView({
   );
 
   return (
+    <EntityEditorProvider open={openHere}>
     <div
       role="dialog"
       aria-label="Quest map"
       className="quest-map"
       onKeyDown={(e) => {
-        // Escape ends a pick on the map without closing the map.
-        if (e.key === 'Escape' && patrol.picking !== null) {
+        // Escape closes the editor opened over the map, then ends a pick, without closing the map.
+        if (e.key === 'Escape' && editor) {
+          e.stopPropagation();
+          setEditor(null);
+        } else if (e.key === 'Escape' && patrol.picking !== null) {
           e.stopPropagation();
           patrol.setPicking(null);
         }
@@ -489,6 +511,7 @@ export function QuestMapView({
               return next !== null;
             }}
             quest={questInfo}
+            onEditEntity={(kind, entry) => void editEntity(kind, entry)}
             onQuestRole={(role, target, on) => {
               const edits = toggleRole(valuesRef.current, role, target, on);
               if (!edits) return OBJECTIVES_FULL;
@@ -680,6 +703,14 @@ export function QuestMapView({
           ))}
         </aside>
       </div>
+      {editor && project && (
+        <div className="modal-backdrop">
+          <EntityEditorHost entities={project.entities} onChange={(next) => project.setEntities(next)} quests={project.quests} hasServerData={hasServerData}
+            state={editor} onTab={(tab) => setEditor((was) => (was ? { ...was, tab } : was))} onClose={() => setEditor(null)}
+            onDelete={(kind, entry) => project.remove(kind, entry)} />
+        </div>
+      )}
     </div>
+    </EntityEditorProvider>
   );
 }

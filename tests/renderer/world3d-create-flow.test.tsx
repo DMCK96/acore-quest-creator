@@ -41,7 +41,17 @@ function mount(entities: ProjectEntities = EMPTY_ENTITIES) {
   const state = { entities };
   const setEntities = vi.fn((next: ProjectEntities) => { state.entities = next; });
   const create = vi.fn(async () => ({ entry: 12000007 }));
-  const value = () => ({ entities: state.entities, setEntities, quests: [], layer: { spawns: [], routes: [], added: [] }, setLayer: vi.fn(), tracked: state.entities.objects.map((o) => ({ kind: 'object' as const, entry: o.entry, name: o.name, origin: 'new' as const, changes: ['new' as const], usedBy: [], goTo: o.spawns[0] ? { kind: 'object' as const, guid: o.spawns[0].guid, map: o.spawns[0].map, x: o.spawns[0].x, y: o.spawns[0].y, z: o.spawns[0].z } : null })), create, remove: vi.fn(async () => null), adopt: vi.fn(async () => ({ error: 'not here' })), ensure: vi.fn(async () => null) });
+  const adopt = vi.fn(async (kind: string, entry: number) => {
+    state.entities = { ...state.entities, npcs: [...state.entities.npcs, { ...newNpc(entry), name: 'Stormwind Guard', origin: { kind: 'existing' as const, original: {}, sharedLoot: 0, spawnCount: 1, locked: [] } }] };
+    return { entry };
+  });
+  const ensure = vi.fn(async (ref: { kind: string; entry: number }) => {
+    const owned = [...state.entities.npcs, ...state.entities.objects, ...state.entities.items].some((e) => e.entry === ref.entry);
+    if (owned) return null;
+    const result = await adopt(ref.kind, ref.entry);
+    return 'error' in result ? (result as { error: string }).error : null;
+  });
+  const value = () => ({ entities: state.entities, setEntities, quests: [], layer: { spawns: [], routes: [], added: [] }, setLayer: vi.fn(), tracked: state.entities.objects.map((o) => ({ kind: 'object' as const, entry: o.entry, name: o.name, origin: 'new' as const, changes: ['new' as const], usedBy: [], goTo: o.spawns[0] ? { kind: 'object' as const, guid: o.spawns[0].guid, map: o.spawns[0].map, x: o.spawns[0].x, y: o.spawns[0].y, z: o.spawns[0].z } : null })), create, remove: vi.fn(async () => null), adopt, ensure });
   const ui = () => (
     <NamesProvider api={api}>
       <ProjectEntitiesProvider value={value()}>
@@ -50,7 +60,7 @@ function mount(entities: ProjectEntities = EMPTY_ENTITIES) {
     </NamesProvider>
   );
   const view = render(ui());
-  return { api, create, setEntities, rerender: () => view.rerender(ui()) };
+  return { api, create, adopt, ensure, setEntities, rerender: () => view.rerender(ui()) };
 }
 const rightClick = (target: any) => act(() => worlds.at(-1).options.onContextMenu(target, { x: 40, y: 40 }));
 
@@ -66,17 +76,22 @@ afterEach(() => {
 });
 
 describe('creating and editing from the World view', () => {
-  it('a database NPC offers no Edit; a project NPC does', async () => {
+  it('a project NPC offers Edit', async () => {
     const hela = { ...newNpc(12000001), name: 'Hela', displayId: 1, spawns: [{ ...newSpawn(6000001), x: 1, y: 2, z: 3 }] };
     mount({ ...EMPTY_ENTITIES, npcs: [hela] });
     await waitFor(() => expect(worlds).toHaveLength(1));
-    const guard = { kind: 'creature' as const, guid: 80330, entry: 1423, name: 'Guard', own: false, added: false, pathId: 0, wander: 0, map: 0, placement: { x: 1, y: 2, z: 3, orientation: 0, rotation: null } };
-    rightClick({ ground: at, hit: { type: 'spawn', spawn: guard }, selection: [guard] });
-    expect(screen.queryByRole('menuitem', { name: 'Edit NPC…' })).toBeNull();
-    await userEvent.keyboard('{Escape}');
-    const own = { ...guard, guid: 6000001, entry: 12000001, name: 'Hela', own: true };
+    const own = { kind: 'creature' as const, guid: 6000001, entry: 12000001, name: 'Hela', own: true, added: false, pathId: 0, wander: 0, map: 0, placement: { x: 1, y: 2, z: 3, orientation: 0, rotation: null } };
     rightClick({ ground: at, hit: { type: 'spawn', spawn: own }, selection: [own] });
     expect(screen.getByRole('menuitem', { name: 'Edit NPC…' })).toBeTruthy();
+  });
+
+  it('Edit NPC on a database NPC brings it into the project and opens its editor', async () => {
+    const { adopt } = mount();
+    await waitFor(() => expect(worlds).toHaveLength(1));
+    const guard = { kind: 'creature' as const, guid: 80330, entry: 1423, name: 'Stormwind Guard', own: false, added: false, pathId: 0, wander: 0, map: 0, placement: { x: 1, y: 2, z: 3, orientation: 0, rotation: null } };
+    rightClick({ ground: at, hit: { type: 'spawn', spawn: guard }, selection: [guard] });
+    await userEvent.click(screen.getByRole('menuitem', { name: 'Edit NPC…' }));
+    await waitFor(() => expect(adopt).toHaveBeenCalledWith('npc', 1423));
   });
 
   it('New NPC here makes an NPC with one spawn where it was clicked, outside any quest, then opens its editor', async () => {

@@ -24,6 +24,12 @@ describe('EntityList', () => {
     expect(within(screen.getByRole('listitem', { name: 'Seal' })).getByText('Item 9200001 · New')).toBeTruthy();
   });
 
+  it('says when the database changed under an edited existing entity', () => {
+    const edited: TrackedEntity = { ...guard, changes: ['details'] };
+    render(<EntityList tracked={[edited]} quests={quests} drifted={[{ kind: 'npc', entry: 1423 }]} />);
+    expect(within(screen.getByRole('listitem', { name: 'Stormwind Guard' })).getByText('Changed in the database since')).toBeTruthy();
+  });
+
   it('edits what can be edited and goes to what has a spawn', async () => {
     const onEdit = vi.fn();
     const onGoTo = vi.fn();

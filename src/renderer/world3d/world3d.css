@@ -307,6 +307,10 @@
   font-variant-numeric: tabular-nums;
 }
 
+.project-changes__entity .world-changes__drift {
+  grid-column: 1;
+}
+
 .project-changes__actions {
   grid-column: 2;
   grid-row: 1 / span 2;

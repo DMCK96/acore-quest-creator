@@ -22,21 +22,24 @@ export function changeSummary(changes: readonly EntityChange[]): string {
  * and which quests use it, with Edit and Go to. With a quest open, its entities come first.
  */
 export function EntityList({
-  tracked, quests, openQuestId = null, canEdit, onEdit, onGoTo,
+  tracked, quests, openQuestId = null, canEdit, onEdit, onGoTo, drifted = [],
 }: {
   tracked: readonly TrackedEntity[];
   quests: readonly ProjectQuestUse[];
   /** With a quest open, its entities come first under "Used by this quest" */
   openQuestId?: number | null;
-  /** Whether a row can be edited; phase 1: new entities only */
+  /** Whether a row can be edited; every row when not given */
   canEdit?(entity: TrackedEntity): boolean;
   onEdit?(ref: EntityRef): void;
   onGoTo?(entity: TrackedEntity): void;
+  /** Existing entities whose rows the world database changed since the project brought them in */
+  drifted?: readonly EntityRef[];
 }): React.JSX.Element {
   const rows = (list: readonly TrackedEntity[]): React.JSX.Element => (
     <ul className="project-changes__list">
       {list.map((e) => (
-        <EntityRow key={`${e.kind}:${e.entry}`} entity={e} quests={quests} openQuestId={openQuestId} canEdit={canEdit} onEdit={onEdit} onGoTo={onGoTo} />
+        <EntityRow key={`${e.kind}:${e.entry}`} entity={e} quests={quests} openQuestId={openQuestId} canEdit={canEdit} onEdit={onEdit} onGoTo={onGoTo}
+          drifted={drifted.some((d) => d.kind === e.kind && d.entry === e.entry)} />
       ))}
     </ul>
   );
@@ -52,9 +55,10 @@ export function EntityList({
 }
 
 function EntityRow({
-  entity, quests, openQuestId, canEdit, onEdit, onGoTo,
+  entity, quests, openQuestId, canEdit, onEdit, onGoTo, drifted,
 }: {
   entity: TrackedEntity;
+  drifted: boolean;
   quests: readonly ProjectQuestUse[];
   openQuestId: number | null;
   canEdit?(entity: TrackedEntity): boolean;
@@ -74,6 +78,7 @@ function EntityRow({
     <li className="project-changes__entity" aria-label={label}>
       <span className="project-changes__name">{label}</span>
       <span className="project-changes__facts">{facts}</span>
+      {drifted && <span className="world-changes__drift">Changed in the database since</span>}
       <span className="project-changes__actions">
         <button type="button" className="btn" disabled={!onEdit || !(canEdit?.(entity) ?? true)} onClick={() => onEdit?.({ kind: entity.kind, entry: entity.entry })}>
           Edit

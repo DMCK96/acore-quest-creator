@@ -112,6 +112,9 @@ export function QuestFlowView({ store }: { store: AppStore }): React.JSX.Element
 
   const openEditor: OpenEditor = async (request) => {
     if (request.kind === 'npc' || request.kind === 'object' || request.kind === 'item') {
+      // An existing one is brought into the project first
+      const error = project ? await project.ensure({ kind: request.kind, entry: request.entry }) : null;
+      if (error) return error;
       setEditor({ kind: request.kind, entry: request.entry, isNew: false });
       return null;
     }

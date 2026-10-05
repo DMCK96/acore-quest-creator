@@ -88,9 +88,11 @@ describe('the ground', () => {
 });
 
 describe('a spawn', () => {
-  it('a database NPC: copy, duplicate, coordinates; no edit, loot or remove', () => {
+  it('a database NPC can be edited too; offline it needs the database', () => {
     const world = buildMenu(on(npc()), context()).find((g) => g.id === 'world')!;
-    expect(world.items.map((i) => i.label)).toEqual(['Copy', 'Duplicate', 'Copy coordinates', 'Respawn time…']);
+    expect(world.items.map((i) => i.label)).toEqual(['Edit NPC…', 'Copy', 'Duplicate', 'Copy coordinates', 'Respawn time…']);
+    expect(item(buildMenu(on(npc()), context({ connected: false })), 'Edit NPC…')!.disabledReason).toBe('Needs the world database');
+    expect(item(buildMenu(on(hela), context({ connected: false })), 'Edit NPC…')!.action).toBeDefined();
   });
 
   it('a project NPC: edit first, and remove last', () => {
