@@ -97,6 +97,22 @@ describe('opening an older project', () => {
     render(createElement(ProjectEntitiesFromStore, { store, children: createElement(Probe, { onValue: (v) => (value = v) }) }));
     expect(value.tracked.map((t: any) => [t.name, t.changes])).toEqual([['Hela', ['new']], ['Stormwind Guard', ['spawns']]]);
   });
+
+  it('lists the entity of a spawn taken out of an existing group, its entry known from a spawn edit', async () => {
+    const place = { x: 0, y: 0, z: 0, orientation: 0, rotation: null };
+    const row = (guid: number) => ({ table: 'pool_creature' as const, row: { guid: String(guid), pool_entry: '5000', chance: '0', description: '' } });
+    const layer = {
+      spawns: [{ kind: 'creature', guid: 300, entry: 1003, name: 'Guard', map: 0, original: place, current: { ...place, x: 1 } }],
+      routes: [], added: [],
+      groups: [{ id: 5000, name: 'Guards', map: 0, maxActive: 1, members: [{ type: 'spawn', kind: 'npc', guid: 100, entry: 1001, chance: 0 }],
+        origin: { kind: 'existing', original: { template: { entry: '5000', max_limit: '1', description: 'Guards' }, members: [row(100), row(300)], event: null } } }],
+    };
+    const store = createAppStore(makeMockApi({ worldLayer: vi.fn(async () => okv(layer)) }));
+    await store.getState().loadLayer();
+    let value: any;
+    render(createElement(ProjectEntitiesFromStore, { store, children: createElement(Probe, { onValue: (v) => (value = v) }) }));
+    expect(value.tracked.find((t: any) => t.entry === 1003).changes).toContain('group');
+  });
 });
 
 function Probe({ onValue }: { onValue(v: unknown): void }) {
