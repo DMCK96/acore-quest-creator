@@ -78,7 +78,9 @@ test('a version 3 project, an NPC made in the World and undone, and the project 
   await expect(changesButton(page)).toHaveText('Project changes (1)', { timeout: 60_000 });
   await changesButton(page).click();
   const changes = page.getByRole('dialog', { name: 'Project changes' });
-  await expect(changes.getByRole('region', { name: 'New NPCs, objects & items' }).getByRole('listitem', { name: 'Fixture Hela' })).toContainText('used by Fixture Wolves');
+  await expect(changes.getByRole('region', { name: 'NPCs, objects & items' }).getByRole('listitem', { name: 'Fixture Hela' })).toContainText('NPC 12000001 · New');
+  // The fixture's quest never names Hela as a giver, ender or objective, so no quest uses her
+  await expect(changes.getByRole('listitem', { name: 'Fixture Hela' })).not.toContainText('used by');
   // Go to takes the camera to its spawn, near Northshire
   await changes.getByRole('listitem', { name: 'Fixture Hela' }).getByRole('button', { name: 'Go to' }).click();
   await expect(changes).toHaveCount(0);

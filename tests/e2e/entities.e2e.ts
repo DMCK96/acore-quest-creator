@@ -73,6 +73,11 @@ test('a new NPC is created, placed, made the quest giver and exported with the q
   await giver.getByRole('combobox', { name: 'Starts at 1' }).fill('Scout Hela');
   await giver.getByRole('option', { name: /Scout Hela · new · #\d+$/ }).click();
   await page.keyboard.press('Escape');
+  // The quest panel lists the entities the quest uses first
+  await page.getByRole('list', { name: 'Modules' }).getByRole('button', { name: /^NPCs, objects & items/ }).click();
+  const used = page.getByRole('dialog', { name: 'NPCs, objects & items' });
+  await expect(used.getByRole('region', { name: 'Used by this quest' }).getByRole('listitem', { name: 'Scout Hela' })).toBeVisible();
+  await page.keyboard.press('Escape');
 
   await page.getByRole('button', { name: 'Changes' }).click();
   const changes = page.getByRole('dialog', { name: 'Changes' });
