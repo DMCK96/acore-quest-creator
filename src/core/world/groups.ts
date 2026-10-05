@@ -43,7 +43,7 @@ export const memberKey = (m: GroupMember): string => (m.type === 'group' ? `grou
 const round2 = (n: number): number => Math.round(n * 100) / 100;
 
 /** The percentage each 0-chance member gets: what the explicit chances leave, split evenly (0 when none). */
-export function equalShare(members: readonly GroupMember[]): number {
+export function equalShare(members: readonly { chance: number }[]): number {
   const equal = members.filter((m) => m.chance === 0).length;
   if (equal === 0) return 0;
   const explicit = members.reduce((sum, m) => sum + m.chance, 0);

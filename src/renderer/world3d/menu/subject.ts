@@ -19,7 +19,7 @@ export type MenuSubject =
  */
 export function spawnedEntityOf(info: MenuSpawn, store: ProjectEntities): NpcSpawn | ObjectSpawn {
   const kind = spawnKindOf(info.kind);
-  const spawn: SpawnPoint = { guid: info.guid, map: info.map, placement: info.placement, origin: info.own || info.added ? 'new' : 'existing' };
+  const spawn: SpawnPoint = { guid: info.guid, map: info.map, placement: info.placement, origin: info.own || info.added ? 'new' : 'existing', group: info.group ?? null };
   if (kind === 'npc') {
     const stored = store.npcs.find((n) => n.entry === info.entry);
     return { kind, entry: info.entry, name: info.name, origin: stored ? originOf(stored) : 'existing', pathId: info.pathId, wander: info.wander, spawn };
