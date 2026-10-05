@@ -32,6 +32,12 @@ import { draftToSaves, savedDraft, type ConnectionDraft } from '../connection/dr
 
 export interface AppState {
   screen: 'connect' | 'pick' | 'preview' | 'edit';
+  /**
+   * The moment (on `moment()`'s clock) the action that last opened a quest began; 0 before any. The
+   * shell brings the quests forward for it unless the author picked a workspace after that moment, so
+   * an open that lands late, or a screen change inside the open quest, never pulls them away.
+   */
+  questsAsked: number;
   profiles: ProfileRecord[];
   /** The profile launch puts on the login screen (seeded from `.env` in development); null when none. */
   startupProfileId: number | null;
@@ -134,6 +140,8 @@ export interface AppState {
    * and sends it at once as its own undo step; one the store has already is left as it is
    */
   adoptEntity(kind: 'npc' | 'object' | 'item', entry: number): Promise<{ entry: number } | { error: string }>;
+  /** Now, on the clock `questsAsked` is read against: a later call always gives a larger number. */
+  moment(): number;
   /** Switches the previewed quest into the module editor. */
   editQuest(): void;
   /** Leaves the editor for the chain canvas, sending any pending edit first; the quest stays previewed. */
@@ -227,6 +235,7 @@ export function createAppStore(api: Api, opts: { saveDelayMs?: number } = {}): A
   // Guards against an older, slower `search`/`openQuest` response landing after a newer one.
   let searchToken = 0;
   let openToken = 0;
+  let clock = 0;
   let nodesToken = 0;
   // Each read of the project state is numbered when it is asked for; only the newest is kept, so a
   // read waiting on the graph cannot put back an unsaved marker a later read has cleared
@@ -267,6 +276,7 @@ export function createAppStore(api: Api, opts: { saveDelayMs?: number } = {}): A
 
   const store = create<AppState>((set, get) => ({
     screen: 'connect',
+    questsAsked: 0,
     profiles: [],
     startupProfileId: null,
     summary: null,
@@ -431,6 +441,7 @@ export function createAppStore(api: Api, opts: { saveDelayMs?: number } = {}): A
 
     async openQuest(id, position) {
       const token = ++openToken;
+      const asked = ++clock;
       const result = position === undefined ? await api.openQuest(id) : await api.openQuest(id, position);
       if (token !== openToken) return false;
       if (!result.ok) {
@@ -442,6 +453,7 @@ export function createAppStore(api: Api, opts: { saveDelayMs?: number } = {}): A
         issues: result.value.issues,
         openPanel: null,
         screen: 'preview',
+        questsAsked: asked,
         error: null,
         dirty: false,
       });
@@ -452,6 +464,7 @@ export function createAppStore(api: Api, opts: { saveDelayMs?: number } = {}): A
 
     async addQuestChain(id, position) {
       const token = ++openToken;
+      const asked = ++clock;
       const result = position === undefined ? await api.addQuestChain(id) : await api.addQuestChain(id, position);
       if (token !== openToken) return;
       if (!result.ok) {
@@ -465,6 +478,7 @@ export function createAppStore(api: Api, opts: { saveDelayMs?: number } = {}): A
         issues: open.issues,
         openPanel: null,
         screen: 'preview',
+        questsAsked: asked,
         // A chain cut short is still a chain on the canvas, but the user has to know it is not all of it.
         error: truncated ? `Only the first ${questIds.length} quests of this chain were added.` : null,
         dirty: false,
@@ -475,6 +489,7 @@ export function createAppStore(api: Api, opts: { saveDelayMs?: number } = {}): A
 
     async newQuest(position) {
       const token = ++openToken;
+      const asked = ++clock;
       const result = position === undefined ? await api.newQuest() : await api.newQuest(position);
       if (token !== openToken) return;
       if (!result.ok) {
@@ -487,6 +502,7 @@ export function createAppStore(api: Api, opts: { saveDelayMs?: number } = {}): A
         openPanel: null,
         addedModules: [],
         screen: 'edit',
+        questsAsked: asked,
         error: null,
         dirty: false,
       });
@@ -618,6 +634,8 @@ export function createAppStore(api: Api, opts: { saveDelayMs?: number } = {}): A
       await get().loadProjectState();
       return { entry };
     },
+
+    moment: () => ++clock,
 
     editQuest() {
       if (!get().open) return;

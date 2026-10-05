@@ -108,6 +108,47 @@ describe('the app shell', () => {
     await waitFor(() => expect(tab('Quests')).toHaveAttribute('aria-selected', 'true'));
   });
 
+  it('a quest preview that opens after the author chose the world leaves them on the world', async () => {
+    let finishSave: (value: unknown) => void = () => {};
+    const { store } = await shell({ updateQuest: () => new Promise((resolve) => { finishSave = resolve; }) });
+    await store.getState().openQuest(60001);
+    store.getState().editQuest();
+    store.getState().setValue('quest_template.LogTitle', 'Edited');
+    await waitFor(() => expect(tab('Quests')).toHaveAttribute('aria-selected', 'true'));
+    // Back to chain saves first; the author goes to the world before the save comes back
+    const back = store.getState().backToChain();
+    await userEvent.click(tab('World'));
+    expect(tab('World')).toHaveAttribute('aria-selected', 'true');
+    await act(async () => {
+      finishSave(okv(true));
+      await back;
+    });
+    expect(store.getState().screen).toBe('preview');
+    expect(tab('World')).toHaveAttribute('aria-selected', 'true');
+  });
+
+  it('a quest that finishes opening after the author chose the world leaves them on the world', async () => {
+    let finishOpen: (value: unknown) => void = () => {};
+    const { store } = await shell({ openQuest: () => new Promise((resolve) => { finishOpen = resolve; }) });
+    await userEvent.click(tab('Quests'));
+    const opening = store.getState().openQuest(60001);
+    await userEvent.click(tab('World'));
+    await act(async () => {
+      finishOpen(okv(sampleOpen()));
+      await opening;
+    });
+    expect(store.getState().screen).toBe('preview');
+    expect(tab('World')).toHaveAttribute('aria-selected', 'true');
+  });
+
+  it('brings the quests forward again for a quest opened after the author chose the world', async () => {
+    const { store } = await shell();
+    await store.getState().openQuest(60001);
+    await userEvent.click(tab('World'));
+    await store.getState().openQuest(60001);
+    await waitFor(() => expect(tab('Quests')).toHaveAttribute('aria-selected', 'true'));
+  });
+
   it('starts a quest from the welcome on the quests tab', async () => {
     const { api } = await shell();
     // A project not greeted yet: the next time the world is shown, it is
