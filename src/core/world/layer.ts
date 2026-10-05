@@ -33,6 +33,8 @@ export interface WorldRouteEdit {
   walkers: number;
   /** The name of an NPC that walks it, read at its first edit, for naming the change */
   name?: string;
+  /** The NPCs that walk it, read at its first edit; older layers have none */
+  walkerEntries?: { entry: number; name: string }[];
   original: RoutePoint[];
   current: RoutePoint[];
 }
