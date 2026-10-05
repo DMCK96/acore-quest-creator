@@ -34,12 +34,12 @@ import { diffSchema, hasBlockingDrift } from '../core/schema/diff';
 import { loadSchema } from '../core/schema/load';
 import { refCheckerFor, validateQuest, type Issue, type RefChecker } from '../core/validate/validate';
 import { TOOL_VERSION } from '../core/version';
-import { addSpawn, hasWorldChanges, isAdded, moveSpawn, movementsOf, revertMovement, revertRoute, revertSpawn, setMovement, setRoute, worldStatements, type RoutePoint, type SpawnDefaults, type WorldLayer } from '../core/world/layer';
+import { addSpawn, hasWorldChanges, isAdded, moveSpawn, movementsOf, respawnsOf, revertMovement, revertRespawn, revertRoute, revertSpawn, setMovement, setRespawn, setRoute, worldStatements, type RoutePoint, type SpawnDefaults, type WorldLayer } from '../core/world/layer';
 import { IDLE } from '../core/world/movement';
 import { describeStep } from './project/step-labels';
 import type { HistoryStep } from './project/history';
 import type { HistoryPart, HistoryResult, QuestEdit, StepSummary } from '../shared/history';
-import { addedDrifted, countWalkers, routeWalkerName, movementDrifted, readMovement, readPlacement, readRoute, readTemplateLook, routeDrifted, spawnDrifted, worldSchema } from './world/world-api';
+import { addedDrifted, countWalkers, routeWalkerName, movementDrifted, readMovement, readPlacement, readRespawn, readRoute, readTemplateLook, respawnDrifted, routeDrifted, spawnDrifted, worldSchema } from './world/world-api';
 import type {
   Api,
   ApiError,
@@ -1962,16 +1962,41 @@ export function createApi(deps: ApiDeps): Api {
         return next;
       }),
 
+    worldSetRespawn: (kind, guid, secs) =>
+      run(async () => {
+        const db = connected().db;
+        const knownIn = (layer: WorldLayer) => respawnsOf(layer).find((r) => r.kind === kind && r.guid === guid);
+        // A spawn placed in the view carries its own respawn; the database does not have it
+        const placedIn = (layer: WorldLayer) => isAdded(layer, kind, guid);
+        const start = deps.session.world.get();
+        let read = knownIn(start) || placedIn(start) ? null : await readRespawn(db, kind, guid);
+        let layer = deps.session.world.get();
+        let known = knownIn(layer);
+        if (!known && !read && !placedIn(layer)) {
+          read = await readRespawn(db, kind, guid);
+          layer = deps.session.world.get();
+          known = knownIn(layer);
+        }
+        if (!known && !read && !placedIn(layer)) throw fail('BAD_REQUEST', `Spawn ${guid} is no longer in the database.`);
+        const edit = known ?? (read
+          ? { kind, guid, entry: read.entry, name: read.name, map: read.map, original: read.secs }
+          : { kind, guid, entry: 0, name: '', map: 0, original: 0 });
+        const next = setRespawn(layer, edit, secs);
+        deps.session.world.put(next);
+        return next;
+      }),
+
     worldRevert: (target) =>
       run(async () => {
         const layer = deps.session.world.get();
         const next =
           target.kind === 'spawn' ? revertSpawn(layer, target.spawnKind, target.guid)
           : target.kind === 'route' ? revertRoute(layer, target.pathId)
+          : target.kind === 'respawn' ? revertRespawn(layer, target.spawnKind, target.guid)
           : revertMovement(layer, target.guid);
         const changed =
           next.spawns.length !== layer.spawns.length || next.routes.length !== layer.routes.length || next.added.length !== layer.added.length ||
-          movementsOf(next).length !== movementsOf(layer).length;
+          movementsOf(next).length !== movementsOf(layer).length || respawnsOf(next).length !== respawnsOf(layer).length;
         if (changed) deps.session.world.put(next);
         return next;
       }),
@@ -1987,6 +2012,7 @@ export function createApi(deps: ApiDeps): Api {
           ...(await Promise.all(
             movementsOf(layer).map(async (m) => ({ ...m, type: 'movement' as const, drifted: await movementDrifted(db, m, isAdded(layer, 'creature', m.guid)) })),
           )),
+          ...(await Promise.all(respawnsOf(layer).map(async (r) => ({ ...r, type: 'respawn' as const, drifted: await respawnDrifted(db, r) })))),
         ];
       }),
 

@@ -4,12 +4,12 @@ import type { EntityHit, QuestSummary, SearchKind } from '@core/db/world-db';
 import type { SpellFacts } from '@core/game/spells';
 import type { MapBox, SpawnDot } from '@core/db/spawns';
 import type { ViewSpawns } from '@core/db/view-spawns';
-import type { Placement, RoutePoint, WorldAddedSpawn, WorldLayer, WorldMovementEdit, WorldRouteEdit, WorldSpawnEdit, WorldSpawnKind } from '@core/world/layer';
+import type { Placement, RoutePoint, WorldAddedSpawn, WorldLayer, WorldMovementEdit, WorldRespawnEdit, WorldRouteEdit, WorldSpawnEdit, WorldSpawnKind } from '@core/world/layer';
 import type { Movement } from '@core/world/movement';
 import type { ProjectEntities } from '@core/entities/model';
 import type { QuestUse } from '@core/entities/links';
 
-export type { Movement, Placement, RoutePoint, WorldAddedSpawn, WorldLayer, WorldMovementEdit, WorldRouteEdit, WorldSpawnEdit, WorldSpawnKind };
+export type { Movement, Placement, RoutePoint, WorldAddedSpawn, WorldLayer, WorldMovementEdit, WorldRespawnEdit, WorldRouteEdit, WorldSpawnEdit, WorldSpawnKind };
 
 /** One world layer entry as the World changes list shows it, and whether the database has moved off its original since. */
 export type WorldChange =
@@ -18,13 +18,16 @@ export type WorldChange =
   /** A spawn placed in the view; `drifted` when the database now has a spawn with its id */
   | (WorldAddedSpawn & { type: 'added'; drifted: boolean })
   /** An NPC's movement; `drifted` when the database's no longer matches its original */
-  | (WorldMovementEdit & { type: 'movement'; drifted: boolean });
+  | (WorldMovementEdit & { type: 'movement'; drifted: boolean })
+  /** A database spawn's respawn time; `drifted` when the database's no longer matches its original */
+  | (WorldRespawnEdit & { type: 'respawn'; drifted: boolean });
 
 /** What a world revert takes back: one spawn, one route, or one NPC's movement. */
 export type WorldRevertTarget =
   | { kind: 'spawn'; spawnKind: WorldSpawnKind; guid: number }
   | { kind: 'route'; pathId: number }
-  | { kind: 'movement'; guid: number };
+  | { kind: 'movement'; guid: number }
+  | { kind: 'respawn'; spawnKind: WorldSpawnKind; guid: number };
 import type { PatchWarning } from '@core/export/build-patch';
 import type { UnmodelledColumn } from '@core/import/unmodelled';
 import type { UnavailableComponent } from '@core/links/availability';
@@ -435,6 +438,8 @@ export interface Api {
   worldSetRoute(pathId: number, points: RoutePoint[], options?: { isNew?: boolean }): Promise<Result<WorldLayer>>;
   /** Sets an NPC's movement (wander, movement type, its spawn's path); its original is read at the first edit. */
   worldSetMovement(guid: number, to: Movement): Promise<Result<WorldLayer>>;
+  /** Sets a spawn's respawn time in seconds; a database spawn's original is read at the first edit. */
+  worldSetRespawn(kind: WorldSpawnKind, guid: number, secs: number): Promise<Result<WorldLayer>>;
   /** A free path id for a new path of an NPC: its guid times ten when that is free, else one past the highest in use. */
   worldNewPathId(guid: number): Promise<Result<number>>;
   /** Takes one spawn or route out of the world layer. */
@@ -628,11 +633,13 @@ const REQUEST_SCHEMAS: Record<keyof Api, z.ZodType<unknown[]>> = {
   worldRoute: z.tuple([z.number().int().min(1)]),
   worldSetRoute: z.tuple([z.number().int().min(1), z.array(routePointArg), z.object({ isNew: z.boolean().optional() }).optional()]),
   worldSetMovement: z.tuple([z.number().int().min(1), movementArg]),
+  worldSetRespawn: z.tuple([z.enum(['creature', 'gameobject']), z.number().int().min(1), z.number().int().min(0)]),
   worldNewPathId: z.tuple([z.number().int().min(1)]),
   worldRevert: z.tuple([z.discriminatedUnion('kind', [
     z.object({ kind: z.literal('spawn'), spawnKind: worldKindArg, guid: z.number().int() }),
     z.object({ kind: z.literal('route'), pathId: z.number().int() }),
     z.object({ kind: z.literal('movement'), guid: z.number().int() }),
+    z.object({ kind: z.literal('respawn'), spawnKind: worldKindArg, guid: z.number().int() }),
   ])]),
   worldChanges: z.tuple([]),
   historyList: z.tuple([]),

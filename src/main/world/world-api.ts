@@ -2,7 +2,7 @@ import type { RawRow, SchemaInfo } from '../../core/db/types';
 import type { WorldDb } from '../../core/db/world-db';
 import { spawnEntryColumn } from '../../core/db/spawns';
 import { pickPreset } from '../../core/db/view-spawns';
-import type { Placement, RoutePoint, WorldAddedSpawn, WorldLook, WorldMovementEdit, WorldRouteEdit, WorldSpawnEdit, WorldSpawnKind } from '../../core/world/layer';
+import type { Placement, RoutePoint, WorldAddedSpawn, WorldLook, WorldMovementEdit, WorldRespawnEdit, WorldRouteEdit, WorldSpawnEdit, WorldSpawnKind } from '../../core/world/layer';
 import { movementOfRow, sameMovement, type Movement } from '../../core/world/movement';
 
 /**
@@ -184,4 +184,20 @@ export async function movementDrifted(db: WorldDb, edit: WorldMovementEdit, plac
   if (placed) return false;
   const now = await readMovement(db, edit.guid);
   return !now || !sameMovement(now.movement, edit.original);
+}
+
+/** A spawn's respawn time as the database has it, with its entry, name and map; null when it is gone */
+export async function readRespawn(db: WorldDb, kind: WorldSpawnKind, guid: number): Promise<{ entry: number; name: string; map: number; secs: number } | null> {
+  const [row] = await db.selectRows(kind, { guid: String(guid) });
+  if (!row) return null;
+  const entry = num(row[spawnEntryColumn(kind, (await db.columns(kind)).map((c) => c.name))]);
+  const template = kind === 'creature' ? 'creature_template' : 'gameobject_template';
+  const [named] = await db.selectRows(template, { entry: String(entry) });
+  return { entry, name: named?.name ?? '', map: num(row.map), secs: num(row.spawntimesecs) };
+}
+
+/** Whether the database no longer holds a spawn's original respawn time */
+export async function respawnDrifted(db: WorldDb, edit: WorldRespawnEdit): Promise<boolean> {
+  const now = await readRespawn(db, edit.kind, edit.guid);
+  return !now || now.secs !== edit.original;
 }

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
-  EMPTY_WORLD, NEW_POINT_REST, addSpawn, deleteGroup, dropMember, groupsOf, hasWorldChanges, putGroup, revertGroup, isAdded, moveSpawn, movementsOf, revertMovement, revertRoute, revertSpawn, setMovement, setRoute, worldStatements,
+  EMPTY_WORLD, NEW_POINT_REST, addSpawn, deleteGroup, dropMember, groupsOf, hasWorldChanges, isAdded, moveSpawn, movementsOf, putGroup, respawnsOf, revertGroup, revertMovement, revertRespawn, revertRoute, revertSpawn, setMovement, setRespawn, setRoute, worldStatements,
   type Placement, type RoutePoint, type WorldAddedSpawn, type WorldMovementEdit, type WorldSpawnEdit,
 } from '../../../src/core/world/layer';
 import { IDLE } from '../../../src/core/world/movement';
@@ -335,5 +335,35 @@ describe('spawn groups in the layer', () => {
     const tied = { ...existing, origin: { kind: 'existing' as const, original: { ...original, event: { eventEntry: '12', pool_entry: '32492' } } } };
     const { apply, revert } = worldStatements(putGroup(EMPTY_WORLD, tied));
     expect([...apply, ...revert].some((s) => s.table === 'game_event_pool')).toBe(false);
+  });
+});
+
+describe('respawn time', () => {
+  const edit = { kind: 'creature' as const, guid: 80330, entry: 1423, name: 'Stormwind Guard', map: 0, original: 300 };
+  it('keeps the first original, and drops an edit set back to it', () => {
+    const once = setRespawn(EMPTY_WORLD, edit, 60);
+    expect(respawnsOf(once)).toEqual([{ ...edit, current: 60 }]);
+    const twice = setRespawn(once, { ...edit, original: 999 }, 120);
+    expect(respawnsOf(twice)).toEqual([{ ...edit, current: 120 }]);
+    expect(respawnsOf(setRespawn(twice, edit, 300))).toEqual([]);
+  });
+
+  it("sets a placed spawn's own respawn instead of an edit", () => {
+    const look = { displayId: 1, scale: 1, equipment: [0, 0, 0] as [number, number, number], preset: null };
+    const placed = addSpawn(EMPTY_WORLD, { kind: 'creature', guid: 9, entry: 1423, name: 'G', map: 0, placement: { x: 0, y: 0, z: 0, orientation: 0, rotation: null }, look });
+    const next = setRespawn(placed, { ...edit, guid: 9 }, 45);
+    expect(next.added[0]!.respawnSecs).toBe(45);
+    expect(respawnsOf(next)).toEqual([]);
+  });
+
+  it('writes respawn edits as updates, put back by the revert, and a placed spawn with its own time', () => {
+    const look = { displayId: 1, scale: 1, equipment: [0, 0, 0] as [number, number, number], preset: null };
+    const layer = setRespawn(addSpawn(EMPTY_WORLD, { kind: 'gameobject', guid: 9, entry: 2843, name: 'Chest', map: 0, placement: { x: 0, y: 0, z: 0, orientation: 0, rotation: null }, look, respawnSecs: 30 }), edit, 60);
+    const { apply, revert } = worldStatements(layer, undefined, { gameobject: { guid: null, id: null, map: null, spawntimesecs: null } });
+    expect(apply).toContainEqual({ kind: 'update', table: 'creature', key: { guid: '80330' }, set: { spawntimesecs: '60' } });
+    expect(revert).toContainEqual({ kind: 'update', table: 'creature', key: { guid: '80330' }, set: { spawntimesecs: '300' } });
+    expect((apply.find((s) => s.kind === 'insert' && s.table === 'gameobject') as any).row.spawntimesecs).toBe('30');
+    expect(hasWorldChanges({ ...EMPTY_WORLD, respawns: [{ ...edit, current: 60 }] })).toBe(true);
+    expect(respawnsOf(revertRespawn(layer, 'creature', 80330))).toEqual([]);
   });
 });
