@@ -7,7 +7,7 @@ import { ItemAdvanced } from './ItemAdvanced';
 import { ItemBasics } from './ItemBasics';
 import { ItemGear } from './ItemGear';
 import { ItemSpells } from './ItemSpells';
-import type { ExistingFacts } from '../npc/NpcEditor';
+import type { ExistingFacts } from '../existing-facts';
 import '../../scripts/scripts.css';
 
 export const SHOW_ADVANCED_KEY = 'acqc.item.showAdvanced';

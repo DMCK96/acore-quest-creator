@@ -586,7 +586,7 @@ export function createAppStore(api: Api, opts: { saveDelayMs?: number } = {}): A
       const sent = await api.putProjectEntities(next);
       if (!sent.ok) {
         await get().loadEntities();
-      await get().loadLayer();
+        await get().loadLayer();
         return { error: sent.error.message };
       }
       await get().loadProjectState();

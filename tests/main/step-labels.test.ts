@@ -48,6 +48,19 @@ describe('describeStep', () => {
     expect(describeStep(step([{ kind: 'name', before: 'A', after: 'B' }]))).toMatchObject({ label: 'Renamed the project', kind: 'project' });
   });
 
+  it('names respawn and spawn group steps instead of counting zero changes', () => {
+    const resp = { kind: 'creature' as const, guid: 80330, entry: 1423, name: 'Stormwind Guard', map: 0, original: 300, current: 60 };
+    const world = (l: object) => describeStep(step([{ kind: 'world', before: EMPTY_WORLD, after: { ...EMPTY_WORLD, ...l } }]));
+    expect(world({ respawns: [resp] }).label).toBe('Respawn time of Stormwind Guard');
+    expect(describeStep(step([{ kind: 'world', before: { ...EMPTY_WORLD, respawns: [resp] }, after: EMPTY_WORLD }])).label).toBe('Reverted respawn time of Stormwind Guard');
+    const group = { id: 5, name: 'Path 1', map: 0, maxActive: 1, members: [], origin: { kind: 'new' as const } } as any;
+    expect(world({ groups: [group] }).label).toBe('Saved spawn group Path 1');
+    const gone = { ...group, origin: { kind: 'existing' as const, original: { template: {}, members: [], event: null } }, removed: true };
+    expect(describeStep(step([{ kind: 'world', before: { ...EMPTY_WORLD, groups: [{ ...gone, removed: false }] }, after: { ...EMPTY_WORLD, groups: [gone] } }])).label).toBe('Deleted spawn group Path 1');
+    expect(describeStep(step([{ kind: 'world', before: { ...EMPTY_WORLD, groups: [group] }, after: EMPTY_WORLD }])).label).toBe('Removed spawn group Path 1');
+    expect(world({ respawns: [resp, { ...resp, guid: 2 }] }).label).toBe('World: 2 changes');
+  });
+
   it('names world changes from the layer\'s difference and says where', () => {
     const guard = { kind: 'creature' as const, guid: 80330, entry: 1423, name: 'Stormwind Guard', map: 0, original: at, current: { ...at, x: 9 } };
     expect(describeStep(step([{ kind: 'world', before: EMPTY_WORLD, after: { ...EMPTY_WORLD, spawns: [guard] } }])))
