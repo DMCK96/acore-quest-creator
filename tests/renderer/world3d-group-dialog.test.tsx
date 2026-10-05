@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { describe, expect, it, vi } from 'vitest';
-import { render, screen, waitFor, within } from '@testing-library/react';
+import { act, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { GroupDialog } from '../../src/renderer/world3d/GroupDialog';
 
@@ -21,6 +21,8 @@ describe('the group dialog', () => {
     await userEvent.clear(within(row).getByLabelText('Percent'));
     await userEvent.type(within(row).getByLabelText('Percent'), '10');
     expect(within(dialog).getByText('Vyragosa: 90% (equal share)')).toBeTruthy();
+    // Save waits for the check of the latest change
+    await waitFor(() => expect(within(dialog).getByRole('button', { name: 'Save' })).toHaveProperty('disabled', false));
     await userEvent.click(within(dialog).getByRole('button', { name: 'Save' }));
     expect(onSave).toHaveBeenCalledWith({ ...group, name: 'Path 1', members: [{ ...drake, chance: 10 }, vyragosa] }, []);
   });
@@ -53,6 +55,7 @@ describe('the group dialog', () => {
     await userEvent.click(screen.getByRole('button', { name: 'Add a group…' }));
     await userEvent.click(screen.getByRole('option', { name: 'Path 2' }));
     await userEvent.click(within(screen.getByRole('listitem', { name: 'Vyragosa' })).getByRole('button', { name: 'Remove' }));
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Save' })).toHaveProperty('disabled', false));
     await userEvent.click(screen.getByRole('button', { name: 'Save' }));
     expect(onSave.mock.calls[0]![0].members).toEqual([drake, { type: 'group', id: 32493, chance: 0 }]);
   });
@@ -64,5 +67,23 @@ describe('the group dialog', () => {
     await userEvent.click(await screen.findByRole('button', { name: 'Move Time-Lost Proto-Drake here' }));
     expect(await screen.findByText('Path 1 would then be empty and is deleted.')).toBeTruthy();
     await waitFor(() => expect(screen.getByRole('button', { name: 'Save' })).toHaveProperty('disabled', false));
+  });
+  it('keeps Save off while a check is waiting or running, and turns it on when the latest check finds nothing', async () => {
+    const pending: ((found: { reasons: string[]; notes: string[] }) => void)[] = [];
+    const check = vi.fn(() => new Promise<{ reasons: string[]; notes: string[] }>((resolve) => pending.push(resolve)));
+    render(<GroupDialog group={{ ...group, name: 'X' }} names={names} check={check} groupsOnMap={[]} onSave={vi.fn()} onClose={vi.fn()} />);
+    const save = screen.getByRole('button', { name: 'Save' });
+    expect(save).toHaveProperty('disabled', true);
+    await waitFor(() => expect(check).toHaveBeenCalledTimes(1));
+    expect(save).toHaveProperty('disabled', true);
+    await act(async () => pending[0]!(fine));
+    expect(save).toHaveProperty('disabled', false);
+    // A change turns Save off until its own check answers; an older answer does not turn it on
+    await userEvent.type(screen.getByLabelText('Name'), 'Y');
+    expect(save).toHaveProperty('disabled', true);
+    await waitFor(() => expect(check).toHaveBeenCalledTimes(2));
+    expect(save).toHaveProperty('disabled', true);
+    await act(async () => pending[1]!(fine));
+    expect(save).toHaveProperty('disabled', false);
   });
 });

@@ -55,6 +55,8 @@ export function GroupDialog({
   const [moves, setMoves] = useState<GroupMove[]>([]);
   const [reasons, setReasons] = useState<string[]>([]);
   const [notes, setNotes] = useState<string[]>([]);
+  /** The group and moves the shown reasons are for; Save waits while it is not the current one */
+  const [checkedKey, setCheckedKey] = useState<string | null>(null);
   const [adding, setAdding] = useState(false);
 
   const nameOf = (m: GroupMember): string => {
@@ -73,17 +75,20 @@ export function GroupDialog({
   const latest = useRef(0);
   useEffect(() => {
     const seq = ++latest.current;
+    const checking = key;
     const timer = setTimeout(() => {
       void check(edited, moves).then(
         (found) => {
           if (seq !== latest.current) return;
           setReasons(found.reasons);
           setNotes(found.notes);
+          setCheckedKey(checking);
         },
         (error: unknown) => {
           if (seq !== latest.current) return;
           setReasons([error instanceof Error ? error.message : String(error)]);
           setNotes([]);
+          setCheckedKey(checking);
         },
       );
     }, CHECK_DELAY_MS);
@@ -112,8 +117,9 @@ export function GroupDialog({
     return member && !moves.some((m) => m.kind === member.kind && m.guid === guid) ? member : null;
   };
 
-  // A blank name is allowed (the server keeps an empty description); the reasons are what block a save
-  const blocked = reasons.length > 0;
+  // A blank name is allowed (the server keeps an empty description); the reasons are what block a save,
+  // and a check still waiting or running for the latest change
+  const blocked = reasons.length > 0 || checkedKey !== key;
 
   return (
     <div className="modal-backdrop" onMouseDown={(e) => e.target === e.currentTarget && onClose()}>
