@@ -65,4 +65,13 @@ describe('trackedEntities', () => {
     expect(rows.find((r) => r.entry === 12000001)!.usedBy).toEqual([60001, 60002]);
     expect(rows.find((r) => r.entry === 1423)!.usedBy).toEqual([60001]);
   });
+
+  it('an existing entity edited in the project is tracked as details, merged with its layer changes', () => {
+    const origin = { kind: 'existing' as const, original: {}, sharedLoot: 0, spawnCount: 1, locked: [] };
+    const edited = { ...EMPTY_ENTITIES, npcs: [{ ...newNpc(1423), name: 'Stormwind Guard', origin }] };
+    const layer: WorldLayer = { ...EMPTY_WORLD, spawns: [{ kind: 'creature', guid: 80330, entry: 1423, name: 'Stormwind Guard', map: 0, original: place(1), current: place(2) }] };
+    expect(trackedEntities({ store: edited, layer, quests: [] })).toEqual([
+      { kind: 'npc', entry: 1423, name: 'Stormwind Guard', origin: 'existing', changes: ['spawns', 'details'], usedBy: [], goTo: { kind: 'creature', guid: 80330, map: 0, x: 2, y: 0, z: 0 } },
+    ]);
+  });
 });

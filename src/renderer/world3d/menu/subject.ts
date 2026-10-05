@@ -1,6 +1,6 @@
 import type { NpcSpawn, ObjectSpawn, SpawnPoint } from '@core/entities/entity';
 import { spawnKindOf } from '@core/entities/entity';
-import type { ProjectEntities } from '@core/entities/model';
+import { originOf, type ProjectEntities } from '@core/entities/model';
 import type { At, MenuSpawn, MenuTarget } from './model';
 
 /**
@@ -12,16 +12,22 @@ export type MenuSubject =
   | { type: 'spawn'; target: NpcSpawn | ObjectSpawn; info: MenuSpawn; at: At | null; selection: MenuSpawn[] }
   | { type: 'routePoint'; guid: number; index: number; at: At | null };
 
-/** A drawn spawn as an entity: new when the project made it, and its spawn new when the project placed it */
+/**
+ * A drawn spawn as an entity: its origin is the stored one when the project holds the entry (made
+ * here, or an existing one edited here) and existing otherwise; its spawn is new when the project
+ * placed it. An object can be made lootable when the project holds it and its type is not locked.
+ */
 export function spawnedEntityOf(info: MenuSpawn, store: ProjectEntities): NpcSpawn | ObjectSpawn {
   const kind = spawnKindOf(info.kind);
   const spawn: SpawnPoint = { guid: info.guid, map: info.map, placement: info.placement, origin: info.own || info.added ? 'new' : 'existing' };
   if (kind === 'npc') {
-    const origin = store.npcs.some((n) => n.entry === info.entry) ? 'new' : 'existing';
-    return { kind, entry: info.entry, name: info.name, origin, pathId: info.pathId, wander: info.wander, spawn };
+    const stored = store.npcs.find((n) => n.entry === info.entry);
+    return { kind, entry: info.entry, name: info.name, origin: stored ? originOf(stored) : 'existing', pathId: info.pathId, wander: info.wander, spawn };
   }
-  const own = store.objects.find((o) => o.entry === info.entry);
-  return { kind, entry: info.entry, name: info.name, origin: own ? 'new' : 'existing', lootable: own ? own.type === 'chest' : null, spawn };
+  const stored = store.objects.find((o) => o.entry === info.entry);
+  const typeLocked = stored?.origin.kind === 'existing' && stored.origin.locked.includes('type');
+  const lootable = !stored || typeLocked ? null : stored.type === 'chest';
+  return { kind, entry: info.entry, name: info.name, origin: stored ? originOf(stored) : 'existing', lootable, spawn };
 }
 
 /** The subject of a right-click target */

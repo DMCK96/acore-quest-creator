@@ -35,4 +35,11 @@ describe('entity validation', () => {
     ]);
     expect(entityIssues({ entities: { npcs: [npc] as never, objects: [], items: [] }, dbNames: new Map() })).toEqual([]);
   });
+
+  it('an existing NPC needs no spawn of its own and may share its name with the database', () => {
+    const origin = { kind: 'existing' as const, original: {}, sharedLoot: 0, spawnCount: 3, locked: [] };
+    const guard = { ...newNpc(1423), name: 'Stormwind Guard', displayId: 3167, origin };
+    const issues = entityIssues({ entities: { npcs: [guard], objects: [], items: [] }, dbNames: new Map([['creature:1423', 'Stormwind Guard']]) });
+    expect(issues.map((i) => i.code)).toEqual([]);
+  });
 });

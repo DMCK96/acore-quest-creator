@@ -14,7 +14,7 @@ const NUMBER = /^-?\d+(\.\d+)?$/;
 /** `ItemClass` Quest: something the player carries for a quest, never worn. */
 const QUEST_CLASS = 12;
 
-/** What is wrong with the quest's new NPCs, objects and items, each issue routed to their module. */
+/** What is wrong with the project's NPCs, objects and items, each issue routed to their module; an existing one is not checked for spawns or a taken entry. */
 export function entityIssues(input: {
   entities: QuestEntities;
   dbNames: ReadonlyMap<string, string>;
@@ -43,8 +43,10 @@ export function entityIssues(input: {
     if ('minLevel' in entity && (entity.minLevel < 1 || entity.minLevel > entity.maxLevel)) {
       add('error', 'ENTITY_LEVELS', 'its minimum level must be at least 1 and no higher than its maximum.');
     }
-    if (entity.spawns.length === 0) add('warning', 'ENTITY_NO_SPAWN', 'nothing places it in the world yet; add a spawn.');
-    else if (entity.spawns.some((s) => s.x === 0 && s.y === 0 && s.z === 0)) {
+    // An existing one already stands where the database has it, and its name is its own
+    const existing = entity.origin.kind === 'existing';
+    if (!existing && entity.spawns.length === 0) add('warning', 'ENTITY_NO_SPAWN', 'nothing places it in the world yet; add a spawn.');
+    else if (!existing && entity.spawns.some((s) => s.x === 0 && s.y === 0 && s.z === 0)) {
       add('warning', 'ENTITY_SPAWN_ORIGIN', 'a spawn is still at 0, 0, 0; set where it stands.');
     }
     if ('equipment' in entity && input.itemInventoryTypes) {
@@ -78,9 +80,9 @@ export function entityIssues(input: {
       if (row.min < 1 || row.min > row.max) add('error', 'LOOT_COUNT', 'the least dropped must be at least 1 and no more than the most.');
     }
     if ('fight' in entity && entity.fight) issues.push(...fightIssues(entity.fight, label, input.knownSpell ?? null, input.objectives ?? null));
-    const existing = input.dbNames.get(`${kind}:${entity.entry}`);
-    if (existing !== undefined && existing !== entity.name) {
-      add('warning', 'ENTITY_TAKEN', `entry ${entity.entry} already holds "${existing}" in the database, which this would replace.`);
+    const held = existing ? undefined : input.dbNames.get(`${kind}:${entity.entry}`);
+    if (held !== undefined && held !== entity.name) {
+      add('warning', 'ENTITY_TAKEN', `entry ${entity.entry} already holds "${held}" in the database, which this would replace.`);
     }
   };
   const checkItem = (item: CustomItem): void => {
@@ -110,9 +112,9 @@ export function entityIssues(input: {
         }
       }
     }
-    const existing = input.dbNames.get(`item:${item.entry}`);
-    if (existing !== undefined && existing !== item.name) {
-      add('warning', 'ENTITY_TAKEN', `entry ${item.entry} already holds "${existing}" in the database, which this would replace.`);
+    const held = item.origin.kind === 'existing' ? undefined : input.dbNames.get(`item:${item.entry}`);
+    if (held !== undefined && held !== item.name) {
+      add('warning', 'ENTITY_TAKEN', `entry ${item.entry} already holds "${held}" in the database, which this would replace.`);
     }
   };
   for (const npc of input.entities.npcs) check('creature', npc);
