@@ -1,7 +1,10 @@
 // @vitest-environment jsdom
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import { createElement } from 'react';
+import { render } from '@testing-library/react';
 import { createAppStore } from '../../src/renderer/state/app-store';
 import { EMPTY_ENTITIES, newNpc } from '../../src/core/entities/model';
+import { ProjectEntitiesFromStore, useProjectEntities } from '../../src/renderer/state/project-entities';
 import { makeMockApi, okv } from './mock-api';
 
 const hela = { ...newNpc(12000001), name: 'Hela' };
@@ -71,4 +74,21 @@ describe('opening an older project', () => {
     await store.getState().openProject('C:\p.aqc');
     expect(store.getState().error).toBe('NPC 1 was in quests 2 and 3; the one from quest 2 was kept.');
   });
+
+  it('loads the world layer with the project and lists tracked entities from it and the store', async () => {
+    const layer = { spawns: [{ kind: 'creature', guid: 80330, entry: 1423, name: 'Stormwind Guard', map: 0, original: { x: 0, y: 0, z: 0, orientation: 0, rotation: null }, current: { x: 1, y: 0, z: 0, orientation: 0, rotation: null } }], routes: [], added: [] };
+    const api = makeMockApi({ worldLayer: vi.fn(async () => okv(layer)), projectEntities: vi.fn(async () => okv({ npcs: [{ ...newNpc(12000001), name: 'Hela' }], objects: [], items: [] })) });
+    const store = createAppStore(api);
+    await store.getState().loadEntities();
+    await store.getState().loadLayer();
+    expect(store.getState().layer).toEqual(layer);
+    let value: any;
+    render(createElement(ProjectEntitiesFromStore, { store, children: createElement(Probe, { onValue: (v) => (value = v) }) }));
+    expect(value.tracked.map((t: any) => [t.name, t.changes])).toEqual([['Hela', ['new']], ['Stormwind Guard', ['spawns']]]);
+  });
 });
+
+function Probe({ onValue }: { onValue(v: unknown): void }) {
+  onValue(useProjectEntities());
+  return null;
+}

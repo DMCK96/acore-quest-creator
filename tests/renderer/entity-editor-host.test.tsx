@@ -39,7 +39,7 @@ describe('entity editor host', () => {
 
   it('discard hands the delete on (which empties the giver cards that named it), after asking', async () => {
     const confirm = vi.spyOn(window, 'confirm').mockReturnValueOnce(false).mockReturnValueOnce(true);
-    const quests = [{ questId: 60001, title: 'Wolves', uses: { npcs: [12000005], objects: [], items: [] } }];
+    const quests = [{ questId: 60001, title: 'Wolves', uses: { npcs: [12000005], objects: [], items: [] }, refs: { npcs: [12000005], objects: [], items: [] } }];
     const { onDelete, onClose } = await mountEditor(withHela({ ...newNpc(12000005) }), { kind: 'npc', entry: 12000005, isNew: true }, { quests });
     await userEvent.click(screen.getByRole('button', { name: 'Discard' }));
     expect(onDelete).not.toHaveBeenCalled();

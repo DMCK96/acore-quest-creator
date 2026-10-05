@@ -34,6 +34,7 @@ export function sampleOpen(overrides: Partial<OpenResult> = {}): OpenResult {
 export function nodeOf(overrides: Partial<CanvasNode> = {}): CanvasNode {
   const base: CanvasNode = {
     uses: { npcs: [], objects: [], items: [] },
+    refs: { npcs: [], objects: [], items: [] },
     questId: 60001,
     title: 'Wolves',
     level: 10,

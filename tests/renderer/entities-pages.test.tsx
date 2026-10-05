@@ -22,7 +22,7 @@ describe('object pages in the editor', () => {
   it('limits a usable object to the quest', async () => {
     const onChange = vi.fn();
     const lever = { ...newObject(9100002), name: 'Lever' };
-    const quests = [{ questId: 60001, title: 'Wolves', uses: { npcs: [], objects: [9100002], items: [] } }];
+    const quests = [{ questId: 60001, title: 'Wolves', uses: { npcs: [], objects: [9100002], items: [] }, refs: { npcs: [], objects: [9100002], items: [] } }];
     await mountEditor({ [ENTITIES_FIELD]: writeEntities({ npcs: [], objects: [lever], items: [] }) }, { kind: 'object', entry: 9100002, isNew: false }, { onChange, quests });
     await userEvent.selectOptions(within(screen.getByRole('dialog', { name: 'Object: Lever' })).getByRole('combobox', { name: 'Only while on the quest' }), '60001');
     expect(last(onChange).objects[0]!.onlyDuringQuest).toBe(60001);

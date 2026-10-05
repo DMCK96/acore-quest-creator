@@ -11,7 +11,7 @@ import { presentModules } from '../../src/core/modules/catalog';
 const store = { ...EMPTY_ENTITIES,
   npcs: [{ ...newNpc(12000001), name: 'Hela' }, { ...newNpc(12000002), name: 'Borin' }, { ...newNpc(12000003), name: 'Vendor' }],
   objects: [{ ...newObject(9100001), name: 'Crate' }], items: [{ ...newItem(9200001), name: 'Seal' }] };
-const others = [{ questId: 60002, title: 'Second', uses: { npcs: [12000002], objects: [], items: [] } }];
+const others = [{ questId: 60002, title: 'Second', uses: { npcs: [12000002], objects: [], items: [] }, refs: { npcs: [12000002], objects: [], items: [] } }];
 
 describe('the quest\'s NPCs, objects & items over the project store', () => {
   it('lists what the quest names, with the other quests that use each', async () => {

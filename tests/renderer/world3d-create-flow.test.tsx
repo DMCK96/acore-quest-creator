@@ -41,7 +41,7 @@ function mount(entities: ProjectEntities = EMPTY_ENTITIES) {
   const state = { entities };
   const setEntities = vi.fn((next: ProjectEntities) => { state.entities = next; });
   const create = vi.fn(async () => ({ entry: 12000007 }));
-  const value = () => ({ entities: state.entities, setEntities, quests: [], create, remove: vi.fn(async () => null) });
+  const value = () => ({ entities: state.entities, setEntities, quests: [], layer: { spawns: [], routes: [], added: [] }, setLayer: vi.fn(), tracked: [], create, remove: vi.fn(async () => null) });
   const ui = () => (
     <NamesProvider api={api}>
       <ProjectEntitiesProvider value={value()}>

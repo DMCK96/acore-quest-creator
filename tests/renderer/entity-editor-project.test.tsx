@@ -12,8 +12,8 @@ const hela = { ...newNpc(12000005), name: 'Hela', displayId: 3167 };
 const crate = { ...newObject(9100001), name: 'Crate', displayId: 1 };
 const none = { npcs: [], objects: [], items: [] };
 const quests = [
-  { questId: 60001, title: 'Kobold Camp', uses: { ...none, npcs: [12000005], objects: [9100001] } },
-  { questId: 60002, title: 'Foreman\'s End', uses: { ...none, npcs: [12000005] } },
+  { questId: 60001, title: 'Kobold Camp', uses: { ...none, npcs: [12000005], objects: [9100001] }, refs: { ...none, npcs: [12000005], objects: [9100001] } },
+  { questId: 60002, title: 'Foreman\'s End', uses: { ...none, npcs: [12000005] }, refs: { ...none, npcs: [12000005] } },
 ];
 const host = (entities: any, state: any, handlers: { onChange?: any; onClose?: any; onDelete?: any } = {}) => (
   <NamesProvider api={makeMockApi()}>

@@ -98,7 +98,7 @@ describe('Fight editor', () => {
 });
 
 describe('quest credit in a fight', () => {
-  const quests = [{ questId: 60001, title: 'Wolves', uses: { npcs: [12000001], objects: [], items: [] } }, { questId: 60002, title: 'Bears', uses: { npcs: [], objects: [], items: [] } }];
+  const quests = [{ questId: 60001, title: 'Wolves', uses: { npcs: [12000001], objects: [], items: [] }, refs: { npcs: [12000001], objects: [], items: [] } }, { questId: 60002, title: 'Bears', uses: { npcs: [], objects: [], items: [] }, refs: { npcs: [], objects: [], items: [] } }];
   it('a preset that gives credit credits the first quest listed, which is one that uses the NPC', async () => {
     const onChange = vi.fn();
     await mountEditor({ [ENTITIES_FIELD]: writeEntities({ npcs: [{ ...newNpc(12000001), name: 'Hela' }], objects: [], items: [] }) }, { kind: 'npc', entry: 12000001, isNew: false }, { onChange, api: spellApi(), tab: 'Fight', quests });

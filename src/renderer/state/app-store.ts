@@ -23,7 +23,7 @@ import type {
   StepPlace,
   Viewport,
 } from '@shared/ipc';
-import type { WorldLayer } from '@core/world/layer';
+import { EMPTY_WORLD, type WorldLayer } from '@core/world/layer';
 import { EMPTY_ENTITIES, newItem, newNpc, newObject, type CustomItem, type CustomNpc, type CustomObject, type ProjectEntities } from '@core/entities/model';
 import { toggleRole } from '@core/modules/quest-roles';
 import type { ModuleId } from '@core/modules/model';
@@ -70,6 +70,8 @@ export interface AppState {
   historyNote: { text: string; where: StepPlace | null; skipped: string[] } | null;
   /** The world layer as an undo or redo left it, with a count that moves each time, for the views to take */
   worldLayer: { layer: WorldLayer; seq: number } | null;
+  /** The world layer: the project's changes to the world, kept here for the tracked list */
+  layer: WorldLayer;
   /** The project's new NPCs, objects and items, as edited here (sent after a pause, like quest edits) */
   entities: ProjectEntities;
   /** Moves each time the store is replaced from the main process (an undo, a load), for the views to redraw */
@@ -113,6 +115,10 @@ export interface AppState {
   flushEntities(): Promise<void>;
   /** Reads the project's NPCs, objects and items from the main process */
   loadEntities(): Promise<void>;
+  /** Reads the world layer from the main process */
+  loadLayer(): Promise<void>;
+  /** Keeps a layer the 3D view or a revert produced */
+  setLayer(layer: WorldLayer): void;
   /**
    * Deletes one of the project's NPCs, objects or items, emptying every giver card that named it, as one
    * undo step; the open quest shows the cards as they now are. Returns the error to show, or null.
@@ -285,6 +291,7 @@ export function createAppStore(api: Api, opts: { saveDelayMs?: number } = {}): A
     history: { steps: [], current: 0, saved: 0 },
     historyNote: null,
     worldLayer: null,
+    layer: EMPTY_WORLD,
     entities: structuredClone(EMPTY_ENTITIES),
     entitiesSeq: 0,
 
@@ -334,6 +341,7 @@ export function createAppStore(api: Api, opts: { saveDelayMs?: number } = {}): A
       set((s) => ({ summary, error: null, screen: 'pick', connection: s.connection + 1 }));
       await loadHistory();
       await get().loadEntities();
+      await get().loadLayer();
     },
 
     async saveConnection(draft, original) {
@@ -516,9 +524,19 @@ export function createAppStore(api: Api, opts: { saveDelayMs?: number } = {}): A
         set({ error: sent.error.message });
         // What the main process holds is the truth: the edit it refused is not kept here
         await get().loadEntities();
+      await get().loadLayer();
         return;
       }
       await get().loadProjectState();
+    },
+
+    async loadLayer() {
+      const read = await api.worldLayer();
+      if (read.ok) set({ layer: read.value });
+    },
+
+    setLayer(layer) {
+      set({ layer });
     },
 
     async loadEntities() {
@@ -559,6 +577,7 @@ export function createAppStore(api: Api, opts: { saveDelayMs?: number } = {}): A
       const sent = await api.putProjectEntities(next);
       if (!sent.ok) {
         await get().loadEntities();
+      await get().loadLayer();
         return { error: sent.error.message };
       }
       await get().loadProjectState();
@@ -979,7 +998,7 @@ export function createAppStore(api: Api, opts: { saveDelayMs?: number } = {}): A
     }
     if (result.world) {
       const world = result.world;
-      store.setState({ worldLayer: { layer: world, seq: ++layerSeq } });
+      store.setState({ worldLayer: { layer: world, seq: ++layerSeq }, layer: world });
     }
     if (result.entities) store.setState({ entities: result.entities, entitiesSeq: ++entitiesSeq });
     if (result.step) {
@@ -1021,9 +1040,11 @@ export function createAppStore(api: Api, opts: { saveDelayMs?: number } = {}): A
       exportError: null,
       historyNote: null,
       worldLayer: null,
+      layer: EMPTY_WORLD,
     });
     await store.getState().loadNodes();
     await store.getState().loadEntities();
+    await store.getState().loadLayer();
     // Last, so the canvas applies the new project's viewport rather than the old one's.
     store.setState((s) => ({ projectEpoch: s.projectEpoch + 1 }));
   }

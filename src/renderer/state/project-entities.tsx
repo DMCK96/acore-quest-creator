@@ -1,6 +1,9 @@
 import { createContext, useContext, useMemo, type ReactNode } from 'react';
 import type { ProjectEntities } from '@core/entities/model';
-import { questUses, type QuestUse } from '@core/entities/links';
+import { trackedEntities } from '@core/entities/tracked';
+import type { TrackedEntity } from '@core/entities/entity';
+import type { WorldLayer } from '@core/world/layer';
+import { questRefs, questUses, type QuestUse } from '@core/entities/links';
 import type { Api } from '@shared/ipc';
 import type { AppStore } from './app-store';
 
@@ -9,6 +12,8 @@ export interface ProjectQuestUse {
   questId: number;
   title: string;
   uses: QuestUse;
+  /** Everything it references, whether or not the project has it */
+  refs: QuestUse;
 }
 
 /**
@@ -19,6 +24,11 @@ export interface ProjectEntitiesValue {
   entities: ProjectEntities;
   setEntities(next: ProjectEntities): void;
   quests: ProjectQuestUse[];
+  /** The project's changes to the world */
+  layer: WorldLayer;
+  setLayer(layer: WorldLayer): void;
+  /** Every NPC, object and item the project tracks: new, changed or placed */
+  tracked: TrackedEntity[];
   create: ReturnType<AppStore['getState']>['createEntity'];
   /** Deletes one, emptying the giver cards that named it, as one step; the error to show, or null */
   remove(kind: 'npc' | 'object' | 'item', entry: number): Promise<string | null>;
@@ -48,18 +58,21 @@ export function ProjectEntitiesFromStore({ store, children }: { store: AppStore;
   const entities = store((s) => s.entities);
   const nodes = store((s) => s.nodes);
   const open = store((s) => s.open);
+  const layer = store((s) => s.layer);
   const value = useMemo((): ProjectEntitiesValue => {
-    const quests = nodes.map((n) => ({ questId: n.questId, title: n.title, uses: n.uses }));
+    const quests = nodes.map((n) => ({ questId: n.questId, title: n.title, uses: n.uses, refs: n.refs }));
     if (open) {
       const title = open.aggregate.values['quest_template.LogTitle'];
-      const mine = { questId: open.questId, title: typeof title === 'string' ? title : '', uses: questUses({ questId: open.questId, aggregate: open.aggregate }, entities) };
+      const like = { questId: open.questId, aggregate: open.aggregate };
+      const mine = { questId: open.questId, title: typeof title === 'string' ? title : '', uses: questUses(like, entities), refs: questRefs(like) };
       const at = quests.findIndex((q) => q.questId === open.questId);
       if (at >= 0) quests[at] = mine;
       else quests.push(mine);
     }
-    const { setEntities, createEntity, deleteEntity } = store.getState();
-    return { entities, setEntities, quests, create: createEntity, remove: deleteEntity };
-  }, [store, nodes, open, entities]);
+    const { setEntities, createEntity, deleteEntity, setLayer } = store.getState();
+    const tracked = trackedEntities({ store: entities, layer, quests });
+    return { entities, setEntities, quests, layer, setLayer, tracked, create: createEntity, remove: deleteEntity };
+  }, [store, nodes, open, entities, layer]);
   return <ProjectEntitiesProvider value={value}>{children}</ProjectEntitiesProvider>;
 }
 

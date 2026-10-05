@@ -244,7 +244,10 @@ function WorldStage({
   const [note, setNote] = useState<string | null>(null);
   const [shared, setShared] = useState<SharedRoute | null>(null);
   const [changesOpen, setChangesOpen] = useState(false);
-  const projectEntities = useProjectEntities()?.entities;
+  const project = useProjectEntities();
+  const projectEntities = project?.entities;
+  const setProjectLayer = useRef(project?.setLayer);
+  setProjectLayer.current = project?.setLayer;
   const changes = layer.spawns.length + layer.routes.length + layer.added.length + movementsOf(layer).length
     + (projectEntities ? projectEntities.npcs.length + projectEntities.objects.length + projectEntities.items.length : 0);
   // Choosing an existing NPC or object to place, and the one being placed (each click on the ground puts one down)
@@ -254,6 +257,7 @@ function WorldStage({
   const takeLayer = (next: WorldLayer): void => {
     layerRef.current = next;
     setLayer(next);
+    setProjectLayer.current?.(next);
     world.current?.setWorldLayer(next);
   };
   // An undo or redo changed the world layer: a drag under way is dropped first, then the layer is drawn
@@ -374,6 +378,7 @@ function WorldStage({
     const applyLayer = (next: WorldLayer): void => {
       layerRef.current = next;
       setLayer(next);
+      setProjectLayer.current?.(next);
       created?.setWorldLayer(next);
     };
     // The card follows the selected spawn to where an edit put it

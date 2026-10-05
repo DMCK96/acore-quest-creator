@@ -307,6 +307,8 @@ export interface CanvasNode {
   notConnected: boolean;
   /** The project's new NPCs, objects and items the quest uses (the ones it names, and NPCs crediting it) */
   uses: QuestUse;
+  /** Everything the quest references, whether or not the project has it */
+  refs: QuestUse;
 }
 
 /** How a quest is offered, reduced to the few kinds a canvas node has room to show. */

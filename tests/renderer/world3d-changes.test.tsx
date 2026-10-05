@@ -3,7 +3,26 @@ import { describe, expect, it, vi } from 'vitest';
 import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { ProjectChanges } from '../../src/renderer/world3d/ProjectChanges';
+import { NamesProvider } from '../../src/renderer/state/names';
+import { ProjectEntitiesProvider } from '../../src/renderer/state/project-entities';
+import { EMPTY_ENTITIES } from '../../src/core/entities/model';
+import { HistoryProvider } from '../../src/renderer/state/history-context';
+import { createAppStore } from '../../src/renderer/state/app-store';
 import { makeMockApi, okv } from './mock-api';
+
+const worlds = vi.hoisted(() => [] as any[]);
+vi.mock('../../src/renderer/world3d/world3d', () => ({
+  createWorld3D: (options: any) => {
+    const world = { options, dispose: vi.fn(), lookAt: vi.fn(), setSpawnVisibility: vi.fn(), setOwnSpawns: vi.fn(), select: vi.fn(), selectSpawns: vi.fn(),
+      setWorldLayer: vi.fn(), setMode: vi.fn(), setPlacing: vi.fn(), cancelDrag: vi.fn(), setMarked: vi.fn(), setActive: vi.fn(), setScenery: vi.fn(), setTool: vi.fn(),
+      setFalloff: vi.fn(), setPendingMovement: vi.fn(), cancelPath: vi.fn(), selectedSpawns: vi.fn(() => []), hasSpawn: vi.fn(() => true), routeOf: vi.fn(() => null),
+      camera: () => ({ position: { x: 0, y: 0, z: 0 }, direction: { x: 1, y: 0, z: 0 } }), target: () => ({ x: 0, y: 0, z: 0 }),
+      spawnStatus: () => ({ capped: { creatures: false, objects: false }, error: null }) };
+    worlds.push(world);
+    return world;
+  },
+}));
+import { World3DView } from '../../src/renderer/world3d/World3DView';
 
 const spawn = { type: 'spawn', kind: 'creature', guid: 80330, entry: 1423, name: 'Stormwind Guard', map: 0, drifted: true,
   original: { x: -9481.31, y: 74.42, z: 56.55, orientation: 1.5, rotation: null }, current: { x: -9470, y: 74.42, z: 56.55, orientation: 2, rotation: null } };
@@ -63,5 +82,16 @@ describe('the Project changes modal', () => {
     expect(within(row).getByText('wanders 5 yd')).toBeInTheDocument();
     await userEvent.click(within(row).getByRole('button', { name: 'Revert movement of Stormwind Guard' }));
     expect(worldRevert).toHaveBeenCalledWith({ kind: 'movement', guid: 80330 });
+  });
+
+  it('hands every layer the 3D view takes to the project context', async () => {
+    vi.stubGlobal('fetch', async () => new Response(new Uint8Array([1]), { status: 200 }));
+    const layer = { spawns: [{ ...spawn, type: undefined }], routes: [], added: [] };
+    const api = makeMockApi({ worldLayer: vi.fn(async () => okv(layer)), mapFloors: vi.fn(async () => okv({ reason: 'none' })) });
+    const setLayer = vi.fn();
+    const value = { entities: EMPTY_ENTITIES, setEntities: vi.fn(), quests: [], create: vi.fn(), remove: vi.fn(), layer, setLayer, tracked: [] } as any;
+    render(<NamesProvider api={api}><HistoryProvider store={createAppStore(api)}><ProjectEntitiesProvider value={value}><World3DView map={0} start={{ x: 0, y: 0, z: 0 }} hasClient /></ProjectEntitiesProvider></HistoryProvider></NamesProvider>);
+    await waitFor(() => expect(setLayer).toHaveBeenCalledWith(expect.objectContaining({ spawns: expect.any(Array) })));
+    worlds.length = 0;
   });
 });

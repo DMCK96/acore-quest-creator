@@ -77,7 +77,7 @@ import { compileEntities } from '../core/entities/compile';
 import { compilePatrols, hasPointActions } from '../core/patrol/compile';
 import { ENTITY_KEYS, ENTITY_TABLES, readEntityContext } from '../core/entities/context';
 import { emptyGiversOf } from '../core/modules/givers';
-import { narrowTo, objectivesOf, questItemsOf, questUses, relationOwners } from '../core/entities/links';
+import { narrowTo, objectivesOf, questItemsOf, questRefs, questUses, relationOwners } from '../core/entities/links';
 import { NPC_TYPE_VALUE, OBJECT_TYPE_VALUE, RANK_VALUE, projectEntitiesSchema, readProjectEntities, type ProjectEntities, type QuestEntities } from '../core/entities/model';
 import { entityIssues } from '../core/entities/validate';
 import { gmCommands } from '../core/testing/gm';
@@ -1546,6 +1546,7 @@ export function createApi(deps: ApiDeps): Api {
             offCanvasLinks: [...neighbours].filter((id) => existing.has(id)).length,
             notConnected,
             uses: questUses(quest, store),
+            refs: questRefs(quest),
           });
         }
         return nodes;
