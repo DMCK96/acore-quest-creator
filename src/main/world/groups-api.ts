@@ -3,14 +3,16 @@ import type { RawRow, Where } from '../../core/db/types';
 import type { WorldDb } from '../../core/db/world-db';
 import { spawnEntryColumn } from '../../core/db/spawns';
 import { OBJECT_TYPE_VALUE, type ProjectEntities } from '../../core/entities/model';
+import { relationOwners } from '../../core/entities/links';
 import type { GroupContext, GroupMember, SpawnGroup } from '../../core/world/groups';
 import { groupsOf, type WorldLayer, type WorldSpawnKind } from '../../core/world/layer';
 import { readPlacement } from './world-api';
 
 /**
  * What spawn groups read from the world database: the server's pools (pool_template, pool_creature,
- * pool_gameobject, pool_pool) as groups, and what checking a group needs to know about its members.
- * A database without the pool tables has no groups.
+ * pool_gameobject, pool_pool, pool_quest) as groups with the game event each follows (game_event_pool),
+ * and what checking a group needs to know about its members. A database without the pool tables has
+ * no groups.
  */
 
 type Kind = 'npc' | 'object';
@@ -39,6 +41,53 @@ async function rowsIn(db: WorldDb, table: string, column: string, values: readon
 
 const byNumber = (column: string) => (a: RawRow, b: RawRow) => num(a[column]) - num(b[column]);
 
+/** quest_template.Flags bits: offered again each day, or each week */
+const QUEST_FLAG_DAILY = 0x1000;
+const QUEST_FLAG_WEEKLY = 0x8000;
+
+/** A quest of the project, as checking a rotation reads it */
+export type ProjectQuestLike = { questId: number; aggregate: { values: Readonly<Record<string, unknown>> } };
+
+export interface QuestFacts {
+  title: string;
+  daily: boolean;
+  weekly: boolean;
+  hasGiver: boolean;
+}
+
+const flagsFacts = (flags: number) => ({ daily: (flags & QUEST_FLAG_DAILY) !== 0, weekly: (flags & QUEST_FLAG_WEEKLY) !== 0 });
+
+/** A project quest's title, kind and whether an NPC or object offers it */
+export function projectQuestFacts(quest: ProjectQuestLike): QuestFacts {
+  const values = quest.aggregate.values;
+  const logTitle = values['quest_template.LogTitle'];
+  const title = typeof logTitle === 'string' && logTitle !== '' ? logTitle : `Quest ${quest.questId}`;
+  const flags = Number(values['quest_template.Flags']);
+  return { title, ...flagsFacts(Number.isFinite(flags) ? flags : 0), hasGiver: relationOwners(quest.aggregate, 'starter').length > 0 };
+}
+
+/** Database quests' titles, kinds and whether an NPC or object offers each, by id; one missing is not there */
+export async function databaseQuestFacts(db: WorldDb, ids: readonly number[]): Promise<Map<number, QuestFacts>> {
+  const out = new Map<number, QuestFacts>();
+  if (ids.length === 0) return out;
+  const keys = ids.map(String);
+  const offered = new Set<number>();
+  for (const table of ['creature_queststarter', 'gameobject_queststarter']) {
+    for (const row of await rowsIn(db, table, 'quest', keys)) offered.add(num(row.quest));
+  }
+  for (const row of await rowsIn(db, 'quest_template', 'ID', keys)) {
+    const id = num(row.ID);
+    out.set(id, { title: row.LogTitle || `Quest ${id}`, ...flagsFacts(num(row.Flags)), hasGiver: offered.has(id) });
+  }
+  return out;
+}
+
+/** A game_event_pool row as a group's event: during a positive entry, except during a negative one */
+const eventOfRow = (row: RawRow | undefined): SpawnGroup['event'] => {
+  const entry = num(row?.eventEntry);
+  return entry === 0 ? null : { id: Math.abs(entry), during: entry > 0 };
+};
+
 /** Each spawn's entry and map by guid, read from its table */
 async function spawnRows(db: WorldDb, kind: Kind, guids: readonly string[]): Promise<Map<string, { entry: number; map: number }>> {
   const table = spawnTable(kind);
@@ -51,8 +100,9 @@ async function spawnRows(db: WorldDb, kind: Kind, guids: readonly string[]): Pro
 
 /**
  * A pool as a group, with the rows it was read from as its original; null when there is no such pool.
- * Members are its NPCs, then its objects, then its groups, each by guid or id; its map is its first
- * spawn's, else its first group's.
+ * Members are its NPCs, then its objects, then its groups, then its quests, each by guid or id; its map
+ * is its first spawn's, else its first group's (0 for a quest pool, where a map means nothing). Its
+ * event is its game_event_pool row's.
  */
 export async function readGroup(db: WorldDb, id: number, seen: ReadonlySet<number> = new Set()): Promise<SpawnGroup | null> {
   const key = String(id);
@@ -61,6 +111,7 @@ export async function readGroup(db: WorldDb, id: number, seen: ReadonlySet<numbe
   const creatures = [...(await rowsOf(db, 'pool_creature', { pool_entry: key }))].sort(byNumber('guid'));
   const objects = [...(await rowsOf(db, 'pool_gameobject', { pool_entry: key }))].sort(byNumber('guid'));
   const children = [...(await rowsOf(db, 'pool_pool', { mother_pool: key }))].sort(byNumber('pool_id'));
+  const quests = [...(await rowsOf(db, 'pool_quest', { pool_entry: key }))].sort(byNumber('entry'));
   const npcSpawns = await spawnRows(db, 'npc', creatures.map((r) => r.guid ?? ''));
   const objectSpawns = await spawnRows(db, 'object', objects.map((r) => r.guid ?? ''));
   const spawnMember = (kind: Kind, row: RawRow, spawns: Map<string, { entry: number; map: number }>): GroupMember => ({
@@ -70,6 +121,7 @@ export async function readGroup(db: WorldDb, id: number, seen: ReadonlySet<numbe
     ...creatures.map((r) => spawnMember('npc', r, npcSpawns)),
     ...objects.map((r) => spawnMember('object', r, objectSpawns)),
     ...children.map((r): GroupMember => ({ type: 'group', id: num(r.pool_id), chance: num(r.chance) })),
+    ...quests.map((r): GroupMember => ({ type: 'quest', questId: num(r.entry) })),
   ];
   const firstSpawn = [...creatures.map((r) => npcSpawns.get(r.guid ?? '')), ...objects.map((r) => objectSpawns.get(r.guid ?? ''))].find((s) => s !== undefined);
   let map = firstSpawn?.map ?? null;
@@ -92,7 +144,7 @@ export async function readGroup(db: WorldDb, id: number, seen: ReadonlySet<numbe
     map: map ?? 0,
     maxActive: num(template.max_limit),
     members,
-    event: null,
+    event: eventOfRow(event),
     origin: {
       kind: 'existing',
       original: {
@@ -101,6 +153,7 @@ export async function readGroup(db: WorldDb, id: number, seen: ReadonlySet<numbe
           ...creatures.map((row) => ({ table: 'pool_creature' as const, row: { ...row } })),
           ...objects.map((row) => ({ table: 'pool_gameobject' as const, row: { ...row } })),
           ...children.map((row) => ({ table: 'pool_pool' as const, row: { ...row } })),
+          ...quests.map((row) => ({ table: 'pool_quest' as const, row: { ...row } })),
         ],
         event: event ? { ...event } : null,
       },
@@ -108,15 +161,38 @@ export async function readGroup(db: WorldDb, id: number, seen: ReadonlySet<numbe
   };
 }
 
+/** A pool as `listPools` gives it: a quest pool has its quests, and is daily unless its quests are weekly */
+export interface PoolSummary {
+  id: number;
+  name: string;
+  maxActive: number;
+  members: number;
+  /** Its first spawn's map, else its first group's; null for one with neither (a quest pool) */
+  map: number | null;
+  groups: number[];
+  quests: number[];
+  daily: boolean;
+}
+
 /** Every pool in the database with its map and member count, read in a few passes rather than one pool at a time */
-export async function listPools(db: WorldDb): Promise<{ id: number; name: string; maxActive: number; members: number; map: number | null; groups: number[] }[]> {
+export async function listPools(db: WorldDb): Promise<PoolSummary[]> {
   const templates = await rowsOf(db, 'pool_template', {});
   if (templates.length === 0) return [];
   const creatures = [...(await rowsOf(db, 'pool_creature', {}))].sort(byNumber('guid'));
   const objects = [...(await rowsOf(db, 'pool_gameobject', {}))].sort(byNumber('guid'));
   const children = [...(await rowsOf(db, 'pool_pool', {}))].sort(byNumber('pool_id'));
+  const questRows = [...(await rowsOf(db, 'pool_quest', {}))].sort(byNumber('entry'));
   const npcSpawns = await spawnRows(db, 'npc', creatures.map((r) => r.guid ?? ''));
   const objectSpawns = await spawnRows(db, 'object', objects.map((r) => r.guid ?? ''));
+  // Each quest pool's quests, and their flags: weekly quests make a weekly rotation
+  const questsOf = new Map<number, number[]>();
+  for (const row of questRows) questsOf.set(num(row.pool_entry), [...(questsOf.get(num(row.pool_entry)) ?? []), num(row.entry)]);
+  const flags = new Map<number, number>();
+  if (questRows.length > 0) for (const row of await rowsIn(db, 'quest_template', 'ID', questRows.map((r) => r.entry ?? ''))) flags.set(num(row.ID), num(row.Flags));
+  const isDaily = (quests: readonly number[]): boolean => {
+    const kinds = quests.map((q) => flagsFacts(flags.get(q) ?? 0));
+    return kinds.some((k) => k.daily) || !kinds.some((k) => k.weekly);
+  };
   const spawnMap = new Map<number, number>();
   const count = new Map<number, number>();
   for (const [rows, spawns] of [[creatures, npcSpawns], [objects, objectSpawns]] as const) {
@@ -145,7 +221,11 @@ export async function listPools(db: WorldDb): Promise<{ id: number; name: string
   };
   return templates.map((t) => {
     const id = num(t.entry);
-    return { id, name: t.description ?? '', maxActive: num(t.max_limit), members: count.get(id) ?? 0, map: mapOf(id, new Set()), groups: [...(childrenOf.get(id) ?? [])] };
+    const quests = questsOf.get(id) ?? [];
+    return {
+      id, name: t.description ?? '', maxActive: num(t.max_limit), members: (count.get(id) ?? 0) + quests.length, map: mapOf(id, new Set()),
+      groups: [...(childrenOf.get(id) ?? [])], quests, daily: isDaily(quests),
+    };
   });
 }
 
@@ -164,8 +244,10 @@ function layerHolder(layer: WorldLayer, held: (m: GroupMember) => boolean): numb
 
 /**
  * What checking `group` needs to know, read now: every group reachable from its members (the layer's,
- * else the database's), and each spawn member's map, object type and the group it is already in. A
- * spawn in `moves` counts as in no group, since saving moves it. A database group the layer has
+ * else the database's), each spawn member's map, object type and the group it is already in, the group
+ * holding `group` itself, each quest member (from `projectQuests`, else the database) and the rotation it
+ * is already in (read into `groups`, so the reason can name it), and whether its event is in game_event.
+ * A spawn in `moves` counts as in no group, since saving moves it. A database group the layer has
  * changed is known by the layer's copy only. Without a database every database read answers null.
  */
 export async function groupContext(
@@ -174,6 +256,7 @@ export async function groupContext(
   store: ProjectEntities,
   moves: readonly Move[],
   group?: SpawnGroup,
+  projectQuests: readonly ProjectQuestLike[] = [],
 ): Promise<GroupContext> {
   const inLayer = new Map(groupsOf(layer).map((g) => [g.id, g]));
   const groups = new Map(inLayer);
@@ -212,7 +295,29 @@ export async function groupContext(
     const [row] = await rowsOf(db!, 'gameobject_template', { entry: String(entry) });
     return row ? num(row.type) : null;
   };
+  const dbQuestGroup = new Map<number, number | null>();
+  let dbQuests = new Map<number, QuestFacts>();
+  let eventKnown: boolean | null = null;
+  const ownQuest = (id: number) => projectQuests.find((q) => q.questId === id) ?? null;
   if (db) {
+    // The group holding the checked group itself: only a top-level group follows an event, and a rotation is never inside one
+    if (group) {
+      const [row] = await rowsOf(db, 'pool_pool', { pool_id: String(group.id) });
+      dbMother.set(group.id, row ? num(row.mother_pool) : null);
+    }
+    const questIds = (group?.members ?? []).flatMap((m) => (m.type === 'quest' ? [m.questId] : []));
+    dbQuests = await databaseQuestFacts(db, questIds.filter((id) => ownQuest(id) === null));
+    for (const row of await rowsIn(db, 'pool_quest', 'entry', questIds.map(String))) {
+      const pool = num(row.pool_entry);
+      dbQuestGroup.set(num(row.entry), pool);
+      if (!groups.has(pool)) {
+        const read = await readGroup(db, pool);
+        if (read) groups.set(pool, read);
+      }
+    }
+    if (group?.event && (await hasTable(db, 'game_event'))) {
+      eventKnown = (await db.selectRows('game_event', { eventEntry: String(group.event.id) })).length > 0;
+    }
     for (const m of group?.members ?? []) {
       if (m.type === 'group') {
         const [row] = await rowsOf(db, 'pool_pool', { pool_id: String(m.id) });
@@ -261,9 +366,18 @@ export async function groupContext(
       const mother = dbMother.get(id) ?? null;
       return mother === null || inLayer.has(mother) ? null : mother;
     },
-    // Quests, their rotations and game events are not read here yet: unknown
-    quest: () => null,
-    groupOfQuest: () => null,
-    eventExists: () => null,
+    quest(questId) {
+      const own = ownQuest(questId);
+      if (own) return projectQuestFacts(own);
+      return dbQuests.get(questId) ?? null;
+    },
+    groupOfQuest(questId) {
+      const held = layerHolder(layer, (m) => m.type === 'quest' && m.questId === questId);
+      if (held !== null) return held;
+      const pool = dbQuestGroup.get(questId) ?? null;
+      // The layer's copy of that rotation, without this quest, wins over the database's
+      return pool === null || inLayer.has(pool) ? null : pool;
+    },
+    eventExists: () => eventKnown,
   };
 }

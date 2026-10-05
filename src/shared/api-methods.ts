@@ -60,6 +60,8 @@ export const API_METHODS = [
   'worldSetGroup',
   'worldDeleteGroup',
   'worldDropMember',
+  'questPools',
+  'gameEvents',
   'historyList',
   'historyUndo',
   'historyRedo',

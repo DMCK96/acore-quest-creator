@@ -28,6 +28,15 @@ async function setup() {
   db.insert('pool_pool', { pool_id: '32493', mother_pool: '32491', chance: '0', description: 'Path 2' });
   db.insert('gameobject_template', { entry: '143981', type: '19', displayId: '1949', name: 'Mailbox', size: '1' });
   db.insert('gameobject', { guid: '5', id: '143981', map: '571', position_x: '0', position_y: '0', position_z: '0', orientation: '0', rotation0: '0', rotation1: '0', rotation2: '0', rotation3: '1' });
+  // A rotation of two daily quests, and the an event the drakes' first path can follow
+  for (const [id, title] of [['60001', 'Wolves'], ['60002', 'Boars']]) {
+    db.insert('quest_template', { ID: id, LogTitle: title, Flags: '4096' });
+    db.insert('creature_queststarter', { id: '32491', quest: id });
+  }
+  db.insert('pool_template', { entry: '900', max_limit: '1', description: 'Dailies' });
+  db.insert('pool_quest', { entry: '60001', pool_entry: '900' });
+  db.insert('pool_quest', { entry: '60002', pool_entry: '900' });
+  db.insert('game_event', { eventEntry: '12', description: 'Darkmoon Faire' });
   const session = createProjectSession(defaultProjectMeta('P', 'C:\\out'));
   const written = new Map<string, string>();
   const api = createApi({ store: openStore(':memory:', box), openWorldDb: async () => db, openDevDb: async () => { throw new Error('x'); },
@@ -48,6 +57,41 @@ describe('spawn groups through the API', () => {
     const mother: any = await api.worldGroup(32491);
     expect(mother.value.members).toEqual([{ type: 'group', id: 32492, chance: 0 }, { type: 'group', id: 32493, chance: 0 }]);
     expect(mother.value.map).toBe(571);
+  });
+
+  it('reads a quest pool as a rotation and an event-tied pool with its event', async () => {
+    const { api, db } = await setup();
+    // Only here: a group inside another cannot follow an event, so the other tests' saves of Path 1 would be refused
+    db.insert('game_event_pool', { eventEntry: '12', pool_entry: '32492' });
+    const rotation: any = await api.worldGroup(900);
+    expect(rotation.value).toMatchObject({ id: 900, name: 'Dailies', members: [{ type: 'quest', questId: 60001 }, { type: 'quest', questId: 60002 }], event: null });
+    const camp: any = await api.worldGroup(32492);
+    expect(camp.value.event).toEqual({ id: 12, during: true });
+    expect(camp.value.origin.original.event).toEqual({ eventEntry: '12', pool_entry: '32492' });
+  });
+
+  it('lists the quest pools for the graph and the game events for the dialog', async () => {
+    const { api } = await setup();
+    expect(((await api.questPools()) as any).value).toEqual([{ id: 900, name: 'Dailies', maxActive: 1, daily: true, questIds: [60001, 60002] }]);
+    expect(((await api.gameEvents()) as any).value).toContainEqual({ id: 12, name: 'Darkmoon Faire' });
+  });
+
+  it('checks a rotation against the quests in the project and the database', async () => {
+    const { api } = await setup();
+    const mixed = { id: 901, name: 'Mixed', map: 0, maxActive: 1, origin: { kind: 'new' }, event: null, members: [{ type: 'quest', questId: 60001 }, { type: 'quest', questId: 4242 }] };
+    expect(((await api.worldCheckGroup(mixed as any, [])) as any).value.reasons).toContain('Quest 4242 is not in the project or the database.');
+    const taken = { ...mixed, members: [{ type: 'quest', questId: 60001 }] };
+    expect(((await api.worldCheckGroup(taken as any, [])) as any).value.reasons).toContain('Wolves is already in rotation Dailies.');
+  });
+
+  it('refuses an event on a database group inside another, found through pool_pool, and an event the database does not have', async () => {
+    const { api } = await setup();
+    const path: any = (await api.worldGroup(32492) as any).value;
+    const reasons = ((await api.worldCheckGroup({ ...path, event: { id: 99, during: true } }, [])) as any).value.reasons;
+    expect(reasons).toContain('Only a group that is not inside another can follow an event.');
+    const top: any = (await api.worldGroup(32491) as any).value;
+    expect(((await api.worldCheckGroup({ ...top, event: { id: 99, during: true } }, [])) as any).value.reasons).toEqual(['Event 99 is not in the database.']);
+    expect(((await api.worldCheckGroup({ ...top, event: { id: 12, during: false } }, [])) as any).value.reasons).toEqual([]);
   });
 
   it('describes a group for the view: members by name with where they stand; a group member at its centre', async () => {

@@ -61,6 +61,19 @@ describe('a spawn that belongs to a game event', () => {
     expect(toViewCreature(row, null, [0, 0, 0]).events).toEqual([{ id: 3, name: 'Darkmoon Faire: Elwynn, Goldshire' }]);
   });
 
+  it('counts the event its top-level group follows as one of its own, once', () => {
+    const during = { ...creatureRow, event_entry: '7', event_name: 'Lunar Festival', pool_event_entry: '12', pool_event_name: 'Darkmoon Faire', event_list: `7${FIELD}Lunar Festival` };
+    for (const spawn of [toViewCreature(during, null, [0, 0, 0]), toViewObject(during)]) {
+      expect(spawn.events).toEqual([{ id: 7, name: 'Lunar Festival' }, { id: 12, name: 'Darkmoon Faire' }]);
+      expect(spawn.event).toEqual({ id: 7, name: 'Lunar Festival' });
+    }
+    const only = toViewCreature({ ...creatureRow, pool_event_entry: '12', pool_event_name: 'Darkmoon Faire', event_list: `12${FIELD}Darkmoon Faire` }, null, [0, 0, 0]);
+    expect(only.events).toEqual([{ id: 12, name: 'Darkmoon Faire' }]);
+    expect(only.event).toEqual({ id: 12, name: 'Darkmoon Faire' });
+    const away = toViewObject({ ...creatureRow, pool_event_entry: '-12', pool_event_name: 'Darkmoon Faire' });
+    expect([away.events, away.removedBy, away.event]).toEqual([[], [{ id: 12, name: 'Darkmoon Faire' }], null]);
+  });
+
   it('has no events and is taken away by none when it has no event rows', () => {
     const c = toViewCreature({ ...creatureRow, event_list: null }, null, [0, 0, 0]);
     expect([c.events, c.removedBy]).toEqual([[], []]);
