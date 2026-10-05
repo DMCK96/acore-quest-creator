@@ -104,6 +104,28 @@ export async function countWalkers(db: WorldDb, pathId: number): Promise<number>
   return own + (await db.selectRows('creature', { [entryColumn]: entries })).length;
 }
 
+/** The distinct NPC entries that walk a route (a spawn's addon or a template's names it), with template names, ascending */
+export async function readWalkerEntries(db: WorldDb, pathId: number): Promise<{ entry: number; name: string }[]> {
+  const entries = new Set<number>();
+  if (await hasTable(db, 'creature_addon')) {
+    for (const own of await db.selectRows('creature_addon', { path_id: String(pathId) })) {
+      const spawn = own.guid ? await readPlacement(db, 'creature', Number(own.guid)) : null;
+      if (spawn) entries.add(spawn.entry);
+    }
+  }
+  if (await hasTable(db, 'creature_template_addon')) {
+    for (const row of await db.selectRows('creature_template_addon', { path_id: String(pathId) })) {
+      if (row.entry) entries.add(Number(row.entry));
+    }
+  }
+  const out: { entry: number; name: string }[] = [];
+  for (const entry of [...entries].sort((a, b) => a - b)) {
+    const [named] = await db.selectRows('creature_template', { entry: String(entry) });
+    out.push({ entry, name: named?.name ?? '' });
+  }
+  return out;
+}
+
 /** The name of an NPC that walks a route (its own spawn's, else its template's), or undefined */
 export async function routeWalkerName(db: WorldDb, pathId: number): Promise<string | undefined> {
   if (await hasTable(db, 'creature_addon')) {
