@@ -6,6 +6,7 @@ import { ProjectChanges } from '../../src/renderer/world3d/ProjectChanges';
 import { ProjectEntitiesProvider } from '../../src/renderer/state/project-entities';
 import { EMPTY_ENTITIES, newNpc, newObject, newSpawn } from '../../src/core/entities/model';
 import { makeMockApi, okv } from './mock-api';
+import { NamesProvider } from '../../src/renderer/state/names';
 
 const entities = {
   ...EMPTY_ENTITIES,
@@ -21,14 +22,15 @@ const tracked = [
 const mount = (extra: any[] = [], api = makeMockApi({
   worldChanges: vi.fn(async () => okv([])),
   exportProject: vi.fn(async () => okv({ applyPath: 'C:\\out\\a_project.sql', revertPath: 'C:\\out\\a_project_revert.sql', sql: '', warnings: [] })),
-})) => {
+}), connected = true) => {
   const onEdit = vi.fn();
   const onGoTo = vi.fn();
-  render(
+  const dialog = (
     <ProjectEntitiesProvider value={{ entities, setEntities: vi.fn(), quests, tracked: [...tracked, ...extra], create: vi.fn(), remove: vi.fn() } as any}>
       <ProjectChanges api={api} onLayer={vi.fn()} onClose={vi.fn()} onEdit={onEdit} onGoTo={onGoTo} />
-    </ProjectEntitiesProvider>,
+    </ProjectEntitiesProvider>
   );
+  render(connected ? <NamesProvider api={api}>{dialog}</NamesProvider> : dialog);
   return { api, onEdit, onGoTo };
 };
 
@@ -60,6 +62,15 @@ describe('Project changes', () => {
     expect(within(row).getByText('NPC 1423 · Spawns changed')).toBeTruthy();
     await userEvent.click(within(row).getByRole('button', { name: 'Edit' }));
     expect(onEdit).toHaveBeenCalledWith('npc', 1423);
+  });
+
+  it('without the world database, an existing one not brought in yet cannot be edited and says why; new ones still can', async () => {
+    const { onEdit } = mount([{ kind: 'npc', entry: 1423, name: 'Stormwind Guard', origin: 'existing', changes: ['spawns'], usedBy: [], goTo: null }], undefined, false);
+    const edit = within(screen.getByRole('listitem', { name: 'Stormwind Guard' })).getByRole('button', { name: 'Edit' });
+    expect(edit).toHaveProperty('disabled', true);
+    expect(edit).toHaveAccessibleDescription('Needs the world database');
+    await userEvent.click(within(screen.getByRole('listitem', { name: 'Hela' })).getByRole('button', { name: 'Edit' }));
+    expect(onEdit).toHaveBeenCalledWith('npc', 12000001);
   });
 
   it('says which existing ones the database changed since', async () => {
