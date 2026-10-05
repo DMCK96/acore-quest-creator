@@ -578,6 +578,20 @@ describe('the world layer in the view', () => {
       expect(await drawn(m, 4, [1, 2, 3])).toEqual([1, 2, 3]);
     });
 
+    it("walks through database groups the loaded spawns do not name, by the group's full membership", async () => {
+      // NPC 1 is in database group 21, inside database group 20, inside database group 19 (its row's top);
+      // the layer has group 19 let go of 20, which new group 9 (tied to event 4) holds
+      const m = manager({ ...empty, creatures: [creature(1, 1, { ...at, group: 21, poolTop: 19 }), creature(2, 1, { ...at, group: 19, poolTop: 19 })] });
+      await m.loadArea(1, 0, box);
+      await m.setWorldLayer({ spawns: [], routes: [], added: [], groups: [
+        group(9, [groupMember(20)], { id: 4, during: true }),
+        group(19, [spawnMember(2)], null, { kind: 'existing', original: { template: {}, members: [], event: null } }),
+      ] } as any);
+      await m.setGroupSpawns(new globalThis.Map([[9, [{ kind: 'npc' as const, guid: 1 }]]]));
+      expect(await drawn(m, 'none', [1, 2])).toEqual([2]);
+      expect(await drawn(m, 4, [1, 2])).toEqual([1, 2]);
+    });
+
     it("merges the group's event with the spawn's own events instead of replacing them", async () => {
       const m = manager({ ...empty, creatures: [creature(1, 1, { ...at, event: fair, events: [fair] })] });
       await m.loadArea(1, 0, box);

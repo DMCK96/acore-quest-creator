@@ -229,6 +229,55 @@ export async function listPools(db: WorldDb): Promise<PoolSummary[]> {
   });
 }
 
+/**
+ * Every spawn under group `id` through all its levels, by kind and guid: each group as the layer has it
+ * (a removed one holds nothing), else as the database's pool, whose member groups come from `pools`. A
+ * spawn or group a layer group holds is under that layer group only, not a database group that still
+ * lists it.
+ */
+export async function spawnsUnder(db: WorldDb, layer: WorldLayer, pools: readonly PoolSummary[], id: number): Promise<{ kind: Kind; guid: number }[]> {
+  const inLayer = new Map(groupsOf(layer).map((g) => [g.id, g]));
+  const heldSpawns = new Set<string>();
+  const heldGroups = new Set<number>();
+  for (const g of inLayer.values()) {
+    if (g.removed) continue;
+    for (const m of g.members) {
+      if (m.type === 'spawn') heldSpawns.add(`${m.kind}:${m.guid}`);
+      else if (m.type === 'group') heldGroups.add(m.id);
+    }
+  }
+  const childrenOf = new Map(pools.map((p) => [p.id, p.groups]));
+  const out = new Map<string, { kind: Kind; guid: number }>();
+  const add = (kind: Kind, guid: number): void => void out.set(`${kind}:${guid}`, { kind, guid });
+  const fromDb: number[] = [];
+  const seen = new Set<number>();
+  const walk = [id];
+  while (walk.length > 0) {
+    const g = walk.pop()!;
+    if (seen.has(g)) continue;
+    seen.add(g);
+    const copy = inLayer.get(g);
+    if (copy) {
+      if (copy.removed) continue;
+      for (const m of copy.members) {
+        if (m.type === 'spawn') add(m.kind, m.guid);
+        else if (m.type === 'group') walk.push(m.id);
+      }
+      continue;
+    }
+    fromDb.push(g);
+    for (const child of childrenOf.get(g) ?? []) if (!heldGroups.has(child)) walk.push(child);
+  }
+  const keys = fromDb.map(String);
+  for (const kind of ['npc', 'object'] as const) {
+    for (const row of keys.length > 0 ? await rowsIn(db, poolTable(kind), 'pool_entry', keys) : []) {
+      const guid = num(row.guid);
+      if (!heldSpawns.has(`${kind}:${guid}`)) add(kind, guid);
+    }
+  }
+  return [...out.values()].sort((a, b) => (a.kind === b.kind ? a.guid - b.guid : a.kind === 'npc' ? -1 : 1));
+}
+
 /** Whether the database has moved off a group's original since it was read; a new group drifts when the database has a pool with its id */
 export async function groupDrifted(db: WorldDb, group: SpawnGroup): Promise<boolean> {
   const now = await readGroup(db, group.id);

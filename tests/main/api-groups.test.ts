@@ -217,6 +217,22 @@ describe('spawn groups through the API', () => {
     expect(both.value.groups ?? []).toEqual([]);
   });
 
+  it('lists every spawn under a group through all its levels: the layer copy of each group, else the database one', async () => {
+    const { api, session } = await setup();
+    const spawn = (guid: number) => ({ type: 'spawn' as const, kind: 'npc' as const, guid, entry: 32491, chance: 0 });
+    const path2: any = ((await api.worldGroup(32493)) as any).value;
+    session.world.put({ spawns: [], routes: [], added: [], groups: [
+      // New group 9 holds the database's top group, which holds both paths only in the database
+      { id: 9, name: 'Event', map: 571, maxActive: 1, event: { id: 12, during: true }, origin: { kind: 'new' }, members: [{ type: 'group', id: 32491, chance: 0 }] },
+      // The layer's Path 2 has let go of 39208; another layer group has taken 39207 from Path 1
+      { ...path2, members: [spawn(39204)] },
+      { id: 10, name: 'Other', map: 571, maxActive: 1, event: null, origin: { kind: 'new' }, members: [spawn(39207)] },
+    ] } as any);
+    const out: any = await api.worldGroupSpawns(9);
+    expect(out.value).toEqual([{ kind: 'npc', guid: 39203 }, { kind: 'npc', guid: 39204 }]);
+    expect(((await api.worldGroupSpawns(32492)) as any).value).toEqual([{ kind: 'npc', guid: 39203 }]);
+  });
+
   it('gives each spawn of the 3D view its group, or null', async () => {
     const { api } = await setup();
     const out: any = await api.viewSpawns(571, { minX: -100, maxX: 100, minY: -100, maxY: 100 });

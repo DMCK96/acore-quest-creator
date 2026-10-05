@@ -235,6 +235,12 @@ class SpawnManager {
   /** Edits to database spawns and routes, drawn over what the database has */
   #layer: WorldLayer = { spawns: [], routes: [], added: [] };
 
+  /**
+   * Every spawn under each top-level layer group with an event, through all its levels (database groups
+   * the loaded spawns do not name among them), by group id
+   */
+  #groupSpawns: ReadonlyMap<number, readonly { kind: 'npc' | 'object'; guid: number }[]> = new globalThis.Map();
+
   /** Routes edited in the view and not yet stored by its host, drawn in place of what it has */
   #pendingRoutes = new globalThis.Map<number, ViewPoint[]>();
   /** NPCs' movement as edited in the view, drawn until the host stores it */
@@ -421,11 +427,20 @@ class SpawnManager {
       }
       return { id: g, layer: true };
     };
+    // The top-level layer group each spawn is under by that group's full membership, which reaches
+    // through database groups the loaded spawns do not name
+    const underTop = new globalThis.Map<string, number>();
+    for (const [id, spawns] of this.#groupSpawns) {
+      if (!liveGroups.has(id) || motherInLayer.has(id)) continue;
+      for (const s of spawns) underTop.set(`${s.kind}:${s.guid}`, id);
+    }
     // A spawn's events as the layer has its groups: its own event rows, with the event of the top-level
     // group it is in (the layer's, else the database's) in place of the one its database group brought
     const evented = <T extends { guid: number; group?: number | null; event?: ViewEvent | null; events?: ViewEvent[]; removedBy?: ViewEvent[]; poolEvent?: PoolEvent | null }>(kind: 'npc' | 'object', s: T): T => {
       const group = groupOf(kind, s);
-      const top = group === null ? null : topOf(group);
+      const key = `${kind}:${s.guid}`;
+      const walked = inLayerGroup.has(key) ? undefined : underTop.get(key);
+      const top = walked !== undefined ? { id: walked, layer: true } : group === null ? null : topOf(group);
       const db = s.poolEvent ?? null;
       const dropDb = db !== null && !db.alsoOwn && !(top !== null && !top.layer && top.id === db.pool);
       const set = top?.layer ? liveGroups.get(top.id)!.event : null;
@@ -504,6 +519,15 @@ class SpawnManager {
     this.#layer = layer;
     this.#pendingRoutes.clear();
     this.#pendingMovements.clear();
+    await this.#redraw();
+  }
+
+  /**
+   * Every spawn under each top-level layer group with an event, through all its levels, by group id:
+   * the event walk reaches them through database groups the loaded spawns do not name
+   */
+  async setGroupSpawns(byGroup: ReadonlyMap<number, readonly { kind: 'npc' | 'object'; guid: number }[]>) {
+    this.#groupSpawns = byGroup;
     await this.#redraw();
   }
 
