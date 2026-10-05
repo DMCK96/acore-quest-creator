@@ -163,18 +163,14 @@ Things that are missing or approximate. Roughly in order of how much they matter
 
 In order. Each is meant to be a step the user can try before the next begins.
 
-The maintainer's eight asked-for features are split into sub-projects A to E. A (camera), B (the spawn layer), C (select and transform, and the world layer) and D (placing and creating from 3D) are done. Edits not part of a quest go to a project-level world layer, and new NPCs, objects and items to the project; both are exported in the project patch.
+The maintainer's eight asked-for features are split into sub-projects A to E, and all five are done: A (camera), B (the spawn layer), C (select and transform, and the world layer), D (placing and creating from 3D) and E (one kind of entity, editing existing ones, respawn time and copying settings, spawn groups; see "One kind of NPC, object and item" under Status). Edits not part of a quest go to a project-level world layer, and new or edited NPCs, objects and items to the project; both are exported in the project patch.
 
 Every action the steps below add is a step of the project's undo history (the user, 2026-10-04: an action that cannot be undone is a bad experience).
 
-1. **E: one kind of entity, edit existing, spawn groups.** Done in three phases (the camera on opening a quest is step 2):
-   1. An NPC, object or item is one kind of thing, whether a quest uses it and whether it is new or the database's (no "quest NPC", no `madeFor`). The right-click menu is built from what was clicked and what it can do. One project list tracks every new entity and every existing one the project changed.
-   2. Change existing templates (loot, faction, level, scale, with a warning first when the template has more than one spawn, or its loot list is shared); any spawn's respawn time; copy a spawn with its settings (respawn time and wander distance, not its path).
-   3. Spawn groups (the server's pools): only some of a set of spawns up at a time, with chances, groups inside groups (as the Time-Lost Proto-Drake uses), existing pools shown and editable.
-2. **Opening a quest moves the World's camera** to the quest's own spawns. Next.
-3. **Quest pools and event pools.** After the camera. Rotating daily and weekly quests (`pool_quest`) and spawn groups that only run during a game event (`game_event_pool`). Spawn groups (step 1.3) are built to take both.
-4. **Reshape the quest grid** into a chain builder beside the 3D view. Needs a design conversation first: what "managing a chain" should mean day to day.
-5. **Fill the gaps** above as they get in the way: props inside buildings first, then the remaining building shaders.
+1. **Opening a quest moves the World's camera** to the quest's own spawns. Next.
+2. **Quest pools and event pools.** Rotating daily and weekly quests (`pool_quest`) and spawn groups that only run during a game event (`game_event_pool`). Spawn groups are built to take both. Needs a short design conversation first.
+3. **Reshape the quest grid** into a chain builder beside the 3D view. Needs a design conversation first: what "managing a chain" should mean day to day.
+4. **Fill the gaps** above as they get in the way: props inside buildings first, then the remaining building shaders.
 
 Decided with the user (2026-10-04):
 
