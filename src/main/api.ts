@@ -2332,6 +2332,8 @@ export function createApi(deps: ApiDeps): Api {
         return { spawns: found.slice(0, FIND_SPAWNS_LIMIT), capped: found.length > FIND_SPAWNS_LIMIT };
       }),
 
+    spawnPlacement: (kind, guid) => run(async () => spawnAt(connected().db, kind, guid)),
+
     questMapRefs: (questId) =>
       run(async () => {
         const db = connected().db;

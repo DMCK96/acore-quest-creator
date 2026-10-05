@@ -73,6 +73,7 @@ export const API_METHODS = [
   'questSpawnList',
   'entitySpawns',
   'findSpawns',
+  'spawnPlacement',
   'questMapRefs',
   'allocateIds',
   'patrolPathId',
