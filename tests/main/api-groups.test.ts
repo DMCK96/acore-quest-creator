@@ -124,7 +124,7 @@ describe('spawn groups through the API', () => {
   it('describes a group for the view: members by name with where they stand; a group member at its centre', async () => {
     const { api } = await setup();
     const out: any = await api.worldGroupView(32491);
-    expect(out.value).toEqual({ id: 32491, name: 'Time-Lost Proto Drake / Vyragosa', map: 571, maxActive: 1, members: [
+    expect(out.value).toEqual({ id: 32491, name: 'Time-Lost Proto Drake / Vyragosa', map: 571, maxActive: 1, event: null, members: [
       { key: 'group:32492', type: 'group', name: 'Path 1', chance: 0, at: { x: 10, y: 0, z: 0 } },
       { key: 'group:32493', type: 'group', name: 'Path 2', chance: 0, at: { x: 50, y: 0, z: 0 } },
     ] });
