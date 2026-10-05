@@ -102,13 +102,18 @@ describe('spawn groups through the API', () => {
     expect(((await api.questPools()) as any).value.map((p: any) => [p.id, p.questIds])).toEqual([[901, [60001, 60004]], [900, [60002, 60003]]]);
   });
 
-  it('a move that would leave a rotation one quest says so', async () => {
-    const { api, db } = await setup();
+  it('a move that would leave a rotation one quest deletes it in the same save, with a note', async () => {
+    const { api, db, session } = await setup();
     db.insert('quest_template', { ID: '60004', LogTitle: 'Crabs', Flags: '4096' });
     db.insert('creature_queststarter', { id: '32491', quest: '60004' });
     const fresh = { id: 901, name: 'Coast', map: 0, maxActive: 1, origin: { kind: 'new' }, event: null, members: [{ type: 'quest', questId: 60001 }, { type: 'quest', questId: 60004 }] };
-    const reasons = ((await api.worldCheckGroup(fresh as any, [{ kind: 'quest', questId: 60001 }])) as any).value.reasons;
-    expect(reasons).toEqual(['Dailies would then: A rotation needs at least two quests.']);
+    const move = [{ kind: 'quest' as const, questId: 60001 }];
+    expect(((await api.worldCheckGroup(fresh as any, move)) as any).value).toEqual({ reasons: [], notes: ['Dailies would then have one quest and is deleted.'] });
+    const saved: any = await api.worldSetGroup(fresh as any, move);
+    expect(saved.ok).toBe(true);
+    const groups = (session.world.get().groups ?? []).filter((g: any) => !g.removed);
+    expect(groups.map((g: any) => g.id)).toEqual([901]);
+    expect(((await api.questPools()) as any).value.map((p: any) => p.id)).toEqual([901]);
   });
 
   it('refuses an event on a database group inside another, found through pool_pool, and an event the database does not have', async () => {

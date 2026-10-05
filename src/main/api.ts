@@ -1245,6 +1245,7 @@ export function createApi(deps: ApiDeps): Api {
     for (const { after } of left) {
       const name = after.name || `Group ${after.id}`;
       if (after.members.length === 0) notes.push(`${name} would then be empty and is deleted.`);
+      else if (isQuestPool(after) && after.members.length < 2) notes.push(`${name} would then have one quest and is deleted.`);
       else reasons.push(...validateGroup(after, await groupContext(db, layer, store, moves, after, quests.list())).map((reason) => `${name} would then: ${reason}`));
     }
     return { group, reasons, notes, left };
@@ -2384,8 +2385,8 @@ export function createApi(deps: ApiDeps): Api {
         for (const move of moves) next = move.kind === 'quest' ? dropQuestMember(next, move.questId) : dropMember(next, move.kind, move.guid);
         for (const { after } of left) {
           const now = groupsOf(next).find((g) => g.id === after.id);
-          if (!now || now.members.length === 0) {
-            // Emptied: deleted, as Delete group would, and let go of by the group holding it
+          if (!now || now.members.length === 0 || (isQuestPool(now) && now.members.length < 2)) {
+            // Emptied, or a rotation left with one quest: deleted, as Delete group would, and let go of by the group holding it
             next = dropGroupMember(next, after.id);
             if (now) next = deleteGroup(next, now);
           } else {
