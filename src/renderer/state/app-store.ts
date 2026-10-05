@@ -765,7 +765,7 @@ export function createAppStore(api: Api, opts: { saveDelayMs?: number } = {}): A
       let saved = false;
       await get().historyStep(async () => {
         // The flags changed for the save, each with what it was: a refused save puts them back, so it leaves no step
-        const madeOpen: { questId: number; was: unknown }[] = [];
+        const madeOpen: { questId: number; was: FieldValue }[] = [];
         const madeOthers: QuestAggregate[] = [];
         const putBack = async (): Promise<void> => {
           for (const aggregate of madeOthers.reverse()) await api.updateQuest(aggregate);
