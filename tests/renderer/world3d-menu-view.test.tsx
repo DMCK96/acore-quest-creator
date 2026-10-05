@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { act, render, screen, waitFor } from '@testing-library/react';
+import { act, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { NamesProvider } from '../../src/renderer/state/names';
 import { makeMockApi, okv } from './mock-api';
@@ -276,5 +276,28 @@ describe('the right-click menu in the 3D view', () => {
     await waitFor(() => expect(api.historyEnd).toHaveBeenCalledTimes(1));
     expect(api.historyBegin).toHaveBeenCalledTimes(1);
     expect(vi.mocked(api.worldSetMovement).mock.invocationCallOrder[0]!).toBeLessThan(vi.mocked(api.historyEnd).mock.invocationCallOrder[0]!);
+  });
+
+  it('Group these spawns makes a new group of the selection, saved as one step', async () => {
+    const { api, world } = await view({ worldNewGroupId: vi.fn(async () => okv(900001)), worldCheckGroup: vi.fn(async () => okv([])), worldSetGroup: vi.fn(async () => okv(EMPTY)) });
+    const other = { ...guard, guid: 80331, entry: 68, name: 'Other' };
+    world.selectedSpawns.mockReturnValue([guard, other]);
+    rightClick(world, { ground: at, hit: { type: 'spawn', spawn: guard }, selection: [guard, other] });
+    await userEvent.click(screen.getByRole('menuitem', { name: 'Group these spawns…' }));
+    const dialog = await screen.findByRole('dialog', { name: 'Spawn group' });
+    await userEvent.type(within(dialog).getByLabelText('Name'), 'Camp');
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Save' }));
+    await waitFor(() => expect(api.worldSetGroup).toHaveBeenCalledWith({ id: 900001, name: 'Camp', map: 0, maxActive: 1, origin: { kind: 'new' },
+      members: [{ type: 'spawn', kind: 'npc', guid: 80330, entry: 1423, chance: 0 }, { type: 'spawn', kind: 'npc', guid: 80331, entry: 68, chance: 0 }] }, []));
+    await waitFor(() => expect(api.historyEnd).toHaveBeenCalledTimes(1));
+  });
+
+  it('Remove on a placed spawn also takes it out of its group, in the same step', async () => {
+    const { api, world } = await view({ worldDropMember: vi.fn(async () => okv(EMPTY)) });
+    const placed = { ...guard, guid: 90001, added: true, group: 900001 };
+    rightClick(world, { ground: at, hit: { type: 'spawn', spawn: placed }, selection: [placed] });
+    await userEvent.click(screen.getByRole('menuitem', { name: 'Remove' }));
+    await waitFor(() => expect(api.worldDropMember).toHaveBeenCalledWith('npc', 90001));
+    await waitFor(() => expect(api.historyEnd).toHaveBeenCalledTimes(1));
   });
 });

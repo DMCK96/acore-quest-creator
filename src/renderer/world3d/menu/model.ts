@@ -60,6 +60,14 @@ export type MenuAction =
   | { kind: 'copyCoordinates'; at: At }
   /** How long the spawns take to respawn, asked for in a dialog */
   | { kind: 'respawn'; spawns: MenuSpawn[] }
+  /** A new spawn group of these spawns, made in a dialog */
+  | { kind: 'groupSpawns'; spawns: MenuSpawn[] }
+  /** A spawn group's members and chances, changed in a dialog */
+  | { kind: 'editGroup'; id: number }
+  /** Selects a spawn group's members, so its card shows */
+  | { kind: 'showGroup'; id: number }
+  /** Takes a spawn out of the group it is in */
+  | { kind: 'leaveGroup'; spawn: MenuSpawn }
   | { kind: 'startPath'; spawn: MenuSpawn; at: At }
   | { kind: 'wander'; spawn: MenuSpawn }
   | { kind: 'removePath'; spawn: MenuSpawn }

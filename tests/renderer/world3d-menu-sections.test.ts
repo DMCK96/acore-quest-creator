@@ -26,7 +26,7 @@ const labels = (groups: ReturnType<typeof buildMenu>) => groups.map((g) => [g.id
 
 describe('the builder', () => {
   it('registers the sections in the spec order', () => {
-    expect(SECTIONS.map((s) => s.id)).toEqual(['busy', 'create', 'edit', 'loot', 'clipboard', 'coordinates', 'respawn', 'remove', 'movement', 'quest-parts', 'quest-spawns']);
+    expect(SECTIONS.map((s) => s.id)).toEqual(['busy', 'create', 'edit', 'loot', 'clipboard', 'coordinates', 'respawn', 'spawn-group', 'remove', 'movement', 'quest-parts', 'quest-spawns']);
   });
 
   it('runs only sections that apply, joins those of one group, and drops empty groups', () => {
@@ -183,5 +183,27 @@ describe('cases carried over from the old builders', () => {
   it('chain spawns are shown by scope, and the next quest in the chain starts after this one', () => {
     expect(item(buildMenu(ground(), context({ quest })), 'Show chain spawns')!.action).toEqual({ kind: 'showSpawns', scope: 'chain' });
     expect(item(buildMenu(on(npc()), context({ quest })), 'Start the next quest in this chain')!.action).toEqual({ kind: 'newQuest', spawn: npc(), after: true });
+  });
+});
+
+describe('spawn groups', () => {
+  it('groups several selected spawns', () => {
+    const both = subjectOf({ ground: at, hit: { type: 'spawn', spawn: npc() }, selection: [npc(), npc({ guid: 2 })] }, store);
+    expect(item(buildMenu(both, context()), 'Group these spawns…')!.action).toEqual({ kind: 'groupSpawns', spawns: [npc(), npc({ guid: 2 })] });
+    expect(item(buildMenu(on(npc()), context()), 'Group these spawns…')).toBeUndefined();
+    expect(item(buildMenu(ground([npc(), npc({ guid: 2 })]), context()), 'Group these spawns…')).toBeDefined();
+  });
+
+  it('a pooled spawn has Spawn group ▸ edit, show and leave', () => {
+    const pooled = npc({ group: 32492 } as any);
+    const groups = buildMenu(on(pooled), context());
+    expect(item(groups, 'Spawn group')!.children!.map((c) => c.label)).toEqual(['Edit group…', 'Show group', 'Remove from group']);
+    expect(item(groups, 'Edit group…')!.action).toEqual({ kind: 'editGroup', id: 32492 });
+    expect(item(groups, 'Remove from group')!.action).toEqual({ kind: 'leaveGroup', spawn: pooled });
+  });
+
+  it('offline, groups need the database', () => {
+    const both = subjectOf({ ground: at, hit: { type: 'spawn', spawn: npc() }, selection: [npc(), npc({ guid: 2 })] }, store);
+    expect(item(buildMenu(both, context({ connected: false })), 'Group these spawns…')!.disabledReason).toBe('Needs the world database');
   });
 });
