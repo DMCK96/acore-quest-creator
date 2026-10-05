@@ -445,6 +445,8 @@ function groupStatements(g: SpawnGroup): { deletes: PatchStatement[]; apply: Pat
   const deletes: PatchStatement[] = POOL_KEYS.map(([table, column]) => ({ kind: 'delete', table, key: { [column]: id } }));
   const inserts: PatchStatement[] = [{ kind: 'insert', table: 'pool_template', row: { entry: id, max_limit: String(g.maxActive), description: g.name } }];
   for (const m of g.members) {
+    // Quest members (pool_quest) are not written yet
+    if (m.type === 'quest') continue;
     if (m.type === 'group') {
       inserts.push({ kind: 'insert', table: 'pool_pool', row: { pool_id: String(m.id), mother_pool: id, chance: String(m.chance), description: g.name } });
     } else {

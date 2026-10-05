@@ -92,6 +92,7 @@ export async function readGroup(db: WorldDb, id: number, seen: ReadonlySet<numbe
     map: map ?? 0,
     maxActive: num(template.max_limit),
     members,
+    event: null,
     origin: {
       kind: 'existing',
       original: {
@@ -218,6 +219,7 @@ export async function groupContext(
         dbMother.set(m.id, row ? num(row.mother_pool) : null);
         continue;
       }
+      if (m.type === 'quest') continue;
       const key = `${m.kind}:${m.guid}`;
       const own = storeSpawn(m.kind, m.guid) !== null || placed(m.kind, m.guid) !== null;
       const read = own ? null : await readPlacement(db, spawnTable(m.kind), m.guid);
@@ -259,5 +261,9 @@ export async function groupContext(
       const mother = dbMother.get(id) ?? null;
       return mother === null || inLayer.has(mother) ? null : mother;
     },
+    // Quests, their rotations and game events are not read here yet: unknown
+    quest: () => null,
+    groupOfQuest: () => null,
+    eventExists: () => null,
   };
 }

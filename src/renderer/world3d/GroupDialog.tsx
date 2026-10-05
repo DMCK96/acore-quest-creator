@@ -21,7 +21,13 @@ const ALREADY_IN = /^Spawn (\d+) is already in group \d+\.$/;
 
 type Row = { member: GroupMember; mode: 'equal' | 'percent'; percent: string };
 
-const rowOf = (member: GroupMember): Row => ({ member, mode: member.chance === 0 ? 'equal' : 'percent', percent: member.chance === 0 ? '' : String(member.chance) });
+/** A member's chance; quest members have none */
+const chanceOf = (member: GroupMember): number | null => (member.type === 'quest' ? null : member.chance);
+
+const rowOf = (member: GroupMember): Row => {
+  const chance = chanceOf(member) ?? 0;
+  return { member, mode: chance === 0 ? 'equal' : 'percent', percent: chance === 0 ? '' : String(chance) };
+};
 
 /**
  * Makes or changes a spawn group (the server's pool): its name, how many of its members are up at
@@ -63,10 +69,13 @@ export function GroupDialog({
     const known = names.get(memberKey(m));
     if (known) return known;
     if (m.type === 'group') return groupsOnMap.find((g) => g.id === m.id)?.name || `Group ${m.id}`;
+    if (m.type === 'quest') return `Quest ${m.questId}`;
     return `${m.kind === 'object' ? 'Object' : 'NPC'} ${m.guid}`;
   };
 
-  const members: GroupMember[] = rows.map((r) => ({ ...r.member, chance: r.mode === 'equal' ? 0 : numberOf(r.percent) }));
+  const members: GroupMember[] = rows.map((r) =>
+    r.member.type === 'quest' ? r.member : { ...r.member, chance: r.mode === 'equal' ? 0 : numberOf(r.percent) },
+  );
   const edited: SpawnGroup = { ...group, name: name.trim(), maxActive: numberOf(upAtOnce), members };
   const share = equalShare(members);
 
@@ -192,9 +201,9 @@ export function GroupDialog({
               );
             })}
           </ul>
-          {members.some((m) => m.chance === 0) && (
+          {members.some((m) => chanceOf(m) === 0) && (
             <ul className="world3d__group-dialog-shares">
-              {members.flatMap((m) => (m.chance === 0 ? [<li key={memberKey(m)}>{`${nameOf(m)}: ${percent(share)}% (equal share)`}</li>] : []))}
+              {members.flatMap((m) => (chanceOf(m) === 0 ? [<li key={memberKey(m)}>{`${nameOf(m)}: ${percent(share)}% (equal share)`}</li>] : []))}
             </ul>
           )}
           <div className="world3d__group-dialog-add">

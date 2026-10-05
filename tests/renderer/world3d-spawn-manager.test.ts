@@ -535,9 +535,9 @@ describe('the world layer in the view', () => {
     const existing = { kind: 'existing' as const, original: { template: {}, members: [], event: null } };
     await m.setWorldLayer({ spawns: [], routes: [], added: [], groups: [
       // Group 7 kept the object but let NPC 1 go; NPC 3 joined new group 9; group 8 was deleted
-      { id: 7, name: 'a', map: 0, maxActive: 1, origin: existing, members: [{ type: 'spawn', kind: 'object', guid: 4, entry: 2, chance: 0 }] },
-      { id: 9, name: 'b', map: 0, maxActive: 1, origin: { kind: 'new' }, members: [{ type: 'spawn', kind: 'npc', guid: 3, entry: 1, chance: 0 }] },
-      { id: 8, name: 'c', map: 0, maxActive: 1, origin: existing, removed: true, members: [{ type: 'spawn', kind: 'npc', guid: 2, entry: 1, chance: 0 }] },
+      { id: 7, name: 'a', map: 0, maxActive: 1, event: null, origin: existing, members: [{ type: 'spawn', kind: 'object', guid: 4, entry: 2, chance: 0 }] },
+      { id: 9, name: 'b', map: 0, maxActive: 1, event: null, origin: { kind: 'new' }, members: [{ type: 'spawn', kind: 'npc', guid: 3, entry: 1, chance: 0 }] },
+      { id: 8, name: 'c', map: 0, maxActive: 1, event: null, origin: existing, removed: true, members: [{ type: 'spawn', kind: 'npc', guid: 2, entry: 1, chance: 0 }] },
     ] });
     expect([m.info('creature', 1)!.group, m.info('creature', 2)!.group, m.info('creature', 3)!.group, m.info('object', 4)!.group]).toEqual([null, null, 9, 7]);
   });

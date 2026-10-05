@@ -1,11 +1,12 @@
 import { describe, expect, it } from 'vitest';
-import { equalShare, memberKey, validateGroup, type GroupContext, type SpawnGroup } from '../../../src/core/world/groups';
+import { equalShare, isQuestPool, memberKey, validateGroup, type GroupContext, type SpawnGroup } from '../../../src/core/world/groups';
 
 const drake = { type: 'spawn' as const, kind: 'npc' as const, guid: 39203, entry: 32491, chance: 10 };
 const vyragosa = { type: 'spawn' as const, kind: 'npc' as const, guid: 39207, entry: 32630, chance: 0 };
-const path = (over: Partial<SpawnGroup> = {}): SpawnGroup => ({ id: 32492, name: 'Path 1', map: 571, maxActive: 1, members: [drake, vyragosa], origin: { kind: 'new' }, ...over });
+const path = (over: Partial<SpawnGroup> = {}): SpawnGroup => ({ id: 32492, name: 'Path 1', map: 571, maxActive: 1, members: [drake, vyragosa], origin: { kind: 'new' }, event: null, ...over });
 const context = (over: Partial<GroupContext> = {}): GroupContext => ({
-  groups: new Map(), spawnMap: () => 571, objectType: () => 3, groupOfSpawn: () => null, groupOfGroup: () => null, ...over,
+  groups: new Map(), spawnMap: () => 571, objectType: () => 3, groupOfSpawn: () => null, groupOfGroup: () => null,
+  quest: () => null, groupOfQuest: () => null, eventExists: () => true, ...over,
 });
 
 describe('a spawn group', () => {
@@ -54,5 +55,51 @@ describe('a spawn group', () => {
     expect(validateGroup(mother, context({ groups: new Map([[32492, path()]]) }))).toContain('Group 32493 is not there any more.');
     const deleted = new Map([[32492, path()], [32493, path({ id: 32493, removed: true })]]);
     expect(validateGroup(mother, context({ groups: deleted }))).toEqual(['Group 32493 is not there any more.']);
+  });
+});
+
+describe('quest rotations and events', () => {
+  const daily = (questId: number) => ({ type: 'quest' as const, questId });
+  const quests = new Map([
+    [60001, { title: 'Wolves', daily: true, weekly: false, hasGiver: true }],
+    [60002, { title: 'Boars', daily: true, weekly: false, hasGiver: true }],
+    [60003, { title: 'Raid', daily: false, weekly: true, hasGiver: true }],
+    [60004, { title: 'Plain', daily: false, weekly: false, hasGiver: true }],
+    [60005, { title: 'Lonely', daily: true, weekly: false, hasGiver: false }],
+  ]);
+  const ctx = (over = {}) => context({ quest: (id: number) => quests.get(id) ?? null, ...over });
+  const rotation = (over = {}) => path({ id: 900010, name: 'Dailies', map: 0, members: [daily(60001), daily(60002)], ...over });
+
+  it('a rotation of daily quests with givers is valid, and is a quest pool', () => {
+    expect(validateGroup(rotation(), ctx())).toEqual([]);
+    expect(isQuestPool(rotation())).toBe(true);
+    expect(memberKey(daily(60001))).toBe('quest:60001');
+  });
+
+  it('refuses mixed members, mixed daily and weekly, non-repeating quests and quests nobody offers', () => {
+    expect(validateGroup(rotation({ members: [daily(60001), drake] }), ctx())).toContain('A spawn group holds quests or spawns, not both.');
+    expect(validateGroup(rotation({ members: [daily(60001), daily(60003)] }), ctx())).toContain('Daily and weekly quests cannot share a rotation.');
+    expect(validateGroup(rotation({ members: [daily(60001), daily(60004)] }), ctx())).toContain('Plain is not a daily or weekly quest.');
+    expect(validateGroup(rotation({ members: [daily(60001), daily(60005)] }), ctx())).toContain('Lonely has no giver, so it is never offered.');
+  });
+
+  it('a quest is in one rotation; a rotation is not nested and follows no event', () => {
+    expect(validateGroup(rotation(), ctx({ groupOfQuest: (id: number) => (id === 60002 ? 7 : null) }))).toContain('Boars is already in rotation 7.');
+    expect(validateGroup(rotation(), ctx({ groupOfGroup: () => 5 }))).toContain('A quest rotation cannot be inside another group.');
+    expect(validateGroup(rotation({ event: { id: 4, during: true } }), ctx())).toContain('A quest rotation cannot follow an event.');
+  });
+
+  it('events: top-level spawn groups only, and the event must exist', () => {
+    expect(validateGroup(path({ event: { id: 4, during: true } }), ctx())).toEqual([]);
+    expect(validateGroup(path({ event: { id: 4, during: false } }), ctx({ groupOfGroup: () => 32491 }))).toContain('Only a group that is not inside another can follow an event.');
+    expect(validateGroup(path({ event: { id: 999, during: true } }), ctx({ eventExists: () => false }))).toContain('Event 999 is not in the database.');
+  });
+
+  it('names the other rotation when its name is known, and unknown quests by id; equal shares ignore quests', () => {
+    const groups = new Map([[7, rotation({ id: 7, name: 'Fishing dailies', members: [daily(60002)] })]]);
+    expect(validateGroup(rotation(), ctx({ groups, groupOfQuest: (id: number) => (id === 60002 ? 7 : null) }))).toContain('Boars is already in rotation Fishing dailies.');
+    expect(validateGroup(rotation({ members: [daily(60001), daily(61234)] }), ctx())).toContain('Quest 61234 is not in the project or the database.');
+    expect(equalShare([...path().members, daily(60001)])).toBe(90);
+    expect(validateGroup(rotation({ members: [daily(60001), { type: 'group', id: 32492, chance: 0 }] }), ctx({ groups: new Map([[32492, path()]]) }))).toContain('A spawn group holds quests or spawns, not both.');
   });
 });

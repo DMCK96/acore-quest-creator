@@ -273,7 +273,7 @@ describe('world layer: a new path and the movement that walks it', () => {
 describe('spawn groups in the layer', () => {
   const drake = { type: 'spawn' as const, kind: 'npc' as const, guid: 39203, entry: 32491, chance: 10 };
   const vyragosa = { type: 'spawn' as const, kind: 'npc' as const, guid: 39207, entry: 32630, chance: 0 };
-  const fresh = { id: 900001, name: 'Path 1', map: 571, maxActive: 1, members: [drake, vyragosa], origin: { kind: 'new' as const } };
+  const fresh = { id: 900001, name: 'Path 1', map: 571, maxActive: 1, event: null, members: [drake, vyragosa], origin: { kind: 'new' as const } };
   const original = {
     template: { entry: '32492', max_limit: '1', description: 'Path 1' },
     members: [
@@ -301,7 +301,7 @@ describe('spawn groups in the layer', () => {
   });
 
   it('writes a new group with its members, and the revert takes them away', () => {
-    const mother = { id: 900002, name: 'Drake', map: 571, maxActive: 1, members: [{ type: 'group' as const, id: 900001, chance: 0 }], origin: { kind: 'new' as const } };
+    const mother = { id: 900002, name: 'Drake', map: 571, maxActive: 1, event: null, members: [{ type: 'group' as const, id: 900001, chance: 0 }], origin: { kind: 'new' as const } };
     const { apply, revert } = worldStatements(putGroup(putGroup(EMPTY_WORLD, fresh), mother));
     expect(apply).toEqual(expect.arrayContaining([
       { kind: 'delete', table: 'pool_template', key: { entry: '900001' } },

@@ -123,9 +123,9 @@ describe('project file: the world layer', () => {
       added: [{ ...world.added[0]!, respawnSecs: 2700 }, world.added[1]!],
       respawns: [{ kind: 'creature' as const, guid: 80330, entry: 1423, name: 'Stormwind Guard', map: 0, original: 300, current: 120 }],
       groups: [
-        { id: 900001, name: 'Path 1', map: 0, maxActive: 1, origin: { kind: 'new' as const },
+        { id: 900001, name: 'Path 1', map: 0, maxActive: 1, event: null, origin: { kind: 'new' as const },
           members: [{ type: 'spawn' as const, kind: 'npc' as const, guid: 80331, entry: 1423, chance: 0 }, { type: 'group' as const, id: 32492, chance: 25.5 }] },
-        { id: 32492, name: 'Drake', map: 0, maxActive: 1, removed: true, members: [{ type: 'spawn' as const, kind: 'object' as const, guid: 80332, entry: 2000, chance: 0 }],
+        { id: 32492, name: 'Drake', map: 0, maxActive: 1, event: null, removed: true, members: [{ type: 'spawn' as const, kind: 'object' as const, guid: 80332, entry: 2000, chance: 0 }],
           origin: { kind: 'existing' as const, original: {
             template: { entry: '32492', max_limit: '1', description: 'Drake' },
             members: [{ table: 'pool_gameobject' as const, row: { guid: '80332', pool_entry: '32492', chance: '0', description: null } }],
