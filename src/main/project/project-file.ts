@@ -109,9 +109,14 @@ const placement = (p: Placement) => ({ x: p.x, y: p.y, z: p.z, orientation: p.or
 const movement = (m: Movement) => ({ type: m.type, wander: m.wander, pathId: m.pathId });
 const point = (p: RoutePoint) => ({ x: p.x, y: p.y, z: p.z, rest: p.rest });
 const member = (m: GroupMember) =>
-  m.type === 'group' ? { type: m.type, id: m.id, chance: m.chance } : { type: m.type, kind: m.kind, guid: m.guid, entry: m.entry, chance: m.chance };
+  m.type === 'group'
+    ? { type: m.type, id: m.id, chance: m.chance }
+    : m.type === 'quest'
+      ? { type: m.type, questId: m.questId }
+      : { type: m.type, kind: m.kind, guid: m.guid, entry: m.entry, chance: m.chance };
 const group = (g: SpawnGroup) => ({
   id: g.id, name: g.name, map: g.map, maxActive: g.maxActive, members: g.members.map(member),
+  ...(g.event ? { event: { id: g.event.id, during: g.event.during } } : {}),
   origin: g.origin.kind === 'new'
     ? { kind: g.origin.kind }
     : { kind: g.origin.kind, original: { template: g.origin.original.template, members: g.origin.original.members.map((m) => ({ table: m.table, row: m.row })), event: g.origin.original.event } },
@@ -227,6 +232,7 @@ const rowSchema = z.record(z.string(), z.string().nullable());
 const groupMemberSchema = z.discriminatedUnion('type', [
   z.object({ type: z.literal('spawn'), kind: z.enum(['npc', 'object']), guid: z.number().int(), entry: z.number().int(), chance: z.number() }),
   z.object({ type: z.literal('group'), id: z.number().int(), chance: z.number() }),
+  z.object({ type: z.literal('quest'), questId: z.number().int() }),
 ]);
 const groupSchema = z.object({
   id: z.number().int(),
@@ -234,13 +240,15 @@ const groupSchema = z.object({
   map: z.number().int(),
   maxActive: z.number().int(),
   members: z.array(groupMemberSchema),
+  // Absent from a project saved before groups could follow an event
+  event: z.object({ id: z.number().int(), during: z.boolean() }).nullable().default(null),
   origin: z.discriminatedUnion('kind', [
     z.object({ kind: z.literal('new') }),
     z.object({
       kind: z.literal('existing'),
       original: z.object({
         template: rowSchema,
-        members: z.array(z.object({ table: z.enum(['pool_creature', 'pool_gameobject', 'pool_pool']), row: rowSchema })),
+        members: z.array(z.object({ table: z.enum(['pool_creature', 'pool_gameobject', 'pool_pool', 'pool_quest']), row: rowSchema })),
         event: rowSchema.nullable(),
       }),
     }),

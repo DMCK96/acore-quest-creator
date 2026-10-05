@@ -371,6 +371,7 @@ export function useWorldMenu(deps: WorldMenuDeps): {
           map: d.current.map,
           maxActive: 1,
           members: spawns.map((s) => ({ type: 'spawn', kind: poolKind(s.kind), guid: s.guid, entry: s.entry, chance: 0 })),
+          event: null,
           origin: { kind: 'new' },
         };
         const names = new Map(spawns.map((s) => [`${poolKind(s.kind)}:${s.guid}`, s.name]));

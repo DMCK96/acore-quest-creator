@@ -1324,7 +1324,7 @@ export function createApi(deps: ApiDeps): Api {
     const spots: { x: number; y: number; z: number }[] = [];
     for (const m of group?.members ?? []) {
       if (m.type === 'group') spots.push(...(await groupSpots(db, m.id, seen)));
-      else {
+      else if (m.type === 'spawn') {
         const at = await spawnAt(db, m.kind, m.guid);
         if (at) spots.push(at);
       }
@@ -2263,6 +2263,8 @@ export function createApi(deps: ApiDeps): Api {
         const store = projectEntities();
         const members: GroupView['members'] = [];
         for (const m of group.members) {
+          // Quest members are not shown in the 3D view's group card
+          if (m.type === 'quest') continue;
           if (m.type === 'group') {
             const child = await groupOf(db, m.id);
             // A group member stands at the centre of every spawn under it

@@ -6,7 +6,7 @@ import { GroupDialog } from '../../src/renderer/world3d/GroupDialog';
 
 const drake = { type: 'spawn' as const, kind: 'npc' as const, guid: 39203, entry: 32491, chance: 0 };
 const vyragosa = { type: 'spawn' as const, kind: 'npc' as const, guid: 39207, entry: 32630, chance: 0 };
-const group = { id: 900001, name: '', map: 571, maxActive: 1, members: [drake, vyragosa], origin: { kind: 'new' as const } };
+const group = { id: 900001, name: '', map: 571, maxActive: 1, event: null, members: [drake, vyragosa], origin: { kind: 'new' as const } };
 const fine = { reasons: [], notes: [] };
 const names = new Map([['npc:39203', 'Time-Lost Proto-Drake'], ['npc:39207', 'Vyragosa'], ['group:32493', 'Path 2']]);
 
