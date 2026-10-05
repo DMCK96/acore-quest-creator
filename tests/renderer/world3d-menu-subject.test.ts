@@ -6,7 +6,7 @@ import type { MenuSpawn } from '../../src/renderer/world3d/menu/model';
 
 const at = { x: 1, y: 2, z: 3 };
 const placement = { x: 1, y: 2, z: 3, orientation: 0, rotation: null };
-const info = (over: Partial<MenuSpawn> = {}): MenuSpawn => ({ kind: 'creature', guid: 80330, entry: 1423, name: 'Guard', own: false, added: false, pathId: 801, wander: 0, map: 0, placement, ...over });
+const info = (over: Partial<MenuSpawn> = {}): MenuSpawn => ({ kind: 'creature', guid: 80330, entry: 1423, name: 'Guard', own: false, added: false, pathId: 801, wander: 0, map: 0, group: null, placement, ...over });
 const store = { ...EMPTY_ENTITIES, npcs: [{ ...newNpc(12000001), name: 'Hela' }], objects: [{ ...newObject(9100001), type: 'chest' as const }, { ...newObject(9100002) }] };
 
 describe('the clicked thing as an entity', () => {

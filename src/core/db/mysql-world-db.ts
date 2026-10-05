@@ -334,6 +334,7 @@ class MysqlWorldDb implements WorldDb {
     const entry = ident(spawnEntryColumn('creature', (await this.knownColumns('creature')).map((c) => c.name)));
     await this.knownColumns('creature_template_model');
     const creatureEvents = await eventOf('game_event_creature');
+    const creaturePools = await this.viewPoolJoin('pool_creature');
     // A spawn with an addon row of its own walks that row's route (none when it is 0), else its
     // template's (a whole kind of NPC walking one route), as the server reads them
     const templateRoutes = (await this.columns('creature_template_addon')).length > 0;
@@ -343,10 +344,10 @@ class MysqlWorldDb implements WorldDb {
     const creatureRows = await query(
       'reading creature',
       `SELECT s.guid, s.${entry} AS entry, s.map, s.position_x, s.position_y, s.position_z, s.orientation, s.wander_distance, s.MovementType, s.equipment_id, ` +
-        `t.name, m.CreatureDisplayID AS display_id, m.DisplayScale AS display_scale, ${pathColumn} AS path_id${creatureEvents.columns} ` +
+        `t.name, m.CreatureDisplayID AS display_id, m.DisplayScale AS display_scale, ${pathColumn} AS path_id${creatureEvents.columns}${creaturePools.columns} ` +
         `FROM creature s LEFT JOIN creature_template t ON t.entry = s.${entry}${routeJoins} ` +
         `LEFT JOIN (SELECT CreatureID, MIN(Idx) AS Idx FROM creature_template_model GROUP BY CreatureID) f ON f.CreatureID = s.${entry} ` +
-        `LEFT JOIN creature_template_model m ON m.CreatureID = f.CreatureID AND m.Idx = f.Idx${creatureEvents.joins} ` +
+        `LEFT JOIN creature_template_model m ON m.CreatureID = f.CreatureID AND m.Idx = f.Idx${creatureEvents.joins}${creaturePools.joins} ` +
         `WHERE ${boxed} ORDER BY s.guid LIMIT ?`,
       [...boxParams, take],
     );
@@ -392,10 +393,11 @@ class MysqlWorldDb implements WorldDb {
     });
 
     const objectEvents = await eventOf('game_event_gameobject');
+    const objectPools = await this.viewPoolJoin('pool_gameobject');
     const objectRows = await query(
       'reading gameobject',
       `SELECT s.guid, s.id AS entry, s.map, s.position_x, s.position_y, s.position_z, s.rotation0, s.rotation1, s.rotation2, s.rotation3, ` +
-        `t.name, t.displayId AS display_id, t.size${objectEvents.columns} FROM gameobject s LEFT JOIN gameobject_template t ON t.entry = s.id${objectEvents.joins} ` +
+        `t.name, t.displayId AS display_id, t.size${objectEvents.columns}${objectPools.columns} FROM gameobject s LEFT JOIN gameobject_template t ON t.entry = s.id${objectEvents.joins}${objectPools.joins} ` +
         `WHERE ${boxed} ORDER BY s.guid LIMIT ?`,
       [...boxParams, take],
     );
@@ -422,6 +424,16 @@ class MysqlWorldDb implements WorldDb {
             ` LEFT JOIN (SELECT guid, MIN(eventEntry) AS eventEntry FROM ${table} WHERE eventEntry > 0 GROUP BY guid) ev ON ev.guid = s.guid` +
             ` LEFT JOIN game_event ge ON ge.eventEntry = ev.eventEntry`,
         }
+      : { columns: '', joins: '' };
+  }
+
+  /**
+   * The spawn group a spawn (`s`) is in: the column and join that add `pool_entry` from `table`
+   * (`pool_creature` or `pool_gameobject`). A database without the table has none.
+   */
+  private async viewPoolJoin(table: 'pool_creature' | 'pool_gameobject'): Promise<{ columns: string; joins: string }> {
+    return (await this.columns(table)).length > 0
+      ? { columns: ', pc.pool_entry AS pool_entry', joins: ` LEFT JOIN ${table} pc ON pc.guid = s.guid` }
       : { columns: '', joins: '' };
   }
 

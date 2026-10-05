@@ -54,6 +54,7 @@ export function ProjectChanges({
       change.type === 'route' ? { kind: 'route', pathId: change.pathId }
       : change.type === 'movement' ? { kind: 'movement', guid: change.guid }
       : change.type === 'respawn' ? { kind: 'respawn', spawnKind: change.kind, guid: change.guid }
+      : change.type === 'group' ? { kind: 'group', id: change.id }
       : { kind: 'spawn', spawnKind: change.kind, guid: change.guid },
     );
     if (!result.ok) {
@@ -121,7 +122,7 @@ export function ProjectChanges({
             </thead>
             <tbody>
               {changes.map((change) => (
-                <ChangeRow key={change.type === 'route' ? `route:${change.pathId}` : change.type === 'movement' ? `movement:${change.guid}` : change.type === 'respawn' ? `respawn:${change.kind}:${change.guid}` : `${change.type}:${change.kind}:${change.guid}`} change={change} onRevert={() => void revert(change)} />
+                <ChangeRow key={change.type === 'route' ? `route:${change.pathId}` : change.type === 'movement' ? `movement:${change.guid}` : change.type === 'respawn' ? `respawn:${change.kind}:${change.guid}` : change.type === 'group' ? `group:${change.id}` : `${change.type}:${change.kind}:${change.guid}`} change={change} onRevert={() => void revert(change)} />
               ))}
             </tbody>
           </table>
@@ -211,6 +212,25 @@ function ChangeRow({ change, onRevert }: { change: WorldChange; onRevert(): void
         <td>{change.current} s</td>
         <td>
           <button type="button" className="btn" aria-label={`Revert respawn of ${name}`} onClick={onRevert}>
+            Revert
+          </button>
+        </td>
+      </tr>
+    );
+  }
+  if (change.type === 'group') {
+    const name = change.name || `Spawn group ${change.id}`;
+    const members = (n: number): string => `${n} ${n === 1 ? 'member' : 'members'}`;
+    const before = change.origin.kind === 'existing' ? members(change.origin.original.members.length) : 'none';
+    return (
+      <tr>
+        <td>
+          {name} · spawn group {change.id} {drift}
+        </td>
+        <td>{before}</td>
+        <td>{change.removed ? 'deleted' : `${members(change.members.length)}, ${change.maxActive} up at once`}</td>
+        <td>
+          <button type="button" className="btn" aria-label={`Revert ${name}`} onClick={onRevert}>
             Revert
           </button>
         </td>

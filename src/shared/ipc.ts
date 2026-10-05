@@ -6,9 +6,11 @@ import type { MapBox, SpawnDot } from '@core/db/spawns';
 import type { ViewSpawns } from '@core/db/view-spawns';
 import type { Placement, RoutePoint, WorldAddedSpawn, WorldLayer, WorldMovementEdit, WorldRespawnEdit, WorldRouteEdit, WorldSpawnEdit, WorldSpawnKind } from '@core/world/layer';
 import type { Movement } from '@core/world/movement';
+import type { GroupMember, SpawnGroup } from '@core/world/groups';
 import type { ProjectEntities } from '@core/entities/model';
 import type { QuestUse } from '@core/entities/links';
 
+export type { GroupMember, SpawnGroup };
 export type { Movement, Placement, RoutePoint, WorldAddedSpawn, WorldLayer, WorldMovementEdit, WorldRespawnEdit, WorldRouteEdit, WorldSpawnEdit, WorldSpawnKind };
 
 /** One world layer entry as the World changes list shows it, and whether the database has moved off its original since. */
@@ -20,14 +22,29 @@ export type WorldChange =
   /** An NPC's movement; `drifted` when the database's no longer matches its original */
   | (WorldMovementEdit & { type: 'movement'; drifted: boolean })
   /** A database spawn's respawn time; `drifted` when the database's no longer matches its original */
-  | (WorldRespawnEdit & { type: 'respawn'; drifted: boolean });
+  | (WorldRespawnEdit & { type: 'respawn'; drifted: boolean })
+  /** A spawn group; `drifted` when the database's pool no longer matches its original (or, for a new one, now has its id) */
+  | (SpawnGroup & { type: 'group'; drifted: boolean });
+
+/** A spawn group as the 3D view describes it: each member by name, and where it stands (a group member at its spawns' centre) */
+export interface GroupView {
+  id: number;
+  name: string;
+  map: number;
+  maxActive: number;
+  members: { key: string; type: 'spawn' | 'group'; name: string; chance: number; at: { x: number; y: number; z: number } | null }[];
+}
+
+/** Spawns a group save moves out of the group they were in */
+export type GroupMove = { kind: 'npc' | 'object'; guid: number };
 
 /** What a world revert takes back: one spawn, one route, or one NPC's movement. */
 export type WorldRevertTarget =
   | { kind: 'spawn'; spawnKind: WorldSpawnKind; guid: number }
   | { kind: 'route'; pathId: number }
   | { kind: 'movement'; guid: number }
-  | { kind: 'respawn'; spawnKind: WorldSpawnKind; guid: number };
+  | { kind: 'respawn'; spawnKind: WorldSpawnKind; guid: number }
+  | { kind: 'group'; id: number };
 import type { PatchWarning } from '@core/export/build-patch';
 import type { UnmodelledColumn } from '@core/import/unmodelled';
 import type { UnavailableComponent } from '@core/links/availability';
@@ -448,6 +465,22 @@ export interface Api {
   worldRevert(target: WorldRevertTarget): Promise<Result<WorldLayer>>;
   /** Every world layer entry, with whether the database has moved off its original. */
   worldChanges(): Promise<Result<WorldChange[]>>;
+  /** A spawn group as the layer has it, else as the database's pool; null when there is none. */
+  worldGroup(id: number): Promise<Result<SpawnGroup | null>>;
+  /** A spawn group described for the view: its members by name and where they stand. */
+  worldGroupView(id: number): Promise<Result<GroupView | null>>;
+  /** The spawn groups on a map (the database's and the layer's), by name. */
+  worldGroupsOnMap(map: number): Promise<Result<{ id: number; name: string; maxActive: number; members: number }[]>>;
+  /** An id no spawn group uses yet. */
+  worldNewGroupId(): Promise<Result<number>>;
+  /** Why the server would refuse or misread a group; none when it is fine. `moves` are spawns the save takes out of their group. */
+  worldCheckGroup(group: SpawnGroup, moves: GroupMove[]): Promise<Result<string[]>>;
+  /** Saves a spawn group in the world layer as one step, moving `moves` out of the group they were in; refused with why when it is not valid. */
+  worldSetGroup(group: SpawnGroup, moves: GroupMove[]): Promise<Result<WorldLayer>>;
+  /** Deletes a spawn group: a new one is forgotten, an existing one is removed on export. */
+  worldDeleteGroup(id: number): Promise<Result<WorldLayer>>;
+  /** Takes a spawn out of every group in the world layer. */
+  worldDropMember(kind: 'npc' | 'object', guid: number): Promise<Result<WorldLayer>>;
   /** The project's undo history: its steps, the last one applied, and the saved one. */
   historyList(): Promise<Result<HistoryList>>;
   /** Puts the last step back as it was before it, and says what changed. */
@@ -554,6 +587,31 @@ const stepPlaceArg = z.union([
   z.object({ map: z.number().int(), x: finite, y: finite, z: finite, spawn: z.object({ kind: worldKindArg, guid: z.number().int() }).optional() }),
 ]);
 const placementArg = z.object({ x: finite, y: finite, z: finite, orientation: finite, rotation: z.tuple([finite, finite, finite, finite]).nullable() });
+const rowArg = z.record(z.string(), z.string().nullable());
+const groupMemberArg = z.discriminatedUnion('type', [
+  z.object({ type: z.literal('spawn'), kind: z.enum(['npc', 'object']), guid: z.number().int().min(1), entry: z.number().int().min(0), chance: z.number().min(0).max(100) }),
+  z.object({ type: z.literal('group'), id: z.number().int().min(1), chance: z.number().min(0).max(100) }),
+]);
+const spawnGroupArg = z.object({
+  id: z.number().int().min(1),
+  name: z.string().max(255),
+  map: z.number().int().min(0),
+  maxActive: z.number().int().min(0),
+  members: z.array(groupMemberArg).max(1000),
+  origin: z.discriminatedUnion('kind', [
+    z.object({ kind: z.literal('new') }),
+    z.object({
+      kind: z.literal('existing'),
+      original: z.object({
+        template: rowArg,
+        members: z.array(z.object({ table: z.enum(['pool_creature', 'pool_gameobject', 'pool_pool']), row: rowArg })),
+        event: rowArg.nullable(),
+      }),
+    }),
+  ]),
+  removed: z.boolean().optional(),
+});
+const groupMovesArg = z.array(z.object({ kind: z.enum(['npc', 'object']), guid: z.number().int().min(1) })).max(1000);
 const routePointArg = z.object({ x: finite, y: finite, z: finite, rest: z.record(z.string(), z.string().nullable()) });
 
 const profileFields = {
@@ -642,8 +700,17 @@ const REQUEST_SCHEMAS: Record<keyof Api, z.ZodType<unknown[]>> = {
     z.object({ kind: z.literal('route'), pathId: z.number().int() }),
     z.object({ kind: z.literal('movement'), guid: z.number().int() }),
     z.object({ kind: z.literal('respawn'), spawnKind: worldKindArg, guid: z.number().int() }),
+    z.object({ kind: z.literal('group'), id: z.number().int() }),
   ])]),
   worldChanges: z.tuple([]),
+  worldGroup: z.tuple([z.number().int().min(1)]),
+  worldGroupView: z.tuple([z.number().int().min(1)]),
+  worldGroupsOnMap: z.tuple([z.number().int().min(0)]),
+  worldNewGroupId: z.tuple([]),
+  worldCheckGroup: z.tuple([spawnGroupArg, groupMovesArg]),
+  worldSetGroup: z.tuple([spawnGroupArg, groupMovesArg]),
+  worldDeleteGroup: z.tuple([z.number().int().min(1)]),
+  worldDropMember: z.tuple([z.enum(['npc', 'object']), z.number().int().min(1)]),
   historyList: z.tuple([]),
   historyUndo: z.tuple([]),
   historyRedo: z.tuple([]),

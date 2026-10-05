@@ -8,7 +8,7 @@ import { EMPTY_ENTITIES, newNpc, newObject, type ProjectEntities } from '../../s
 
 const at = { x: 1, y: 2, z: 3 };
 const npc = (over: Partial<MenuSpawn> = {}): MenuSpawn => ({ kind: 'creature', guid: 80330, entry: 1423, name: 'Guard', own: false, added: false, pathId: 0, wander: 0, map: 0,
-  placement: { x: 1, y: 2, z: 3, orientation: 0, rotation: null }, ...over });
+  placement: { x: 1, y: 2, z: 3, orientation: 0, rotation: null }, group: null, ...over }) as MenuSpawn;
 const crate = (over: Partial<MenuSpawn> = {}): MenuSpawn => npc({ kind: 'object', guid: 5, entry: 143981, name: 'Crate', ...over });
 const hela = npc({ guid: 6000001, entry: 12000001, name: 'Hela', own: true });
 const chest = crate({ guid: 7000001, entry: 9100001, own: true });

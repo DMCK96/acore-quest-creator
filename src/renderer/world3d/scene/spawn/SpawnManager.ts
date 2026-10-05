@@ -44,6 +44,8 @@ export type SpawnInfo = {
   wander: number;
   map: number;
   placement: Placement;
+  /** The spawn group it is in (as the world layer has the groups), or null */
+  group: number | null;
 };
 
 /** An object's facing: its turn about Z, from 0 to a whole turn */
@@ -351,6 +353,21 @@ class SpawnManager {
     const placed = (kind: 'creature' | 'gameobject', guid: number) => this.#layer.spawns.find((s) => s.kind === kind && s.guid === guid)?.current;
     const routes = new globalThis.Map(this.#layer.routes.map((r) => [r.pathId, r.current]));
     const movements = new globalThis.Map((this.#layer.movements ?? []).map((m) => [m.guid, m.current]));
+    // The layer's groups win over the database's: a spawn in one shows it, and one a layer group let go
+    // of (or one in a group deleted there) is in none
+    const layerGroups = this.#layer.groups ?? [];
+    const inLayerGroup = new globalThis.Map<string, number>();
+    for (const g of layerGroups) {
+      if (g.removed) continue;
+      for (const m of g.members) if (m.type === 'spawn') inLayerGroup.set(`${m.kind}:${m.guid}`, g.id);
+    }
+    const layerGroupIds = new Set(layerGroups.map((g) => g.id));
+    const grouped = <T extends { guid: number; group?: number | null }>(kind: 'npc' | 'object', s: T): T => {
+      const held = inLayerGroup.get(`${kind}:${s.guid}`);
+      const was = s.group ?? null;
+      const group = held ?? (was !== null && layerGroupIds.has(was) ? null : was);
+      return group === was && 'group' in s ? s : { ...s, group };
+    };
     // The layer's movement first, so a new path is found by its id among the layer's routes
     const routed = (c: ViewCreature): ViewCreature => {
       const movement = movements.get(c.guid);
@@ -360,7 +377,7 @@ class SpawnManager {
     };
     const creature = (c: ViewCreature): ViewCreature => {
       const at = placed('creature', c.guid);
-      return routed(at ? { ...c, x: at.x, y: at.y, z: at.z, orientation: at.orientation } : c);
+      return grouped('npc', routed(at ? { ...c, x: at.x, y: at.y, z: at.z, orientation: at.orientation } : c));
     };
     const pending = (c: ViewCreature): ViewCreature => {
       const movement = this.#pendingMovements.get(c.guid);
@@ -370,13 +387,13 @@ class SpawnManager {
     };
     const object = (o: ViewObject): ViewObject => {
       const at = placed('gameobject', o.guid);
-      return at ? { ...o, x: at.x, y: at.y, z: at.z, ...(at.rotation ? { rotation: at.rotation } : {}) } : o;
+      return grouped('object', at ? { ...o, x: at.x, y: at.y, z: at.z, ...(at.rotation ? { rotation: at.rotation } : {}) } : o);
     };
     // Spawns placed in the view, drawn as their template looked when they were placed
     const placedCreatures = this.#layer.added.filter((a) => a.kind === 'creature').map(
       (a): ViewCreature => ({
         guid: a.guid, entry: a.entry, name: a.name, map: a.map, x: a.placement.x, y: a.placement.y, z: a.placement.z, orientation: a.placement.orientation,
-        displayId: a.look.displayId, scale: a.look.scale, wander: 0, path: null, pathId: 0, equipment: a.look.equipment, own: false, added: true, event: null, events: [], removedBy: [], preset: a.look.preset,
+        displayId: a.look.displayId, scale: a.look.scale, wander: 0, path: null, pathId: 0, equipment: a.look.equipment, own: false, added: true, event: null, events: [], removedBy: [], preset: a.look.preset, group: null,
       }),
     );
     const placedObjects = this.#layer.added.filter((a) => a.kind === 'gameobject').map(
@@ -384,12 +401,20 @@ class SpawnManager {
         guid: a.guid, entry: a.entry, name: a.name, map: a.map, x: a.placement.x, y: a.placement.y, z: a.placement.z,
         // Turned about Z by its facing unless it was tilted
         rotation: a.placement.rotation ?? [0, 0, Math.sin(a.placement.orientation / 2), Math.cos(a.placement.orientation / 2)],
-        displayId: a.look.displayId, scale: a.look.scale, own: false, added: true, event: null, events: [], removedBy: [],
+        displayId: a.look.displayId, scale: a.look.scale, own: false, added: true, event: null, events: [], removedBy: [], group: null,
       }),
     );
     return {
-      creatures: [...spawns.creatures.filter((c) => !ownCreatures.has(c.guid) && shown(c)).map(creature), ...this.#own.creatures.filter(inBox), ...placedCreatures.filter(inBox).map(routed)].map(pending),
-      objects: [...spawns.objects.filter((o) => !ownObjects.has(o.guid) && shown(o)).map(object), ...this.#own.objects.filter(inBox), ...placedObjects.filter(inBox)],
+      creatures: [
+        ...spawns.creatures.filter((c) => !ownCreatures.has(c.guid) && shown(c)).map(creature),
+        ...this.#own.creatures.filter(inBox).map((c) => grouped('npc', c)),
+        ...placedCreatures.filter(inBox).map((c) => grouped('npc', routed(c))),
+      ].map(pending),
+      objects: [
+        ...spawns.objects.filter((o) => !ownObjects.has(o.guid) && shown(o)).map(object),
+        ...this.#own.objects.filter(inBox).map((o) => grouped('object', o)),
+        ...placedObjects.filter(inBox).map((o) => grouped('object', o)),
+      ],
       capped: spawns.capped,
     };
   }
@@ -432,7 +457,7 @@ class SpawnManager {
     for (const group of this.#areas.values()) {
       const data: ViewCreature | ViewObject | undefined = (kind === 'creature' ? group.userData.creatures : group.userData.objects)?.get(guid);
       if (!data) continue;
-      const base = { kind, guid, entry: data.entry, name: data.name, own: data.own, added: data.added ?? false, map: data.map };
+      const base = { kind, guid, entry: data.entry, name: data.name, own: data.own, added: data.added ?? false, map: data.map, group: data.group ?? null };
       if (kind === 'creature') {
         const c = data as ViewCreature;
         return { ...base, pathId: c.pathId ?? 0, wander: c.wander, placement: { x: c.x, y: c.y, z: c.z, orientation: c.orientation, rotation: null } };

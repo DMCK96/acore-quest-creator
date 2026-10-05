@@ -5,10 +5,10 @@ import type { WorldLayer } from '../../src/core/world/layer';
 import SpawnManager from '../../src/renderer/world3d/scene/spawn/SpawnManager';
 
 const creature = (guid: number, displayId: number, extra: object = {}) => ({
-  guid, entry: 1, name: 'n', map: 0, x: 0, y: 0, z: 0, orientation: 0, displayId, scale: 1, wander: 0, path: null, equipment: [0, 0, 0] as [number, number, number], own: false, event: null, events: [], removedBy: [], pathId: 0, preset: null, ...extra,
+  guid, entry: 1, name: 'n', map: 0, x: 0, y: 0, z: 0, orientation: 0, displayId, scale: 1, wander: 0, path: null, equipment: [0, 0, 0] as [number, number, number], own: false, event: null, events: [], removedBy: [], pathId: 0, preset: null, group: null, ...extra,
 });
 const object = (guid: number, displayId: number, extra: object = {}) => ({
-  guid, entry: 2, name: 'o', map: 0, x: 0, y: 0, z: 0, rotation: [0, 0, 0, 1] as [number, number, number, number], displayId, scale: 1, own: false, event: null, events: [], removedBy: [], ...extra,
+  guid, entry: 2, name: 'o', map: 0, x: 0, y: 0, z: 0, rotation: [0, 0, 0, 1] as [number, number, number, number], displayId, scale: 1, own: false, event: null, events: [], removedBy: [], group: null, ...extra,
 });
 const box = { minX: 0, maxX: 1, minY: 0, maxY: 1 };
 
@@ -523,9 +523,23 @@ describe('the world layer in the view', () => {
   it('describes a drawn spawn for the menu', async () => {
     const m = manager({ creatures: [creature(1, 1, { x: 0.5, y: 0.5, orientation: 2, wander: 4 })], objects: [], capped: { creatures: false, objects: false } });
     await m.loadArea(1, 0, box);
-    expect(m.info('creature', 1)).toEqual({ kind: 'creature', guid: 1, entry: 1, name: 'n', own: false, added: false, pathId: 0, wander: 4, map: 0,
+    expect(m.info('creature', 1)).toEqual({ kind: 'creature', guid: 1, entry: 1, name: 'n', own: false, added: false, pathId: 0, wander: 4, map: 0, group: null,
       placement: { x: 0.5, y: 0.5, z: 0, orientation: 2, rotation: null } });
     expect(m.info('creature', 99)).toBeNull();
+  });
+
+  it('says which spawn group a drawn spawn is in, as the world layer has the groups', async () => {
+    const m = manager({ creatures: [creature(1, 1, { x: 0.5, y: 0.5, group: 7 }), creature(2, 1, { x: 0.5, y: 0.5, group: 8 }), creature(3, 1, { x: 0.5, y: 0.5, group: null })], objects: [object(4, 2, { x: 0.5, y: 0.5, group: 7 })], capped: { creatures: false, objects: false } });
+    await m.loadArea(1, 0, box);
+    expect([m.info('creature', 1)!.group, m.info('creature', 2)!.group, m.info('creature', 3)!.group, m.info('object', 4)!.group]).toEqual([7, 8, null, 7]);
+    const existing = { kind: 'existing' as const, original: { template: {}, members: [], event: null } };
+    await m.setWorldLayer({ spawns: [], routes: [], added: [], groups: [
+      // Group 7 kept the object but let NPC 1 go; NPC 3 joined new group 9; group 8 was deleted
+      { id: 7, name: 'a', map: 0, maxActive: 1, origin: existing, members: [{ type: 'spawn', kind: 'object', guid: 4, entry: 2, chance: 0 }] },
+      { id: 9, name: 'b', map: 0, maxActive: 1, origin: { kind: 'new' }, members: [{ type: 'spawn', kind: 'npc', guid: 3, entry: 1, chance: 0 }] },
+      { id: 8, name: 'c', map: 0, maxActive: 1, origin: existing, removed: true, members: [{ type: 'spawn', kind: 'npc', guid: 2, entry: 1, chance: 0 }] },
+    ] });
+    expect([m.info('creature', 1)!.group, m.info('creature', 2)!.group, m.info('creature', 3)!.group, m.info('object', 4)!.group]).toEqual([null, null, 9, 7]);
   });
 
   it('picks a route point of the selected NPC by its ball', async () => {
