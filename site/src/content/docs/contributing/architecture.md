@@ -1,11 +1,11 @@
 ---
 title: Architecture
-description: How ACORE Quest Creator's code is laid out and how a quest travels from the editor to SQL.
+description: How Azeroth World Editor's code is laid out, how the 3D view is built and the rules it keeps, and how a change travels from the editor to SQL.
 sidebar:
   order: 2
 ---
 
-ACORE Quest Creator is an [Electron](https://www.electronjs.org/) app written in TypeScript, with a React interface.
+Azeroth World Editor is an [Electron](https://www.electronjs.org/) app written in TypeScript, with a React interface.
 
 ## Layout
 
@@ -14,7 +14,7 @@ src/
   core/       Pure logic: no Electron, no React. Quest model, schema, SQL, scripts, map maths.
   main/       Electron's main process: the IPC API, the project store, database connections, map tiles.
   preload/    The bridge that exposes the main process's API to the interface.
-  renderer/   The React interface: views, modules, editors, the map.
+  renderer/   The React interface: the World (world3d/), views, modules, editors, the map.
   shared/     Types shared by main and renderer, such as the IPC contract.
 drizzle/      Migrations for the local project store.
 tests/        core, main, renderer, integration, e2e and docs tests.
@@ -27,18 +27,48 @@ Inside `src/core`, each feature has its own folder: `scripts` (quest scripting s
 
 ## Processes
 
-- The **main process** (`src/main`) owns everything with side effects: the MySQL connection to the world database (read-only) and optional dev database, the local project store (SQLite through Drizzle), the file system, the game client and server data folders, and the `acqc-map://` protocol that serves map tiles.
+- The **main process** (`src/main`) owns everything with side effects: the MySQL connection to the world database (read-only) and optional dev database, the open project and its undo history, the local store (SQLite through Drizzle), the file system, the game client and server data folders, the `acqc-map://` protocol that serves map tiles and the `acqc-wow://` protocol that serves game client files to the 3D view.
 - The **renderer** (`src/renderer`) is the interface. It talks to the main process only through the API that `src/preload` exposes; state lives in [Zustand](https://zustand.docs.pmnd.rs/) stores in `src/renderer/state`.
+
+## The 3D view
+
+The app is built around the **World**: the game world in 3D, drawn from the user's own game client. It is where the app opens, and the quest tools are a second workspace beside it. The code is in `src/renderer/world3d/`.
+
+### How it is built
+
+- **Files come straight from the client.** The main process opens the client's MPQ archives in the game's own load order and serves each file at `acqc-wow://file/<path>`. Nothing is extracted, copied or hosted, and the repo never contains game files.
+- **Drawing is [Three.js](https://threejs.org/).** Terrain, doodads (trees, fences, carts) and animated models come from [wowserhq/scene](https://github.com/wowserhq/scene), copied into `world3d/scene/` because the editor changes its insides. Its README lists every change from upstream. Buildings (WMO), liquids, dressed characters and the editing tools were written here or adapted from MIT-licensed projects.
+- **Loaders run in Web Workers;** the main thread only builds Three.js objects from what they return.
+- **World units are the server's:** yards, X north, Y west, Z up. A spawn's `position_x/y/z` is its place in the scene, with no conversion anywhere. Keep it that way.
+- **`world3d.ts` is the scene's API** (the `World3D` interface): React drives it through calls such as `lookAt`, `select`, `setWorldLayer` and `setPlacing`, and hears back through callbacks. React components never reach into Three.js objects. `World3DView.tsx` wires the scene to the app; `WorldWorkspace.tsx` is the workspace around it (the place card, Find, Teleport, the welcome).
+- **Spawns are read per map tile** through the `viewSpawns` call (`src/core/db/view-spawns.ts`): the camera's tile and the eight round it, capped per tile.
+
+### Rules it keeps
+
+- **Every change is a step of the project's history.** The view keeps no undo of its own: a gesture is sent to the main process as one step, and an undo hands the view a new layer to draw. A gesture that changes ten spawns is still one step. An action that cannot be undone is treated as a bug.
+- **Where an edit goes is decided by what it touches.** The open quest's own spawns are edited through the quest. Everything else goes into the project's **world layer** (`src/core/world/layer.ts`): moved and placed spawns, routes, movements, respawn times and spawn groups, each keeping what the database had at the first edit, so it can be listed, reverted one by one, flagged when the database has moved since, and exported with a revert patch. New and edited NPCs, objects and items belong to the project, not to a quest.
+- **The database is only ever read.** Edits become rows in a patch; nothing in the 3D view writes to the world database.
+- **One bad file never takes the view down.** A model, building, texture or terrain tile that cannot be read is skipped, drawn as a stand-in where it can be, and reported by name (`scene/diagnostics.ts`); the rest still draws. Real clients, especially modded ones, are messier than the format specs.
+- **The right-click menu is built from sections**, one file each under `world3d/menu/sections/`, registered in order. A section says which subject it applies to and gives its items. A new ability is a new section file, not a branch in a big switch.
+- **Frame time is a budget.** Spawns are drawn within a set distance of the camera, simplified further out, and animated less often the further they are; copies of a doodad that never moves are batched into one draw call per model. Before this, Goldshire was 18,000 draw calls at one frame a second. A change that adds per-frame work should be measured in a busy place such as Goldshire, not in an empty field.
+
+### Testing it
+
+`npm run test:world3d` opens the real 3D code in a browser (software WebGL, no graphics card) against a fake game client built by `tests/world3d/fake-client.ts`. The failures here are usually silent, an empty view, so write each test to fail against the old code before fixing. See [Testing](/azeroth-world-editor/contributing/testing/).
+
+### Where it is going
+
+The next step is one interface: the quest chain view built into the 3D view, alongside it. Selecting a quest, or an NPC or object in a quest, takes the World to them, and a change made in either shows in the other at once, around simple click-and-drag workflows. Changes to the 3D view should keep that direction in mind.
 
 ## From the editor to SQL
 
-1. **Load.** Opening an existing quest reads its rows from the world database and turns them into the app's quest model. A quest that would not read back exactly is marked unsafe to export.
-2. **Edit.** Modules edit the quest model. Scenes, fights, new NPCs and patrols are kept in author terms (for example "when the quest is accepted, say this"), not as rows.
+1. **Load.** The World reads spawns, routes and groups for the area around the camera. Opening an existing quest reads its rows from the world database and turns them into the app's quest model. A quest that would not read back exactly is marked unsafe to export.
+2. **Edit.** The World edits the world layer and the project's NPCs, objects and items; modules edit the quest model. Scenes, fights, new NPCs and patrols are kept in author terms (for example "when the quest is accepted, say this"), not as rows.
 3. **Validate.** Each module reports warnings and errors, shown as badges.
-4. **Compile.** Export turns the model into rows: the quest's own tables, plus scripts compiled from scenes, fights and patrol actions.
+4. **Compile.** Export turns the model into rows: the project patch for the world layer and the project's NPCs, objects and items, and each quest's own tables, plus scripts compiled from scenes, fights and patrol actions.
 5. **Write.** The rows become an SQL patch file, or are applied to the dev database. The **Changes** dialog shows the same rows before you commit to either.
 
-See [What gets written to the database](/acore-quest-creator/reference/database-tables/) for the tables involved.
+See [What gets written to the database](/azeroth-world-editor/reference/database-tables/) for the tables involved.
 
 ## Interface conventions
 

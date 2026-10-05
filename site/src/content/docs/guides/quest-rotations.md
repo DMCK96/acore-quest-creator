@@ -31,7 +31,7 @@ Saving is one undo step. The rotation is listed in **Project changes**, goes out
 The dialog lists the reasons a rotation cannot be saved, and **Save** stays off until there are none:
 
 - **All daily or all weekly.** A rotation cannot mix them.
-- **Every quest needs a giver.** A quest nobody offers is never shown. See [quest givers and enders](/acore-quest-creator/guides/givers-and-enders/).
+- **Every quest needs a giver.** A quest nobody offers is never shown. See [quest givers and enders](/azeroth-world-editor/guides/givers-and-enders/).
 - **One rotation per quest.**
 - **At least two quests.** A rotation of one is no rotation.
-- **Not nested, and no events.** A rotation cannot sit inside a spawn group, and does not follow a game event: the server rotates quests at the daily and weekly reset, apart from events. Groups of spawns can follow events; see [Spawn groups](/acore-quest-creator/guides/spawn-groups/).
+- **Not nested, and no events.** A rotation cannot sit inside a spawn group, and does not follow a game event: the server rotates quests at the daily and weekly reset, apart from events. Groups of spawns can follow events; see [Spawn groups](/azeroth-world-editor/guides/spawn-groups/).

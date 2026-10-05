@@ -1,0 +1,1753 @@
+{
+  "format": "acore-quest-creator/project",
+  "version": 6,
+  "toolVersion": "0.1.0",
+  "name": "Goldshire",
+  "idRange": {
+    "start": 60000,
+    "end": 99999
+  },
+  "outputDir": "C:\\AzerothCore\\data\\sql\\custom\\db_world",
+  "viewport": {
+    "x": 0,
+    "y": 0,
+    "zoom": 1
+  },
+  "quests": [],
+  "world": {
+    "spawns": [],
+    "routes": [
+      {
+        "pathId": 802630,
+        "walkers": 1,
+        "name": "Stormwind Guard",
+        "walkerEntries": [
+          {
+            "entry": 1423,
+            "name": "Stormwind Guard"
+          }
+        ],
+        "original": [
+          {
+            "x": -9438.46,
+            "y": 54.5786,
+            "z": 56.02,
+            "rest": {
+              "orientation": null,
+              "velocity": "0",
+              "delay": "10000",
+              "smoothTransition": "0",
+              "move_type": "0",
+              "action": "0",
+              "action_chance": "100",
+              "wpguid": "0"
+            }
+          },
+          {
+            "x": -9431.21,
+            "y": 46.5591,
+            "z": 56.6935,
+            "rest": {
+              "orientation": null,
+              "velocity": "0",
+              "delay": "0",
+              "smoothTransition": "0",
+              "move_type": "0",
+              "action": "0",
+              "action_chance": "100",
+              "wpguid": "0"
+            }
+          },
+          {
+            "x": -9421.63,
+            "y": 36.4708,
+            "z": 57.3185,
+            "rest": {
+              "orientation": null,
+              "velocity": "0",
+              "delay": "0",
+              "smoothTransition": "0",
+              "move_type": "0",
+              "action": "0",
+              "action_chance": "100",
+              "wpguid": "0"
+            }
+          },
+          {
+            "x": -9411.37,
+            "y": 24.5168,
+            "z": 58.2478,
+            "rest": {
+              "orientation": null,
+              "velocity": "0",
+              "delay": "0",
+              "smoothTransition": "0",
+              "move_type": "0",
+              "action": "0",
+              "action_chance": "100",
+              "wpguid": "0"
+            }
+          },
+          {
+            "x": -9401.32,
+            "y": 13.3848,
+            "z": 59.6792,
+            "rest": {
+              "orientation": null,
+              "velocity": "0",
+              "delay": "0",
+              "smoothTransition": "0",
+              "move_type": "0",
+              "action": "0",
+              "action_chance": "100",
+              "wpguid": "0"
+            }
+          },
+          {
+            "x": -9390.17,
+            "y": -1.14529,
+            "z": 60.8219,
+            "rest": {
+              "orientation": null,
+              "velocity": "0",
+              "delay": "0",
+              "smoothTransition": "0",
+              "move_type": "0",
+              "action": "0",
+              "action_chance": "100",
+              "wpguid": "0"
+            }
+          },
+          {
+            "x": -9378.08,
+            "y": -13.0141,
+            "z": 61.8883,
+            "rest": {
+              "orientation": null,
+              "velocity": "0",
+              "delay": "0",
+              "smoothTransition": "0",
+              "move_type": "0",
+              "action": "0",
+              "action_chance": "100",
+              "wpguid": "0"
+            }
+          },
+          {
+            "x": -9365.35,
+            "y": -27.7294,
+            "z": 63.3652,
+            "rest": {
+              "orientation": null,
+              "velocity": "0",
+              "delay": "0",
+              "smoothTransition": "0",
+              "move_type": "0",
+              "action": "0",
+              "action_chance": "100",
+              "wpguid": "0"
+            }
+          },
+          {
+            "x": -9351.89,
+            "y": -40.303,
+            "z": 64.8154,
+            "rest": {
+              "orientation": null,
+              "velocity": "0",
+              "delay": "0",
+              "smoothTransition": "0",
+              "move_type": "0",
+              "action": "0",
+              "action_chance": "100",
+              "wpguid": "0"
+            }
+          },
+          {
+            "x": -9337.79,
+            "y": -50.1553,
+            "z": 65.6746,
+            "rest": {
+              "orientation": null,
+              "velocity": "0",
+              "delay": "0",
+              "smoothTransition": "0",
+              "move_type": "0",
+              "action": "0",
+              "action_chance": "100",
+              "wpguid": "0"
+            }
+          },
+          {
+            "x": -9329.19,
+            "y": -52.8443,
+            "z": 66.1309,
+            "rest": {
+              "orientation": null,
+              "velocity": "0",
+              "delay": "0",
+              "smoothTransition": "0",
+              "move_type": "0",
+              "action": "0",
+              "action_chance": "100",
+              "wpguid": "0"
+            }
+          },
+          {
+            "x": -9314.49,
+            "y": -56.4806,
+            "z": 66.7049,
+            "rest": {
+              "orientation": null,
+              "velocity": "0",
+              "delay": "0",
+              "smoothTransition": "0",
+              "move_type": "0",
+              "action": "0",
+              "action_chance": "100",
+              "wpguid": "0"
+            }
+          },
+          {
+            "x": -9302.47,
+            "y": -59.147,
+            "z": 66.9322,
+            "rest": {
+              "orientation": null,
+              "velocity": "0",
+              "delay": "0",
+              "smoothTransition": "0",
+              "move_type": "0",
+              "action": "0",
+              "action_chance": "100",
+              "wpguid": "0"
+            }
+          },
+          {
+            "x": -9290.4,
+            "y": -63.3569,
+            "z": 67.5221,
+            "rest": {
+              "orientation": null,
+              "velocity": "0",
+              "delay": "0",
+              "smoothTransition": "0",
+              "move_type": "0",
+              "action": "0",
+              "action_chance": "100",
+              "wpguid": "0"
+            }
+          },
+          {
+            "x": -9281.47,
+            "y": -69.3226,
+            "z": 68.0978,
+            "rest": {
+              "orientation": null,
+              "velocity": "0",
+              "delay": "0",
+              "smoothTransition": "0",
+              "move_type": "0",
+              "action": "0",
+              "action_chance": "100",
+              "wpguid": "0"
+            }
+          },
+          {
+            "x": -9270.33,
+            "y": -77.1763,
+            "z": 68.6869,
+            "rest": {
+              "orientation": null,
+              "velocity": "0",
+              "delay": "0",
+              "smoothTransition": "0",
+              "move_type": "0",
+              "action": "0",
+              "action_chance": "100",
+              "wpguid": "0"
+            }
+          },
+          {
+            "x": -9258.73,
+            "y": -86.8968,
+            "z": 69.7136,
+            "rest": {
+              "orientation": null,
+              "velocity": "0",
+              "delay": "0",
+              "smoothTransition": "0",
+              "move_type": "0",
+              "action": "0",
+              "action_chance": "100",
+              "wpguid": "0"
+            }
+          },
+          {
+            "x": -9245.78,
+            "y": -95.4848,
+            "z": 70.5271,
+            "rest": {
+              "orientation": null,
+              "velocity": "0",
+              "delay": "0",
+              "smoothTransition": "0",
+              "move_type": "0",
+              "action": "0",
+              "action_chance": "100",
+              "wpguid": "0"
+            }
+          },
+          {
+            "x": -9235.75,
+            "y": -101.567,
+            "z": 70.7765,
+            "rest": {
+              "orientation": null,
+              "velocity": "0",
+              "delay": "0",
+              "smoothTransition": "0",
+              "move_type": "0",
+              "action": "0",
+              "action_chance": "100",
+              "wpguid": "0"
+            }
+          },
+          {
+            "x": -9228.75,
+            "y": -104.131,
+            "z": 70.9917,
+            "rest": {
+              "orientation": null,
+              "velocity": "0",
+              "delay": "0",
+              "smoothTransition": "0",
+              "move_type": "0",
+              "action": "0",
+              "action_chance": "100",
+              "wpguid": "0"
+            }
+          },
+          {
+            "x": -9219.66,
+            "y": -106.704,
+            "z": 71.2539,
+            "rest": {
+              "orientation": null,
+              "velocity": "0",
+              "delay": "0",
+              "smoothTransition": "0",
+              "move_type": "0",
+              "action": "0",
+              "action_chance": "100",
+              "wpguid": "0"
+            }
+          },
+          {
+            "x": -9208.19,
+            "y": -109.8,
+            "z": 71.1746,
+            "rest": {
+              "orientation": null,
+              "velocity": "0",
+              "delay": "0",
+              "smoothTransition": "0",
+              "move_type": "0",
+              "action": "0",
+              "action_chance": "100",
+              "wpguid": "0"
+            }
+          },
+          {
+            "x": -9197.43,
+            "y": -112.189,
+            "z": 71.0954,
+            "rest": {
+              "orientation": null,
+              "velocity": "0",
+              "delay": "0",
+              "smoothTransition": "0",
+              "move_type": "0",
+              "action": "0",
+              "action_chance": "100",
+              "wpguid": "0"
+            }
+          },
+          {
+            "x": -9185.82,
+            "y": -112.741,
+            "z": 70.9956,
+            "rest": {
+              "orientation": null,
+              "velocity": "0",
+              "delay": "0",
+              "smoothTransition": "0",
+              "move_type": "0",
+              "action": "0",
+              "action_chance": "100",
+              "wpguid": "0"
+            }
+          },
+          {
+            "x": -9174.03,
+            "y": -111.842,
+            "z": 71.549,
+            "rest": {
+              "orientation": null,
+              "velocity": "0",
+              "delay": "0",
+              "smoothTransition": "0",
+              "move_type": "0",
+              "action": "0",
+              "action_chance": "100",
+              "wpguid": "0"
+            }
+          },
+          {
+            "x": -9159.32,
+            "y": -106.846,
+            "z": 73.042,
+            "rest": {
+              "orientation": null,
+              "velocity": "0",
+              "delay": "0",
+              "smoothTransition": "0",
+              "move_type": "0",
+              "action": "0",
+              "action_chance": "100",
+              "wpguid": "0"
+            }
+          },
+          {
+            "x": -9149.28,
+            "y": -100.661,
+            "z": 74.2365,
+            "rest": {
+              "orientation": null,
+              "velocity": "0",
+              "delay": "0",
+              "smoothTransition": "0",
+              "move_type": "0",
+              "action": "0",
+              "action_chance": "100",
+              "wpguid": "0"
+            }
+          },
+          {
+            "x": -9135.36,
+            "y": -91.4846,
+            "z": 76.2439,
+            "rest": {
+              "orientation": null,
+              "velocity": "0",
+              "delay": "0",
+              "smoothTransition": "0",
+              "move_type": "0",
+              "action": "0",
+              "action_chance": "100",
+              "wpguid": "0"
+            }
+          },
+          {
+            "x": -9119.71,
+            "y": -80.9652,
+            "z": 79.7045,
+            "rest": {
+              "orientation": null,
+              "velocity": "0",
+              "delay": "0",
+              "smoothTransition": "0",
+              "move_type": "0",
+              "action": "0",
+              "action_chance": "100",
+              "wpguid": "0"
+            }
+          },
+          {
+            "x": -9109.23,
+            "y": -73.0075,
+            "z": 82.2177,
+            "rest": {
+              "orientation": null,
+              "velocity": "0",
+              "delay": "0",
+              "smoothTransition": "0",
+              "move_type": "0",
+              "action": "0",
+              "action_chance": "100",
+              "wpguid": "0"
+            }
+          },
+          {
+            "x": -9097.45,
+            "y": -63.842,
+            "z": 84.3533,
+            "rest": {
+              "orientation": null,
+              "velocity": "0",
+              "delay": "0",
+              "smoothTransition": "0",
+              "move_type": "0",
+              "action": "0",
+              "action_chance": "100",
+              "wpguid": "0"
+            }
+          },
+          {
+            "x": -9090.09,
+            "y": -58.3601,
+            "z": 85.4209,
+            "rest": {
+              "orientation": null,
+              "velocity": "0",
+              "delay": "0",
+              "smoothTransition": "0",
+              "move_type": "0",
+              "action": "0",
+              "action_chance": "100",
+              "wpguid": "0"
+            }
+          },
+          {
+            "x": -9084.71,
+            "y": -52.9579,
+            "z": 86.3824,
+            "rest": {
+              "orientation": null,
+              "velocity": "0",
+              "delay": "0",
+              "smoothTransition": "0",
+              "move_type": "0",
+              "action": "0",
+              "action_chance": "100",
+              "wpguid": "0"
+            }
+          },
+          {
+            "x": -9079.42,
+            "y": -48.8967,
+            "z": 87.3543,
+            "rest": {
+              "orientation": null,
+              "velocity": "0",
+              "delay": "0",
+              "smoothTransition": "0",
+              "move_type": "0",
+              "action": "0",
+              "action_chance": "100",
+              "wpguid": "0"
+            }
+          },
+          {
+            "x": -9070.88,
+            "y": -43.4176,
+            "z": 88.0645,
+            "rest": {
+              "orientation": null,
+              "velocity": "0",
+              "delay": "10000",
+              "smoothTransition": "0",
+              "move_type": "0",
+              "action": "0",
+              "action_chance": "100",
+              "wpguid": "0"
+            }
+          },
+          {
+            "x": -9083.6,
+            "y": -53.3508,
+            "z": 86.4261,
+            "rest": {
+              "orientation": null,
+              "velocity": "0",
+              "delay": "0",
+              "smoothTransition": "0",
+              "move_type": "0",
+              "action": "0",
+              "action_chance": "100",
+              "wpguid": "0"
+            }
+          },
+          {
+            "x": -9098.67,
+            "y": -65.6183,
+            "z": 84.054,
+            "rest": {
+              "orientation": null,
+              "velocity": "0",
+              "delay": "0",
+              "smoothTransition": "0",
+              "move_type": "0",
+              "action": "0",
+              "action_chance": "100",
+              "wpguid": "0"
+            }
+          },
+          {
+            "x": -9109.42,
+            "y": -75.7207,
+            "z": 82.0922,
+            "rest": {
+              "orientation": null,
+              "velocity": "0",
+              "delay": "0",
+              "smoothTransition": "0",
+              "move_type": "0",
+              "action": "0",
+              "action_chance": "100",
+              "wpguid": "0"
+            }
+          },
+          {
+            "x": -9125.42,
+            "y": -85.1659,
+            "z": 78.163,
+            "rest": {
+              "orientation": null,
+              "velocity": "0",
+              "delay": "0",
+              "smoothTransition": "0",
+              "move_type": "0",
+              "action": "0",
+              "action_chance": "100",
+              "wpguid": "0"
+            }
+          },
+          {
+            "x": -9142.28,
+            "y": -95.8797,
+            "z": 75.0947,
+            "rest": {
+              "orientation": null,
+              "velocity": "0",
+              "delay": "0",
+              "smoothTransition": "0",
+              "move_type": "0",
+              "action": "0",
+              "action_chance": "100",
+              "wpguid": "0"
+            }
+          },
+          {
+            "x": -9163.2,
+            "y": -108.535,
+            "z": 72.5671,
+            "rest": {
+              "orientation": null,
+              "velocity": "0",
+              "delay": "0",
+              "smoothTransition": "0",
+              "move_type": "0",
+              "action": "0",
+              "action_chance": "100",
+              "wpguid": "0"
+            }
+          },
+          {
+            "x": -9176.17,
+            "y": -111.983,
+            "z": 71.2451,
+            "rest": {
+              "orientation": null,
+              "velocity": "0",
+              "delay": "0",
+              "smoothTransition": "0",
+              "move_type": "0",
+              "action": "0",
+              "action_chance": "100",
+              "wpguid": "0"
+            }
+          },
+          {
+            "x": -9195.77,
+            "y": -112.795,
+            "z": 71.1206,
+            "rest": {
+              "orientation": null,
+              "velocity": "0",
+              "delay": "0",
+              "smoothTransition": "0",
+              "move_type": "0",
+              "action": "0",
+              "action_chance": "100",
+              "wpguid": "0"
+            }
+          },
+          {
+            "x": -9208.96,
+            "y": -109.317,
+            "z": 71.1289,
+            "rest": {
+              "orientation": null,
+              "velocity": "0",
+              "delay": "0",
+              "smoothTransition": "0",
+              "move_type": "0",
+              "action": "0",
+              "action_chance": "100",
+              "wpguid": "0"
+            }
+          },
+          {
+            "x": -9225.82,
+            "y": -104.717,
+            "z": 71.1289,
+            "rest": {
+              "orientation": null,
+              "velocity": "0",
+              "delay": "0",
+              "smoothTransition": "0",
+              "move_type": "0",
+              "action": "0",
+              "action_chance": "100",
+              "wpguid": "0"
+            }
+          },
+          {
+            "x": -9238.65,
+            "y": -99.047,
+            "z": 70.7085,
+            "rest": {
+              "orientation": null,
+              "velocity": "0",
+              "delay": "0",
+              "smoothTransition": "0",
+              "move_type": "0",
+              "action": "0",
+              "action_chance": "100",
+              "wpguid": "0"
+            }
+          },
+          {
+            "x": -9249.91,
+            "y": -91.4822,
+            "z": 70.4067,
+            "rest": {
+              "orientation": null,
+              "velocity": "0",
+              "delay": "0",
+              "smoothTransition": "0",
+              "move_type": "0",
+              "action": "0",
+              "action_chance": "100",
+              "wpguid": "0"
+            }
+          },
+          {
+            "x": -9268.24,
+            "y": -77.8927,
+            "z": 68.6869,
+            "rest": {
+              "orientation": null,
+              "velocity": "0",
+              "delay": "0",
+              "smoothTransition": "0",
+              "move_type": "0",
+              "action": "0",
+              "action_chance": "100",
+              "wpguid": "0"
+            }
+          },
+          {
+            "x": -9280.2,
+            "y": -67.6585,
+            "z": 68.2496,
+            "rest": {
+              "orientation": null,
+              "velocity": "0",
+              "delay": "0",
+              "smoothTransition": "0",
+              "move_type": "0",
+              "action": "0",
+              "action_chance": "100",
+              "wpguid": "0"
+            }
+          },
+          {
+            "x": -9297.88,
+            "y": -60.6128,
+            "z": 67.3444,
+            "rest": {
+              "orientation": null,
+              "velocity": "0",
+              "delay": "0",
+              "smoothTransition": "0",
+              "move_type": "0",
+              "action": "0",
+              "action_chance": "100",
+              "wpguid": "0"
+            }
+          },
+          {
+            "x": -9322.91,
+            "y": -53.6008,
+            "z": 66.4439,
+            "rest": {
+              "orientation": null,
+              "velocity": "0",
+              "delay": "0",
+              "smoothTransition": "0",
+              "move_type": "0",
+              "action": "0",
+              "action_chance": "100",
+              "wpguid": "0"
+            }
+          },
+          {
+            "x": -9335.96,
+            "y": -49.3748,
+            "z": 65.8247,
+            "rest": {
+              "orientation": null,
+              "velocity": "0",
+              "delay": "0",
+              "smoothTransition": "0",
+              "move_type": "0",
+              "action": "0",
+              "action_chance": "100",
+              "wpguid": "0"
+            }
+          },
+          {
+            "x": -9351.48,
+            "y": -40.1138,
+            "z": 64.8154,
+            "rest": {
+              "orientation": null,
+              "velocity": "0",
+              "delay": "0",
+              "smoothTransition": "0",
+              "move_type": "0",
+              "action": "0",
+              "action_chance": "100",
+              "wpguid": "0"
+            }
+          },
+          {
+            "x": -9362.03,
+            "y": -29.9148,
+            "z": 63.7647,
+            "rest": {
+              "orientation": null,
+              "velocity": "0",
+              "delay": "0",
+              "smoothTransition": "0",
+              "move_type": "0",
+              "action": "0",
+              "action_chance": "100",
+              "wpguid": "0"
+            }
+          },
+          {
+            "x": -9376.17,
+            "y": -14.7843,
+            "z": 62.2442,
+            "rest": {
+              "orientation": null,
+              "velocity": "0",
+              "delay": "0",
+              "smoothTransition": "0",
+              "move_type": "0",
+              "action": "0",
+              "action_chance": "100",
+              "wpguid": "0"
+            }
+          },
+          {
+            "x": -9397.75,
+            "y": 6.89572,
+            "z": 60.044,
+            "rest": {
+              "orientation": null,
+              "velocity": "0",
+              "delay": "0",
+              "smoothTransition": "0",
+              "move_type": "0",
+              "action": "0",
+              "action_chance": "100",
+              "wpguid": "0"
+            }
+          },
+          {
+            "x": -9409.91,
+            "y": 21.163,
+            "z": 58.8272,
+            "rest": {
+              "orientation": null,
+              "velocity": "0",
+              "delay": "0",
+              "smoothTransition": "0",
+              "move_type": "0",
+              "action": "0",
+              "action_chance": "100",
+              "wpguid": "0"
+            }
+          }
+        ],
+        "current": [
+          {
+            "x": -9438.46,
+            "y": 54.5786,
+            "z": 56.02,
+            "rest": {
+              "orientation": null,
+              "velocity": "0",
+              "delay": "10000",
+              "smoothTransition": "0",
+              "move_type": "0",
+              "action": "0",
+              "action_chance": "100",
+              "wpguid": "0"
+            }
+          },
+          {
+            "x": -9431.21,
+            "y": 46.5591,
+            "z": 56.6935,
+            "rest": {
+              "orientation": null,
+              "velocity": "0",
+              "delay": "0",
+              "smoothTransition": "0",
+              "move_type": "0",
+              "action": "0",
+              "action_chance": "100",
+              "wpguid": "0"
+            }
+          },
+          {
+            "x": -9421.63,
+            "y": 36.4708,
+            "z": 57.3185,
+            "rest": {
+              "orientation": null,
+              "velocity": "0",
+              "delay": "0",
+              "smoothTransition": "0",
+              "move_type": "0",
+              "action": "0",
+              "action_chance": "100",
+              "wpguid": "0"
+            }
+          },
+          {
+            "x": -9410.494667566978,
+            "y": 25.326583298714368,
+            "z": 57.68,
+            "rest": {
+              "orientation": null,
+              "velocity": "0",
+              "delay": "0",
+              "smoothTransition": "0",
+              "move_type": "0",
+              "action": "0",
+              "action_chance": "100",
+              "wpguid": "0"
+            }
+          },
+          {
+            "x": -9397.715269155935,
+            "y": 17.036377661537156,
+            "z": 58.68,
+            "rest": {
+              "orientation": null,
+              "velocity": "0",
+              "delay": "0",
+              "smoothTransition": "0",
+              "move_type": "0",
+              "action": "0",
+              "action_chance": "100",
+              "wpguid": "0"
+            }
+          },
+          {
+            "x": -9387.560125400807,
+            "y": 14.685106588349162,
+            "z": 59.42,
+            "rest": {
+              "orientation": null,
+              "velocity": "0",
+              "delay": "0",
+              "smoothTransition": "0",
+              "move_type": "0",
+              "action": "0",
+              "action_chance": "100",
+              "wpguid": "0"
+            }
+          },
+          {
+            "x": -9381.03728479828,
+            "y": 12.029368400904758,
+            "z": 59.69,
+            "rest": {
+              "orientation": null,
+              "velocity": "0",
+              "delay": "0",
+              "smoothTransition": "0",
+              "move_type": "0",
+              "action": "0",
+              "action_chance": "100",
+              "wpguid": "0"
+            }
+          },
+          {
+            "x": -9359.84626746883,
+            "y": 7.89814726034654,
+            "z": 61.07,
+            "rest": {
+              "orientation": null,
+              "velocity": "0",
+              "delay": "0",
+              "smoothTransition": "0",
+              "move_type": "0",
+              "action": "0",
+              "action_chance": "100",
+              "wpguid": "0"
+            }
+          },
+          {
+            "x": -9348.17144145173,
+            "y": 5.278459242437127,
+            "z": 61.71,
+            "rest": {
+              "orientation": null,
+              "velocity": "0",
+              "delay": "0",
+              "smoothTransition": "0",
+              "move_type": "0",
+              "action": "0",
+              "action_chance": "100",
+              "wpguid": "0"
+            }
+          },
+          {
+            "x": -9326.62816393322,
+            "y": -1.07035095554608,
+            "z": 63.2,
+            "rest": {
+              "orientation": null,
+              "velocity": "0",
+              "delay": "0",
+              "smoothTransition": "0",
+              "move_type": "0",
+              "action": "0",
+              "action_chance": "100",
+              "wpguid": "0"
+            }
+          },
+          {
+            "x": -9320.60064354328,
+            "y": -5.599954440598749,
+            "z": 63.49,
+            "rest": {
+              "orientation": null,
+              "velocity": "0",
+              "delay": "0",
+              "smoothTransition": "0",
+              "move_type": "0",
+              "action": "0",
+              "action_chance": "100",
+              "wpguid": "0"
+            }
+          },
+          {
+            "x": -9314.255191444548,
+            "y": -11.450439131639161,
+            "z": 63.71,
+            "rest": {
+              "orientation": null,
+              "velocity": "0",
+              "delay": "0",
+              "smoothTransition": "0",
+              "move_type": "0",
+              "action": "0",
+              "action_chance": "100",
+              "wpguid": "0"
+            }
+          },
+          {
+            "x": -9306.280326975455,
+            "y": -23.68202632213055,
+            "z": 64.27,
+            "rest": {
+              "orientation": null,
+              "velocity": "0",
+              "delay": "0",
+              "smoothTransition": "0",
+              "move_type": "0",
+              "action": "0",
+              "action_chance": "100",
+              "wpguid": "0"
+            }
+          },
+          {
+            "x": -9284.670335287758,
+            "y": -60.296680953894125,
+            "z": 67.07,
+            "rest": {
+              "orientation": null,
+              "velocity": "0",
+              "delay": "0",
+              "smoothTransition": "0",
+              "move_type": "0",
+              "action": "0",
+              "action_chance": "100",
+              "wpguid": "0"
+            }
+          },
+          {
+            "x": -9278.935178987867,
+            "y": -69.3226,
+            "z": 67.92,
+            "rest": {
+              "orientation": null,
+              "velocity": "0",
+              "delay": "0",
+              "smoothTransition": "0",
+              "move_type": "0",
+              "action": "0",
+              "action_chance": "100",
+              "wpguid": "0"
+            }
+          },
+          {
+            "x": -9270.33,
+            "y": -77.1763,
+            "z": 68.6869,
+            "rest": {
+              "orientation": null,
+              "velocity": "0",
+              "delay": "0",
+              "smoothTransition": "0",
+              "move_type": "0",
+              "action": "0",
+              "action_chance": "100",
+              "wpguid": "0"
+            }
+          },
+          {
+            "x": -9258.73,
+            "y": -86.8968,
+            "z": 69.7136,
+            "rest": {
+              "orientation": null,
+              "velocity": "0",
+              "delay": "0",
+              "smoothTransition": "0",
+              "move_type": "0",
+              "action": "0",
+              "action_chance": "100",
+              "wpguid": "0"
+            }
+          },
+          {
+            "x": -9245.78,
+            "y": -95.4848,
+            "z": 70.5271,
+            "rest": {
+              "orientation": null,
+              "velocity": "0",
+              "delay": "0",
+              "smoothTransition": "0",
+              "move_type": "0",
+              "action": "0",
+              "action_chance": "100",
+              "wpguid": "0"
+            }
+          },
+          {
+            "x": -9235.75,
+            "y": -101.567,
+            "z": 70.7765,
+            "rest": {
+              "orientation": null,
+              "velocity": "0",
+              "delay": "0",
+              "smoothTransition": "0",
+              "move_type": "0",
+              "action": "0",
+              "action_chance": "100",
+              "wpguid": "0"
+            }
+          },
+          {
+            "x": -9228.75,
+            "y": -104.131,
+            "z": 70.9917,
+            "rest": {
+              "orientation": null,
+              "velocity": "0",
+              "delay": "0",
+              "smoothTransition": "0",
+              "move_type": "0",
+              "action": "0",
+              "action_chance": "100",
+              "wpguid": "0"
+            }
+          },
+          {
+            "x": -9219.66,
+            "y": -106.704,
+            "z": 71.2539,
+            "rest": {
+              "orientation": null,
+              "velocity": "0",
+              "delay": "0",
+              "smoothTransition": "0",
+              "move_type": "0",
+              "action": "0",
+              "action_chance": "100",
+              "wpguid": "0"
+            }
+          },
+          {
+            "x": -9208.19,
+            "y": -109.8,
+            "z": 71.1746,
+            "rest": {
+              "orientation": null,
+              "velocity": "0",
+              "delay": "0",
+              "smoothTransition": "0",
+              "move_type": "0",
+              "action": "0",
+              "action_chance": "100",
+              "wpguid": "0"
+            }
+          },
+          {
+            "x": -9197.43,
+            "y": -112.189,
+            "z": 71.0954,
+            "rest": {
+              "orientation": null,
+              "velocity": "0",
+              "delay": "0",
+              "smoothTransition": "0",
+              "move_type": "0",
+              "action": "0",
+              "action_chance": "100",
+              "wpguid": "0"
+            }
+          },
+          {
+            "x": -9185.82,
+            "y": -112.741,
+            "z": 70.9956,
+            "rest": {
+              "orientation": null,
+              "velocity": "0",
+              "delay": "0",
+              "smoothTransition": "0",
+              "move_type": "0",
+              "action": "0",
+              "action_chance": "100",
+              "wpguid": "0"
+            }
+          },
+          {
+            "x": -9174.03,
+            "y": -111.842,
+            "z": 71.549,
+            "rest": {
+              "orientation": null,
+              "velocity": "0",
+              "delay": "0",
+              "smoothTransition": "0",
+              "move_type": "0",
+              "action": "0",
+              "action_chance": "100",
+              "wpguid": "0"
+            }
+          },
+          {
+            "x": -9159.32,
+            "y": -106.846,
+            "z": 73.042,
+            "rest": {
+              "orientation": null,
+              "velocity": "0",
+              "delay": "0",
+              "smoothTransition": "0",
+              "move_type": "0",
+              "action": "0",
+              "action_chance": "100",
+              "wpguid": "0"
+            }
+          },
+          {
+            "x": -9149.28,
+            "y": -100.661,
+            "z": 74.2365,
+            "rest": {
+              "orientation": null,
+              "velocity": "0",
+              "delay": "0",
+              "smoothTransition": "0",
+              "move_type": "0",
+              "action": "0",
+              "action_chance": "100",
+              "wpguid": "0"
+            }
+          },
+          {
+            "x": -9135.36,
+            "y": -91.4846,
+            "z": 76.2439,
+            "rest": {
+              "orientation": null,
+              "velocity": "0",
+              "delay": "0",
+              "smoothTransition": "0",
+              "move_type": "0",
+              "action": "0",
+              "action_chance": "100",
+              "wpguid": "0"
+            }
+          },
+          {
+            "x": -9119.71,
+            "y": -80.9652,
+            "z": 79.7045,
+            "rest": {
+              "orientation": null,
+              "velocity": "0",
+              "delay": "0",
+              "smoothTransition": "0",
+              "move_type": "0",
+              "action": "0",
+              "action_chance": "100",
+              "wpguid": "0"
+            }
+          },
+          {
+            "x": -9109.23,
+            "y": -73.0075,
+            "z": 82.2177,
+            "rest": {
+              "orientation": null,
+              "velocity": "0",
+              "delay": "0",
+              "smoothTransition": "0",
+              "move_type": "0",
+              "action": "0",
+              "action_chance": "100",
+              "wpguid": "0"
+            }
+          },
+          {
+            "x": -9097.45,
+            "y": -63.842,
+            "z": 84.3533,
+            "rest": {
+              "orientation": null,
+              "velocity": "0",
+              "delay": "0",
+              "smoothTransition": "0",
+              "move_type": "0",
+              "action": "0",
+              "action_chance": "100",
+              "wpguid": "0"
+            }
+          },
+          {
+            "x": -9090.09,
+            "y": -58.3601,
+            "z": 85.4209,
+            "rest": {
+              "orientation": null,
+              "velocity": "0",
+              "delay": "0",
+              "smoothTransition": "0",
+              "move_type": "0",
+              "action": "0",
+              "action_chance": "100",
+              "wpguid": "0"
+            }
+          },
+          {
+            "x": -9084.71,
+            "y": -52.9579,
+            "z": 86.3824,
+            "rest": {
+              "orientation": null,
+              "velocity": "0",
+              "delay": "0",
+              "smoothTransition": "0",
+              "move_type": "0",
+              "action": "0",
+              "action_chance": "100",
+              "wpguid": "0"
+            }
+          },
+          {
+            "x": -9079.42,
+            "y": -48.8967,
+            "z": 87.3543,
+            "rest": {
+              "orientation": null,
+              "velocity": "0",
+              "delay": "0",
+              "smoothTransition": "0",
+              "move_type": "0",
+              "action": "0",
+              "action_chance": "100",
+              "wpguid": "0"
+            }
+          },
+          {
+            "x": -9070.88,
+            "y": -43.4176,
+            "z": 88.0645,
+            "rest": {
+              "orientation": null,
+              "velocity": "0",
+              "delay": "10000",
+              "smoothTransition": "0",
+              "move_type": "0",
+              "action": "0",
+              "action_chance": "100",
+              "wpguid": "0"
+            }
+          },
+          {
+            "x": -9083.6,
+            "y": -53.3508,
+            "z": 86.4261,
+            "rest": {
+              "orientation": null,
+              "velocity": "0",
+              "delay": "0",
+              "smoothTransition": "0",
+              "move_type": "0",
+              "action": "0",
+              "action_chance": "100",
+              "wpguid": "0"
+            }
+          },
+          {
+            "x": -9098.67,
+            "y": -65.6183,
+            "z": 84.054,
+            "rest": {
+              "orientation": null,
+              "velocity": "0",
+              "delay": "0",
+              "smoothTransition": "0",
+              "move_type": "0",
+              "action": "0",
+              "action_chance": "100",
+              "wpguid": "0"
+            }
+          },
+          {
+            "x": -9109.42,
+            "y": -75.7207,
+            "z": 82.0922,
+            "rest": {
+              "orientation": null,
+              "velocity": "0",
+              "delay": "0",
+              "smoothTransition": "0",
+              "move_type": "0",
+              "action": "0",
+              "action_chance": "100",
+              "wpguid": "0"
+            }
+          },
+          {
+            "x": -9125.42,
+            "y": -85.1659,
+            "z": 78.163,
+            "rest": {
+              "orientation": null,
+              "velocity": "0",
+              "delay": "0",
+              "smoothTransition": "0",
+              "move_type": "0",
+              "action": "0",
+              "action_chance": "100",
+              "wpguid": "0"
+            }
+          },
+          {
+            "x": -9142.28,
+            "y": -95.8797,
+            "z": 75.0947,
+            "rest": {
+              "orientation": null,
+              "velocity": "0",
+              "delay": "0",
+              "smoothTransition": "0",
+              "move_type": "0",
+              "action": "0",
+              "action_chance": "100",
+              "wpguid": "0"
+            }
+          },
+          {
+            "x": -9163.2,
+            "y": -108.535,
+            "z": 72.5671,
+            "rest": {
+              "orientation": null,
+              "velocity": "0",
+              "delay": "0",
+              "smoothTransition": "0",
+              "move_type": "0",
+              "action": "0",
+              "action_chance": "100",
+              "wpguid": "0"
+            }
+          },
+          {
+            "x": -9176.17,
+            "y": -111.983,
+            "z": 71.2451,
+            "rest": {
+              "orientation": null,
+              "velocity": "0",
+              "delay": "0",
+              "smoothTransition": "0",
+              "move_type": "0",
+              "action": "0",
+              "action_chance": "100",
+              "wpguid": "0"
+            }
+          },
+          {
+            "x": -9195.77,
+            "y": -112.795,
+            "z": 71.1206,
+            "rest": {
+              "orientation": null,
+              "velocity": "0",
+              "delay": "0",
+              "smoothTransition": "0",
+              "move_type": "0",
+              "action": "0",
+              "action_chance": "100",
+              "wpguid": "0"
+            }
+          },
+          {
+            "x": -9208.96,
+            "y": -109.317,
+            "z": 71.1289,
+            "rest": {
+              "orientation": null,
+              "velocity": "0",
+              "delay": "0",
+              "smoothTransition": "0",
+              "move_type": "0",
+              "action": "0",
+              "action_chance": "100",
+              "wpguid": "0"
+            }
+          },
+          {
+            "x": -9225.82,
+            "y": -104.717,
+            "z": 71.1289,
+            "rest": {
+              "orientation": null,
+              "velocity": "0",
+              "delay": "0",
+              "smoothTransition": "0",
+              "move_type": "0",
+              "action": "0",
+              "action_chance": "100",
+              "wpguid": "0"
+            }
+          },
+          {
+            "x": -9238.65,
+            "y": -99.047,
+            "z": 70.7085,
+            "rest": {
+              "orientation": null,
+              "velocity": "0",
+              "delay": "0",
+              "smoothTransition": "0",
+              "move_type": "0",
+              "action": "0",
+              "action_chance": "100",
+              "wpguid": "0"
+            }
+          },
+          {
+            "x": -9249.91,
+            "y": -91.4822,
+            "z": 70.4067,
+            "rest": {
+              "orientation": null,
+              "velocity": "0",
+              "delay": "0",
+              "smoothTransition": "0",
+              "move_type": "0",
+              "action": "0",
+              "action_chance": "100",
+              "wpguid": "0"
+            }
+          },
+          {
+            "x": -9268.24,
+            "y": -77.8927,
+            "z": 68.6869,
+            "rest": {
+              "orientation": null,
+              "velocity": "0",
+              "delay": "0",
+              "smoothTransition": "0",
+              "move_type": "0",
+              "action": "0",
+              "action_chance": "100",
+              "wpguid": "0"
+            }
+          },
+          {
+            "x": -9277.622490398644,
+            "y": -67.6585,
+            "z": 67.87,
+            "rest": {
+              "orientation": null,
+              "velocity": "0",
+              "delay": "0",
+              "smoothTransition": "0",
+              "move_type": "0",
+              "action": "0",
+              "action_chance": "100",
+              "wpguid": "0"
+            }
+          },
+          {
+            "x": -9302.805350035474,
+            "y": -29.315566285742392,
+            "z": 64.81,
+            "rest": {
+              "orientation": null,
+              "velocity": "0",
+              "delay": "0",
+              "smoothTransition": "0",
+              "move_type": "0",
+              "action": "0",
+              "action_chance": "100",
+              "wpguid": "0"
+            }
+          },
+          {
+            "x": -9318.418305294763,
+            "y": -6.57016992731799,
+            "z": 63.53,
+            "rest": {
+              "orientation": null,
+              "velocity": "0",
+              "delay": "0",
+              "smoothTransition": "0",
+              "move_type": "0",
+              "action": "0",
+              "action_chance": "100",
+              "wpguid": "0"
+            }
+          },
+          {
+            "x": -9324.604073576456,
+            "y": -0.2402163140697009,
+            "z": 63.24,
+            "rest": {
+              "orientation": null,
+              "velocity": "0",
+              "delay": "0",
+              "smoothTransition": "0",
+              "move_type": "0",
+              "action": "0",
+              "action_chance": "100",
+              "wpguid": "0"
+            }
+          },
+          {
+            "x": -9347.7183328799,
+            "y": 5.553657178803949,
+            "z": 61.72,
+            "rest": {
+              "orientation": null,
+              "velocity": "0",
+              "delay": "0",
+              "smoothTransition": "0",
+              "move_type": "0",
+              "action": "0",
+              "action_chance": "100",
+              "wpguid": "0"
+            }
+          },
+          {
+            "x": -9355.97772955258,
+            "y": 8.26069083963995,
+            "z": 61.3,
+            "rest": {
+              "orientation": null,
+              "velocity": "0",
+              "delay": "0",
+              "smoothTransition": "0",
+              "move_type": "0",
+              "action": "0",
+              "action_chance": "100",
+              "wpguid": "0"
+            }
+          },
+          {
+            "x": -9378.455741814558,
+            "y": 11.330901503106544,
+            "z": 59.75,
+            "rest": {
+              "orientation": null,
+              "velocity": "0",
+              "delay": "0",
+              "smoothTransition": "0",
+              "move_type": "0",
+              "action": "0",
+              "action_chance": "100",
+              "wpguid": "0"
+            }
+          },
+          {
+            "x": -9391.230520229294,
+            "y": 14.157115866909391,
+            "z": 59.12,
+            "rest": {
+              "orientation": null,
+              "velocity": "0",
+              "delay": "0",
+              "smoothTransition": "0",
+              "move_type": "0",
+              "action": "0",
+              "action_chance": "100",
+              "wpguid": "0"
+            }
+          },
+          {
+            "x": -9408.465362457224,
+            "y": 22.499456083086173,
+            "z": 57.75,
+            "rest": {
+              "orientation": null,
+              "velocity": "0",
+              "delay": "0",
+              "smoothTransition": "0",
+              "move_type": "0",
+              "action": "0",
+              "action_chance": "100",
+              "wpguid": "0"
+            }
+          }
+        ]
+      }
+    ],
+    "added": []
+  },
+  "entities": {
+    "npcs": [],
+    "objects": [],
+    "items": []
+  }
+}

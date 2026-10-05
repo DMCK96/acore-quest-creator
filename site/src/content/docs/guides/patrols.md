@@ -11,7 +11,7 @@ A **patrol** is a route a new NPC walks, over and over. At each point it can wai
 
 ## Draw a route
 
-1. Place the NPC on the [quest map](/acore-quest-creator/guides/quest-map/).
+1. Place the NPC on the [quest map](/azeroth-world-editor/guides/quest-map/).
 2. Choose **Draw patrol**. The panel shows **Patrol: _name_**.
 3. Click the map to add points in order. Each shows as **Point 1**, **Point 2** and so on.
 4. Choose **Done**.

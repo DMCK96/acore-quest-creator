@@ -1,6 +1,6 @@
 ---
 title: What gets written to the database
-description: The world database tables each feature of ACORE Quest Creator writes, for server admins reviewing patches.
+description: The world database tables each feature of Azeroth World Editor writes, for server admins reviewing patches.
 sidebar:
   order: 3
 ---

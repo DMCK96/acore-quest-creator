@@ -18,4 +18,4 @@ New NPCs have a **Loot** tab, and chests have a **Contents** tab, for what a pla
 
 ## Loot versus quest items
 
-Items the quest asks the player to collect are set up in **Objectives**, under **Drop sources**, not here. See [Quest details, objectives and rewards](/acore-quest-creator/guides/quest-details-and-objectives/#objectives). Use loot for everything else a creature or chest gives.
+Items the quest asks the player to collect are set up in **Objectives**, under **Drop sources**, not here. See [Quest details, objectives and rewards](/azeroth-world-editor/guides/quest-details-and-objectives/#objectives). Use loot for everything else a creature or chest gives.

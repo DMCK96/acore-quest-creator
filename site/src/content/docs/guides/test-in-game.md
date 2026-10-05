@@ -9,7 +9,7 @@ sidebar:
 
 ![The Test in game panel listing reload, travel and quest commands](../../../assets/screenshots/test-in-game.png)
 
-Apply the quest to your dev database first (see [Exporting and applying](/acore-quest-creator/guides/export-and-apply/)), then use the commands in order.
+Apply the quest to your dev database first (see [Exporting and applying](/azeroth-world-editor/guides/export-and-apply/)), then use the commands in order.
 
 ## Reload after applying
 

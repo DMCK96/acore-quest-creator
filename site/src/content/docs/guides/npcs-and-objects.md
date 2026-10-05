@@ -5,9 +5,9 @@ sidebar:
   order: 5
 ---
 
-An NPC, object or [item](/acore-quest-creator/guides/items/) belongs to your project, not to one quest. A quest uses it by naming it: as its giver or ender, an objective, a reward, or in a script. It is the same NPC whether one quest uses it, several do, or none, and whether you made it or the database already had it.
+An NPC, object or [item](/azeroth-world-editor/guides/items/) belongs to your project, not to one quest. A quest uses it by naming it: as its giver or ender, an objective, a reward, or in a script. It is the same NPC whether one quest uses it, several do, or none, and whether you made it or the database already had it.
 
-A quest's **NPCs, objects & items** module lists the project's NPCs, objects and items in two parts. **Used by this quest** comes first: the ones this quest names. **Others in the project** lists the rest. Each row says what changed (**New**, **Spawns changed**, **Movement changed**, **Path changed**, **Details changed**, **Group changed**) and which quests use it. The module appears as soon as the project has any. Making a new NPC from the [Quest Giver](/acore-quest-creator/guides/givers-and-enders/) module adds it to the quest for you.
+A quest's **NPCs, objects & items** module lists the project's NPCs, objects and items in two parts. **Used by this quest** comes first: the ones this quest names. **Others in the project** lists the rest. Each row says what changed (**New**, **Spawns changed**, **Movement changed**, **Path changed**, **Details changed**, **Group changed**) and which quests use it. The module appears as soon as the project has any. Making a new NPC from the [Quest Giver](/azeroth-world-editor/guides/givers-and-enders/) module adds it to the quest for you.
 
 - **Add NPC**, **Add object** and **Add item** make a new one for the project and open its editor.
 - **Add from project…** lists the project's NPCs, objects and items, and gives the one you pick a part in this quest.
@@ -15,7 +15,7 @@ A quest's **NPCs, objects & items** module lists the project's NPCs, objects and
 
 A new NPC or object is in the project as soon as you add it, and every change is kept as you make it. **Discard** on a new one takes it away again. Deleting one tells you which quests use it, and takes it off their giver and ender cards. Like every change, both are undone with **Ctrl+Z**.
 
-You can also make them straight in [the World](/acore-quest-creator/guides/the-world/#new-npcs-and-objects): right-click the ground and choose **New NPC here…** or **New object here…**.
+You can also make them straight in [the World](/azeroth-world-editor/guides/the-world/#new-npcs-and-objects): right-click the ground and choose **New NPC here…** or **New object here…**.
 
 ## Change one that already exists
 
@@ -36,7 +36,7 @@ Some parts are read-only, with a line saying why:
 - **Loot**, when the loot list has references to other lists or groups.
 - An object whose type the editor does not have.
 
-An existing NPC's spawns are not in the editor. Change them in the World: move them, set their [respawn time](/acore-quest-creator/guides/the-world/#place-copy-and-paste), wander and paths.
+An existing NPC's spawns are not in the editor. Change them in the World: move them, set their [respawn time](/azeroth-world-editor/guides/the-world/#place-copy-and-paste), wander and paths.
 
 If the database has changed the NPC's rows since you first edited it, **Project changes** says so, so check before you apply the patch: applying it overwrites those changes.
 
@@ -52,9 +52,9 @@ The editor has tabs:
 :::note[Weapons only need a display]
 An NPC holds a weapon by its item's display alone, so any item works, even one your database lists without a proper name (it may show as `[MISSING ITEM NAME]`). The NPC still holds it in game.
 :::
-- **Fight**: how it fights. See the [combat wizard](/acore-quest-creator/guides/combat-wizard/).
-- **Loot**: what it drops. See [Loot](/acore-quest-creator/guides/loot/).
-- **Placement**: where it stands. **Add spawn**, then either paste the output of the in-game `.gps` command or place it on the [quest map](/acore-quest-creator/guides/quest-map/).
+- **Fight**: how it fights. See the [combat wizard](/azeroth-world-editor/guides/combat-wizard/).
+- **Loot**: what it drops. See [Loot](/azeroth-world-editor/guides/loot/).
+- **Placement**: where it stands. **Add spawn**, then either paste the output of the in-game `.gps` command or place it on the [quest map](/azeroth-world-editor/guides/quest-map/).
 
 ## The object editor
 
@@ -65,7 +65,7 @@ Objects have **Basics**, **Look**, **Placement**, and for some types **Contents*
 | Usable object | Something the player clicks, such as a lever or a quest item on the ground. Can show pages of text. |
 | Lootable | Something the player loots, such as a chest. Its **Contents** tab holds its loot. |
 | Quest giver | An object that offers or takes back quests, such as a wanted poster. |
-| Readable | A book, note or plaque. See [Readable objects](/acore-quest-creator/guides/readable-objects/). |
+| Readable | A book, note or plaque. See [Readable objects](/azeroth-world-editor/guides/readable-objects/). |
 | Decoration | Scenery with nothing to use. |
 
 Usable and lootable objects can be **Only usable while this quest is in the log**.
@@ -73,5 +73,5 @@ Usable and lootable objects can be **Only usable while this quest is in the log*
 On **Look**, **Other ways** lets you **Browse models** by name, such as `chest` or `book`.
 
 :::tip
-Without the [server data folder](/acore-quest-creator/getting-started/connect/#folders-optional), models and spells cannot be searched by name. Type their IDs instead.
+Without the [server data folder](/azeroth-world-editor/getting-started/connect/#folders-optional), models and spells cannot be searched by name. Type their IDs instead.
 :::

@@ -1,6 +1,6 @@
 # Wowser scene (vendored)
 
-For what the 3D editor is for, what works and what is next, see [docs/3d-editor.md](../../../../docs/3d-editor.md).
+How the 3D view is put together, and the rules it keeps, is in the [architecture page](https://dmck96.github.io/azeroth-world-editor/contributing/architecture/#the-3d-view).
 
 Three.js rendering classes for World of Warcraft terrain and models, copied from
 [wowserhq/scene](https://github.com/wowserhq/scene) 0.32.0 (`src/lib`, commit `cbe1211`), which is

@@ -1,6 +1,6 @@
 ---
 title: Settings and connection profiles
-description: Every connection setting, and where ACORE Quest Creator keeps its data on your computer.
+description: Every connection setting, and where Azeroth World Editor keeps its data on your computer.
 sidebar:
   order: 1
 ---
@@ -27,7 +27,7 @@ The world database is only ever read.
 | --- | --- |
 | Server data folder | The worldserver's data folder, the one holding `dbc/`. Adds XP values, name search for spells and models, ground height and floors on the map. |
 | Game client folder | The folder with `Wow.exe`. Adds zone art and the minimap to the quest map. |
-| Export folder | Where **Export patch** writes SQL files. Empty: `Documents/ACORE Quest Creator/sql`. |
+| Export folder | Where **Export patch** writes SQL files. Empty: `Documents/Azeroth World Editor/sql`. |
 
 All three are optional.
 
@@ -45,8 +45,8 @@ Connection details, recent projects, recovery copies and cached map tiles live i
 
 | System | Folder |
 | --- | --- |
-| Windows | `%APPDATA%\acore-quest-creator` |
-| macOS | `~/Library/Application Support/acore-quest-creator` |
-| Linux | `~/.config/acore-quest-creator` |
+| Windows | `%APPDATA%\azeroth-world-editor` |
+| macOS | `~/Library/Application Support/azeroth-world-editor` |
+| Linux | `~/.config/azeroth-world-editor` |
 
-Exported SQL patches go to the **Export folder**, or `Documents/ACORE Quest Creator/sql` when none is set. Projects are saved wherever you choose, as `.aqc` files.
+Exported SQL patches go to the **Export folder**, or `Documents/Azeroth World Editor/sql` when none is set. Projects are saved wherever you choose, as `.awe` files (older versions saved `.aqc`, which still open).

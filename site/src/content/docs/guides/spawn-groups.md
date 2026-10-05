@@ -7,14 +7,14 @@ sidebar:
 
 A **spawn group** is a set of spawns of which only some are up at a time. When the one that is up dies and its respawn time passes, the server rolls again and any member of the group can be the next. Rare spawns, rotating chests and herb patches that move around all work this way.
 
-Groups are made in [the World](/acore-quest-creator/guides/the-world/), from the spawns you select.
+Groups are made in [the World](/azeroth-world-editor/guides/the-world/), from the spawns you select.
 
 ## How a group works
 
 - **Up at once** is how many members are up at the same time. Most groups use 1.
 - Each member has a **Chance**, either a **Percentage** or an **Equal share**. An equal share is whatever is left after the percentages, divided evenly among the equal-share members.
 - A member can be an NPC spawn, an object spawn, or another group. A group of groups is how you build a choice between several things that each have their own choice inside.
-- The respawn time of each spawn decides how soon the next roll happens. See **Respawn time…** in [the right-click menu](/acore-quest-creator/guides/the-world/#place-copy-and-paste).
+- The respawn time of each spawn decides how soon the next roll happens. See **Respawn time…** in [the right-click menu](/azeroth-world-editor/guides/the-world/#place-copy-and-paste).
 
 ## Make a group
 
@@ -51,7 +51,7 @@ Choosing either of the last two shows **Which event**, a list of the game's even
 
 A group that follows an event shows **Only during _event_** or **Except during _event_** on its card. In the layers card, the **Event** choice treats the spawns of such a group like any other event spawn.
 
-An event can only be set on a group that is not inside another group. To make a whole choice follow an event, set it on the outer group. Rotating daily and weekly quests are a different kind of group and do not follow events; see [Quest rotations](/acore-quest-creator/guides/quest-rotations/).
+An event can only be set on a group that is not inside another group. To make a whole choice follow an event, set it on the outer group. Rotating daily and weekly quests are a different kind of group and do not follow events; see [Quest rotations](/azeroth-world-editor/guides/quest-rotations/).
 
 ## What the server refuses
 
@@ -75,5 +75,5 @@ The server will not spawn a group that breaks these, so the app will not write o
 - A group the database already has can be edited too. The project patch rewrites its rows and the revert patch writes the originals back.
 
 :::note
-Rotating daily or weekly quests are made on the Quests graph, not in the World. See [Quest rotations](/acore-quest-creator/guides/quest-rotations/).
+Rotating daily or weekly quests are made on the Quests graph, not in the World. See [Quest rotations](/azeroth-world-editor/guides/quest-rotations/).
 :::

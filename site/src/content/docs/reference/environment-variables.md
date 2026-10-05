@@ -1,6 +1,6 @@
 ---
 title: Environment variables
-description: The .env file and ACQC_* variables, for running ACORE Quest Creator from source.
+description: The .env file and ACQC_* variables, for running Azeroth World Editor from source.
 sidebar:
   order: 2
 ---
@@ -45,4 +45,4 @@ Variables already set in your shell win over the file.
 | `ACQC_TEST_MYSQL_URL` | The world database for integration and end-to-end tests, as `mysql://user:password@host:port/database`. |
 | `ACQC_AC_SQL_DIR` | The fork's `data/sql` folder, for tests that read its base SQL. Without it, tests use the `sql` folder beside `ACQC_WORLD_DB_DBC_DIR`'s parent. |
 
-See [Testing](/acore-quest-creator/contributing/testing/).
+See [Testing](/azeroth-world-editor/contributing/testing/).

@@ -1,15 +1,25 @@
 ---
 title: The World in 3D
-description: Walk the game world in 3D, place and move NPCs and objects, draw their paths, and tie them to your quest from a right-click menu.
+description: The heart of the app. Walk the game world in 3D, place and move NPCs and objects, fix and draw their paths, and tie them to your quests.
 sidebar:
-  order: 1.5
+  order: 0.5
 ---
 
-The **World** tab is the game world in 3D, drawn from your own game client. Walk it, place NPCs and objects that already exist, move them, draw the paths they walk, and tie them to the quest you have open. Changes to spawns that belong to no quest are kept as **world changes** and exported as a patch of their own.
+The **World** tab is where the app opens and where most work happens: the game world in 3D, drawn from your own game client. Walk it, place NPCs and objects that already exist, move them, draw the paths they walk, and tie them to the quest you have open. Changes to spawns that belong to no quest are kept as **world changes** and exported as a patch of their own.
 
 ![The World over Northshire Abbey, with Marshal McBride selected](../../../assets/screenshots/world.png)
 
-The World needs the **game client folder**, set when you [connect](/acore-quest-creator/getting-started/connect/). Without it the tab says so and offers Settings.
+## Before and after: fixing a route
+
+The Stormwind Guard who walks between Goldshire and Northshire Valley follows the stock route, which leaves the road outside Goldshire and cuts across the grass. A project that does nothing else drags that stretch back onto the road. Select the guard and his route is drawn; with **Trees & props** hidden, the whole of it shows.
+
+![Before: the stock route leaves the road north of Goldshire](../../../assets/screenshots/route-before.png)
+
+![After: the same stretch moved onto the road, with Project changes (1)](../../../assets/screenshots/route-after.png)
+
+The edit is one entry in **Project changes**, and **Export project patch** writes it as the route's new points, with a revert patch that puts the stock route back. Every other spawn and route stays as the database has it.
+
+The World needs the **game client folder**, set when you [connect](/azeroth-world-editor/getting-started/connect/). Without it the tab says so and offers Settings.
 
 ## Find your way
 
@@ -61,7 +71,7 @@ With something selected:
 - **G** moves it and **R** turns it, with the handles on the selection. A moved spawn drops onto the server's floor where you let go.
 - On a shown route, click a point to pick it, **Shift**-click (Alt-click in Select mode) to add one, and **Delete** to remove the picked points. A route keeps at least two points.
 - **O** turns on **Falloff**: nearby route points follow a move, less the further they are. **[** and **]** change its radius.
-- **Ctrl+Z** and **Ctrl+Y** undo and redo, one whole move or turn at a time. They're the project's undo, so they also reach changes made elsewhere; see [Undo and redo](/acore-quest-creator/guides/undo/).
+- **Ctrl+Z** and **Ctrl+Y** undo and redo, one whole move or turn at a time. They're the project's undo, so they also reach changes made elsewhere; see [Undo and redo](/azeroth-world-editor/guides/undo/).
 
 When a route is walked by more than one spawn, the app asks before it changes it for all of them.
 
@@ -93,7 +103,7 @@ These work for any NPC, whether the database has it or you made it.
 
 Right-click an NPC or object and open **Quests**:
 
-- With a quest open, **Set as quest giver**, **Set as quest ender** and **Add as kill objective** (**Add as use objective** for an object) give it that part in the quest. When it already has the part, the item reads **Remove as…** and takes it away. See [quest givers and enders](/acore-quest-creator/guides/givers-and-enders/).
+- With a quest open, **Set as quest giver**, **Set as quest ender** and **Add as kill objective** (**Add as use objective** for an object) give it that part in the quest. When it already has the part, the item reads **Remove as…** and takes it away. See [quest givers and enders](/azeroth-world-editor/guides/givers-and-enders/).
 - On an NPC, **Start a new quest from this NPC** makes a quest it gives and takes back. With a quest open, **Start the next quest in this chain** does the same and puts the new quest after the open one.
 
 On the ground, with a quest open:
@@ -102,15 +112,15 @@ On the ground, with a quest open:
 
 ### New NPCs and objects
 
-- **New NPC here…** and **New object here…** make a new [NPC or object](/acore-quest-creator/guides/npcs-and-objects/) for the project, with a spawn where you right-clicked, and open its editor. No quest needs to be open.
-- On any NPC or object, **Edit NPC…** or **Edit object…** opens its editor. For one the database already has this needs the world database connected; see [Change an NPC or object that already exists](/acore-quest-creator/guides/npcs-and-objects/#change-one-that-already-exists).
+- **New NPC here…** and **New object here…** make a new [NPC or object](/azeroth-world-editor/guides/npcs-and-objects/) for the project, with a spawn where you right-clicked, and open its editor. No quest needs to be open.
+- On any NPC or object, **Edit NPC…** or **Edit object…** opens its editor. For one the database already has this needs the world database connected; see [Change an NPC or object that already exists](/azeroth-world-editor/guides/npcs-and-objects/#change-one-that-already-exists).
 - On an object, **Make lootable…** turns it into a chest and opens its loot. **Stop being lootable** turns it back.
 
 An NPC or object is the project's, and a quest uses it by naming it. The project's NPCs and objects are drawn and edited in the World whether or not a quest is open. A move, or a path you give one, stays with the NPC, whichever quest uses it.
 
 ### Spawn groups
 
-Select two or more spawns and choose **Group these spawns…** to make a [spawn group](/acore-quest-creator/guides/spawn-groups/): only some of them are up at a time. On a spawn that is already in a group, **Spawn group ▸** holds **Edit group…**, **Show group** and **Remove from group**. Selecting a pooled spawn rings the rest of its group, and the card lists each member's chance. In **Find…**, the **Spawn group** option searches groups by name.
+Select two or more spawns and choose **Group these spawns…** to make a [spawn group](/azeroth-world-editor/guides/spawn-groups/): only some of them are up at a time. On a spawn that is already in a group, **Spawn group ▸** holds **Edit group…**, **Show group** and **Remove from group**. Selecting a pooled spawn rings the rest of its group, and the card lists each member's chance. In **Find…**, the **Spawn group** option searches groups by name.
 
 ## Project changes
 
@@ -125,13 +135,13 @@ First comes the project's list of NPCs, objects and items: every one you made, a
 - **Details changed**: you edited the NPC, object or item itself.
 - **Group changed**: one of its spawns joined, left or was changed in a spawn group.
 
-The quest panel shows the same list; see [NPCs and objects](/acore-quest-creator/guides/npcs-and-objects/).
+The quest panel shows the same list; see [NPCs and objects](/azeroth-world-editor/guides/npcs-and-objects/).
 
 Then come changes to spawns already in the database: spawns moved or turned, respawn times, routes changed, spawns placed, NPCs' movement and spawn groups, each with what it was before and after. **Revert** or **Remove** takes one back; a new path and the movement that walks it go back together.
 
 ![The Project changes list: a placed guard, its new path and its movement](../../../assets/screenshots/world-changes.png)
 
-**Export project patch** writes all of it, and a patch that undoes it. If one of the new NPCs, objects or items has an error, it lists what to fix first. See [exporting and applying](/acore-quest-creator/guides/export-and-apply/#the-project-patch).
+**Export project patch** writes all of it, and a patch that undoes it. If one of the new NPCs, objects or items has an error, it lists what to fix first. See [exporting and applying](/azeroth-world-editor/guides/export-and-apply/#the-project-patch).
 
 :::note
 A change shows as *Changed in the database since* when the world database no longer matches what it was when you first changed it. Check those before applying the patch.

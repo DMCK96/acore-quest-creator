@@ -31,7 +31,7 @@ Consumables, trade goods and quest items aren't worn, so **Gear** starts hidden 
 
 Pick an item the database already has in any item picker, such as a reward, and choose **Edit…**. The editor opens with its title ending in **(existing)**. It needs the world database connected.
 
-The first edit adds the item to the project (one undo step) and lists it as **Details changed**. Nothing in the database changes until you apply the project patch, which writes the item's row with your changes over it, so fields the editor does not show stay as they were. **Put back as the database has it** takes your changes away again. See [NPCs and objects](/acore-quest-creator/guides/npcs-and-objects/#change-one-that-already-exists) for how editing an existing one works.
+The first edit adds the item to the project (one undo step) and lists it as **Details changed**. Nothing in the database changes until you apply the project patch, which writes the item's row with your changes over it, so fields the editor does not show stay as they were. **Put back as the database has it** takes your changes away again. See [NPCs and objects](/azeroth-world-editor/guides/npcs-and-objects/#change-one-that-already-exists) for how editing an existing one works.
 
 ## Readable items
 

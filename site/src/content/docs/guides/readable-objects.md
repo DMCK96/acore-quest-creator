@@ -20,4 +20,4 @@ A **readable object** shows pages of text when a player uses it: a ledger, a not
 
 Use **Up** and **Down** to reorder pages and **Remove** to delete one.
 
-After you apply the quest to your test server, the `.reload page_text` command in [Test in game](/acore-quest-creator/guides/test-in-game/) loads new pages without a restart. A new object itself appears only after a server restart.
+After you apply the quest to your test server, the `.reload page_text` command in [Test in game](/azeroth-world-editor/guides/test-in-game/) loads new pages without a restart. A new object itself appears only after a server restart.

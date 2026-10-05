@@ -1,15 +1,15 @@
 ---
-title: ACORE Quest Creator
-description: Build and script AzerothCore quests, NPCs and objects without editing database tables by hand.
+title: Azeroth World Editor
+description: 'Edit your AzerothCore world in 3D: quests, NPCs, objects, spawns and scripting, without editing database tables by hand.'
 template: splash
 hero:
-  tagline: Build and script quests for your AzerothCore server, then export them as SQL.
+  tagline: Build the world of your AzerothCore server, from quests and scripting to every NPC and object in it, then export it as SQL.
   actions:
     - text: Get started
-      link: /acore-quest-creator/getting-started/introduction/
+      link: /azeroth-world-editor/getting-started/introduction/
       icon: right-arrow
     - text: View on GitHub
-      link: https://github.com/DMCK96/acore-quest-creator
+      link: https://github.com/DMCK96/azeroth-world-editor
       icon: github
 ---
 
@@ -17,6 +17,13 @@ import QuestChain from '../../components/QuestChain.astro';
 
 <QuestChain
 	steps={[
+		{
+			title: 'The world in 3D',
+			meta: 'Spawns · paths · project patch',
+			chip: 'World',
+			href: '/guides/the-world/',
+			text: 'Start here: walk the game world from your own client, place and move NPCs and objects, fix their paths, group spawns, and export it all as one patch.',
+		},
 		{
 			title: 'Quests on a canvas',
 			meta: 'Chains · givers · rewards',
@@ -37,13 +44,6 @@ import QuestChain from '../../components/QuestChain.astro';
 			chip: 'NPC',
 			href: '/guides/npcs-and-objects/',
 			text: 'Make new NPCs and objects, pick how they look, and give them loot.',
-		},
-		{
-			title: 'The world in 3D',
-			meta: 'Spawns · paths · project patch',
-			chip: 'World',
-			href: '/guides/the-world/',
-			text: 'Walk the game world, place and move NPCs and objects, draw their paths, and export the changes as a patch.',
 		},
 	]}
 />
