@@ -11,7 +11,7 @@ Rotations are made on the **Quests** graph, from the quests you select.
 
 ## Make a rotation
 
-1. On the Quests graph, select the quests: **Ctrl**-click each, or **Shift**-drag a box round them.
+1. On the Quests graph, select the quests: **Ctrl**- or **Shift**-click each, or **Shift**-drag a box round them.
 2. In the **Quest tools**, choose **Rotate these quests…**. The **Quest rotation** dialog opens.
 3. Give the rotation a **Name**, and choose **Daily** or **Weekly**.
 4. Set **Offered each reset**: how many of the quests are offered at a time.
@@ -22,7 +22,7 @@ The quests in a rotation must all be daily or all weekly. If one is not, the dia
 
 If a quest you chose is already in another rotation, the dialog offers **Move _title_ here**. A quest can be in only one rotation.
 
-On the graph, each quest in a rotation is tagged **Daily rotation: _name_** or **Weekly rotation: _name_**. The same tag line shows in the open quest's Flags summary. To change a rotation, click its tag on any of its quests' cards on the graph; the **Quest rotation** dialog opens. Selecting quests and choosing **Rotate these quests…** always makes a new rotation. **Delete rotation** removes it; the quests stay, and keep their daily or weekly flag.
+On the graph, each quest in a rotation is tagged **Daily rotation: _name_** or **Weekly rotation: _name_**. The same line shows in the open quest's **Behaviour** module, in the preview and in the editor. To change a rotation, click its tag on any of its quests' cards on the graph; the **Quest rotation** dialog opens. Selecting quests and choosing **Rotate these quests…** always makes a new rotation. **Delete rotation** removes it; the quests stay, and keep their daily or weekly flag.
 
 Saving is one undo step. The rotation is listed in **Project changes**, goes out with the project patch, and the revert patch takes it away again.
 
