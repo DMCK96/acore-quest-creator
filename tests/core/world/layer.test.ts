@@ -360,12 +360,6 @@ describe('spawn groups in the layer', () => {
       expect(back).toHaveLength(db.length);
     }
   });
-
-  it('never touches game_event_pool', () => {
-    const tied = { ...existing, origin: { kind: 'existing' as const, original: { ...original, event: { eventEntry: '12', pool_entry: '32492' } } } };
-    const { apply, revert } = worldStatements(putGroup(EMPTY_WORLD, tied));
-    expect([...apply, ...revert].some((s) => s.table === 'game_event_pool')).toBe(false);
-  });
 });
 
 describe('respawn time', () => {
@@ -395,5 +389,43 @@ describe('respawn time', () => {
     expect((apply.find((s) => s.kind === 'insert' && s.table === 'gameobject') as any).row.spawntimesecs).toBe('30');
     expect(hasWorldChanges({ ...EMPTY_WORLD, respawns: [{ ...edit, current: 60 }] })).toBe(true);
     expect(respawnsOf(revertRespawn(layer, 'creature', 80330))).toEqual([]);
+  });
+});
+
+describe('rotations and events in the patch', () => {
+  const rotation = { id: 900010, name: 'Dailies', map: 0, maxActive: 1, members: [{ type: 'quest' as const, questId: 60001 }, { type: 'quest' as const, questId: 60002 }], origin: { kind: 'new' as const }, event: null };
+
+  it('writes a new rotation as a template and pool_quest rows, deletes first, and the revert removes them', () => {
+    const { apply, revert } = worldStatements(putGroup(EMPTY_WORLD, rotation));
+    expect(apply).toEqual(expect.arrayContaining([
+      { kind: 'delete', table: 'pool_quest', key: { pool_entry: '900010' } },
+      { kind: 'insert', table: 'pool_template', row: { entry: '900010', max_limit: '1', description: 'Dailies' } },
+      { kind: 'insert', table: 'pool_quest', row: { entry: '60001', pool_entry: '900010', description: 'Dailies' } },
+      { kind: 'insert', table: 'pool_quest', row: { entry: '60002', pool_entry: '900010', description: 'Dailies' } },
+    ]));
+    const lastDelete = Math.max(...apply.map((s, i) => (s.kind === 'delete' ? i : -1)));
+    const firstInsert = apply.findIndex((s) => s.kind === 'insert');
+    expect(lastDelete).toBeLessThan(firstInsert);
+    expect(revert).toContainEqual({ kind: 'delete', table: 'pool_quest', key: { pool_entry: '900010' } });
+  });
+
+  it("writes a new group's event, during as positive and except during as negative", () => {
+    const camp = { id: 900020, name: 'Camp', map: 0, maxActive: 1, members: [{ type: 'spawn' as const, kind: 'npc' as const, guid: 1, entry: 1, chance: 0 }], origin: { kind: 'new' as const }, event: { id: 4, during: false } };
+    const { apply, revert } = worldStatements(putGroup(EMPTY_WORLD, camp));
+    expect(apply).toContainEqual({ kind: 'delete', table: 'game_event_pool', key: { pool_entry: '900020' } });
+    expect(apply).toContainEqual({ kind: 'insert', table: 'game_event_pool', row: { eventEntry: '-4', pool_entry: '900020' } });
+    expect(revert).toContainEqual({ kind: 'delete', table: 'game_event_pool', key: { pool_entry: '900020' } });
+  });
+
+  it("leaves an existing group's event row alone when its event did not change, and puts it back when it did", () => {
+    const eventRow = { eventEntry: '12', pool_entry: '32492' };
+    const existing = { id: 32492, name: 'Path 1', map: 571, maxActive: 1, members: [{ type: 'spawn' as const, kind: 'npc' as const, guid: 39203, entry: 32491, chance: 0 }],
+      origin: { kind: 'existing' as const, original: { template: { entry: '32492', max_limit: '1', description: 'Path 1' }, members: [], event: eventRow } }, event: { id: 12, during: true } };
+    const same = worldStatements(putGroup(EMPTY_WORLD, { ...existing, maxActive: 1 }));
+    expect([...same.apply, ...same.revert].some((s) => s.table === 'game_event_pool')).toBe(false);
+    const changed = worldStatements(putGroup(EMPTY_WORLD, { ...existing, event: null }));
+    expect(changed.apply).toContainEqual({ kind: 'delete', table: 'game_event_pool', key: { pool_entry: '32492' } });
+    expect(changed.apply.some((s) => s.kind === 'insert' && s.table === 'game_event_pool')).toBe(false);
+    expect(changed.revert).toContainEqual({ kind: 'insert', table: 'game_event_pool', row: eventRow });
   });
 });

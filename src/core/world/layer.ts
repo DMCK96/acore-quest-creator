@@ -434,31 +434,42 @@ const POOL_KEYS: [PatchStatement['table'], string][] = [
   ['pool_creature', 'pool_entry'],
   ['pool_gameobject', 'pool_entry'],
   ['pool_pool', 'mother_pool'],
+  ['pool_quest', 'pool_entry'],
 ];
 
 /**
  * A group's rows: the four deletes by its id, and what to write on apply and on revert. Kept apart so
- * every group's deletes can go before any group's inserts. Never touches game_event_pool.
+ * every group's deletes can go before any group's inserts. game_event_pool is written only when the event differs from the one the group had.
  */
 function groupStatements(g: SpawnGroup): { deletes: PatchStatement[]; apply: PatchStatement[]; revert: PatchStatement[] } {
   const id = String(g.id);
   const deletes: PatchStatement[] = POOL_KEYS.map(([table, column]) => ({ kind: 'delete', table, key: { [column]: id } }));
   const inserts: PatchStatement[] = [{ kind: 'insert', table: 'pool_template', row: { entry: id, max_limit: String(g.maxActive), description: g.name } }];
   for (const m of g.members) {
-    // Quest members (pool_quest) are not written yet
-    if (m.type === 'quest') continue;
-    if (m.type === 'group') {
+    if (m.type === 'quest') {
+      inserts.push({ kind: 'insert', table: 'pool_quest', row: { entry: String(m.questId), pool_entry: id, description: g.name } });
+    } else if (m.type === 'group') {
       inserts.push({ kind: 'insert', table: 'pool_pool', row: { pool_id: String(m.id), mother_pool: id, chance: String(m.chance), description: g.name } });
     } else {
       const table = m.kind === 'npc' ? 'pool_creature' : 'pool_gameobject';
       inserts.push({ kind: 'insert', table, row: { guid: String(m.guid), pool_entry: id, chance: String(m.chance), description: g.name } });
     }
   }
+  // The event the group has now (none once removed) against the one it came with
+  const now = g.removed ? null : g.event;
+  const was = g.origin.kind === 'existing' ? g.origin.original.event : null;
+  const wasEvent = was ? { id: Math.abs(Number(was.eventEntry)), during: Number(was.eventEntry) > 0 } : null;
+  const eventChanged = (now?.id ?? null) !== (wasEvent?.id ?? null) || (now?.during ?? null) !== (wasEvent?.during ?? null);
+  if (eventChanged) {
+    deletes.push({ kind: 'delete', table: 'game_event_pool', key: { pool_entry: id } });
+    if (now) inserts.push({ kind: 'insert', table: 'game_event_pool', row: { eventEntry: String(now.during ? now.id : -now.id), pool_entry: id } });
+  }
   const back: PatchStatement[] =
     g.origin.kind === 'existing'
       ? [
           { kind: 'insert', table: 'pool_template', row: g.origin.original.template },
           ...g.origin.original.members.map((m): PatchStatement => ({ kind: 'insert', table: m.table, row: m.row })),
+          ...(eventChanged && g.origin.original.event ? [{ kind: 'insert', table: 'game_event_pool', row: g.origin.original.event } as PatchStatement] : []),
         ]
       : [];
   return { deletes, apply: g.removed ? [] : inserts, revert: back };

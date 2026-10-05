@@ -21,7 +21,7 @@ export const PROJECT_FORMAT = 'acore-quest-creator/project';
  * 5 added respawn times, spawn groups and route walkers to the world layer (an older tool would drop
  * them on a save, so it refuses the file instead).
  */
-export const PROJECT_VERSION = 5;
+export const PROJECT_VERSION = 6;
 export const PROJECT_EXTENSION = 'aqc';
 export const DEFAULT_PROJECT_NAME = 'Untitled Project';
 export const DEFAULT_ID_RANGE = { start: 60000, end: 99999 } as const;

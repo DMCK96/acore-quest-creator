@@ -53,7 +53,7 @@ describe('project file', () => {
   });
 
   it('refuses a newer format version and says which', () => {
-    const text = serializeProject(doc()).replace(`"version": ${PROJECT_VERSION}`, '"version": 7');
+    const text = serializeProject(doc()).replace(`"version": ${PROJECT_VERSION}`, `"version": ${PROJECT_VERSION + 1}`);
     expect(reasonOf(() => parseProject(text))).toBe('newer-version');
     expect(() => parseProject(text)).toThrow(/7/);
   });
@@ -134,6 +134,28 @@ describe('project file: the world layer', () => {
       ],
     };
     expect(parseProject(serializeProject(doc({ world: full }))).world).toEqual(full);
+  });
+
+  it('keeps rotations and group events through a save and reopen, as version 6', () => {
+    const groups = [
+      { id: 900010, name: 'Dailies', map: 0, maxActive: 1, event: null, origin: { kind: 'new' as const },
+        members: [{ type: 'quest' as const, questId: 60001 }, { type: 'quest' as const, questId: 60002 }] },
+      { id: 900011, name: 'Camp', map: 0, maxActive: 1, event: { id: 4, during: true }, origin: { kind: 'new' as const },
+        members: [{ type: 'spawn' as const, kind: 'npc' as const, guid: 80331, entry: 1423, chance: 0 }] },
+    ];
+    const text = serializeProject(doc({ world: { ...world, groups } }));
+    expect(JSON.parse(text).version).toBe(6);
+    expect(PROJECT_VERSION).toBe(6);
+    expect(parseProject(text).world.groups).toEqual(groups);
+  });
+
+  it('opens a version 5 file with groups that have no event, reading event as null', () => {
+    const groups = [{ id: 900001, name: 'Path 1', map: 0, maxActive: 1, event: null, origin: { kind: 'new' as const },
+      members: [{ type: 'spawn' as const, kind: 'npc' as const, guid: 80331, entry: 1423, chance: 0 }] }];
+    const raw = JSON.parse(serializeProject(doc({ world: { ...world, groups } })));
+    raw.version = 5;
+    delete raw.world.groups[0].event;
+    expect(parseProject(JSON.stringify(raw)).world.groups![0]!.event).toBeNull();
   });
 
   it('writes no respawns or groups for a layer without any, as before', () => {
