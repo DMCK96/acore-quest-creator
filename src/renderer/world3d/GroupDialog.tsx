@@ -41,6 +41,8 @@ export function GroupDialog({
   names,
   check,
   groupsOnMap,
+  events = [],
+  nested = false,
   onSave,
   onRespawnAll,
   onClose,
@@ -50,6 +52,10 @@ export function GroupDialog({
   names: ReadonlyMap<string, string>;
   check(group: SpawnGroup, moves: GroupMove[]): Promise<GroupCheck>;
   groupsOnMap: { id: number; name: string }[];
+  /** The game events a group can follow, by name */
+  events?: { id: number; name: string }[];
+  /** The group is inside another, so it cannot follow an event itself */
+  nested?: boolean;
   onSave(group: SpawnGroup, moves: GroupMove[]): void;
   onRespawnAll?(): void;
   onClose(): void;
@@ -64,6 +70,8 @@ export function GroupDialog({
   /** The group and moves the shown reasons are for; Save waits while it is not the current one */
   const [checkedKey, setCheckedKey] = useState<string | null>(null);
   const [adding, setAdding] = useState(false);
+  const [eventMode, setEventMode] = useState<'always' | 'during' | 'except'>(group.event ? (group.event.during ? 'during' : 'except') : 'always');
+  const [eventId, setEventId] = useState<number | null>(group.event?.id ?? null);
 
   const nameOf = (m: GroupMember): string => {
     const known = names.get(memberKey(m));
@@ -76,7 +84,10 @@ export function GroupDialog({
   const members: GroupMember[] = rows.map((r) =>
     r.member.type === 'quest' ? r.member : { ...r.member, chance: r.mode === 'equal' ? 0 : numberOf(r.percent) },
   );
-  const edited: SpawnGroup = { ...group, name: name.trim(), maxActive: numberOf(upAtOnce), members };
+  // A choice of event with none picked yet follows the first one listed
+  const pickedId = eventId ?? events[0]?.id ?? null;
+  const event = nested || eventMode === 'always' || pickedId === null ? null : { id: pickedId, during: eventMode === 'during' };
+  const edited: SpawnGroup = { ...group, name: name.trim(), maxActive: numberOf(upAtOnce), members, event };
   const share = equalShare(members);
 
   // Checked again a moment after each change; an answer to an older group is dropped
@@ -166,6 +177,27 @@ export function GroupDialog({
             <span>Up at once</span>
             <input type="number" min={1} step={1} data-selection="on" value={upAtOnce} onChange={(e) => setUpAtOnce(e.target.value)} />
           </label>
+          <label className="scene-field">
+            <span>Event</span>
+            <select aria-label="Event" data-selection="on" disabled={nested} value={nested ? 'always' : eventMode} onChange={(e) => setEventMode(e.target.value === 'during' ? 'during' : e.target.value === 'except' ? 'except' : 'always')}>
+              <option value="always">Always</option>
+              <option value="during">Only during</option>
+              <option value="except">Except during</option>
+            </select>
+          </label>
+          {!nested && eventMode !== 'always' && (
+            <label className="scene-field">
+              <span>Which event</span>
+              <select aria-label="Which event" data-selection="on" value={pickedId ?? ''} onChange={(e) => setEventId(Number(e.target.value))}>
+                {events.map((ev) => (
+                  <option key={ev.id} value={ev.id}>
+                    {ev.name || `Event ${ev.id}`}
+                  </option>
+                ))}
+              </select>
+            </label>
+          )}
+          {nested && <p>Only a group that is not inside another can follow an event.</p>}
           <h3 className="world3d__group-dialog-heading">Members</h3>
           <ul className="world3d__group-dialog-members">
             {rows.map((row, index) => {

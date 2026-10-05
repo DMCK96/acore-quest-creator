@@ -28,7 +28,7 @@ import { World3DView } from '../../src/renderer/world3d/World3DView';
 
 afterEach(() => { worlds.length = 0; vi.unstubAllGlobals(); });
 
-const view = { id: 32492, name: 'Path 1', map: 571, maxActive: 1, members: [
+const view = { id: 32492, name: 'Path 1', map: 571, maxActive: 1, event: null, members: [
   { key: 'npc:39203', type: 'spawn' as const, name: 'Time-Lost Proto-Drake', chance: 10, at: { x: 10, y: 0, z: 0 } },
   { key: 'npc:39207', type: 'spawn' as const, name: 'Vyragosa', chance: 0, at: { x: 12, y: 0, z: 0 } },
 ] };
@@ -44,6 +44,16 @@ describe('the group card', () => {
     expect(within(card).getByText('Vyragosa · 90% (equal share)')).toBeTruthy();
     await userEvent.click(within(card).getByRole('button', { name: 'Edit group…' }));
     expect(onEdit).toHaveBeenCalled();
+  });
+});
+
+describe('the group card event line', () => {
+  it('says which event the group follows', () => {
+    const { unmount } = render(<GroupCard view={{ ...view, event: { id: 12, name: 'Darkmoon Faire', during: true } }} onClose={vi.fn()} />);
+    expect(screen.getByText('Only during Darkmoon Faire')).toBeTruthy();
+    unmount();
+    render(<GroupCard view={{ ...view, event: { id: 12, name: 'Darkmoon Faire', during: false } }} onClose={vi.fn()} />);
+    expect(screen.getByText('Except during Darkmoon Faire')).toBeTruthy();
   });
 });
 

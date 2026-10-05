@@ -32,6 +32,8 @@ export interface GroupView {
   name: string;
   map: number;
   maxActive: number;
+  /** The game event it follows, by name; null for always */
+  event: { id: number; name: string; during: boolean } | null;
   members: { key: string; type: 'spawn' | 'group'; name: string; chance: number; at: { x: number; y: number; z: number } | null }[];
 }
 

@@ -86,4 +86,21 @@ describe('the group dialog', () => {
     await act(async () => pending[1]!(fine));
     expect(save).toHaveProperty('disabled', false);
   });
+
+  it('sets the event: always, only during, except during', async () => {
+    const onSave = vi.fn();
+    const events = [{ id: 12, name: 'Darkmoon Faire' }, { id: 4, name: "Hallow's End" }];
+    render(<GroupDialog group={{ ...group, name: 'Camp', event: null }} names={names} check={async () => fine} groupsOnMap={[]} events={events} nested={false} onSave={onSave} onClose={vi.fn()} />);
+    await userEvent.selectOptions(screen.getByLabelText('Event'), 'Only during');
+    await userEvent.selectOptions(screen.getByLabelText('Which event'), '12');
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Save' })).toHaveProperty('disabled', false));
+    await userEvent.click(screen.getByRole('button', { name: 'Save' }));
+    expect(onSave.mock.calls[0]![0].event).toEqual({ id: 12, during: true });
+  });
+
+  it('a group inside another cannot follow an event, and says why', () => {
+    render(<GroupDialog group={{ ...group, name: 'Path', event: null }} names={names} check={async () => fine} groupsOnMap={[]} events={[]} nested onSave={vi.fn()} onClose={vi.fn()} />);
+    expect(screen.getByLabelText('Event')).toHaveProperty('disabled', true);
+    expect(screen.getByText('Only a group that is not inside another can follow an event.')).toBeTruthy();
+  });
 });

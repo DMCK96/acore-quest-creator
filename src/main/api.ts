@@ -2283,7 +2283,12 @@ export function createApi(deps: ApiDeps): Api {
           const name = own?.name ?? placedName ?? (await db.lookupNames(table, [m.entry])).get(m.entry) ?? '';
           members.push({ key: memberKey(m), type: 'spawn', name, chance: m.chance, at: await spawnAt(db, m.kind, m.guid) });
         }
-        return { id: group.id, name: group.name, map: group.map, maxActive: group.maxActive, members };
+        let event: GroupView['event'] = null;
+        if (group.event) {
+          const named = (await db.columns('game_event')).length > 0 ? await db.selectRows('game_event', { eventEntry: String(group.event.id) }) : [];
+          event = { id: group.event.id, name: named[0]?.description || `Event ${group.event.id}`, during: group.event.during };
+        }
+        return { id: group.id, name: group.name, map: group.map, maxActive: group.maxActive, event, members };
       }),
 
     worldGroupsOnMap: (map) =>

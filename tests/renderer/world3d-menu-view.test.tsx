@@ -296,7 +296,7 @@ describe('the right-click menu in the 3D view', () => {
     // Save waits for the check of the latest change
     await waitFor(() => expect(within(dialog).getByRole('button', { name: 'Save' })).toHaveProperty('disabled', false));
     await userEvent.click(within(dialog).getByRole('button', { name: 'Save' }));
-    await waitFor(() => expect(api.worldSetGroup).toHaveBeenCalledWith({ id: 900001, name: 'Camp', map: 0, maxActive: 1, origin: { kind: 'new' },
+    await waitFor(() => expect(api.worldSetGroup).toHaveBeenCalledWith({ id: 900001, name: 'Camp', map: 0, maxActive: 1, event: null, origin: { kind: 'new' },
       members: [{ type: 'spawn', kind: 'npc', guid: 80330, entry: 1423, chance: 0 }, { type: 'spawn', kind: 'npc', guid: 80331, entry: 68, chance: 0 }] }, []));
     await waitFor(() => expect(api.historyEnd).toHaveBeenCalledTimes(1));
   });

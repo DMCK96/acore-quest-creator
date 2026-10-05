@@ -74,7 +74,7 @@ type RespawnTarget = { ref: SpawnRef; name: string; respawnSecs: number | null }
 const respawnTargetOf = (s: MenuSpawn): RespawnTarget => ({ ref: refOf(s), name: s.name, respawnSecs: s.respawnSecs });
 
 /** A spawn group open in the dialog: the members by name, and the other groups on its map */
-type GroupEdit = { group: SpawnGroup; names: Map<string, string>; groupsOnMap: { id: number; name: string }[] };
+type GroupEdit = { group: SpawnGroup; names: Map<string, string>; groupsOnMap: { id: number; name: string }[]; events: { id: number; name: string }[]; nested: boolean };
 
 /**
  * The 3D view's right-click menu: what it offers for a right-clicked target, and what each item does.
@@ -225,6 +225,16 @@ export function useWorldMenu(deps: WorldMenuDeps): {
     return found?.ok ? found.value.filter((g) => g.id !== except).map((g) => ({ id: g.id, name: g.name })) : [];
   };
 
+  /** The game events a group can follow, and whether the group is a member of another on the map */
+  const eventChoices = async (id: number): Promise<{ events: { id: number; name: string }[]; nested: boolean }> => {
+    const { api, map } = d.current;
+    const [events, onMap] = await Promise.all([api?.gameEvents(), api?.worldGroupsOnMap(map)]);
+    return {
+      events: events?.ok ? events.value : [],
+      nested: onMap?.ok ? onMap.value.some((g) => g.groups.includes(id)) : false,
+    };
+  };
+
   /** Opens the dialog on a spawn group, its members named as the view describes them */
   const openGroup = async (id: number): Promise<void> => {
     const { api, setNote } = d.current;
@@ -235,7 +245,7 @@ export function useWorldMenu(deps: WorldMenuDeps): {
       return;
     }
     const names = new Map(view.ok && view.value ? view.value.members.map((m) => [m.key, m.name] as const) : []);
-    setGroupEdit({ group: found.value, names, groupsOnMap: await groupsHere(id) });
+    setGroupEdit({ group: found.value, names, groupsOnMap: await groupsHere(id), ...(await eventChoices(id)) });
   };
 
   /** Saves a group as one step; a refusal says why, keeps the dialog open and leaves no change */
@@ -375,7 +385,7 @@ export function useWorldMenu(deps: WorldMenuDeps): {
           origin: { kind: 'new' },
         };
         const names = new Map(spawns.map((s) => [`${poolKind(s.kind)}:${s.guid}`, s.name]));
-        setGroupEdit({ group, names, groupsOnMap: await groupsHere(id.value) });
+        setGroupEdit({ group, names, groupsOnMap: await groupsHere(id.value), ...(await eventChoices(id.value)) });
         return;
       }
       case 'editGroup':
@@ -541,6 +551,8 @@ export function useWorldMenu(deps: WorldMenuDeps): {
           group={groupEdit.group}
           names={groupEdit.names}
           groupsOnMap={groupEdit.groupsOnMap}
+          events={groupEdit.events}
+          nested={groupEdit.nested}
           check={async (group, moves) => {
             const result = await d.current.api?.worldCheckGroup(group, moves);
             return !result ? { reasons: ['Needs the world database'], notes: [] } : result.ok ? result.value : { reasons: [result.error.message], notes: [] };

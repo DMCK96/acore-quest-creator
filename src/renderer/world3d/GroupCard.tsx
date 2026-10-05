@@ -36,6 +36,7 @@ export function GroupCard({ view, onEdit, onClose }: { view: GroupView; onEdit?(
         </button>
       </header>
       <p>{`${view.maxActive} of ${view.members.length} at a time`}</p>
+      {view.event && <p>{`${view.event.during ? 'Only during' : 'Except during'} ${view.event.name}`}</p>}
       <ul className="world3d__group-members">
         {view.members.map((m) => (
           <li key={m.key}>{m.chance === 0 ? `${m.name} · ${percent(share)}% (equal share)` : `${m.name} · ${percent(m.chance)}%`}</li>

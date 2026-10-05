@@ -542,6 +542,17 @@ describe('the world layer in the view', () => {
     expect([m.info('creature', 1)!.group, m.info('creature', 2)!.group, m.info('creature', 3)!.group, m.info('object', 4)!.group]).toEqual([null, null, 9, 7]);
   });
 
+  it("a layer group's event overrides the database's for its spawns", async () => {
+    const m = manager({ creatures: [creature(1, 1, { x: 0.5, y: 0.5 })], objects: [], capped: { creatures: false, objects: false } });
+    await m.loadArea(1, 0, box);
+    await m.setWorldLayer({ spawns: [], routes: [], added: [], groups: [
+      { id: 9, name: 'b', map: 0, maxActive: 1, event: { id: 4, during: true }, origin: { kind: 'new' }, members: [{ type: 'spawn', kind: 'npc', guid: 1, entry: 1, chance: 0 }] },
+    ] });
+    expect(m.info('creature', 1)).toBeNull();
+    await m.setVisibility({ creatures: true, objects: true, paths: true, events: 4 });
+    expect(m.info('creature', 1)).not.toBeNull();
+  });
+
   it("describes a spawn's respawn time: the layer's edit over the database's, and a placed spawn's own or 300", async () => {
     const m = manager({ creatures: [creature(1, 1, { x: 0.5, y: 0.5, respawnSecs: 120 })], objects: [object(5, 2, { x: 0.5, y: 0.5, respawnSecs: 60 })], capped: { creatures: false, objects: false } });
     await m.loadArea(1, 0, box);

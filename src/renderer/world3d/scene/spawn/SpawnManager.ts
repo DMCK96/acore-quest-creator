@@ -362,6 +362,7 @@ class SpawnManager {
     const spawns = withLooks(rawSpawns, this.#looks);
     const inBox = (s: { map: number; x: number; y: number }) => s.map === map && s.x >= box.minX && s.x <= box.maxX && s.y >= box.minY && s.y <= box.maxY;
     const shown = (s: Parameters<typeof inEvent>[0]) => inEvent(s, this.#visibility.events);
+    const eventNames = new globalThis.Map(this.status.events.map((e) => [e.id, e.name]));
     const ownCreatures = new Set(this.#own.creatures.map((c) => c.guid));
     const ownObjects = new Set(this.#own.objects.map((o) => o.guid));
     const placed = (kind: 'creature' | 'gameobject', guid: number) => this.#layer.spawns.find((s) => s.kind === kind && s.guid === guid)?.current;
@@ -376,6 +377,20 @@ class SpawnManager {
       for (const m of g.members) if (m.type === 'spawn') inLayerGroup.set(`${m.kind}:${m.guid}`, g.id);
     }
     const layerGroupIds = new Set(layerGroups.map((g) => g.id));
+    // A layer group's event overrides the database's for its spawns (also one cleared there)
+    const eventOfSpawn = new globalThis.Map<string, { events: ViewEvent[]; removedBy: ViewEvent[] }>();
+    for (const g of layerGroups) {
+      if (g.removed) continue;
+      const cleared = g.origin.kind === 'existing' && g.origin.original.event !== null;
+      if (!g.event && !cleared) continue;
+      const e = g.event ? { id: g.event.id, name: eventNames.get(g.event.id) ?? `Event ${g.event.id}` } : null;
+      const over = { events: e && g.event!.during ? [e] : [], removedBy: e && !g.event!.during ? [e] : [] };
+      for (const m of g.members) if (m.type === 'spawn') eventOfSpawn.set(`${m.kind}:${m.guid}`, over);
+    }
+    const evented = <T extends { guid: number }>(kind: 'npc' | 'object', s: T): T => {
+      const over = eventOfSpawn.get(`${kind}:${s.guid}`);
+      return over ? { ...s, event: over.events[0] ?? null, ...over } : s;
+    };
     const grouped = <T extends { guid: number; group?: number | null }>(kind: 'npc' | 'object', s: T): T => {
       const held = inLayerGroup.get(`${kind}:${s.guid}`);
       const was = s.group ?? null;
@@ -428,12 +443,12 @@ class SpawnManager {
     );
     return {
       creatures: [
-        ...spawns.creatures.filter((c) => !ownCreatures.has(c.guid) && shown(c)).map(creature),
+        ...spawns.creatures.filter((c) => !ownCreatures.has(c.guid)).map((c) => evented('npc', c)).filter(shown).map(creature),
         ...this.#own.creatures.filter(inBox).map((c) => grouped('npc', c)),
         ...placedCreatures.filter(inBox).map((c) => grouped('npc', routed(c))),
       ].map(pending),
       objects: [
-        ...spawns.objects.filter((o) => !ownObjects.has(o.guid) && shown(o)).map(object),
+        ...spawns.objects.filter((o) => !ownObjects.has(o.guid)).map((o) => evented('object', o)).filter(shown).map(object),
         ...this.#own.objects.filter(inBox).map((o) => grouped('object', o)),
         ...placedObjects.filter(inBox).map((o) => grouped('object', o)),
       ],
