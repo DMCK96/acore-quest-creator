@@ -8,6 +8,8 @@ import MapLight from './light/MapLight.js';
 import Model from '../model/Model.js';
 import { getFade } from '../world.js';
 import { describeError, reportProblem } from '../diagnostics.js';
+import { ViewChange } from '../view-change.js';
+import DoodadBatch from './DoodadBatch.js';
 
 type DoodadManagerOptions = {
   host: AssetHost;
@@ -27,6 +29,16 @@ class DoodadManager {
   #doodadDefs = new Map<number, MapDoodadDefSpec[]>();
   #doodadRefs = new Map<number, number>();
 
+  /** A cull decides by the camera alone: while it stands still and no area came or went, it is skipped */
+  #view = new ViewChange();
+
+  /**
+   * Each doodad model's batch, by its path: null while its template loads, or when it cannot be had.
+   * The batches live in one group the map adds; see `DoodadBatch`.
+   */
+  #batches = new Map<string, DoodadBatch | null>();
+  #batchGroup = new THREE.Group();
+
   constructor(options: DoodadManagerOptions) {
     this.#host = options.host;
 
@@ -35,14 +47,29 @@ class DoodadManager {
       textureManager: options.textureManager,
       sceneLight: options.mapLight,
     });
+
+    this.#batchGroup.name = 'doodads';
+    this.#batchGroup.matrixAutoUpdate = false;
+  }
+
+  /** The batched doodads, for the map to add to the scene and show or hide with the rest of them */
+  get batches(): THREE.Group {
+    return this.#batchGroup;
   }
 
   cull(cullingFrustum: THREE.Frustum, cameraPosition: THREE.Vector3) {
+    if (!this.#view.check(cameraPosition, cullingFrustum)) {
+      return;
+    }
+
+    for (const batch of this.#batches.values()) batch?.begin();
+
     for (const [areaId, areaGroup] of this.#loadedAreas.entries()) {
       const areaBounds = this.#areaBounds.get(areaId);
       const areaVisible = cullingFrustum.intersectsSphere(areaBounds);
 
       areaGroup.visible = areaVisible;
+      areaGroup.userData.allHidden = false;
 
       for (const doodad of areaGroup.children as Model[]) {
         if (!areaVisible) {
@@ -65,9 +92,63 @@ class DoodadManager {
           continue;
         }
 
+        // Drawn fully: with the other copies of its model in one call, once that batch is there
+        const batch = fade === 1.0 ? this.#batchFor(doodad) : null;
+        if (batch) {
+          batch.addCopy(doodad);
+          doodad.hide();
+          continue;
+        }
+
         doodad.alpha = fade;
         doodad.show();
       }
+    }
+
+    for (const batch of this.#batches.values()) batch?.finish();
+  }
+
+  /** The batch a doodad is drawn in, or null when it cannot be batched or its batch is still coming */
+  #batchFor(doodad: Model): DoodadBatch | null {
+    if (doodad.userData.batchable === undefined) {
+      doodad.userData.batchable = DoodadBatch.fits(doodad);
+    }
+    if (!doodad.userData.batchable) {
+      return null;
+    }
+
+    const path: string = doodad.userData.path;
+    const key = path.toLowerCase();
+    const batch = this.#batches.get(key);
+    if (batch !== undefined) {
+      return batch;
+    }
+
+    // Its own copy of the model, never in the scene, lends the batch its materials and animation
+    this.#batches.set(key, null);
+    this.#modelManager
+      .get(path)
+      .then((template) => {
+        const made = new DoodadBatch(template);
+        this.#batches.set(key, made);
+        this.#batchGroup.add(made);
+        // The next cull puts the copies in, camera moved or not
+        this.#view.mark();
+      })
+      .catch((error) => {
+        console.warn(`3D view: doodad ${path} is drawn copy by copy: ${describeError(error)}`);
+      });
+    return null;
+  }
+
+  /** Hides every doodad, which stops its animation until a cull shows it again; an area once */
+  hideAll() {
+    for (const areaGroup of this.#loadedAreas.values()) {
+      if (areaGroup.userData.allHidden) continue;
+      for (const doodad of areaGroup.children as Model[]) doodad.hide();
+      areaGroup.userData.allHidden = true;
+      // Shown again, they need a cull whether the camera moved or not
+      this.#view.mark();
     }
   }
 
@@ -89,6 +170,7 @@ class DoodadManager {
   }
 
   removeArea(areaId: number) {
+    this.#view.mark();
     this.#areaBounds.delete(areaId);
     this.#loadedAreas.delete(areaId);
 
@@ -182,6 +264,8 @@ class DoodadManager {
 
       // We handle doodad culling ourselves
       model.frustumCulled = false;
+      // For its batch (see DoodadBatch)
+      model.userData.path = def.name;
 
       model.position.set(def.position[0], def.position[1], def.position[2]);
       model.quaternion.set(def.rotation[0], def.rotation[1], def.rotation[2], def.rotation[3]);
@@ -201,6 +285,8 @@ class DoodadManager {
 
     this.#loadedAreas.set(areaId, areaGroup);
     this.#loadingAreas.delete(areaId);
+    // Its doodads start shown: the next cull decides, camera moved or not
+    this.#view.mark();
 
     return areaGroup;
   }

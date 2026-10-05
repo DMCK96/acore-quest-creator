@@ -35,6 +35,16 @@ import { describeError, reportProblem } from '../diagnostics.js';
 const DEFAULT_VIEW_DISTANCE = 1277.0;
 const DETAIL_DISTANCE_EXTENSION = MAP_CHUNK_HEIGHT;
 
+/**
+ * Works out where everything in a group that never moves is, once, and leaves it out of every later
+ * frame's update: tens of thousands of terrain chunks and doodads cost more than drawing them did
+ */
+function freeze(group: THREE.Object3D) {
+  group.matrixAutoUpdate = false;
+  group.updateMatrixWorld(true);
+  group.matrixWorldAutoUpdate = false;
+}
+
 type MapManagerOptions = {
   host: AssetHost;
   textureManager?: TextureManager;
@@ -167,9 +177,11 @@ class MapManager extends EventTarget {
       groundBelow: options.groundBelow,
     });
 
+    // Never moved, so never worked out again; what is under it is still visited (spawns move). The
+    // scene must not force it either (see world3d.ts), or every frame works out every object's matrix.
     this.#root = new THREE.Group();
     this.#root.matrixAutoUpdate = false;
-    this.#root.matrixWorldAutoUpdate = false;
+    this.#root.add(this.#doodadManager.batches);
   }
 
   get clearColor() {
@@ -368,19 +380,22 @@ class MapManager extends EventTarget {
     // Cull entire groups to save on frustum intersection cost
     this.#cullGroups();
 
+    this.#doodadManager.batches.visible = this.#scenery.doodads;
     if (this.#scenery.doodads) {
       this.#doodadManager.cull(this.#cullingFrustum, camera.position);
-      this.#doodadManager.update(deltaTime, camera);
     } else {
-      // Hidden doodads are left as they were: neither culled nor animated
+      // Hidden doodads: not culled, and not animated (a hidden model is skipped by the update below)
+      this.#doodadManager.hideAll();
       for (const doodadGroup of this.#doodadGroups.values()) doodadGroup.visible = false;
     }
+    // Always: the doodads' model manager animates and poses the spawns too, which stay shown
+    this.#doodadManager.update(deltaTime, camera);
     for (const wmoGroup of this.#wmoGroups.values()) wmoGroup.visible = this.#scenery.buildings;
 
     this.#liquidManager.update(deltaTime);
 
     this.#syncSpawns();
-    this.#spawnManager.cull(camera.position);
+    this.#spawnManager.cull(camera.position, this.#cullingFrustum);
   }
 
   /**
@@ -605,6 +620,9 @@ class MapManager extends EventTarget {
         .setFromObject(terrainGroup)
         .getBoundingSphere(new THREE.Sphere());
       terrainGroup.userData.boundingSphere = terrainBoundingSphere;
+
+      // Terrain, doodads, buildings and liquid never move once placed (doodads animate by their bones)
+      for (const group of [terrainGroup, doodadGroup, wmoGroup, liquidGroup]) freeze(group);
 
       this.#terrainGroups.set(areaId, terrainGroup);
       this.#root.add(terrainGroup);

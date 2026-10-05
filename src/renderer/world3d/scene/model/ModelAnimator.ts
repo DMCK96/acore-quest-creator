@@ -5,6 +5,7 @@ import { BoneSpec, SequenceSpec } from './loader/types.js';
 import ModelAnimation from './ModelAnimation.js';
 import Model from './Model.js';
 import { getTrackInterpolation } from './util.js';
+import { skeletonDue, skeletonInterval } from './skeleton-schedule.js';
 
 interface Constructor<T> {
   new (...args: any[]): T;
@@ -15,6 +16,8 @@ type TrackIdentity = {
   index?: number;
   property?: string;
 };
+
+const _cameraPosition = new THREE.Vector3();
 
 class ModelAnimator {
   #mixer: THREE.AnimationMixer;
@@ -71,8 +74,10 @@ class ModelAnimator {
     this.#modelsByAnimation.delete(animation);
   }
 
-  update(deltaTime: number, camera: THREE.Camera) {
+  /** Advances the animations, and poses each shown model: distant ones only every few frames */
+  update(deltaTime: number, camera: THREE.Camera, frame = 0) {
     this.#mixer.update(deltaTime);
+    _cameraPosition.setFromMatrixPosition(camera.matrixWorld);
 
     for (const model of this.#modelsByAnimation.values()) {
       if (!model.visible) {
@@ -80,7 +85,12 @@ class ModelAnimator {
       }
 
       if (model.skinned) {
-        model.updateSkeleton(camera);
+        const interval = skeletonInterval(model.boundingSphereWorld.center.distanceTo(_cameraPosition));
+        if (!model.posed || skeletonDue(frame, model.id, interval)) {
+          model.updateSkeleton(camera);
+        } else {
+          model.carrySkeleton(camera);
+        }
       }
     }
   }

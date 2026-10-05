@@ -40,6 +40,7 @@ class ModelManager {
   #loader: ModelLoader;
   #loaded = new globalThis.Map<string, ModelResources>();
   #loading = new globalThis.Map<string, Promise<ModelResources>>();
+  #frame = 0;
 
   constructor(options: ModelManagerOptions) {
     this.#host = options.host;
@@ -57,9 +58,11 @@ class ModelManager {
   }
 
   update(deltaTime: number, camera: THREE.Camera) {
+    // Counts frames, for posing distant models only every few
+    this.#frame += 1;
     for (const resources of this.#loaded.values()) {
       if (resources.animator) {
-        resources.animator.update(deltaTime, camera);
+        resources.animator.update(deltaTime, camera, this.#frame);
       }
     }
   }

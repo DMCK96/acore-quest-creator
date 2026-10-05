@@ -234,7 +234,7 @@ test('draws spawns: a marker where a display cannot be drawn, and asks the clien
   expect(after).not.toEqual([r, g, b, 255]);
 });
 
-test('a click selects the NPC under it, and event spawns only once they are shown', async ({ page }) => {
+test('a click selects the NPC under it, a double-click on nothing deselects it, and event spawns only once they are shown', async ({ page }) => {
   await openPage(page);
   const SPOT = { x: START.x + 60, y: START.y - 60, z: START.z };
   // A marker NPC at the camera's target (the middle of the picture), and one that only comes with an event
@@ -253,8 +253,11 @@ test('a click selects the NPC under it, and event spawns only once they are show
   };
 
   expect(await click(0.5, 0.5)).toMatchObject({ kind: 'creature', guid: 5, event: null });
-  // Off to the side of everything: nothing selected
-  expect(await click(0.05, 0.9)).toBeNull();
+  // Off to the side of everything: a click keeps the selection, a double-click clears it
+  expect(await click(0.05, 0.9)).toMatchObject({ guid: 5 });
+  await page.waitForTimeout(500);
+  await page.mouse.dblclick(box.x + box.width * 0.05, box.y + box.height * 0.9);
+  expect((await state(page)).selected).toBeNull();
 
   // The event NPC stands between the camera and the first: hidden by default, so the click reaches the first
   await page.evaluate('window.__setVisibility({ creatures: true, objects: true, paths: true, events: "all" })');
@@ -339,6 +342,33 @@ test('a route never goes below two points', async ({ page }) => {
   await page.keyboard.press('Delete');
   await expect.poll(async () => (await state(page)).notices).toContain('A route keeps at least two points.');
   expect((await state(page)).edits).toEqual([]);
+});
+
+test('with one route point picked, a click on another under the gizmo’s handles picks that one', async ({ page }) => {
+  await openPage(page);
+  const SPOT = { x: START.x + 60, y: START.y - 60, z: START.z };
+  await page.evaluate(`window.__spawns = { creatures: [
+    { guid: 9, entry: 1, name: 'P', map: 0, x: ${SPOT.x - 20}, y: ${SPOT.y + 20}, z: ${SPOT.z}, orientation: 0, displayId: 0, scale: 1, wander: 0, pathId: 77,
+      path: [ { x: ${SPOT.x}, y: ${SPOT.y}, z: ${SPOT.z} }, { x: ${SPOT.x + 4}, y: ${SPOT.y + 4}, z: ${SPOT.z} }, { x: ${SPOT.x - 6}, y: ${SPOT.y - 6}, z: ${SPOT.z} } ],
+      equipment: [0,0,0], own: false, event: null }
+  ], objects: [], capped: { creatures: false, objects: false } }`);
+  await page.evaluate(`window.__open('azeroth', 0, ${JSON.stringify(SPOT)})`);
+  await page.waitForFunction('window.__state.ready', null, { timeout: 45000 });
+  await page.evaluate(`window.__select({ kind: 'creature', guid: 9 })`);
+  await page.waitForTimeout(1500);
+  const box = (await page.locator('canvas.world3d__canvas').boundingBox())!;
+  // The first point is at the middle of the picture, the second straight above it, on the gizmo's Z handle
+  const second = { x: box.x + box.width / 2, y: box.y + box.height / 2 - 30 };
+  await page.mouse.click(box.x + box.width / 2, box.y + box.height / 2);
+  await expect.poll(async () => (await state(page)).selection).toMatchObject({ points: 1 });
+  await page.waitForTimeout(300);
+  await page.mouse.move(second.x, second.y, { steps: 5 });
+  await page.mouse.click(second.x, second.y);
+  await page.waitForTimeout(300);
+  // The second one is what Delete takes out
+  await page.keyboard.press('Delete');
+  await expect.poll(async () => (await state(page)).edits.length).toBe(1);
+  expect((await state(page)).edits[0].points.map((p: any) => [p.x - SPOT.x, p.y - SPOT.y])).toEqual([[0, 0], [-6, -6]]);
 });
 
 test('Esc clears the selection and goes no further; with nothing selected it is left to what is round the view', async ({ page }) => {

@@ -9,6 +9,15 @@ class ModelSkeleton {
   #boneTexture: THREE.DataTexture;
   #boneMatrices: Float32Array;
 
+  /** The model-view matrix the bones were last worked out from (they are in the camera's space) */
+  #poseView = new THREE.Matrix4();
+  #poseViewInverse = new THREE.Matrix4();
+  /**
+   * Takes the last pose from the camera it was made for to the camera now: identity right after a
+   * pose, and (view now) x (view then)^-1 on a frame the model is not posed. The shader applies it.
+   */
+  viewCorrection = new THREE.Matrix4();
+
   constructor(root: THREE.Object3D, bones: ModelBone[] = []) {
     this.#root = root;
     this.#bones = bones;
@@ -51,6 +60,15 @@ class ModelSkeleton {
     }
 
     this.#boneTexture.needsUpdate = true;
+
+    this.#poseView.copy(this.#root.modelViewMatrix);
+    this.#poseViewInverse.copy(this.#poseView).invert();
+    this.viewCorrection.identity();
+  }
+
+  /** Carries the last pose to the model-view matrix now, for a frame the bones are not worked out */
+  correct(modelView: THREE.Matrix4) {
+    this.viewCorrection.multiplyMatrices(modelView, this.#poseViewInverse);
   }
 
   /**

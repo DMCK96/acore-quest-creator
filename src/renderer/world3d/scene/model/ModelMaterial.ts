@@ -99,6 +99,11 @@ class ModelMaterial extends THREE.RawShaderMaterial {
     this.#setupTextureTransforms();
   }
 
+  /** How it blends as the model file says, whatever its alpha now */
+  get blend() {
+    return this.#blend;
+  }
+
   get alpha() {
     return this.#materialParams.x;
   }
@@ -154,6 +159,7 @@ class ModelMaterial extends THREE.RawShaderMaterial {
 
   set skeleton(skeleton: ModelSkeleton) {
     this.uniforms.boneTexture = { value: skeleton.boneTexture };
+    this.uniforms.boneView = { value: skeleton.viewCorrection };
   }
 
   prepareMaterial(model: Model) {

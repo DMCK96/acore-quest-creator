@@ -81,13 +81,85 @@ describe('the spawn layer', () => {
 
 describe('how far spawns are drawn', () => {
   it('hides spawns beyond the draw distance from the camera, and shows them again within it', async () => {
-    const m = manager({ creatures: [creature(1, 1, { x: 50 }), creature(2, 1, { x: 400 })], objects: [object(3, 2)], capped: { creatures: false, objects: false } });
+    const m = manager({ creatures: [creature(1, 1, { x: 50 }), creature(2, 1, { x: 1200 })], objects: [object(3, 2)], capped: { creatures: false, objects: false } });
     const group = (await m.loadArea(1, 0, box))!;
     const [near, far] = group.getObjectByName('creatures')!.children;
     m.cull(new THREE.Vector3(0, 0, 0));
     expect([near!.visible, far!.visible]).toEqual([true, false]);
-    m.cull(new THREE.Vector3(390, 0, 0));
+    m.cull(new THREE.Vector3(1190, 0, 0));
     expect([near!.visible, far!.visible]).toEqual([false, true]);
+  });
+
+  it('draws an NPC as far off as its area is loaded while its route is worked on, and offers it to a box', async () => {
+    const m = manager({ creatures: [creature(1, 1, { x: 50 }), creature(2, 1, { x: 1200, path: [{ x: 1210, y: 0, z: 0 }] })], objects: [], capped: { creatures: false, objects: false } });
+    const group = (await m.loadArea(1, 0, box))!;
+    const [, far] = group.getObjectByName('creatures')!.children;
+    m.setActiveRoutes([2]);
+    m.cull(new THREE.Vector3(0, 0, 0));
+    expect(far!.visible).toBe(true);
+    expect(m.candidates(new THREE.Vector3(0, 0, 0)).spawns.map((s) => s.guid)).toEqual([1, 2]);
+    m.setActiveRoutes([]);
+    m.cull(new THREE.Vector3(0, 0, 0));
+    expect(far!.visible).toBe(false);
+  });
+
+  it('hides a model the camera does not look at, so it is neither drawn nor animated, but still finds it for edits', async () => {
+    // A model with the world bounding sphere the real ones keep
+    const sphered = async () => {
+      const model: any = new THREE.Object3D();
+      model.boundingSphereWorld = new THREE.Sphere(new THREE.Vector3(), 1);
+      model.updateMatrixWorld = function (force?: boolean) { THREE.Object3D.prototype.updateMatrixWorld.call(this, force); this.boundingSphereWorld.center.copy(this.position); };
+      return model;
+    };
+    const m = manager({ creatures: [creature(1, 1, { x: 50 }), creature(2, 1, { x: -50 })], objects: [], capped: { creatures: false, objects: false } }, { createModel: sphered });
+    const group = (await m.loadArea(1, 0, box))!;
+    group.updateMatrixWorld(true);
+    // Looking along +X from the origin: the NPC at x 50 is ahead, the one at x -50 behind
+    const camera = new THREE.PerspectiveCamera(60, 1, 0.5, 1000);
+    camera.up.set(0, 0, 1);
+    camera.lookAt(1, 0, 0);
+    camera.updateMatrixWorld();
+    const frustum = new THREE.Frustum().setFromProjectionMatrix(new THREE.Matrix4().multiplyMatrices(camera.projectionMatrix, camera.matrixWorldInverse));
+    m.cull(new THREE.Vector3(0, 0, 0), frustum);
+    const [ahead, behind] = group.getObjectByName('creatures')!.children;
+    expect([ahead!.visible, behind!.visible]).toEqual([true, false]);
+    expect(m.find('creature', 2)).toBe(behind);
+  });
+
+  it('leaves off what an NPC wears or holds when it is far off or out of view, which also stops it animating', async () => {
+    const worn: any[] = [];
+    const dressed = async () => {
+      const model: any = new THREE.Object3D();
+      const point = new THREE.Object3D();
+      point.name = 'attachment:11';
+      const helmet: any = new THREE.Object3D();
+      helmet.hide = vi.fn(() => { helmet.visible = false; });
+      helmet.show = vi.fn(() => { helmet.visible = true; });
+      point.add(helmet);
+      model.add(point);
+      worn.push(helmet);
+      return model;
+    };
+    const m = manager({ creatures: [creature(1, 1, { x: 50 })], objects: [], capped: { creatures: false, objects: false } }, { createModel: dressed });
+    await m.loadArea(1, 0, box);
+    const [helmet] = worn;
+    m.cull(new THREE.Vector3(0, 0, 0));
+    expect(helmet.visible).toBe(true);
+    m.cull(new THREE.Vector3(-300, 0, 0));
+    expect(helmet.visible).toBe(false);
+    expect(helmet.hide).toHaveBeenCalled();
+    m.cull(new THREE.Vector3(0, 0, 0));
+    expect(helmet.visible).toBe(true);
+    // Beyond draw distance the NPC is hidden, and so is what it wears
+    m.cull(new THREE.Vector3(-1000, 0, 0));
+    expect(helmet.visible).toBe(false);
+  });
+
+  it('draws spawns further than the game does, for an editor zoomed out over a route', async () => {
+    const m = manager({ creatures: [creature(1, 1, { x: 480 })], objects: [], capped: { creatures: false, objects: false } });
+    const group = (await m.loadArea(1, 0, box))!;
+    m.cull(new THREE.Vector3(0, 0, 0));
+    expect(group.getObjectByName('creatures')!.children[0]!.visible).toBe(true);
   });
 });
 
@@ -152,7 +224,7 @@ describe('standing NPCs on the drawn ground', () => {
 
   it('does not lift objects, markers, or NPCs out of range', async () => {
     const asked = vi.fn(() => 12);
-    const m = manager(spawns([creature(1, 0, { z: 10 }), creature(2, 1, { z: 10, x: 400 })], [object(3, 2, { z: 10 })]), { groundBelow: asked });
+    const m = manager(spawns([creature(1, 0, { z: 10 }), creature(2, 1, { z: 10, x: 1200 })], [object(3, 2, { z: 10 })]), { groundBelow: asked });
     const group = (await m.loadArea(1, 0, box))!;
     m.cull(eye);
     expect(asked).not.toHaveBeenCalled();
@@ -205,7 +277,7 @@ describe('which routes are drawn', () => {
 
   it('offers a box the points of drawn routes and the shown spawns within draw distance', async () => {
     const m = manager({
-      creatures: [creature(2, 0, { path: [{ x: 10, y: 0, z: 0 }, { x: 20, y: 0, z: 0 }] }), creature(5, 0, { x: 500 })],
+      creatures: [creature(2, 0, { path: [{ x: 10, y: 0, z: 0 }, { x: 20, y: 0, z: 0 }] }), creature(5, 0, { x: 1200 })],
       objects: [object(3, 0, { x: 4 })], capped: { creatures: false, objects: false },
     });
     await m.loadArea(1, 0, box);
