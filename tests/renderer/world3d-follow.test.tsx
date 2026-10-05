@@ -129,11 +129,25 @@ describe('Show in World and Go to', () => {
   });
 
   it('says so when nothing of the quest is placed', async () => {
+    const view = mount({ active: true }, vi.fn(async () => okv([{ questId: 60001, title: 'Q', spawns: [], capped: false, cut: 0 }])));
+    await waitFor(() => expect(worlds).toHaveLength(1));
+    view.rerender({ active: true, showRequest: { target: { questId: 60001 }, nonce: 1 } });
+    expect(await screen.findByText('Nothing of this quest is placed in the world yet.')).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Back' })).toHaveProperty('disabled', true);
+  });
+
+  it('says the NPC has no spawn when one named NPC is not placed', async () => {
     const view = mount({ active: true });
     await waitFor(() => expect(worlds).toHaveLength(1));
     view.rerender({ active: true, showRequest: { target: { questId: 60001, kind: 'creature', entry: 99 }, nonce: 1 } });
-    expect(await screen.findByText('Nothing of this quest is placed in the world yet.')).toBeTruthy();
-    expect(screen.getByRole('button', { name: 'Back' })).toHaveProperty('disabled', true);
+    expect(await screen.findByText('NPC #99 has no spawn in the world yet.')).toBeTruthy();
+  });
+
+  it('says why the spawns could not be read while connected', async () => {
+    const view = mount({ active: true }, vi.fn(async () => ({ ok: false, error: { code: 'QUERY', message: 'Lost connection' } })));
+    await waitFor(() => expect(worlds).toHaveLength(1));
+    view.rerender({ active: true, showRequest: { target: { questId: 60001 }, nonce: 1 } });
+    expect(await screen.findByText('Could not read the quest’s spawns: Lost connection')).toBeTruthy();
   });
 
   it('says the world database is needed when the quest’s spawns cannot be read', async () => {

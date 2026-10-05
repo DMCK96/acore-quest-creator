@@ -9,7 +9,8 @@ import { useHistorySteps } from '../state/history-context';
 import { useProjectEntities } from '../state/project-entities';
 import { ownViewSpawns } from '@core/entities/view-spawns';
 import { toggleRole } from '@core/modules/quest-roles';
-import { useApi } from '../state/names';
+import { useApi, useNameBook } from '../state/names';
+import { giverName } from '@core/modules/summaries';
 import { ownEdit } from '../map/own-3d-edit';
 import { chainOf, questMenuInfo } from './quest-context';
 import { OBJECTIVES_FULL } from './menu/section';
@@ -109,6 +110,9 @@ export function WorldWorkspace({
   const own = useMemo(() => ownViewSpawns(store), [store]);
   const { runStep } = useHistorySteps();
   const api = useApi();
+  const names = useNameBook();
+  const namesRef = useRef(names);
+  namesRef.current = names;
   // The NPC or object editor, opened from the right-click menu
   const [editor, setEditor] = useState<EditorState | null>(null);
   const [note, setNote] = useState<string | null>(null);
@@ -278,29 +282,22 @@ export function WorldWorkspace({
 
   /**
    * Where a quest is, or the nearest spawn of one of its NPCs or objects: a spawn to go to, null when
-   * nothing of it is placed, or why it could not be told. Without the world database only the project's
-   * own NPCs and objects, and the spawns the World's layer moved or placed, can be found.
+   * nothing of it is placed, or why it could not be told.
    */
-  const placeOf = async (target: ShowTarget): Promise<{ spawn: FoundSpawn | null } | { error: string }> => {
+  const placeOf = async (target: ShowTarget): Promise<{ spawn: FoundSpawn | null; name?: string } | { error: string }> => {
     const from = { map: mapRef.current, ...placeRef.current };
     const only = 'kind' in target ? { kind: target.kind, entry: target.entry } : undefined;
-    let groups: QuestSpawnGroup[];
-    if (api) {
-      const read = await api.questSpawnList([target.questId]);
-      if (!read.ok) return { error: NEEDS_DATABASE };
-      groups = read.value;
-    } else {
-      const owner = !only ? undefined : only.kind === 'creature'
-        ? storeRef.current.npcs.find((n) => n.entry === only.entry)
-        : storeRef.current.objects.find((o) => o.entry === only.entry);
-      if (!owner) return { error: NEEDS_DATABASE };
-      const spawns = owner.spawns.map((s) => ({ kind: only!.kind, guid: s.guid, entry: owner.entry, name: owner.name, map: s.map, x: s.x, y: s.y, z: s.z, role: 'own' as const }));
-      groups = [{ questId: target.questId, title: '', spawns, capped: false, cut: 0 }];
+    if (!api) return { error: NEEDS_DATABASE };
+    const read = await api.questSpawnList([target.questId]);
+    if (!read.ok) {
+      // Only an absent connection needs the database; any other failure says what went wrong
+      return { error: read.error.code === 'NOT_CONNECTED' ? NEEDS_DATABASE : `Could not read the quest’s spawns: ${read.error.message}` };
     }
+    const groups: QuestSpawnGroup[] = read.value;
     const s = questPlace(groups, from, only);
     // Nothing the project or the layer has: the database may still have it
     if (!s && groups.some((g) => g.offline)) return { error: NEEDS_DATABASE };
-    if (!s || !worldMapById(s.map)) return { spawn: null };
+    if (!s || !worldMapById(s.map)) return { spawn: null, ...(only && { name: giverName({ kind: only.kind, id: only.entry }, namesRef.current, storeRef.current) }) };
     return { spawn: { kind: s.kind === 'gameobject' ? 'object' : 'creature', guid: s.guid, entry: s.entry, name: s.name, map: s.map, x: s.x, y: s.y, z: s.z, event: s.event ?? null, note: null } };
   };
   const placeOfRef = useRef(placeOf);
@@ -316,7 +313,7 @@ export function WorldWorkspace({
     void (async () => {
       const place = await placeOfRef.current(showRequest.target);
       if ('error' in place) setNote(place.error);
-      else if (!place.spawn) setNote('Nothing of this quest is placed in the world yet.');
+      else if (!place.spawn) setNote(place.name !== undefined ? `${place.name} has no spawn in the world yet.` : 'Nothing of this quest is placed in the world yet.');
       else findRef.current(place.spawn);
     })();
     // Only a new request moves the camera
