@@ -99,12 +99,12 @@ describe('Fight editor', () => {
 
 describe('quest credit in a fight', () => {
   const quests = [{ questId: 60001, title: 'Wolves', uses: { npcs: [12000001], objects: [], items: [] } }, { questId: 60002, title: 'Bears', uses: { npcs: [], objects: [], items: [] } }];
-  it('a preset that gives credit credits the quest the NPC was made for', async () => {
+  it('a preset that gives credit credits the first quest listed, which is one that uses the NPC', async () => {
     const onChange = vi.fn();
-    await mountEditor({ [ENTITIES_FIELD]: writeEntities({ npcs: [{ ...newNpc(12000001, 60002), name: 'Hela' }], objects: [], items: [] }) }, { kind: 'npc', entry: 12000001, isNew: false }, { onChange, api: spellApi(), tab: 'Fight', quests });
+    await mountEditor({ [ENTITIES_FIELD]: writeEntities({ npcs: [{ ...newNpc(12000001), name: 'Hela' }], objects: [], items: [] }) }, { kind: 'npc', entry: 12000001, isNew: false }, { onChange, api: spellApi(), tab: 'Fight', quests });
     await userEvent.selectOptions(within(fightRegion()).getByLabelText('Start from a preset'), 'Surrenders at 20%');
     const steps = last(onChange).npcs[0]!.fight!.reactions.flatMap((r) => r.steps);
-    expect(steps.find((s) => s.kind === 'credit')).toMatchObject({ quest: 60002 });
+    expect(steps.find((s) => s.kind === 'credit')).toMatchObject({ quest: 60001 });
   });
 
   it('a credit step names the quest it gives credit for, from the project\'s quests', async () => {

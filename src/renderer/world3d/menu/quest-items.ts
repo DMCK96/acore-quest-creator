@@ -1,8 +1,7 @@
 import { hasRole, type RoleTarget } from '@core/modules/quest-roles';
 import { item, type MenuContext, type MenuGroup, type MenuItem, type MenuTarget } from './model';
-import { newHere } from './world-items';
 
-/** The open quest's items: new quest NPCs here, a spawn's part in it or a quest started from it, show its spawns */
+/** The open quest's items: a spawn's part in it or a quest started from it, show its spawns */
 
 export const OBJECTIVES_FULL = 'All four objectives are in use';
 
@@ -12,7 +11,6 @@ export function questItems(target: MenuTarget, context: MenuContext): MenuGroup 
   const { hit, ground } = target;
   const items: MenuItem[] = [];
   if (!hit) {
-    if (quest) items.push(...newHere(target, context, true));
     if (quest) {
       items.push(item('Show quest spawns', { action: { kind: 'showSpawns', scope: 'quest' } }));
       if (quest.chained) items.push(item('Show chain spawns', { action: { kind: 'showSpawns', scope: 'chain' } }));

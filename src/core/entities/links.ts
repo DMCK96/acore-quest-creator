@@ -3,8 +3,8 @@ import type { ProjectEntities } from './model';
 
 /**
  * Which quests use which of the project's NPCs, objects and items. Nothing is stored: a quest uses
- * what it names (givers, enders, objectives, its scenes, a fight crediting it, its items) and what was
- * made for it, so the links can never drift from the quest.
+ * what it names (givers, enders, objectives, its scenes, its items) and the NPCs whose fights credit
+ * it, so the links can never drift from the quest.
  */
 
 type WithValues = { values: Readonly<Record<string, unknown>> };
@@ -50,7 +50,13 @@ export interface QuestUse {
   items: number[];
 }
 
-export function questUses(quest: QuestLike, entities: ProjectEntities): QuestUse {
+const sorted = (set: Set<number>): number[] => [...set].sort((a, b) => a - b);
+
+/**
+ * Every NPC, object and item entry the quest names: givers, enders, objectives, its scenes, its item
+ * fields and start item. Not narrowed to the store, and without fight credits (those live on the NPC).
+ */
+export function questRefs(quest: QuestLike): QuestUse {
   const { values } = quest.aggregate;
   const npcs = new Set<number>();
   const objects = new Set<number>();
@@ -78,16 +84,20 @@ export function questUses(quest: QuestLike, entities: ProjectEntities): QuestUse
   }
   const start = values['quest_template.StartItem'];
   if (typeof start === 'number' && start > 0) items.add(start);
+  return { npcs: sorted(npcs), objects: sorted(objects), items: sorted(items) };
+}
+
+/** The project's NPCs, objects and items a quest uses: the ones it names, plus the NPCs whose fights credit it. */
+export function questUses(quest: QuestLike, entities: ProjectEntities): QuestUse {
+  const refs = questRefs(quest);
+  const npcs = new Set(refs.npcs);
   for (const npc of entities.npcs) {
-    if (npc.madeFor === quest.questId) npcs.add(npc.entry);
     const credits = npc.fight?.reactions.some((r) => r.steps.some((s) => s.kind === 'credit' && s.quest === quest.questId));
     if (credits) npcs.add(npc.entry);
   }
-  for (const object of entities.objects) if (object.madeFor === quest.questId) objects.add(object.entry);
-  for (const item of entities.items) if (item.madeFor === quest.questId) items.add(item.entry);
   const kept = (set: Set<number>, have: readonly { entry: number }[]): number[] =>
     have.map((e) => e.entry).filter((e) => set.has(e)).filter((e, i, all) => all.indexOf(e) === i).sort((a, b) => a - b);
-  return { npcs: kept(npcs, entities.npcs), objects: kept(objects, entities.objects), items: kept(items, entities.items) };
+  return { npcs: kept(npcs, entities.npcs), objects: kept(new Set(refs.objects), entities.objects), items: kept(new Set(refs.items), entities.items) };
 }
 
 /** The quests that use an entity, by id */
@@ -96,7 +106,7 @@ export function usedBy(kind: 'npc' | 'object' | 'item', entry: number, quests: r
   return quests.filter((q) => questUses(q, entities)[key].includes(entry)).map((q) => q.questId).sort((a, b) => a - b);
 }
 
-/** The part of the store a quest uses */
+/** The part of the store a quest uses: the entities it names and the NPCs crediting it */
 export function narrowTo(entities: ProjectEntities, use: QuestUse): ProjectEntities {
   return {
     npcs: entities.npcs.filter((n) => use.npcs.includes(n.entry)),

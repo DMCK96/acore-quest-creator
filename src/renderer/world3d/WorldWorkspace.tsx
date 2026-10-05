@@ -100,7 +100,7 @@ export function WorldWorkspace({
   const [note, setNote] = useState<string | null>(null);
 
   /** New NPC here… / New object here…: one project NPC or object with a spawn where it was asked for, as one step */
-  const createEntity = async (what: 'creature' | 'object', at: Placement, forQuest: boolean): Promise<void> => {
+  const createEntity = async (what: 'creature' | 'object', at: Placement): Promise<void> => {
     if (!project || !api) return;
     let made: { kind: 'npc' | 'object'; entry: number } | null = null;
     await runStep(async () => {
@@ -111,7 +111,7 @@ export function WorldWorkspace({
       }
       const spawn = { ...newSpawn(guid.value[0]!), map: mapRef.current, x: at.x, y: at.y, z: at.z, o: at.orientation, rotation: what === 'object' ? at.rotation : null };
       const kind = what === 'creature' ? 'npc' : 'object';
-      const result = await project.create(kind, { spawns: [spawn] }, forQuest && quest ? quest.open.questId : null);
+      const result = await project.create(kind, { spawns: [spawn] });
       if ('error' in result) setNote(result.error);
       else made = { kind, entry: result.entry };
     }, what === 'creature' ? 'New NPC' : 'New object');

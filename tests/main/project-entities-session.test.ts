@@ -54,14 +54,15 @@ describe('project file version 4', () => {
   });
 
   it('opens a version 3 project with its quests\' entities moved into the store', () => {
-    const { madeFor: _m, ...old } = newNpc(12000001);
+    const old = newNpc(12000001);
     const v3 = JSON.parse(serializeProject(doc({ entities: EMPTY_ENTITIES })));
     v3.version = 3;
     delete v3.entities;
     v3.quests = [{ questId: 60001, isNew: true, x: 0, y: 0, lastExportPath: null, fidelity: null, snapshot: null,
       aggregate: { questId: 60001, isNew: true, values: { [ENTITIES_FIELD]: { npcs: [{ ...old, name: 'Hela' }], objects: [], items: [] } }, readOnly: [], sharedItems: {} } }];
     const opened = parseProject(JSON.stringify(v3));
-    expect(opened.entities.npcs.map((n) => [n.name, n.madeFor])).toEqual([['Hela', 60001]]);
+    expect(opened.entities.npcs.map((n) => n.name)).toEqual(['Hela']);
+    expect(opened.entities.npcs[0]).not.toHaveProperty('madeFor');
     expect(opened.quests[0]!.aggregate.values).not.toHaveProperty(ENTITIES_FIELD);
     expect(opened.migrationWarnings).toEqual([]);
   });

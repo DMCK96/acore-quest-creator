@@ -53,8 +53,8 @@ export type MenuAction =
   | { kind: 'undoPoint' }
   | { kind: 'cancelPath' }
   | { kind: 'placeHere'; what: 'creature' | 'object'; at: At }
-  /** A new project NPC or object standing here; `forQuest` makes it for the open quest */
-  | { kind: 'newEntity'; what: 'creature' | 'object'; at: At; forQuest: boolean }
+  /** A new project NPC or object standing here, attached to no quest */
+  | { kind: 'newEntity'; what: 'creature' | 'object'; at: At }
   | { kind: 'editEntity'; spawn: MenuSpawn }
   | { kind: 'setLootable'; spawn: MenuSpawn; on: boolean }
   | { kind: 'copy' }

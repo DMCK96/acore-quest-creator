@@ -114,15 +114,15 @@ export interface AppState {
   /** Reads the project's NPCs, objects and items from the main process */
   loadEntities(): Promise<void>;
   /**
-   * Makes a new NPC, object or item with a fresh ID, made for `madeFor` (a quest, or null), and sends
-   * it at once so it is its own undo step before an editor opens on it
-   */
-  /**
    * Deletes one of the project's NPCs, objects or items, emptying every giver card that named it, as one
    * undo step; the open quest shows the cards as they now are. Returns the error to show, or null.
    */
   deleteEntity(kind: 'npc' | 'object' | 'item', entry: number): Promise<string | null>;
-  createEntity(kind: 'npc' | 'object' | 'item', preset: Partial<CustomNpc> | Partial<CustomObject> | Partial<CustomItem>, madeFor: number | null): Promise<{ entry: number } | { error: string }>;
+  /**
+   * Makes a new NPC, object or item with a fresh ID, attached to no quest (a quest uses it by naming
+   * it), and sends it at once so it is its own undo step before an editor opens on it
+   */
+  createEntity(kind: 'npc' | 'object' | 'item', preset: Partial<CustomNpc> | Partial<CustomObject> | Partial<CustomItem>): Promise<{ entry: number } | { error: string }>;
   /** Switches the previewed quest into the module editor. */
   editQuest(): void;
   /** Leaves the editor for the chain canvas, sending any pending edit first; the quest stays previewed. */
@@ -542,7 +542,7 @@ export function createAppStore(api: Api, opts: { saveDelayMs?: number } = {}): A
       return null;
     },
 
-    async createEntity(kind, preset, madeFor) {
+    async createEntity(kind, preset) {
       await get().flushEntities();
       const allocated = await api.allocateIds(kind === 'npc' ? 'creature' : kind === 'object' ? 'gameobject' : 'item', 1);
       if (!allocated.ok) return { error: allocated.error.message };
@@ -551,10 +551,10 @@ export function createAppStore(api: Api, opts: { saveDelayMs?: number } = {}): A
       const now = get().entities;
       const next: ProjectEntities =
         kind === 'npc'
-          ? { ...now, npcs: [...now.npcs, { ...newNpc(entry, madeFor), ...(preset as Partial<CustomNpc>), entry, madeFor }] }
+          ? { ...now, npcs: [...now.npcs, { ...newNpc(entry), ...(preset as Partial<CustomNpc>), entry }] }
           : kind === 'object'
-            ? { ...now, objects: [...now.objects, { ...newObject(entry, madeFor), ...(preset as Partial<CustomObject>), entry, madeFor }] }
-            : { ...now, items: [...now.items, { ...newItem(entry, madeFor), ...(preset as Partial<CustomItem>), entry, madeFor }] };
+            ? { ...now, objects: [...now.objects, { ...newObject(entry), ...(preset as Partial<CustomObject>), entry }] }
+            : { ...now, items: [...now.items, { ...newItem(entry), ...(preset as Partial<CustomItem>), entry }] };
       set({ entities: next });
       const sent = await api.putProjectEntities(next);
       if (!sent.ok) {

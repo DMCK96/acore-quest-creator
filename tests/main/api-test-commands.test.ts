@@ -7,7 +7,6 @@ import type { ProjectController } from '../../src/main/project/controller';
 import { ENTITIES_FIELD, newNpc, writeEntities } from '../../src/core/entities/model';
 import { SCRIPTS_FIELD, writeScenes } from '../../src/core/scripts/model';
 import { forkDb } from '../helpers/fixtures';
-import { madeFor } from '../helpers/entities';
 
 const box = { encrypt: (s: string) => Uint8Array.from(Buffer.from(s)), decrypt: (b: Uint8Array) => Buffer.from(b).toString() };
 
@@ -20,7 +19,7 @@ describe('testCommands', () => {
     await api.connect(rec.value.id);
     const opened: any = await api.newQuest();
     const aggregate = opened.value.aggregate;
-    await api.putProjectEntities(madeFor({ npcs: [{ ...newNpc(12000001), name: 'Scout Hela', displayId: 1, spawns: [{ guid: 5, map: 0, x: 1, y: 2, z: 3, o: 0, respawnSecs: 60, wander: 0, patrol: null, rotation: null }] }], objects: [], items: [] }, aggregate.questId));
+    await api.putProjectEntities({ npcs: [{ ...newNpc(12000001), name: 'Scout Hela', displayId: 1, spawns: [{ guid: 5, map: 0, x: 1, y: 2, z: 3, o: 0, respawnSecs: 60, wander: 0, patrol: null, rotation: null }] }], objects: [], items: [] });
     aggregate.values.creature_queststarter = [{ id: 12000001 }];
     aggregate.values[SCRIPTS_FIELD] = writeScenes([{ id: 's1', name: '', owner: { kind: 'creature', entry: 12000001 }, trigger: { kind: 'questAccepted' }, gates: [],
       steps: [{ kind: 'say', text: 'Go!', style: 'say', waitMs: 0 }] }]);

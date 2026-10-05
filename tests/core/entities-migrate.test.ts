@@ -4,19 +4,19 @@ import { ENTITIES_FIELD, newNpc, newObject, newItem } from '../../src/core/entit
 
 const quest = (questId: number, entities: unknown, other: Record<string, unknown> = {}) =>
   ({ questId, aggregate: { values: { 'quest_template.LogTitle': `Q${questId}`, ...other, ...(entities === undefined ? {} : { [ENTITIES_FIELD]: entities }) } } });
-const { madeFor: _a, ...oldNpc } = newNpc(12000001);
-const { madeFor: _b, onlyDuringQuest: _c, ...oldObject } = newObject(9100001);
-const { madeFor: _d, ...oldItem } = newItem(9200001);
+const oldNpc = newNpc(12000001);
+const { onlyDuringQuest: _c, ...oldObject } = newObject(9100001);
+const oldItem = newItem(9200001);
 
 describe('migrateQuestEntities', () => {
-  it('moves each quest\'s entities into the store, made for that quest, in quest order', () => {
+  it('moves each quest\'s entities into the store, in quest order', () => {
     const out = migrateQuestEntities([
       quest(60002, { npcs: [{ ...oldNpc, entry: 12000002, name: 'B' }], objects: [], items: [] }),
       quest(60001, { npcs: [{ ...oldNpc, name: 'A' }], objects: [{ ...oldObject, onlyDuringQuest: true }], items: [oldItem] }),
     ]);
-    expect(out.entities.npcs.map((n) => [n.name, n.madeFor])).toEqual([['A', 60001], ['B', 60002]]);
+    expect(out.entities.npcs.map((n) => n.name)).toEqual(['A', 'B']);
+    expect(out.entities.npcs[0]).not.toHaveProperty('madeFor');
     expect(out.entities.objects[0]!.onlyDuringQuest).toBe(60001);
-    expect(out.entities.items[0]!.madeFor).toBe(60001);
     expect(out.warnings).toEqual([]);
   });
 

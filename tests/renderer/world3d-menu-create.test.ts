@@ -10,14 +10,14 @@ const ground: MenuTarget = { ground: at, hit: null, selection: [] };
 const on = (s: MenuSpawn): MenuTarget => ({ ground: at, hit: { type: 'spawn', spawn: s }, selection: [s] });
 const flat = (groups: ReturnType<typeof buildMenu>): MenuItem[] => groups.flatMap((g) => g.items.flatMap((i) => [i, ...(i.children ?? [])]));
 const item = (groups: ReturnType<typeof buildMenu>, label: string) => flat(groups).find((i) => i.label === label);
-const quest = { id: 60001, title: 'Wolves', roles: { givers: [], enders: [], objectives: [null, null, null, null] }, entities: [], chained: false };
+const quest = { id: 60001, title: 'Wolves', roles: { givers: [], enders: [], objectives: [null, null, null, null] }, chained: false };
 
 describe('creating from the menu', () => {
   it('offers a new NPC and a new object on the ground, after placing', () => {
     const world = buildMenu(ground, context()).find((g) => g.id === 'world')!.items.map((i) => i.label);
     expect(world.slice(0, 4)).toEqual(['Place NPC here…', 'Place object here…', 'New NPC here…', 'New object here…']);
-    expect(item(buildMenu(ground, context()), 'New NPC here…')!.action).toEqual({ kind: 'newEntity', what: 'creature', at, forQuest: false });
-    expect(item(buildMenu(ground, context()), 'New object here…')!.action).toEqual({ kind: 'newEntity', what: 'object', at, forQuest: false });
+    expect(item(buildMenu(ground, context()), 'New NPC here…')!.action).toEqual({ kind: 'newEntity', what: 'creature', at });
+    expect(item(buildMenu(ground, context()), 'New object here…')!.action).toEqual({ kind: 'newEntity', what: 'object', at });
   });
 
   it('needs the ground and the database', () => {
@@ -25,11 +25,11 @@ describe('creating from the menu', () => {
     expect(item(buildMenu(ground, context({ connected: false })), 'New object here…')!.disabledReason).toBe('Needs the world database');
   });
 
-  it('with a quest open, offers new quest NPCs and objects', () => {
+  it('offers the same New NPC here… with a quest open, and no quest copies of it', () => {
     const groups = buildMenu(ground, context({ quest }));
-    expect(item(groups, 'New quest NPC here…')!.action).toEqual({ kind: 'newEntity', what: 'creature', at, forQuest: true });
-    expect(item(groups, 'New quest object here…')!.action).toEqual({ kind: 'newEntity', what: 'object', at, forQuest: true });
-    expect(item(buildMenu(ground, context()), 'New quest NPC here…')).toBeUndefined();
+    expect(item(groups, 'New NPC here…')!.action).toEqual({ kind: 'newEntity', what: 'creature', at });
+    expect(item(groups, 'New quest NPC here…')).toBeUndefined();
+    expect(item(groups, 'New quest object here…')).toBeUndefined();
   });
 
   it('a project spawn can be edited and removed; a database one cannot', () => {

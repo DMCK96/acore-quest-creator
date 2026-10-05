@@ -6,7 +6,6 @@ import { defaultProjectMeta } from '../../src/main/project/project-file';
 import type { ProjectController } from '../../src/main/project/controller';
 import { ENTITIES_FIELD, newItem, writeEntities } from '../../src/core/entities/model';
 import { forkDb } from '../helpers/fixtures';
-import { madeFor } from '../helpers/entities';
 
 const box = { encrypt: (s: string) => Uint8Array.from(Buffer.from(s)), decrypt: (b: Uint8Array) => Buffer.from(b).toString() };
 
@@ -27,7 +26,7 @@ describe('custom items through the API', () => {
     expect(((await api.allocateIds('item', 1)) as any).value).toEqual([990101]);
     const opened: any = await api.newQuest();
     const aggregate = opened.value.aggregate;
-    await api.putProjectEntities(madeFor({ npcs: [], objects: [], items: [{ ...newItem(990105), name: 'Pearl' }] }, aggregate.questId));
+    await api.putProjectEntities({ npcs: [], objects: [], items: [{ ...newItem(990105), name: 'Pearl' }] });
     await api.updateQuest(aggregate);
     expect(((await api.allocateIds('item', 1)) as any).value).toEqual([990106]);
   });
@@ -36,7 +35,7 @@ describe('custom items through the API', () => {
     const opened: any = await api.newQuest();
     const aggregate = opened.value.aggregate;
     aggregate.values['quest_template.LogTitle'] = 'Pearls';
-    await api.putProjectEntities(madeFor({ npcs: [], objects: [], items: [{ ...newItem(990110), name: 'Golden Pearl', displayId: 7040 }] }, aggregate.questId));
+    await api.putProjectEntities({ npcs: [], objects: [], items: [{ ...newItem(990110), name: 'Golden Pearl', displayId: 7040 }] });
     aggregate.values['quest_template.RewardItems'] = [{ item: 990110, amount: 1 }, { item: 0, amount: 0 }, { item: 0, amount: 0 }, { item: 0, amount: 0 }];
     await api.updateQuest(aggregate);
     expect(((await api.searchEntities('item', 'Pearl')) as any).value[0]).toMatchObject({ id: 990110, name: 'Golden Pearl', detail: 'new' });
@@ -57,7 +56,7 @@ describe('custom items through the API', () => {
     const { api } = await setup();
     const opened: any = await api.newQuest();
     const aggregate = opened.value.aggregate;
-    await api.putProjectEntities(madeFor({ npcs: [], objects: [], items: [{ ...newItem(990120), name: 'Torn Letter', startsQuest: aggregate.questId }] }, aggregate.questId));
+    await api.putProjectEntities({ npcs: [], objects: [], items: [{ ...newItem(990120), name: 'Torn Letter', startsQuest: aggregate.questId }] });
     await api.updateQuest(aggregate);
     const links: any = await api.questLinks([aggregate.questId]);
     expect(JSON.stringify(links.value)).toContain('990120');

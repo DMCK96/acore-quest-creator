@@ -48,8 +48,8 @@ export interface WorldMenuDeps {
   onQuestRole?(role: Role, target: RoleTarget, on: boolean): string | null;
   onNewQuest?(giver: { entry: number; name: string }, after: boolean): void;
   onShowSpawns?(groups: QuestSpawnGroup[], scope: 'quest' | 'chain'): void;
-  /** Makes a new project NPC or object with one spawn at `at` (made for the open quest with `forQuest`), as one step */
-  onCreateEntity?(what: 'creature' | 'object', at: Placement, forQuest: boolean): Promise<void>;
+  /** Makes a new project NPC or object with one spawn at `at`, as one step */
+  onCreateEntity?(what: 'creature' | 'object', at: Placement): Promise<void>;
   /** Opens the editor on one of the project's NPCs or objects */
   onEditEntity?(kind: 'creature' | 'object', entry: number): void;
   /** Makes a project object lootable, or no longer */
@@ -221,7 +221,7 @@ export function useWorldMenu(deps: WorldMenuDeps): {
         setPlace({ what: action.what, at: action.at });
         return;
       case 'newEntity':
-        await d.current.onCreateEntity?.(action.what, await floored(facingCamera(action.at, action.what)), action.forQuest);
+        await d.current.onCreateEntity?.(action.what, await floored(facingCamera(action.at, action.what)));
         return;
       case 'editEntity':
         d.current.onEditEntity?.(action.spawn.kind, action.spawn.entry);

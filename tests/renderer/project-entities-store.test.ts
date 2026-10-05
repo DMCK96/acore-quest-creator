@@ -38,20 +38,21 @@ describe('the renderer\'s project store', () => {
     expect(store.getState().entitiesSeq).toBe(seq + 1);
   });
 
-  it('creates an entity with a fresh id, made for the quest given, and sends it now', async () => {
+  it('creates an entity with a fresh id and no quest attached, and sends it now', async () => {
     const api = makeMockApi({ allocateIds: vi.fn(async () => okv([12000007])), putProjectEntities: vi.fn(async () => okv(true as const)) });
     const store = createAppStore(api, { saveDelayMs: 10_000 });
-    const made = await store.getState().createEntity('npc', { name: 'Scout' }, 60001);
+    const made = await store.getState().createEntity('npc', { name: 'Scout' });
     expect(made).toEqual({ entry: 12000007 });
     expect(api.allocateIds).toHaveBeenCalledWith('creature', 1);
     expect(api.putProjectEntities).toHaveBeenCalledTimes(1);
-    expect(store.getState().entities.npcs[0]).toMatchObject({ entry: 12000007, name: 'Scout', madeFor: 60001 });
+    expect(store.getState().entities.npcs[0]).toMatchObject({ entry: 12000007, name: 'Scout' });
+    expect(store.getState().entities.npcs[0]).not.toHaveProperty('madeFor');
   });
 
   it('says why when no id could be had', async () => {
     const api = makeMockApi({ allocateIds: vi.fn(async () => okv([])) });
     const store = createAppStore(api, { saveDelayMs: 10 });
-    expect(await store.getState().createEntity('object', {}, null)).toEqual({ error: 'No free ID could be found.' });
+    expect(await store.getState().createEntity('object', {})).toEqual({ error: 'No free ID could be found.' });
     expect(store.getState().entities).toEqual(EMPTY_ENTITIES);
   });
 

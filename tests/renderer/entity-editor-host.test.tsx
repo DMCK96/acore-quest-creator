@@ -85,7 +85,7 @@ describe('the editor in the quest flow', () => {
     const editor = await screen.findByRole('dialog', { name: 'New NPC' });
     const values = store.getState().open!.aggregate.values;
     const { npcs } = store.getState().entities;
-    expect(npcs.map((n) => [n.entry, n.madeFor])).toEqual([[12000005, 60123]]);
+    expect(npcs.map((n) => n.entry)).toEqual([12000005]);
     expect(npcs[0]!.questGiver).toBe(true);
     expect(values.creature_queststarter).toEqual([{ id: 12000005 }]);
     await userEvent.click(within(editor).getByRole('button', { name: 'Done' }));

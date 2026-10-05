@@ -26,7 +26,7 @@ async function mountFlow() {
   const a = createNewAggregate(schema, registry, 60123);
   const values = { ...a.values, creature_queststarter: [{ id: 12000005 }], [ENTITIES_FIELD]: writeEntities({ npcs: [{ ...newNpc(12000005), name: 'Hela' }], objects: [], items: [] }) };
   const open = sampleOpen({ questId: 60123, aggregate: { ...a, values } });
-  const api = makeMockApi({ newQuest: vi.fn(async () => okv(open)), projectEntities: vi.fn(async () => okv({ npcs: [{ ...newNpc(12000005, 60123), name: 'Hela' }], objects: [], items: [] })) });
+  const api = makeMockApi({ newQuest: vi.fn(async () => okv(open)), projectEntities: vi.fn(async () => okv({ npcs: [{ ...newNpc(12000005), name: 'Hela' }], objects: [], items: [] })) });
   const store = createAppStore(api, { saveDelayMs: 0 });
   await store.getState().loadEntities();
   await store.getState().newQuest();

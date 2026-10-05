@@ -58,10 +58,13 @@ describe('the project store through the API', () => {
   it('a quest\'s spawn list reads the NPCs the quest uses from the store', async () => {
     const { api } = await setup();
     const opened: any = await api.newQuest();
-    await api.putProjectEntities({ ...EMPTY_ENTITIES, npcs: [{ ...hela, madeFor: opened.value.questId }] });
+    await api.putProjectEntities({ ...EMPTY_ENTITIES, npcs: [hela] });
+    const aggregate = opened.value.aggregate;
+    aggregate.values.creature_queststarter = [{ id: hela.entry }];
+    await api.updateQuest(aggregate);
     const groups: any = await api.questSpawnList([opened.value.questId]);
     expect(groups.value[0].spawns).toEqual([expect.objectContaining({ guid: 5300700, entry: 11000240, role: 'own' })]);
-    expect(opened.value.aggregate.values).not.toHaveProperty('entities');
+    expect(aggregate.values).not.toHaveProperty('entities');
     const nodes: any = await api.listNodes();
     expect(nodes.value[0].uses).toEqual({ npcs: [11000240], objects: [], items: [] });
   });

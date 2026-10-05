@@ -32,7 +32,7 @@ export function NpcEditor({
   /** The project's quests a fight's credit can name, those that use the NPC first */
   quests?: readonly { questId: number; title: string }[];
 }): React.JSX.Element {
-  const credit = { quests, defaultQuest: npc.madeFor ?? quests[0]?.questId ?? 0 };
+  const credit = { quests, defaultQuest: quests[0]?.questId ?? 0 };
   return (
     <EditorTabs
       label="NPC"

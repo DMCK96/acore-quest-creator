@@ -747,7 +747,7 @@ export function createApi(deps: ApiDeps): Api {
     return deps.session.entities.get();
   }
 
-  /** The project's NPCs, objects and items a quest uses: made for it, or named by it */
+  /** The project's NPCs, objects and items a quest uses: the ones it names, and the NPCs whose fights credit it */
   function questEntities(aggregate: QuestAggregate): ProjectEntities {
     const store = projectEntities();
     return narrowTo(store, questUses({ questId: aggregate.questId, aggregate }, store));

@@ -109,8 +109,6 @@ const npcSchema = z.object({
   fight: fightSchema.nullable().default(null),
   // Added with the NPC editor (slice M): the weapons it holds, as items; none keeps older NPCs unarmed.
   equipment: z.object({ mainHand: int, offHand: int, ranged: int }).default({ mainHand: 0, offHand: 0, ranged: 0 }),
-  // The quest it was made for, or null when made outside a quest: where it came from, not a link list.
-  madeFor: int.nullable().default(null),
 });
 
 const pageSchema = z.object({ id: int, text: z.string() });
@@ -127,7 +125,6 @@ const objectSchema = z.object({
   // The quest a player must have in their log to use or loot it, or null for anyone.
   onlyDuringQuest: int.nullable().default(null),
   loot: z.array(lootSchema).default([]),
-  madeFor: int.nullable().default(null),
 });
 
 export const ITEM_QUALITY_VALUE = { poor: 0, common: 1, uncommon: 2, rare: 3, epic: 4, legendary: 5, artifact: 6, heirloom: 7 } as const;
@@ -166,7 +163,6 @@ const itemSchema = z.object({
   stats: z.array(itemStatSchema).max(10),
   spells: z.array(itemSpellSchema).max(5),
   advanced: z.record(z.string(), z.string()),
-  madeFor: int.nullable().default(null),
 });
 
 export type Spawn = z.infer<typeof spawnSchema>;
@@ -189,7 +185,7 @@ export type ItemSpell = z.infer<typeof itemSpellSchema>;
 export type ItemQuality = CustomItem['quality'];
 export type Bonding = CustomItem['bonding'];
 
-/** The project's new NPCs, objects and items: one store, whichever quest (if any) they were made for. */
+/** The project's new NPCs, objects and items: one store; a quest uses one by naming it. */
 export interface ProjectEntities {
   npcs: CustomNpc[];
   objects: CustomObject[];
@@ -229,7 +225,7 @@ export function writeEntities(entities: QuestEntities): FieldValue {
   return entities as unknown as FieldValue;
 }
 
-export function newNpc(entry: number, madeFor: number | null = null): CustomNpc {
+export function newNpc(entry: number): CustomNpc {
   return {
     entry,
     name: '',
@@ -249,12 +245,11 @@ export function newNpc(entry: number, madeFor: number | null = null): CustomNpc 
     loot: [],
     fight: null,
     equipment: { mainHand: 0, offHand: 0, ranged: 0 },
-    madeFor,
   };
 }
 
-export function newObject(entry: number, madeFor: number | null = null): CustomObject {
-  return { entry, name: '', type: 'goober', displayId: 0, size: 1, spawns: [], pages: [], onlyDuringQuest: null, loot: [], madeFor };
+export function newObject(entry: number): CustomObject {
+  return { entry, name: '', type: 'goober', displayId: 0, size: 1, spawns: [], pages: [], onlyDuringQuest: null, loot: [] };
 }
 
 export function newSpawn(guid: number): Spawn {
@@ -262,10 +257,10 @@ export function newSpawn(guid: number): Spawn {
 }
 
 /** A new item starts as a quest item: most are things the player is asked to collect. */
-export function newItem(entry: number, madeFor: number | null = null): CustomItem {
+export function newItem(entry: number): CustomItem {
   return {
     entry, name: '', description: '', quality: 'common', itemClass: 12, subclass: 0, inventoryType: 0, displayId: 0,
     itemLevel: 1, requiredLevel: 0, stackable: 1, maxCount: 1, bonding: 'quest', buyPrice: 0, sellPrice: 0, startsQuest: 0,
-    pages: [], armor: 0, damage: [], delayMs: 0, stats: [], spells: [], advanced: {}, madeFor,
+    pages: [], armor: 0, damage: [], delayMs: 0, stats: [], spells: [], advanced: {},
   };
 }

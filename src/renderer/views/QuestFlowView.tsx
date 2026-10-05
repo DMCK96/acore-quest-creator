@@ -117,9 +117,9 @@ export function QuestFlowView({ store }: { store: AppStore }): React.JSX.Element
     if (!api) return 'Not connected.';
     // The first `if` returned for both existing kinds; TypeScript cannot narrow a union-typed `kind` out.
     const made = request as Extract<EditorRequest, { kind: 'newNpc' | 'newObject' | 'newItem' }>;
-    // Created in the project at once (never a draft), made for the open quest unless asked otherwise
+    // Created in the project at once (never a draft); a quest uses it once it names it (`onCreated`)
     const kind = made.kind === 'newNpc' ? 'npc' : made.kind === 'newObject' ? 'object' : 'item';
-    const result = await store.getState().createEntity(kind, made.preset ?? {}, made.madeFor !== undefined ? made.madeFor : (store.getState().open?.questId ?? null));
+    const result = await store.getState().createEntity(kind, made.preset ?? {});
     if ('error' in result) return result.error;
     const entry = result.entry;
     made.onCreated?.(entry);
