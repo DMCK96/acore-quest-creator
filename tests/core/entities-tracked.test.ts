@@ -65,4 +65,26 @@ describe('trackedEntities', () => {
     expect(rows.find((r) => r.entry === 12000001)!.usedBy).toEqual([60001, 60002]);
     expect(rows.find((r) => r.entry === 1423)!.usedBy).toEqual([60001]);
   });
+
+  it('an existing entity edited in the project is tracked as details, merged with its layer changes', () => {
+    const origin = { kind: 'existing' as const, original: {}, sharedLoot: 0, spawnCount: 1, locked: [] };
+    const edited = { ...EMPTY_ENTITIES, npcs: [{ ...newNpc(1423), name: 'Stormwind Guard', origin }] };
+    const layer: WorldLayer = { ...EMPTY_WORLD, spawns: [{ kind: 'creature', guid: 80330, entry: 1423, name: 'Stormwind Guard', map: 0, original: place(1), current: place(2) }] };
+    expect(trackedEntities({ store: edited, layer, quests: [] })).toEqual([
+      { kind: 'npc', entry: 1423, name: 'Stormwind Guard', origin: 'existing', changes: ['spawns', 'details'], usedBy: [], goTo: { kind: 'creature', guid: 80330, map: 0, x: 2, y: 0, z: 0 } },
+    ]);
+  });
+
+  it('a respawn change is a spawns change', () => {
+    const layer: WorldLayer = { ...EMPTY_WORLD, respawns: [{ kind: 'creature', guid: 80330, entry: 1423, name: 'Stormwind Guard', map: 0, original: 300, current: 60 }] };
+    expect(trackedEntities({ store: EMPTY_ENTITIES, layer, quests: [] })[0]).toMatchObject({ entry: 1423, changes: ['spawns'] });
+  });
+
+  it('every entity with a spawn in a changed group has a group change', () => {
+    const member = { type: 'spawn' as const, kind: 'npc' as const, guid: 39203, entry: 32491, chance: 0 };
+    const layer: WorldLayer = { ...EMPTY_WORLD, groups: [{ id: 900001, name: 'Path 1', map: 571, maxActive: 1, members: [member], origin: { kind: 'new' } }] };
+    expect(trackedEntities({ store: EMPTY_ENTITIES, layer, quests: [] })).toEqual([
+      { kind: 'npc', entry: 32491, name: 'NPC 32491', origin: 'existing', changes: ['group'], usedBy: [], goTo: null },
+    ]);
+  });
 });

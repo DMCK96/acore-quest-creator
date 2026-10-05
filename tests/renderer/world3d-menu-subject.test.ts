@@ -42,4 +42,12 @@ describe('the clicked thing as an entity', () => {
   it('translates the 3D view and world layer kinds', () => {
     expect([spawnKindOf('creature'), spawnKindOf('object'), spawnKindOf('gameobject')]).toEqual(['npc', 'object', 'object']);
   });
+
+  it('an existing NPC edited in the project stays existing; an edited existing chest can be looted unless its type is locked', () => {
+    const origin = (locked: ('type' | 'loot' | 'fight')[]) => ({ kind: 'existing' as const, original: {}, sharedLoot: 0, spawnCount: 1, locked });
+    const edited = { ...store, npcs: [...store.npcs, { ...newNpc(1423), origin: origin([]) }], objects: [{ ...newObject(143981), type: 'chest' as const, origin: origin([]) }, { ...newObject(5000), origin: origin(['type']) }] };
+    expect(spawnedEntityOf(info(), edited)).toMatchObject({ origin: 'existing', spawn: { origin: 'existing' } });
+    expect(spawnedEntityOf(info({ kind: 'object', entry: 143981 }), edited)).toMatchObject({ origin: 'existing', lootable: true });
+    expect(spawnedEntityOf(info({ kind: 'object', entry: 5000 }), edited)).toMatchObject({ lootable: null });
+  });
 });

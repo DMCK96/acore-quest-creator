@@ -78,7 +78,7 @@ import { compilePatrols, hasPointActions } from '../core/patrol/compile';
 import { ENTITY_KEYS, ENTITY_TABLES, readEntityContext } from '../core/entities/context';
 import { emptyGiversOf } from '../core/modules/givers';
 import { narrowTo, objectivesOf, questItemsOf, questRefs, questUses, relationOwners } from '../core/entities/links';
-import { NPC_TYPE_VALUE, OBJECT_TYPE_VALUE, RANK_VALUE, projectEntitiesSchema, readProjectEntities, type ProjectEntities, type QuestEntities } from '../core/entities/model';
+import { NPC_TYPE_VALUE, OBJECT_TYPE_VALUE, RANK_VALUE, newOnly, projectEntitiesSchema, readProjectEntities, type ProjectEntities, type QuestEntities } from '../core/entities/model';
 import { entityIssues } from '../core/entities/validate';
 import { gmCommands } from '../core/testing/gm';
 import { TerrainFormatError, gridFileName, parseMapFile, terrainHeight, type TerrainFile } from '../core/game/terrain';
@@ -1075,9 +1075,11 @@ export function createApi(deps: ApiDeps): Api {
     const schema: SchemaInfo = { ...base, tables: { ...ws.tables, ...base.tables } };
     const givers = all.flatMap((q) => [...relationOwners(q.aggregate, 'starter'), ...relationOwners(q.aggregate, 'ender')]).flatMap((o) => (o.kind === 'creature' ? [o.entry] : []));
     const questItems = all.flatMap((q) => questItemsOf(q.aggregate).map((item) => ({ item, questId: q.questId })));
-    const entityContext = await readEntityContext(live.db, store, all.map((q) => q.questId));
+    // Existing entities edited here are written as edits of their own rows, not compiled as new ones
+    const made = newOnly(store);
+    const entityContext = await readEntityContext(live.db, made, all.map((q) => q.questId));
     const compiledEntities = compileEntities({
-      entities: store, givers, questItems, context: entityContext,
+      entities: made, givers, questItems, context: entityContext,
       itemColumns: live.scriptSchema.tables.item_template ? new Set(live.scriptSchema.tables.item_template.map((c) => c.name)) : null,
     });
     const scripts = await projectScripts(live);
