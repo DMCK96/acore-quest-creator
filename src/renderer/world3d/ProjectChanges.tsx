@@ -1,8 +1,9 @@
 import { useEffect, useRef, useState } from 'react';
 import type { Api, ApiError, Movement, Placement, RoutePoint, WorldChange, WorldLayer } from '@shared/ipc';
-import type { CustomNpc, CustomObject, Spawn } from '@core/entities/model';
+import type { SpawnLocation } from '@core/entities/entity';
 import { trapTab } from '../components/trap-tab';
-import { otherUsers, useProjectEntities, type ProjectQuestUse } from '../state/project-entities';
+import { useProjectEntities } from '../state/project-entities';
+import { EntityList } from '../entities/EntityList';
 import '../views/ProjectDialog.css';
 
 /**
@@ -24,13 +25,12 @@ export function ProjectChanges({
   /** Opens the editor of one of the project's NPCs, objects or items */
   onEdit?(kind: 'npc' | 'object' | 'item', entry: number): void;
   /** Takes the camera to a spawn of one of the project's NPCs or objects */
-  onGoTo?(kind: 'creature' | 'object', entity: CustomNpc | CustomObject, spawn: Spawn): void;
+  onGoTo?(location: SpawnLocation): void;
   /** Moves when an undo or redo changed the layer, so the list is read again */
   layerSeq?: number;
 }): React.JSX.Element {
   const project = useProjectEntities();
-  const entities = project?.entities;
-  const count = entities ? entities.npcs.length + entities.objects.length + entities.items.length : 0;
+  const count = project?.tracked.length ?? 0;
   const dialog = useRef<HTMLDivElement>(null);
   const [changes, setChanges] = useState<WorldChange[] | null>(null);
   const [exported, setExported] = useState<{ applyPath: string; revertPath: string } | null>(null);
@@ -95,22 +95,16 @@ export function ProjectChanges({
             ✕
           </button>
         </header>
-        {entities && count > 0 && (
-          <section className="project-changes__entities" aria-label="New NPCs, objects & items">
-            <h3 className="section-label">New NPCs, objects &amp; items</h3>
-            <ul className="project-changes__list">
-              {entities.npcs.map((npc) => (
-                <EntityRow key={`npc:${npc.entry}`} kind="npc" entry={npc.entry} name={npc.name} spawns={npc.spawns.length} quests={project.quests}
-                  onEdit={onEdit} onGoTo={npc.spawns[0] && onGoTo ? () => onGoTo('creature', npc, npc.spawns[0]) : undefined} />
-              ))}
-              {entities.objects.map((object) => (
-                <EntityRow key={`object:${object.entry}`} kind="object" entry={object.entry} name={object.name} spawns={object.spawns.length} quests={project.quests}
-                  onEdit={onEdit} onGoTo={object.spawns[0] && onGoTo ? () => onGoTo('object', object, object.spawns[0]) : undefined} />
-              ))}
-              {entities.items.map((item) => (
-                <EntityRow key={`item:${item.entry}`} kind="item" entry={item.entry} name={item.name} spawns={null} quests={project.quests} onEdit={onEdit} />
-              ))}
-            </ul>
+        {count > 0 && project && (
+          <section className="project-changes__entities" aria-label="NPCs, objects & items">
+            <h3 className="section-label">NPCs, objects &amp; items</h3>
+            <EntityList
+              tracked={project.tracked}
+              quests={project.quests}
+              canEdit={(e) => e.origin === 'new'}
+              onEdit={(ref) => onEdit?.(ref.kind, ref.entry)}
+              onGoTo={(e) => e.goTo && onGoTo?.(e.goTo)}
+            />
           </section>
         )}
         {count > 0 && <h3 className="section-label">World changes</h3>}
@@ -162,43 +156,6 @@ export function ProjectChanges({
 
 /** The errors a refusal lists (its warnings are left out: they do not stop the export) */
 const errorsOf = (error: ApiError): string[] => (error.issues ?? []).filter((i) => i.severity === 'error').map((i) => i.message);
-
-const KIND_LABEL = { npc: 'NPC', object: 'Object', item: 'Item' } as const;
-const USE_KEY = { npc: 'npcs', object: 'objects', item: 'items' } as const;
-
-/** One of the project's NPCs, objects or items: what it is, how many spawns it has, and the quests that use it */
-function EntityRow({
-  kind, entry, name, spawns, quests, onEdit, onGoTo,
-}: {
-  kind: 'npc' | 'object' | 'item';
-  entry: number;
-  name: string;
-  /** Null for items, which have none */
-  spawns: number | null;
-  quests: readonly ProjectQuestUse[];
-  onEdit?(kind: 'npc' | 'object' | 'item', entry: number): void;
-  onGoTo?(): void;
-}): React.JSX.Element {
-  const label = name.trim() || `${KIND_LABEL[kind]} ${entry}`;
-  const users = otherUsers(quests, null, USE_KEY[kind], entry);
-  const parts = [`${KIND_LABEL[kind]} ${entry}`];
-  if (spawns !== null) parts.push(`${spawns} ${spawns === 1 ? 'spawn' : 'spawns'}`);
-  if (users.length > 0) parts.push(`used by ${users.join(', ')}`);
-  return (
-    <li className="project-changes__entity" aria-label={label}>
-      <span className="project-changes__name">{label}</span>
-      <span className="project-changes__facts">{parts.join(' · ')}</span>
-      <span className="project-changes__actions">
-        <button type="button" className="btn" disabled={!onEdit} onClick={() => onEdit?.(kind, entry)}>
-          Edit
-        </button>
-        <button type="button" className="btn" disabled={!onGoTo} onClick={onGoTo}>
-          Go to
-        </button>
-      </span>
-    </li>
-  );
-}
 
 const where = (p: Placement): string => `${p.x.toFixed(2)}, ${p.y.toFixed(2)}, ${p.z.toFixed(2)}`;
 /** How an NPC moves, in a few words */

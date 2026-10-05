@@ -779,9 +779,10 @@ function WorldStage({
           onEdit={onEditEntity ? (kind, entry) => onEditEntity(kind === 'npc' ? 'creature' : kind, entry) : undefined}
           onGoTo={
             onGoToSpawn
-              ? (kind, entity, spawn) => {
+              ? (spawn) => {
                   setChangesOpen(false);
-                  onGoToSpawn({ kind, guid: spawn.guid, entry: entity.entry, name: entity.name, map: spawn.map, x: spawn.x, y: spawn.y, z: spawn.z, event: null, added: false });
+                  const entity = project?.tracked.find((t) => t.goTo === spawn);
+                  onGoToSpawn({ kind: spawn.kind, guid: spawn.guid, entry: entity?.entry ?? 0, name: entity?.name ?? '', map: spawn.map, x: spawn.x, y: spawn.y, z: spawn.z, event: null, added: false });
                 }
               : undefined
           }
