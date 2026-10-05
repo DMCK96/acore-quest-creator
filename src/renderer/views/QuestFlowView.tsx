@@ -83,8 +83,9 @@ export function QuestFlowView({ store }: { store: AppStore }): React.JSX.Element
   const values = open.aggregate.values;
   // The project's NPCs, objects and items this quest uses: they show its module and sum it up
   const mine = project && open ? narrowTo(project.entities, questUses({ questId: open.questId, aggregate: open.aggregate }, project.entities)) : EMPTY_ENTITIES;
-  const shown = presentModules(values, addedModules, mine);
-  const offered = offeredModules(values, addedModules, mine);
+  const tracking = (project?.tracked.length ?? 0) > 0;
+  const shown = presentModules(values, addedModules, tracking);
+  const offered = offeredModules(values, addedModules, tracking);
   const routed = routeIssues(issues);
   const chips: ReadinessChip[] = shown.flatMap((id) => {
     const severity = worstSeverity(routed.byModule[id]);

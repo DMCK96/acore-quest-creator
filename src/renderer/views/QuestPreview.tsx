@@ -67,7 +67,7 @@ export function QuestPreview({ store }: { store: AppStore }): React.JSX.Element 
         )}
       </header>
       <div className="quest-preview__body">
-        {presentModules(values, [], mine).map((id) => {
+        {presentModules(values, [], (project?.tracked.length ?? 0) > 0).map((id) => {
           const def = moduleById(id);
           const lines = def.summary(values, names, mine);
           return (
