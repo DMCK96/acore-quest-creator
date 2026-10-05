@@ -183,6 +183,13 @@ describe('the right-click menu in the 3D view', () => {
     expect(await screen.findByRole('button', { name: 'Project changes (1)' })).toBeEnabled();
   });
 
+  it('counts respawn and spawn group changes on the Project changes button, so a project with only those can open it', async () => {
+    const respawns = [{ kind: 'creature', guid: 80330, entry: 1423, name: 'Guard', map: 0, original: 300, current: 120 }];
+    const groups = [{ id: 900001, name: 'Path 1', map: 0, maxActive: 1, members: [{ type: 'spawn', kind: 'npc', guid: 80330, entry: 1423, chance: 0 }], origin: { kind: 'new' } }];
+    await view({ worldLayer: vi.fn(async () => okv({ ...EMPTY, respawns, groups })) });
+    expect(await screen.findByRole('button', { name: 'Project changes (2)' })).toBeEnabled();
+  });
+
   it('does not paste or duplicate while a path is drawn', async () => {
     const { api, world } = await view();
     world.selectedSpawns.mockReturnValue([guard]);
