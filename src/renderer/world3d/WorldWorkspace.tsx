@@ -447,9 +447,10 @@ export function WorldWorkspace({
         showArea={false}
         onArea={setArea}
         onPlaceChange={(place) => {
-          // The place the camera was last sent to is reported back once it rests there; anything else is the author moving it
+          // The place the camera was last sent to is reported back once it rests there; anything else is the author
+          // moving it. The author cannot move it while the World is hidden: a jump settling then is not a move
           const was = placeRef.current;
-          if (Math.hypot(place.x - was.x, place.y - was.y, place.z - was.z) > 1) lastCameraMove.current = nowRef.current();
+          if (active && Math.hypot(place.x - was.x, place.y - was.y, place.z - was.z) > 1) lastCameraMove.current = nowRef.current();
           placeRef.current = place;
           writeLastPlace({ map: mapRef.current, ...place });
         }}

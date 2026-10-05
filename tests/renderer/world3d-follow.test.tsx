@@ -78,14 +78,25 @@ describe('following a newly opened quest', () => {
   });
 
   it('drops the follow when the camera moved after the quest was opened', { timeout: 8000 }, async () => {
-    const view = mount({ active: false, follow: { questId: 60001, at: 10 }, now: () => 20 });
+    const view = mount({ active: true, now: () => 20 });
     await waitFor(() => expect(worlds).toHaveLength(1));
     // The author flies the camera at moment 20: the view reports where it rests on its next check
     worlds[0].target = () => ({ x: 40, y: 2, z: 3 });
     await waitFor(() => expect(readLastPlace().x).toBe(40), { timeout: 3000 });
+    view.rerender({ active: false, follow: { questId: 60001, at: 10 } });
     view.rerender({ active: true, follow: { questId: 60001, at: 10 } });
     await new Promise((r) => setTimeout(r, 50));
     expect(api.questSpawnList).not.toHaveBeenCalled();
+  });
+
+  it('keeps the follow when the camera only settled while the World was hidden', { timeout: 8000 }, async () => {
+    const view = mount({ active: false, follow: { questId: 60001, at: 10 }, now: () => 20 });
+    await waitFor(() => expect(worlds).toHaveLength(1));
+    // A smooth jump comes to rest off the place it was sent to after the author switched away
+    worlds[0].target = () => ({ x: 40, y: 2, z: 3 });
+    await waitFor(() => expect(readLastPlace().x).toBe(40), { timeout: 3000 });
+    view.rerender({ active: true, follow: { questId: 60001, at: 10 } });
+    await waitFor(() => expect(api.questSpawnList).toHaveBeenCalledWith([60001]));
   });
 
   it('records nothing for a quest opened while the World is shown', async () => {

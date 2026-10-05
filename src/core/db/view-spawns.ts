@@ -79,6 +79,10 @@ export interface ViewCreature {
   preset: ViewPreset | null;
   /** The spawn group (pool) it is in, or null when it is in none */
   group: number | null;
+  /** The top-level group its database group sits in (itself when not nested), when the query gave it */
+  poolTop?: number | null;
+  /** The event that top-level group follows in the database (game_event_pool), which `events` or `removedBy` holds */
+  poolEvent?: PoolEvent | null;
   /** Seconds before it respawns once killed (`spawntimesecs`) */
   respawnSecs: number;
 }
@@ -108,8 +112,23 @@ export interface ViewObject {
   removedBy: ViewEvent[];
   /** The spawn group (pool) it is in, or null when it is in none */
   group: number | null;
+  /** The top-level group its database group sits in (itself when not nested), when the query gave it */
+  poolTop?: number | null;
+  /** The event that top-level group follows in the database (game_event_pool), which `events` or `removedBy` holds */
+  poolEvent?: PoolEvent | null;
   /** Seconds before it respawns once used up (`spawntimesecs`) */
   respawnSecs: number;
+}
+
+/** The event a spawn's top-level group follows in the database */
+export interface PoolEvent {
+  /** The top-level group whose game_event_pool row it is */
+  pool: number;
+  id: number;
+  /** Brings the spawns (positive), else takes them away */
+  during: boolean;
+  /** The spawn also has its own event row for this event, which stays when the group's goes */
+  alsoOwn: boolean;
 }
 
 export interface ViewSpawns {
@@ -161,9 +180,19 @@ const eventListOf = (row: Row): { events: ViewEvent[]; removedBy: ViewEvent[] } 
   const poolEntry = num(row.pool_event_entry);
   const poolEvent = { id: Math.abs(poolEntry), name: row.pool_event_name ?? '' };
   const into = poolEntry > 0 ? events : poolEntry < 0 ? removedBy : null;
-  if (into && !into.some((e) => e.id === poolEvent.id)) into.push(poolEvent);
+  const alsoOwn = into ? into.some((e) => e.id === poolEvent.id) : false;
+  if (into && !alsoOwn) into.push(poolEvent);
   const byId = (a: ViewEvent, b: ViewEvent) => a.id - b.id;
-  return { events: events.sort(byId), removedBy: removedBy.sort(byId) };
+  return { events: events.sort(byId), removedBy: removedBy.sort(byId), ...poolOf(row, alsoOwn) };
+};
+
+/** Its database top-level group and that group's event, when the query gave them */
+const poolOf = (row: Row, alsoOwn: boolean): { poolTop?: number; poolEvent?: PoolEvent | null } => {
+  // Left out for a spawn in no group (or a query without groups)
+  if (row.pool_top === undefined || row.pool_top === null || row.pool_top === '') return {};
+  const poolTop = num(row.pool_top);
+  const entry = num(row.pool_event_entry);
+  return { poolTop, poolEvent: entry !== 0 ? { pool: poolTop, id: Math.abs(entry), during: entry > 0, alsoOwn } : null };
 };
 
 /** Its first event: its own (`event_entry`), or its top-level group's when that one comes first */
