@@ -7,6 +7,7 @@
  * leaves the world drawn without them.
  */
 import * as THREE from 'three';
+import { withLooks, type EntityLooks } from '../../../../core/entities/view-spawns.js';
 import { ViewCreature, ViewEvent, ViewObject, ViewPoint, ViewSpawns } from '../../../../core/db/view-spawns.js';
 import { WorldLayer } from '../../../../core/world/layer.js';
 import type { Movement } from '../../../../core/world/movement.js';
@@ -218,6 +219,8 @@ class SpawnManager {
   #wanted = new globalThis.Map<number, number>();
   #requests = 0;
   #visibility: SpawnVisibility = { ...DEFAULT_VISIBILITY };
+  /** Looks of edited existing entities, drawn on their database spawns */
+  #looks: EntityLooks = new globalThis.Map();
   #own: ViewSpawns = { creatures: [], objects: [], capped: { creatures: false, objects: false } };
   #warned = new Set<string>();
   #now: () => number;
@@ -329,6 +332,12 @@ class SpawnManager {
     this.status = { ...this.status, events: eventsIn(this.#responses.values()) };
   }
 
+  /** The looks of edited existing entities, drawn on their database spawns; loaded areas are redrawn */
+  async setLooks(looks: EntityLooks) {
+    this.#looks = looks;
+    await this.#redraw();
+  }
+
   /**
    * The open quest's own spawns, drawn in whichever loaded area holds them, in place of a database
    * spawn with the same guid. Loaded areas are redrawn from their last answer, without asking again.
@@ -345,7 +354,8 @@ class SpawnManager {
    * open quest has its own of, plus its own in the box on its map; without event spawns unless they
    * are asked for
    */
-  #overlay(spawns: ViewSpawns, box: Box, map: number): ViewSpawns {
+  #overlay(rawSpawns: ViewSpawns, box: Box, map: number): ViewSpawns {
+    const spawns = withLooks(rawSpawns, this.#looks);
     const inBox = (s: { map: number; x: number; y: number }) => s.map === map && s.x >= box.minX && s.x <= box.maxX && s.y >= box.minY && s.y <= box.maxY;
     const shown = (s: Parameters<typeof inEvent>[0]) => inEvent(s, this.#visibility.events);
     const ownCreatures = new Set(this.#own.creatures.map((c) => c.guid));

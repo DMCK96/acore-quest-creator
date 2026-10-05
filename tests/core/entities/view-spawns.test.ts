@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { newNpc, newObject, newSpawn } from '../../../src/core/entities/model';
-import { ownViewSpawns } from '../../../src/core/entities/view-spawns';
+import { looksOf, ownViewSpawns, withLooks } from '../../../src/core/entities/view-spawns';
 
 describe('the open quest\'s own spawns for the 3D view', () => {
   it('turns a new NPC\'s spawns into view creatures, with its look, weapons, wander and route', () => {
@@ -22,5 +22,22 @@ describe('the open quest\'s own spawns for the 3D view', () => {
     expect(o).toMatchObject({ guid: 800010, entry: 900200, name: 'Old Chest', displayId: 259, scale: 1.5, own: true });
     expect(o!.rotation[2]).toBeCloseTo(1, 6);
     expect(o!.rotation[3]).toBeCloseTo(0, 6);
+  });
+});
+
+describe('edited looks', () => {
+  it('draws database spawns of an edited existing entity with its new look, and leaves others alone', () => {
+    const origin = { kind: 'existing' as const, original: {}, sharedLoot: 0, spawnCount: 2, locked: [] } as any;
+    const store = { npcs: [{ ...newNpc(1423), displayId: 4000, scale: 2, equipment: { mainHand: 1899, offHand: 0, ranged: 0 }, origin }, newNpc(12000001)], objects: [{ ...newObject(143981), displayId: 9, size: 3, origin }], items: [] };
+    const looks = looksOf(store);
+    expect([...looks.keys()]).toEqual(['creature:1423', 'object:143981']);
+    const spawns = {
+      creatures: [{ guid: 1, entry: 1423, displayId: 3167, scale: 1, equipment: [0, 0, 0] }, { guid: 2, entry: 68, displayId: 5, scale: 1, equipment: [0, 0, 0] }],
+      objects: [{ guid: 3, entry: 143981, displayId: 1949, scale: 1 }],
+      capped: { creatures: false, objects: false },
+    } as any;
+    const drawn = withLooks(spawns, looks);
+    expect(drawn.creatures.map((c: any) => [c.displayId, c.scale, c.equipment])).toEqual([[4000, 2, [1899, 0, 0]], [5, 1, [0, 0, 0]]]);
+    expect(drawn.objects[0]).toMatchObject({ displayId: 9, scale: 3 });
   });
 });

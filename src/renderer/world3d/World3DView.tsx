@@ -1,4 +1,4 @@
-import { Component, useEffect, useRef, useState, type ReactNode } from 'react';
+import { Component, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { assetUrl } from '@core/client/asset-url';
 import { worldMapDirectory } from '@core/map/world-maps';
 import { createWorld3D, type Scenery, type SelectionSummary, type World3D } from './world3d';
@@ -22,6 +22,7 @@ import { useWorldMenu } from './useWorldMenu';
 import type { QuestMenuInfo } from './menu/model';
 import type { Role, RoleTarget } from '@core/modules/quest-roles';
 import type { QuestSpawnGroup } from '@shared/ipc';
+import { looksOf } from '@core/entities/view-spawns';
 import '../views/ProjectDialog.css';
 import './world3d.css';
 
@@ -539,6 +540,7 @@ function WorldStage({
           created.setTool(layersRef.current.tool);
           created.setFalloff({ on: layersRef.current.falloff, radius: layersRef.current.falloffRadius });
           if (!activeRef.current) created.setActive(false);
+          if (looksRef.current.size > 0) created.setLooks(looksRef.current);
           if (ownRef.current) created.setOwnSpawns(ownRef.current);
           world.current = created;
           bringIntoViewRef.current();
@@ -557,6 +559,18 @@ function WorldStage({
       world.current = null;
     };
   }, [directory, map, hasClient]);
+
+  // Edited existing NPCs and objects, drawn with their new look
+  const looks = useMemo(() => looksOf(projectEntities ?? EMPTY_ENTITIES), [projectEntities]);
+  const looksKey = JSON.stringify([...looks]);
+  const looksSet = useRef(false);
+  const looksRef = useRef(looks);
+  looksRef.current = looks;
+  useEffect(() => {
+    if (looksRef.current.size === 0 && !looksSet.current) return;
+    looksSet.current = looksRef.current.size > 0;
+    world.current?.setLooks(looksRef.current);
+  }, [looksKey]);
 
   // The open quest's own spawns, redrawn as they change.
   useEffect(() => {
