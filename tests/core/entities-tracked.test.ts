@@ -87,4 +87,39 @@ describe('trackedEntities', () => {
       { kind: 'npc', entry: 32491, name: 'NPC 32491', origin: 'existing', changes: ['group'], usedBy: [], goTo: null },
     ]);
   });
+
+  describe('group changes: only spawns whose membership changed', () => {
+    const spawn = (guid: number, entry: number, chance = 0) => ({ type: 'spawn' as const, kind: 'npc' as const, guid, entry, chance });
+    const row = (guid: number, chance = 0) => ({ table: 'pool_creature' as const, row: { guid: String(guid), pool_entry: '5000', chance: String(chance), description: '' } });
+    const existing = (members: ReturnType<typeof row>[]) => ({ kind: 'existing' as const, original: { template: { entry: '5000', max_limit: '1', description: 'Guards' }, members, event: null } });
+    const entries: Record<number, number> = { 300: 1003 };
+    const entryOfSpawn = (kind: 'npc' | 'object', guid: number): number | null => (kind === 'npc' ? entries[guid] ?? null : null);
+    const changed = (layer: WorldLayer) =>
+      trackedEntities({ store: EMPTY_ENTITIES, layer, quests: [], entryOfSpawn }).filter((t) => t.changes.includes('group')).map((t) => t.entry);
+
+    it('an existing group marks the spawns added to it and the ones taken out whose entry is known, not the ones it kept', () => {
+      const layer: WorldLayer = { ...EMPTY_WORLD, groups: [{ id: 5000, name: 'Guards', map: 0, maxActive: 1,
+        members: [spawn(100, 1001), spawn(200, 1002)], origin: existing([row(100), row(300), row(400)]) }] };
+      expect(changed(layer)).toEqual([1002, 1003]);
+    });
+
+    it('the entry of a spawn taken out can be read from the layer', () => {
+      const layer: WorldLayer = { ...EMPTY_WORLD,
+        respawns: [{ kind: 'creature', guid: 400, entry: 1004, name: 'Guard', map: 0, original: 300, current: 60 }],
+        groups: [{ id: 5000, name: 'Guards', map: 0, maxActive: 1, members: [spawn(100, 1001)], origin: existing([row(100), row(400)]) }] };
+      expect(trackedEntities({ store: EMPTY_ENTITIES, layer, quests: [] }).find((t) => t.entry === 1004)!.changes).toEqual(['spawns', 'group']);
+    });
+
+    it('a chance-only or name-only edit of an existing group changes no membership', () => {
+      const layer: WorldLayer = { ...EMPTY_WORLD, groups: [{ id: 5000, name: 'Renamed', map: 0, maxActive: 1,
+        members: [spawn(100, 1001, 40), spawn(300, 1003, 60)], origin: existing([row(100, 50), row(300, 50)]) }] };
+      expect(changed(layer)).toEqual([]);
+    });
+
+    it('a deleted existing group marks every original member whose entry is known, and its current members', () => {
+      const layer: WorldLayer = { ...EMPTY_WORLD, groups: [{ id: 5000, name: 'Guards', map: 0, maxActive: 1, removed: true,
+        members: [spawn(100, 1001)], origin: existing([row(100), row(300), row(400)]) }] };
+      expect(changed(layer)).toEqual([1001, 1003]);
+    });
+  });
 });

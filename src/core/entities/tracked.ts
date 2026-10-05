@@ -1,3 +1,4 @@
+import type { SpawnGroup } from '../world/groups';
 import { groupsOf, movementsOf, respawnsOf, type WorldLayer } from '../world/layer';
 import { spawnKindOf, type EntityChange, type EntityKind, type SpawnLocation, type TrackedEntity } from './entity';
 import type { QuestUse } from './links';
@@ -19,7 +20,13 @@ const LIST_OF = { npc: 'npcs', object: 'objects', item: 'items' } as const;
  * existing NPC or object the project changed through the world layer (spawn moves, placed spawns,
  * movement, paths, respawn times, spawn groups), with what changed and the quests using it.
  */
-export function trackedEntities(input: { store: ProjectEntities; layer: WorldLayer; quests: readonly TrackedQuest[] }): TrackedEntity[] {
+export function trackedEntities(input: {
+  store: ProjectEntities;
+  layer: WorldLayer;
+  quests: readonly TrackedQuest[];
+  /** The entry of a spawn the layer and store do not know, or null; a spawn taken out of a group carries only its guid */
+  entryOfSpawn?(kind: 'npc' | 'object', guid: number): number | null;
+}): TrackedEntity[] {
   const { store, layer, quests } = input;
   const rows = new Map<string, TrackedEntity>();
   const keyOf = (kind: EntityKind, entry: number): string => `${kind}:${entry}`;
@@ -64,9 +71,10 @@ export function trackedEntities(input: { store: ProjectEntities; layer: WorldLay
       : (r.walkerEntries ?? []);
     for (const w of walkers) touch('npc', w.entry, w.name, 'path');
   }
-  // Every entity with a spawn in a group the project made or changed; members only carry an entry, not a name
+  // Every entity with a spawn whose group membership the project changed; members only carry an entry, not a name
+  const entryOf = spawnEntries(store, layer, input.entryOfSpawn);
   for (const g of groupsOf(layer)) {
-    for (const m of g.members) if (m.type === 'spawn') touch(m.kind, m.entry, '', 'group');
+    for (const m of changedMembers(g, entryOf)) touch(m.kind, m.entry, '', 'group');
   }
   for (const t of touched.values()) {
     const changes = CHANGE_ORDER.filter((c) => t.changes.has(c));
@@ -83,4 +91,53 @@ export function trackedEntities(input: { store: ProjectEntities; layer: WorldLay
     return { ...row, usedBy };
   });
   return result.sort((a, b) => KIND_ORDER[a.kind] - KIND_ORDER[b.kind] || a.name.localeCompare(b.name, 'en') || a.entry - b.entry);
+}
+
+/** The entry of a spawn by guid, as the layer and the store know it, else as `fallback` does; null when not known */
+function spawnEntries(
+  store: ProjectEntities,
+  layer: WorldLayer,
+  fallback?: (kind: 'npc' | 'object', guid: number) => number | null,
+): (kind: 'npc' | 'object', guid: number) => number | null {
+  const known = new Map<string, number>();
+  const put = (kind: 'npc' | 'object', guid: number, entry: number): void => {
+    if (!known.has(`${kind}:${guid}`)) known.set(`${kind}:${guid}`, entry);
+  };
+  for (const s of layer.spawns) put(spawnKindOf(s.kind), s.guid, s.entry);
+  for (const a of layer.added) put(spawnKindOf(a.kind), a.guid, a.entry);
+  for (const r of respawnsOf(layer)) put(spawnKindOf(r.kind), r.guid, r.entry);
+  for (const m of movementsOf(layer)) put('npc', m.guid, m.entry);
+  for (const g of groupsOf(layer)) for (const m of g.members) if (m.type === 'spawn') put(m.kind, m.guid, m.entry);
+  for (const n of store.npcs) for (const s of n.spawns) put('npc', s.guid, n.entry);
+  for (const o of store.objects) for (const s of o.spawns) put('object', s.guid, o.entry);
+  return (kind, guid) => known.get(`${kind}:${guid}`) ?? fallback?.(kind, guid) ?? null;
+}
+
+/**
+ * The spawns whose membership a layer group changes: every member of a new group; the spawns added to
+ * an existing group and the ones taken out of it; every spawn of a deleted one. A spawn taken out whose
+ * entry is not known is left out.
+ */
+function changedMembers(
+  group: SpawnGroup,
+  entryOf: (kind: 'npc' | 'object', guid: number) => number | null,
+): { kind: 'npc' | 'object'; guid: number; entry: number }[] {
+  const current = group.members.flatMap((m) => (m.type === 'spawn' ? [{ kind: m.kind, guid: m.guid, entry: m.entry }] : []));
+  if (group.origin.kind === 'new') return current;
+  const original = group.origin.original.members.flatMap((m) => {
+    if (m.table === 'pool_pool') return [];
+    const kind = m.table === 'pool_creature' ? ('npc' as const) : ('object' as const);
+    const guid = Number(m.row.guid);
+    return Number.isFinite(guid) ? [{ kind, guid }] : [];
+  });
+  const key = (m: { kind: string; guid: number }): string => `${m.kind}:${m.guid}`;
+  const was = new Set(original.map(key));
+  const now = new Set(current.map(key));
+  const known = (list: { kind: 'npc' | 'object'; guid: number }[]) =>
+    list.flatMap((m) => {
+      const entry = entryOf(m.kind, m.guid);
+      return entry === null ? [] : [{ ...m, entry }];
+    });
+  if (group.removed) return [...current, ...known(original.filter((m) => !now.has(key(m))))];
+  return [...current.filter((m) => !was.has(key(m))), ...known(original.filter((m) => !now.has(key(m))))];
 }
