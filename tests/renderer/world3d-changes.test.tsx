@@ -94,4 +94,21 @@ describe('the Project changes modal', () => {
     await waitFor(() => expect(setLayer).toHaveBeenCalledWith(expect.objectContaining({ spawns: expect.any(Array) })));
     worlds.length = 0;
   });
+
+  it('draws the layer of a project opened while the view is showing', async () => {
+    vi.stubGlobal('fetch', async () => new Response(new Uint8Array([1]), { status: 200 }));
+    const empty = { spawns: [], routes: [], added: [] };
+    const opened = { spawns: [], routes: [{ pathId: 802630, walkers: 1, name: 'Stormwind Guard', original: route.original, current: route.current }], added: [] };
+    const api = makeMockApi({ worldLayer: vi.fn(async () => okv(empty)), mapFloors: vi.fn(async () => okv({ reason: 'none' })) });
+    const value = (layer: unknown) => ({ entities: EMPTY_ENTITIES, setEntities: vi.fn(), quests: [], create: vi.fn(), remove: vi.fn(), layer, setLayer: vi.fn(), tracked: [] }) as any;
+    const view = (layer: unknown) => <NamesProvider api={api}><HistoryProvider store={createAppStore(api)}><ProjectEntitiesProvider value={value(layer)}><World3DView map={0} start={{ x: 0, y: 0, z: 0 }} hasClient /></ProjectEntitiesProvider></HistoryProvider></NamesProvider>;
+    const { rerender } = render(view(empty));
+    await waitFor(() => expect(worlds.at(-1)?.setWorldLayer).toHaveBeenCalled());
+    expect(screen.getByRole('button', { name: 'Project changes (0)' })).toBeTruthy();
+    // Project → Open…: the app store reads the new project's layer and hands it down
+    rerender(view(opened));
+    await waitFor(() => expect(worlds.at(-1)!.setWorldLayer).toHaveBeenLastCalledWith(opened));
+    expect(screen.getByRole('button', { name: 'Project changes (1)' })).toBeTruthy();
+    worlds.length = 0;
+  });
 });

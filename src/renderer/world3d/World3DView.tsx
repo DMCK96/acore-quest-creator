@@ -277,6 +277,16 @@ function WorldStage({
     // takeLayer only writes refs and state
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [undone]);
+  // A project opened while the view is up (or the store read the layer again): draw what it holds.
+  // A layer this view handed up comes back down as the same object, or the same content, and is not drawn again.
+  const storeLayer = project?.layer;
+  useEffect(() => {
+    if (!storeLayer || storeLayer === layerRef.current || JSON.stringify(storeLayer) === JSON.stringify(layerRef.current)) return;
+    world.current?.cancelDrag();
+    layerRef.current = storeLayer;
+    setLayer(storeLayer);
+    world.current?.setWorldLayer(storeLayer);
+  }, [storeLayer]);
   /** Takes the camera close to the pending focus and selects it, with the layers that would hide it on */
   const bringIntoView = (): void => {
     const target = pendingFocus.current;
