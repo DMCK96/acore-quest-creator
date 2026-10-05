@@ -62,7 +62,8 @@ Right-click (without dragging) for a menu about what is under the cursor: a rout
 ### Place, copy and paste
 
 - **Place NPC here…** and **Place object here…**: pick an existing NPC or object, and one is put down where you right-clicked, facing you, on the server's floor. **Place…** in the Layers card places one with each click instead, until **Esc**.
-- **Copy**, **Paste here** and **Duplicate** (also **Ctrl+C**, **Ctrl+V** and **Ctrl+D**): a copied group keeps its layout and facing. **Ctrl+V** pastes under the cursor, and Duplicate puts the copy beside the original. A paste copies what a spawn is and how it faces, not its path or wander.
+- **Copy**, **Paste here** and **Duplicate** (also **Ctrl+C**, **Ctrl+V** and **Ctrl+D**): a copied group keeps its layout and facing. **Ctrl+V** pastes under the cursor, and Duplicate puts the copy beside the original. A paste copies what a spawn is, how it faces, its respawn time and how far it wanders. It does not copy a path: a pasted NPC that walked a path stands still, and you draw it a new one.
+- **Respawn time…**: how long a spawn takes to come back after it dies or is despawned, in minutes and seconds. It starts from the spawn's current time. With several spawns selected the item reads **Respawn time of _n_ spawns…** and sets them all; if they differ the boxes start empty. It works on any spawn, a new one, one you placed, or one the database already has.
 - **Remove**: takes away a spawn you placed. Spawns already in the database are not deleted.
 - **Copy coordinates**: puts `.go xyz` with the place's X, Y, Z and map on the clipboard, ready to paste in game.
 
@@ -74,7 +75,7 @@ Placing, pasting and removing are undone with **Ctrl+Z** like any other change.
 - **Change wander distance…**: how far the NPC roams from where it stands, 0 to 100 yards. Its circle follows what you type.
 - **Remove path**: the NPC stands still. A path the database already has is left in place for any other NPC that walks it.
 
-These work for the NPCs of the database and for your quest's own.
+These work for any NPC, whether the database has it or you made it.
 
 ### Your quest
 
@@ -85,24 +86,36 @@ Right-click an NPC or object and open **Quests**:
 
 On the ground, with a quest open:
 
-- **New quest NPC here…** and **New quest object here…** make a new NPC or object for the open quest, standing where you right-clicked.
 - **Show quest spawns** and **Show chain spawns** ring every spawn the quest (or its whole chain) uses and list them in the Find dialog by quest and part, so you can jump to any of them. **Hide quest spawns** takes the rings away.
 
 ### New NPCs and objects
 
 - **New NPC here…** and **New object here…** make a new [NPC or object](/acore-quest-creator/guides/npcs-and-objects/) for the project, with a spawn where you right-clicked, and open its editor. No quest needs to be open.
-- On one of the project's own NPCs or objects, **Edit NPC…** or **Edit object…** opens its editor.
-- On one of the project's own objects, **Make lootable…** turns it into a chest and opens its loot. **Stop being lootable** turns it back.
+- On any NPC or object, **Edit NPC…** or **Edit object…** opens its editor. For one the database already has this needs the world database connected; see [Change an NPC or object that already exists](/acore-quest-creator/guides/npcs-and-objects/#change-one-that-already-exists).
+- On an object, **Make lootable…** turns it into a chest and opens its loot. **Stop being lootable** turns it back.
 
-The project's NPCs and objects are drawn and edited in the World whether or not a quest is open. A move, or a path you give one, stays with the NPC, whichever quest uses it.
+An NPC or object is the project's, and a quest uses it by naming it. The project's NPCs and objects are drawn and edited in the World whether or not a quest is open. A move, or a path you give one, stays with the NPC, whichever quest uses it.
+
+### Spawn groups
+
+Select two or more spawns and choose **Group these spawns…** to make a [spawn group](/acore-quest-creator/guides/spawn-groups/): only some of them are up at a time. On a spawn that is already in a group, **Spawn group ▸** holds **Edit group…**, **Show group** and **Remove from group**. Selecting a pooled spawn rings the rest of its group, and the card lists each member's chance. In **Find…**, the **Spawn group** option searches groups by name.
 
 ## Project changes
 
 **Project changes (_n_)** in the Layers card lists everything the project adds to or changes in the world database, outside its quests.
 
-First come the project's new NPCs, objects and items, each with how many spawns it has and which quests use it. **Edit** opens its editor, and **Go to** takes the camera to its spawn.
+First comes the project's list of NPCs, objects and items: every one you made, and every existing one you changed. Each row says what changed, which quests use it and how many spawns it has. **Edit** opens its editor, and **Go to** takes the camera to its spawn. The summary is one or more of:
 
-Then come changes to spawns already in the database: spawns moved or turned, routes changed, spawns placed, and NPCs' movement, each with what it was before and after. **Revert** or **Remove** takes one back; a new path and the movement that walks it go back together.
+- **New**: you made it.
+- **Spawns changed**: you moved, turned, placed or changed the respawn time of one of its spawns.
+- **Movement changed**: how it moves changed, such as its wander distance.
+- **Path changed**: a route it walks changed.
+- **Details changed**: you edited the NPC, object or item itself.
+- **Group changed**: one of its spawns joined, left or was changed in a spawn group.
+
+The quest panel shows the same list; see [NPCs and objects](/acore-quest-creator/guides/npcs-and-objects/).
+
+Then come changes to spawns already in the database: spawns moved or turned, respawn times, routes changed, spawns placed, NPCs' movement and spawn groups, each with what it was before and after. **Revert** or **Remove** takes one back; a new path and the movement that walks it go back together.
 
 ![The Project changes list: a placed guard, its new path and its movement](../../../assets/screenshots/world-changes.png)
 

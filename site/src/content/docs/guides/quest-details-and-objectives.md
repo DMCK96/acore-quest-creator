@@ -34,7 +34,7 @@ Every quest has four core modules:
 | Requirements | Who can take the quest: level cap, races, classes, skills and reputation. |
 | Chain | The quests that come before and after this one. |
 | Scripts | What NPCs, objects and areas do around this quest. See [Quest scripting](/acore-quest-creator/guides/quest-scripting/). |
-| NPCs, objects & items | New NPCs, objects and items this quest needs. See [NPCs and objects](/acore-quest-creator/guides/npcs-and-objects/) and [Items](/acore-quest-creator/guides/items/). |
+| NPCs, objects & items | The project's NPCs, objects and items, with the ones this quest uses first under **Used by this quest**. See [NPCs and objects](/acore-quest-creator/guides/npcs-and-objects/) and [Items](/acore-quest-creator/guides/items/). |
 | Timer | A time limit the quest fails after. |
 | Behaviour | Sharing, daily or weekly repeats, auto-complete and other quest flags. |
 | Map marker | Where the quest points on the world map. |

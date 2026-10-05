@@ -1,11 +1,11 @@
 ---
 title: Items
-description: New quest items and rewards, made alongside the quest that needs them.
+description: New quest items and rewards, and changes to items the database already has.
 sidebar:
   order: 6.5
 ---
 
-A quest often needs an item the world database doesn't have yet: a letter to deliver, a trophy to collect, or a reward to hand out. You make these in the **NPCs, objects & items** module, next to the quest's new NPCs and objects.
+A quest often needs an item the world database doesn't have yet: a letter to deliver, a trophy to collect, or a reward to hand out. An item belongs to your project, and a quest uses it by naming it as a required item, a drop or a reward. You make one in the **NPCs, objects & items** module, next to the project's NPCs and objects.
 
 ![The New item editor on its Basics tab](../../../assets/screenshots/item-editor.png)
 
@@ -26,6 +26,12 @@ The item can now be picked anywhere the quest asks for an item: required items i
 4. Set **Required level**, **Item level**, and the **Buy price** and **Sell price** in copper on **Basics**.
 
 Consumables, trade goods and quest items aren't worn, so **Gear** starts hidden for them. **Show gear fields anyway** shows them.
+
+## Change an item that already exists
+
+Pick an item the database already has in any item picker, such as a reward, and choose **Edit…**. The editor opens with its title ending in **(existing)**. It needs the world database connected.
+
+The first edit adds the item to the project (one undo step) and lists it as **Details changed**. Nothing in the database changes until you apply the project patch, which writes the item's row with your changes over it, so fields the editor does not show stay as they were. **Put back as the database has it** takes your changes away again. See [NPCs and objects](/acore-quest-creator/guides/npcs-and-objects/#change-one-that-already-exists) for how editing an existing one works.
 
 ## Readable items
 
