@@ -2,7 +2,7 @@ import { isDeepStrictEqual } from 'node:util';
 import { fieldById } from '../../core/registry';
 import { moduleById, ownerOf } from '../../core/modules/catalog';
 import type { ModuleId } from '../../core/modules/model';
-import { movementsOf, type WorldLayer, type WorldRouteEdit } from '../../core/world/layer';
+import { groupsOf, movementsOf, respawnsOf, type WorldLayer, type WorldRouteEdit } from '../../core/world/layer';
 import type { HistoryPart, QuestEdit, StepPlace, StepSummary } from '../../shared/history';
 import type { HistoryStep } from './history';
 
@@ -109,6 +109,23 @@ function worldChanges(before: WorldLayer, after: WorldLayer): WorldChange[] {
     out.push({ text: `Movement of ${m.name}`, where: null });
   }
   for (const [key, m] of movesBefore) if (!movesAfter.has(key)) out.push({ text: `Reverted movement of ${m.name}`, where: null });
+
+  const respawnKey = (r: { kind: string; guid: number }) => `${r.kind}:${r.guid}`;
+  const respawnsBefore = keyed(respawnsOf(before), respawnKey);
+  const respawnsAfter = keyed(respawnsOf(after), respawnKey);
+  for (const [key, r] of respawnsAfter) {
+    if (isDeepStrictEqual(respawnsBefore.get(key), r)) continue;
+    out.push({ text: `Respawn time of ${r.name}`, where: null });
+  }
+  for (const [key, r] of respawnsBefore) if (!respawnsAfter.has(key)) out.push({ text: `Reverted respawn time of ${r.name}`, where: null });
+
+  const groupsBefore = keyed(groupsOf(before), (g) => String(g.id));
+  const groupsAfter = keyed(groupsOf(after), (g) => String(g.id));
+  for (const [key, g] of groupsAfter) {
+    if (isDeepStrictEqual(groupsBefore.get(key), g)) continue;
+    out.push({ text: `${g.removed ? 'Deleted' : 'Saved'} spawn group ${g.name}`, where: null });
+  }
+  for (const [key, g] of groupsBefore) if (!groupsAfter.has(key)) out.push({ text: `Removed spawn group ${g.name}`, where: null });
   return out;
 }
 
