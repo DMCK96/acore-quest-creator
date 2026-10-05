@@ -28,6 +28,7 @@ import type {
 } from '@shared/ipc';
 import { EMPTY_WORLD, type WorldLayer } from '@core/world/layer';
 import type { SpawnGroup } from '@core/world/groups';
+import type { QuestAggregate } from '@core/model/aggregate';
 import { EMPTY_ENTITIES, newItem, newNpc, newObject, type CustomItem, type CustomNpc, type CustomObject, type ProjectEntities } from '@core/entities/model';
 import { toggleRole } from '@core/modules/quest-roles';
 import type { ModuleId } from '@core/modules/model';
@@ -763,6 +764,17 @@ export function createAppStore(api: Api, opts: { saveDelayMs?: number } = {}): A
     async saveRotation(group, moves, makeKind) {
       let saved = false;
       await get().historyStep(async () => {
+        // The flags changed for the save, each with what it was: a refused save puts them back, so it leaves no step
+        const madeOpen: { questId: number; was: unknown }[] = [];
+        const madeOthers: QuestAggregate[] = [];
+        const putBack = async (): Promise<void> => {
+          for (const aggregate of madeOthers.reverse()) await api.updateQuest(aggregate);
+          for (const { questId, was } of madeOpen) if (get().open?.questId === questId) get().setValue(FLAGS_FIELD, was);
+        };
+        const refuse = async (message: string): Promise<void> => {
+          await putBack();
+          set({ error: message });
+        };
         if (makeKind) {
           const [set1, clear] = makeKind === 'daily' ? [QUEST_FLAG_DAILY, QUEST_FLAG_WEEKLY] : [QUEST_FLAG_WEEKLY, QUEST_FLAG_DAILY];
           const remade = (flags: unknown): number | null => {
@@ -774,34 +786,30 @@ export function createAppStore(api: Api, opts: { saveDelayMs?: number } = {}): A
             if (member.type !== 'quest') continue;
             const open = get().open;
             if (open?.questId === member.questId) {
-              const now = remade(open.aggregate.values[FLAGS_FIELD]);
-              if (now !== null) get().setValue(FLAGS_FIELD, now);
+              const was = open.aggregate.values[FLAGS_FIELD];
+              const now = remade(was);
+              if (now !== null) {
+                madeOpen.push({ questId: open.questId, was });
+                get().setValue(FLAGS_FIELD, now);
+              }
               continue;
             }
             // Only a quest of the project is edited; one only the database has keeps its flags
             if (!get().nodes.some((n) => n.questId === member.questId)) continue;
             const read = await api.openQuest(member.questId);
-            if (!read.ok) {
-              set({ error: read.error.message });
-              return;
-            }
+            if (!read.ok) return refuse(read.error.message);
             const aggregate = read.value.aggregate;
             const now = remade(aggregate.values[FLAGS_FIELD]);
             if (now === null) continue;
             const put = await api.updateQuest({ ...aggregate, values: { ...aggregate.values, [FLAGS_FIELD]: now } });
-            if (!put.ok) {
-              set({ error: put.error.message });
-              return;
-            }
+            if (!put.ok) return refuse(put.error.message);
+            madeOthers.push(aggregate);
           }
           // The open quest's edit goes now, so it is in this step before the rotation is checked
           await get().flushSave();
         }
         const result = await api.worldSetGroup(group, moves);
-        if (!result.ok) {
-          set({ error: result.error.message });
-          return;
-        }
+        if (!result.ok) return refuse(result.error.message);
         saved = true;
         set({ worldLayer: { layer: result.value, seq: ++layerSeq }, layer: result.value });
       }, `Saved rotation ${group.name || group.id}`);

@@ -116,10 +116,12 @@ export function RotationDialog({
   }, [key]);
 
   /** The quests, known here, that are not of the chosen kind and are not marked to be made it */
-  const needing = kind === null ? [] : questIds.filter((id) => !marked.has(id) && titles.has(id) && !isKind(titles.get(id)!, kind));
+  const notOfKind = kind === null ? [] : questIds.filter((id) => !marked.has(id) && titles.has(id) && !isKind(titles.get(id)!, kind));
+  /** Of those, the ones that can be made it on save: only a project quest's flags are changed */
+  const needing = notOfKind.filter((id) => projectQuests.some((q) => q.questId === id));
   const knownTitles = new Set(questIds.flatMap((id) => (titles.has(id) ? [titles.get(id)!.title] : [])));
   const allKnown = questIds.every((id) => titles.has(id));
-  const own: string[] = kind === null ? ['Choose Daily or Weekly.'] : needing.map((id) => `${titleOf(id)} is not a ${kind} quest.`);
+  const own: string[] = kind === null ? ['Choose Daily or Weekly.'] : notOfKind.map((id) => `${titleOf(id)} is not a ${kind} quest.`);
   const fromCheck = reasons.filter((reason) => {
     const plain = NOT_REPEATING.exec(reason);
     if (plain && knownTitles.has(plain[1]!)) return false;

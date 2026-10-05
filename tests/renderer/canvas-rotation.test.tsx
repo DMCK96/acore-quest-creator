@@ -4,7 +4,7 @@ import { fireEvent, render, screen, waitFor, within } from '@testing-library/rea
 import userEvent from '@testing-library/user-event';
 import { createAppStore } from '../../src/renderer/state/app-store';
 import { CanvasHome } from '../../src/renderer/views/CanvasHome';
-import { makeMockApi, okv, sampleOpen, nodeOf } from './mock-api';
+import { makeMockApi, okv, errv, sampleOpen, nodeOf } from './mock-api';
 
 const drift = { missingTables: [], unregistered: [], missingColumns: [], typeMismatches: [] };
 const rec = { id: 1, name: 'w', role: 'world' as const, host: 'h', port: 1, user: 'u', database: 'd' };
@@ -118,6 +118,24 @@ describe('rotations on the Quests graph', () => {
     await store.getState().saveRotation(rotation(), [], 'daily');
     expect(store.getState().open?.aggregate.values['quest_template.Flags']).toBe(0x1000);
     expect((api.updateQuest as any).mock.calls.at(-1)[0]).toMatchObject({ questId: 60002, values: { 'quest_template.Flags': 0x1000 } });
+  });
+
+  it('a refused rotation save puts back the flags it changed, so it leaves no step', async () => {
+    const { api, store } = await canvas({ worldSetGroup: vi.fn(async () => errv('VALIDATION', 'This spawn group cannot be saved.')) });
+    await screen.findAllByTestId('quest-node');
+    expect(await store.getState().saveRotation(rotation(), [], 'daily')).toBe(false);
+    // Boars was made daily for the save, then put back to weekly when the save was refused
+    const boars = (api.updateQuest as any).mock.calls.filter((c: any[]) => c[0].questId === 60002).map((c: any[]) => c[0].values['quest_template.Flags']);
+    expect(boars).toEqual([0x1000, 0x8000]);
+    expect(store.getState().error).toBe('This spawn group cannot be saved.');
+  });
+
+  it('a refused rotation save puts back the flags of the open quest', async () => {
+    const { store } = await canvas({ worldSetGroup: vi.fn(async () => errv('VALIDATION', 'This spawn group cannot be saved.')) });
+    await screen.findAllByTestId('quest-node');
+    await store.getState().openQuest(60001);
+    expect(await store.getState().saveRotation(rotation(), [], 'weekly')).toBe(false);
+    expect(store.getState().open?.aggregate.values['quest_template.Flags']).toBe(0x1000);
   });
 
   it('deletes a rotation as one step', async () => {

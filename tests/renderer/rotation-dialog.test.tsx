@@ -8,11 +8,12 @@ const q = (questId: number) => ({ type: 'quest' as const, questId });
 const group = { id: 900010, name: '', map: 0, maxActive: 1, members: [q(60001), q(60002)], origin: { kind: 'new' as const }, event: null };
 const titles = new Map([[60001, { title: 'Wolves', daily: true, weekly: false }], [60002, { title: 'Boars', daily: false, weekly: false }]]);
 const ok = async () => ({ reasons: [], notes: [] });
+const inProject = [{ questId: 60001, title: 'Wolves' }, { questId: 60002, title: 'Boars' }];
 
 describe('the rotation dialog', () => {
   it('names the rotation, picks daily, how many each reset, and saves with the quests made daily', async () => {
     const onSave = vi.fn();
-    render(<RotationDialog group={group} titles={titles} projectQuests={[]} check={ok} onSave={onSave} onClose={vi.fn()} />);
+    render(<RotationDialog group={group} titles={titles} projectQuests={inProject} check={ok} onSave={onSave} onClose={vi.fn()} />);
     const dialog = screen.getByRole('dialog', { name: 'Quest rotation' });
     await userEvent.type(within(dialog).getByLabelText('Name'), 'Dailies');
     await userEvent.click(within(dialog).getByRole('radio', { name: 'Daily' }));
@@ -48,7 +49,7 @@ describe('the rotation dialog', () => {
       <RotationDialog
         group={group}
         titles={both}
-        projectQuests={[{ questId: 60003, title: 'Bears' }, { questId: 60001, title: 'Wolves' }]}
+        projectQuests={[{ questId: 60003, title: 'Bears' }, ...inProject]}
         check={ok}
         onSave={onSave}
         onClose={vi.fn()}
@@ -57,6 +58,7 @@ describe('the rotation dialog', () => {
     await userEvent.click(screen.getByRole('button', { name: 'Add a quest…' }));
     const choices = screen.getByRole('listbox', { name: 'Project quests' });
     expect(within(choices).queryByText(/Wolves/)).toBeNull();
+    expect(within(choices).queryByText(/Boars/)).toBeNull();
     await userEvent.click(within(choices).getByRole('option', { name: /Bears/ }));
     expect(screen.getByRole('listitem', { name: 'Bears' })).toBeTruthy();
     expect(screen.getByLabelText('Offered each reset')).toHaveProperty('max', '3');
@@ -67,5 +69,20 @@ describe('the rotation dialog', () => {
     await waitFor(() => expect(screen.getByRole('button', { name: 'Save' })).toHaveProperty('disabled', false));
     await userEvent.click(screen.getByRole('button', { name: 'Save' }));
     expect(onSave).toHaveBeenCalledWith({ ...group, members: [q(60001), q(60002), q(60003)] }, [], 'daily');
+  });
+
+  it('offers no Make button for a quest only the database has, and its reason still blocks saving', async () => {
+    // Quest 70001 is only in the database (a daily rotation's quest): its flags cannot be changed here
+    const known = new Map([...titles, [70001, { title: 'Quest 70001', daily: true, weekly: false }]]);
+    render(
+      <RotationDialog group={{ ...group, members: [q(60001), q(70001)] }} titles={known} projectQuests={inProject} check={ok} onSave={vi.fn()} onClose={vi.fn()} />,
+    );
+    await userEvent.click(screen.getByRole('radio', { name: 'Weekly' }));
+    expect(screen.getByRole('button', { name: 'Make Wolves weekly' })).toBeTruthy();
+    expect(screen.queryByRole('button', { name: 'Make Quest 70001 weekly' })).toBeNull();
+    await userEvent.click(screen.getByRole('button', { name: 'Make Wolves weekly' }));
+    expect(await screen.findByText('Quest 70001 is not a weekly quest.')).toBeTruthy();
+    expect(screen.queryByRole('button', { name: 'Make them all weekly' })).toBeNull();
+    expect(screen.getByRole('button', { name: 'Save' })).toHaveProperty('disabled', true);
   });
 });
