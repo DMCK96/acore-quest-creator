@@ -234,7 +234,7 @@ test('draws spawns: a marker where a display cannot be drawn, and asks the clien
   expect(after).not.toEqual([r, g, b, 255]);
 });
 
-test('a click selects the NPC under it, and event spawns only once they are shown', async ({ page }) => {
+test('a click selects the NPC under it, a double-click on nothing deselects it, and event spawns only once they are shown', async ({ page }) => {
   await openPage(page);
   const SPOT = { x: START.x + 60, y: START.y - 60, z: START.z };
   // A marker NPC at the camera's target (the middle of the picture), and one that only comes with an event
@@ -253,8 +253,11 @@ test('a click selects the NPC under it, and event spawns only once they are show
   };
 
   expect(await click(0.5, 0.5)).toMatchObject({ kind: 'creature', guid: 5, event: null });
-  // Off to the side of everything: nothing selected
-  expect(await click(0.05, 0.9)).toBeNull();
+  // Off to the side of everything: a click keeps the selection, a double-click clears it
+  expect(await click(0.05, 0.9)).toMatchObject({ guid: 5 });
+  await page.waitForTimeout(500);
+  await page.mouse.dblclick(box.x + box.width * 0.05, box.y + box.height * 0.9);
+  expect((await state(page)).selected).toBeNull();
 
   // The event NPC stands between the camera and the first: hidden by default, so the click reaches the first
   await page.evaluate('window.__setVisibility({ creatures: true, objects: true, paths: true, events: "all" })');
@@ -294,7 +297,7 @@ test('dragging the move gizmo moves the selected NPC and drops it on the server\
   expect((await state(page)).errors).toEqual([]);
 });
 
-test('Shift-click on the selected NPC\'s route inserts a point there, and Ctrl+Z takes it back out', async ({ page }) => {
+test('Shift-click on the selected NPC\'s route inserts a point there; Ctrl+Z is left to the app', async ({ page }) => {
   await openPage(page);
   const SPOT = { x: START.x + 60, y: START.y - 60, z: START.z };
   await page.evaluate(`window.__spawns = { creatures: [
@@ -315,9 +318,10 @@ test('Shift-click on the selected NPC\'s route inserts a point there, and Ctrl+Z
   expect(inserted).toMatchObject({ kind: 'route', pathId: 77, spawn: { guid: 9 } });
   expect(inserted.points.map((p: any) => p.carry ?? null)).toEqual([{ delay: '0' }, null, { delay: '9' }]);
   expect(Math.hypot(inserted.points[1].x - SPOT.x, inserted.points[1].y - SPOT.y)).toBeLessThan(2);
+  // Undo is the project's now: the view sends nothing of its own
   await page.keyboard.press('Control+KeyZ');
-  await expect.poll(async () => (await state(page)).edits.length).toBe(2);
-  expect((await state(page)).edits[1].points).toHaveLength(2);
+  await page.waitForTimeout(300);
+  expect((await state(page)).edits).toHaveLength(1);
 });
 
 test('a route never goes below two points', async ({ page }) => {
@@ -338,6 +342,33 @@ test('a route never goes below two points', async ({ page }) => {
   await page.keyboard.press('Delete');
   await expect.poll(async () => (await state(page)).notices).toContain('A route keeps at least two points.');
   expect((await state(page)).edits).toEqual([]);
+});
+
+test('with one route point picked, a click on another under the gizmo’s handles picks that one', async ({ page }) => {
+  await openPage(page);
+  const SPOT = { x: START.x + 60, y: START.y - 60, z: START.z };
+  await page.evaluate(`window.__spawns = { creatures: [
+    { guid: 9, entry: 1, name: 'P', map: 0, x: ${SPOT.x - 20}, y: ${SPOT.y + 20}, z: ${SPOT.z}, orientation: 0, displayId: 0, scale: 1, wander: 0, pathId: 77,
+      path: [ { x: ${SPOT.x}, y: ${SPOT.y}, z: ${SPOT.z} }, { x: ${SPOT.x + 4}, y: ${SPOT.y + 4}, z: ${SPOT.z} }, { x: ${SPOT.x - 6}, y: ${SPOT.y - 6}, z: ${SPOT.z} } ],
+      equipment: [0,0,0], own: false, event: null }
+  ], objects: [], capped: { creatures: false, objects: false } }`);
+  await page.evaluate(`window.__open('azeroth', 0, ${JSON.stringify(SPOT)})`);
+  await page.waitForFunction('window.__state.ready', null, { timeout: 45000 });
+  await page.evaluate(`window.__select({ kind: 'creature', guid: 9 })`);
+  await page.waitForTimeout(1500);
+  const box = (await page.locator('canvas.world3d__canvas').boundingBox())!;
+  // The first point is at the middle of the picture, the second straight above it, on the gizmo's Z handle
+  const second = { x: box.x + box.width / 2, y: box.y + box.height / 2 - 30 };
+  await page.mouse.click(box.x + box.width / 2, box.y + box.height / 2);
+  await expect.poll(async () => (await state(page)).selection).toMatchObject({ points: 1 });
+  await page.waitForTimeout(300);
+  await page.mouse.move(second.x, second.y, { steps: 5 });
+  await page.mouse.click(second.x, second.y);
+  await page.waitForTimeout(300);
+  // The second one is what Delete takes out
+  await page.keyboard.press('Delete');
+  await expect.poll(async () => (await state(page)).edits.length).toBe(1);
+  expect((await state(page)).edits[0].points.map((p: any) => [p.x - SPOT.x, p.y - SPOT.y])).toEqual([[0, 0], [-6, -6]]);
 });
 
 test('Esc clears the selection and goes no further; with nothing selected it is left to what is round the view', async ({ page }) => {
@@ -453,7 +484,7 @@ test('every model shader compiles, and none the game uses is missing', async ({ 
   expect(result.unimplemented).toEqual([]);
 });
 
-test('in Select mode a box picks two NPCs, the gizmo moves both, and Ctrl+Z puts both back', async ({ page }) => {
+test('in Select mode a box picks two NPCs and the gizmo moves both as one gesture', async ({ page }) => {
   await openPage(page);
   const SPOT = { x: START.x + 60, y: START.y - 60, z: START.z };
   // Either side of the camera's target, across the view, so the group's middle is the middle of the picture
@@ -489,13 +520,6 @@ test('in Select mode a box picks two NPCs, the gizmo moves both, and Ctrl+Z puts
   expect(Math.hypot(edits[0].to.x - edits[1].to.x, edits[0].to.y - edits[1].to.y)).toBeCloseTo(Math.hypot(4, 4), 3);
   expect(Math.hypot(edits[0].to.x - A.x, edits[0].to.y - A.y)).toBeGreaterThan(1);
 
-  await page.keyboard.press('Control+KeyZ');
-  await expect.poll(async () => (await state(page)).edits.length).toBe(4);
-  const back = Object.fromEntries((await state(page)).edits.slice(2).map((e) => [e.spawn.guid, [e.to.x, e.to.y]]));
-  expect(back[21][0]).toBeCloseTo(A.x, 3);
-  expect(back[21][1]).toBeCloseTo(A.y, 3);
-  expect(back[22][0]).toBeCloseTo(B.x, 3);
-  expect(back[22][1]).toBeCloseTo(B.y, 3);
   expect((await state(page)).errors).toEqual([]);
 });
 
@@ -585,6 +609,31 @@ test('a right-click on an NPC selects it and asks for the menu with it; a right-
   await page.mouse.up({ button: 'right' });
   await page.waitForTimeout(300);
   expect((await state(page)).contexts).toHaveLength(1);
+});
+
+test('a right-click on a project NPC hands the menu a project spawn; on bare ground it hands the ground', async ({ page }) => {
+  await openPage(page);
+  const SPOT = { x: START.x + 60, y: START.y - 60, z: START.z };
+  await page.evaluate(`window.__spawns = { creatures: [], objects: [], capped: { creatures: false, objects: false } }`);
+  await page.evaluate(`window.__open('azeroth', 0, ${JSON.stringify(SPOT)})`);
+  await page.waitForFunction('window.__state.ready', null, { timeout: 45000 });
+  // Project spawns come from the project store, not the database: own marks them
+  await page.evaluate(`window.__world().setOwnSpawns({ creatures: [
+    { guid: 6000001, entry: 12000001, name: 'Hela', map: 0, x: ${SPOT.x}, y: ${SPOT.y}, z: ${SPOT.z}, orientation: 0, displayId: 0, scale: 1, wander: 0, pathId: 0, path: null,
+      equipment: [0,0,0], own: true, event: null }
+  ], objects: [], capped: { creatures: false, objects: false } })`);
+  await page.waitForTimeout(1500);
+  const box = (await page.locator('canvas.world3d__canvas').boundingBox())!;
+  await page.mouse.click(box.x + box.width / 2, box.y + box.height / 2, { button: 'right' });
+  await expect.poll(async () => (await state(page)).contexts.length).toBe(1);
+  expect((await state(page)).contexts[0].target.hit).toMatchObject({ type: 'spawn', spawn: { guid: 6000001, entry: 12000001, own: true } });
+  await page.keyboard.press('Escape');
+  await page.mouse.click(box.x + box.width * 0.1, box.y + box.height * 0.85, { button: 'right' });
+  await expect.poll(async () => (await state(page)).contexts.length).toBe(2);
+  const ground = (await state(page)).contexts[1].target;
+  expect(ground.hit).toBeNull();
+  expect(ground.ground).toEqual({ x: expect.any(Number), y: expect.any(Number), z: expect.any(Number) });
+  expect((await state(page)).errors).toEqual([]);
 });
 
 test('drawing a path: clicks add points to the selected NPC’s new path, Enter finishes', async ({ page }) => {

@@ -1,19 +1,28 @@
+import { popPlace, pushPlace, type CameraPlace } from './camera-history';
 import { useEffect, useMemo, useRef, useState } from 'react';
-import type { CanvasNode, OpenResult, QuestSpawnGroup } from '@shared/ipc';
+import type { CanvasNode, GroupView, OpenResult, QuestSpawnGroup } from '@shared/ipc';
 import type { FieldValue } from '@core/registry/types';
-import { readEntities } from '@core/entities/model';
+import { EMPTY_ENTITIES, newSpawn, type CustomObject } from '@core/entities/model';
+import type { Placement } from '@core/world/layer';
+import { EntityEditorHost, type EditorState } from '../entities/EntityEditorHost';
+import { useHistorySteps } from '../state/history-context';
+import { useProjectEntities } from '../state/project-entities';
 import { ownViewSpawns } from '@core/entities/view-spawns';
 import { toggleRole } from '@core/modules/quest-roles';
-import { useNameBook } from '../state/names';
+import { useApi, useNameBook } from '../state/names';
+import { giverName } from '@core/modules/summaries';
 import { ownEdit } from '../map/own-3d-edit';
 import { chainOf, questMenuInfo } from './quest-context';
-import { OBJECTIVES_FULL } from './menu/quest-items';
+import { OBJECTIVES_FULL } from './menu/section';
 import { WORLD_MAPS, worldMapById } from '@core/map/world-maps';
 import type { TeleportSpot } from '@core/map/teleports';
 import { World3DView, type FocusTarget } from './World3DView';
 import { FindDialog, type FindPreset, type FoundSpawn } from './FindDialog';
 import { TeleportDialog } from './TeleportDialog';
 import { QuestOrb } from '../components/QuestOrb';
+import { questPlace } from './quest-place';
+import type { ShowTarget } from './ShowInWorldContext';
+import { NEEDS_DATABASE } from './menu/section';
 import { readLastPlace, writeLastPlace } from './last-place';
 import { markWelcomeSeen, welcomeSeen } from './welcome-seen';
 import { Welcome } from './Welcome';
@@ -35,7 +44,18 @@ export interface WorldWorkspaceProps {
   /** Changes one of the open quest's fields */
   onQuestField?(fieldId: string, value: FieldValue): void;
   /** Starts a new quest given and taken back by an NPC, after `previous` in its chain when that is set */
-  onNewQuest?(giver: { entry: number }, previous: number | null): void;
+  onNewQuest?(giver: { entry: number; name: string }, previous: number | null): void;
+  /** A place to take the camera to (Show on the undo note); each request is its own, even to the same place */
+  goTo?: { map: number; x: number; y: number; z: number; nonce: number };
+  /**
+   * A quest opened while the World was hidden, and when its opening began (on `now`'s clock): when the
+   * World is next shown, the camera goes to where the quest is, unless it was moved after that moment
+   */
+  follow?: { questId: number; at: number };
+  /** Show in World / Go to: a quest or one of its NPCs or objects to take the camera to; each request is its own */
+  showRequest?: { target: ShowTarget; nonce: number };
+  /** Now, on the clock `follow.at` is read against (the store's `moment`) */
+  now?: () => number;
 }
 
 const ROLE_LABELS: Record<QuestSpawnGroup['spawns'][number]['role'], string> = { giver: 'givers', ender: 'enders', objective: 'objectives', own: 'own' };
@@ -69,9 +89,9 @@ const WELCOME_FADE_MS = 500;
  * a place to start.
  */
 export function WorldWorkspace({
-  hasClient, active = true, projectKey, projectName, onOpenSettings, onShowQuests, onStartQuest, quest, onQuestField, onNewQuest,
+  hasClient, active = true, projectKey, projectName, onOpenSettings, onShowQuests, onStartQuest, quest, onQuestField, onNewQuest, goTo: goToRequest,
+  follow, showRequest, now = Date.now,
 }: WorldWorkspaceProps): React.JSX.Element {
-  const names = useNameBook();
   // The open quest's values as last changed here, so edits made one after another build on each other
   const values = useRef(quest?.open.aggregate.values);
   values.current = quest?.open.aggregate.values;
@@ -79,9 +99,100 @@ export function WorldWorkspace({
     if (values.current) values.current = { ...values.current, [fieldId]: value };
     onQuestField?.(fieldId, value);
   };
-  const info = useMemo(() => (quest ? questMenuInfo(quest.open, quest.nodes, names) : undefined), [quest, names]);
+  const project = useProjectEntities();
+  const store = project?.entities ?? EMPTY_ENTITIES;
+  const info = useMemo(() => (quest ? questMenuInfo(quest.open, quest.nodes) : undefined), [quest]);
   const chainIds = useMemo(() => (quest ? chainOf(quest.nodes, quest.open.questId) : undefined), [quest]);
-  const own = useMemo(() => (quest ? ownViewSpawns(readEntities(quest.open.aggregate.values)) : undefined), [quest]);
+  // The project's NPCs and objects; edits to their spawns go to the whole store
+  const storeRef = useRef(store);
+  storeRef.current = store;
+  // Every project spawn is drawn and edited here, whether or not a quest is open
+  const own = useMemo(() => ownViewSpawns(store), [store]);
+  const { runStep } = useHistorySteps();
+  const api = useApi();
+  const names = useNameBook();
+  const namesRef = useRef(names);
+  namesRef.current = names;
+  // The NPC or object editor, opened from the right-click menu
+  const [editor, setEditor] = useState<EditorState | null>(null);
+  const [note, setNote] = useState<string | null>(null);
+
+  /** New NPC here… / New object here…: one project NPC or object with a spawn where it was asked for, as one step */
+  const createEntity = async (what: 'creature' | 'object', at: Placement): Promise<void> => {
+    if (!project || !api) return;
+    let made: { kind: 'npc' | 'object'; entry: number } | null = null;
+    await runStep(async () => {
+      const guid = await api.allocateIds(what === 'creature' ? 'creatureSpawn' : 'gameobjectSpawn', 1);
+      if (!guid.ok || guid.value.length === 0) {
+        setNote(guid.ok ? 'No free spawn ID could be found.' : guid.error.message);
+        return;
+      }
+      const spawn = { ...newSpawn(guid.value[0]!), map: mapRef.current, x: at.x, y: at.y, z: at.z, o: at.orientation, rotation: what === 'object' ? at.rotation : null };
+      const kind = what === 'creature' ? 'npc' : 'object';
+      const result = await project.create(kind, { spawns: [spawn] });
+      if ('error' in result) setNote(result.error);
+      else made = { kind, entry: result.entry };
+    }, what === 'creature' ? 'New NPC' : 'New object');
+    const opened = made as { kind: 'npc' | 'object'; entry: number } | null;
+    if (opened) setEditor({ kind: opened.kind, entry: opened.entry, isNew: true, tab: 'basics' });
+  };
+
+  /** Edit NPC… / Edit object…: an existing one is brought into the project first, then its editor opens */
+  const editEntity = async (what: 'creature' | 'object' | 'item', entry: number): Promise<void> => {
+    if (!project) return;
+    const kind = what === 'creature' ? 'npc' : what;
+    const error = await project.ensure({ kind, entry });
+    if (error) setNote(error);
+    else setEditor({ kind, entry, isNew: false });
+  };
+
+  /**
+   * Make lootable… / Stop being lootable on an object, asking first when it would stop doing something
+   * else. A database object the project does not hold yet is read first (to ask and to see its type is
+   * not locked), then brought in and changed in one step.
+   */
+  const setLootable = async (entry: number, on: boolean): Promise<void> => {
+    if (!project) return;
+    let object = storeRef.current.objects.find((o) => o.entry === entry);
+    let adopting: CustomObject | null = null;
+    if (!object) {
+      if (!api) return;
+      const read = await api.readExistingEntity('object', entry);
+      if (!read.ok) {
+        setNote(read.error.message);
+        return;
+      }
+      adopting = read.value as CustomObject;
+      object = adopting;
+    }
+    const name = object.name.trim() || 'this object';
+    if (object.origin.kind === 'existing' && object.origin.locked.includes('type')) {
+      setNote(`${name}'s type cannot be changed: it is one this editor does not change.`);
+      return;
+    }
+    if (on && object.pages.length > 0 && !window.confirm(`Make ${name} lootable? Its pages are not shown once it can be looted.`)) return;
+    if (on && object.pages.length === 0 && object.onlyDuringQuest !== null && object.type === 'goober'
+      && !window.confirm(`Make ${name} lootable? Its quest-only use stops; only its loot can be quest-only.`)) return;
+    const type = on ? 'chest' as const : 'goober' as const;
+    let changed = false;
+    await runStep(async () => {
+      if (adopting) {
+        const error = await project.ensure({ kind: 'object', entry });
+        if (error) {
+          setNote(error);
+          return;
+        }
+      }
+      // Brought in just now: the store this view holds has not caught up yet, so the object read is added to it
+      const base = storeRef.current;
+      const objects = base.objects.some((o) => o.entry === entry) || !adopting ? base.objects : [...base.objects, adopting];
+      const next = { ...base, objects: objects.map((o) => (o.entry === entry ? { ...o, type } : o)) };
+      storeRef.current = next;
+      project.setEntities(next);
+      changed = true;
+    }, on ? `Made ${name} lootable` : `Stopped ${name} being lootable`);
+    if (on && changed) setEditor({ kind: 'object', entry, isNew: false, tab: 'contents' });
+  };
   // The spawns of the open quest or its chain, listed after the menu showed them
   const [preset, setPreset] = useState<FindPreset | null>(null);
   const [first] = useState(readLastPlace);
@@ -120,21 +231,141 @@ export function WorldWorkspace({
   const goTo = (point: Point, map = mapRef.current): void => {
     if (map !== mapRef.current) setMapId(map);
     setAt(point);
+    placeRef.current = point;
     setTyped({ x: String(point.x), y: String(point.y), z: String(point.z) });
     writeLastPlace({ map, ...point });
   };
-  const chooseMap = (id: number): void => goTo(worldMapById(id)!.start, id);
+  // Where the camera has been before each jump, for Back
+  const [back, setBack] = useState<CameraPlace[]>([]);
+  const placeRef = useRef<Point>({ x: first.x, y: first.y, z: first.z });
+  const areaRef = useRef(area);
+  areaRef.current = area;
+  // When the camera last moved (a flight, a drag or a jump), on `now`'s clock: a quest opened before then is not followed
+  const lastCameraMove = useRef(0);
+  const nowRef = useRef(now);
+  nowRef.current = now;
+  /** Every jump of the app's: remembers the place the camera leaves, then goes to the point */
+  const jump = (point: Point, map = mapRef.current, label?: string): void => {
+    const here = { map: mapRef.current, ...placeRef.current, label: label ?? areaRef.current ?? worldMapById(mapRef.current)?.name ?? '' };
+    setBack((stack) => pushPlace(stack, here));
+    lastCameraMove.current = nowRef.current();
+    goTo(point, map);
+  };
+  const goBack = (): void => {
+    const { place, stack } = popPlace(back);
+    if (!place) return;
+    setBack(stack);
+    goTo({ x: place.x, y: place.y, z: place.z }, place.map);
+  };
+  const backRef = useRef(goBack);
+  backRef.current = goBack;
+  // Picking a map in the Coordinates form already jumped (and remembered where from); the Go that
+  // follows is part of the same move, so it does not remember the map's start as a place to go back to
+  const mapPicked = useRef(false);
+  const chooseMap = (id: number): void => {
+    if (id === mapRef.current) return;
+    mapPicked.current = true;
+    jump(worldMapById(id)!.start, id);
+  };
+  const goFromForm = (point: Point): void => {
+    if (mapPicked.current) goTo(point);
+    else jump(point);
+    mapPicked.current = false;
+  };
+  // Show on the undo note: the camera goes to where the step happened
+  useEffect(() => {
+    if (!goToRequest || !worldMapById(goToRequest.map)) return;
+    jump({ x: goToRequest.x, y: goToRequest.y, z: goToRequest.z }, goToRequest.map);
+    // Only a new request moves the camera
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [goToRequest?.nonce]);
+
+  /**
+   * Where a quest is, or the nearest spawn of one of its NPCs or objects: a spawn to go to, null when
+   * nothing of it is placed, or why it could not be told.
+   */
+  const placeOf = async (target: ShowTarget): Promise<{ spawn: FoundSpawn | null; name?: string } | { error: string }> => {
+    const from = { map: mapRef.current, ...placeRef.current };
+    const only = 'kind' in target ? { kind: target.kind, entry: target.entry } : undefined;
+    if (!api) return { error: NEEDS_DATABASE };
+    const read = await api.questSpawnList([target.questId]);
+    if (!read.ok) {
+      // Only an absent connection needs the database; any other failure says what went wrong
+      return { error: read.error.code === 'NOT_CONNECTED' ? NEEDS_DATABASE : `Could not read the quest’s spawns: ${read.error.message}` };
+    }
+    const groups: QuestSpawnGroup[] = read.value;
+    const s = questPlace(groups, from, only);
+    // Nothing the project or the layer has: the database may still have it
+    if (!s && groups.some((g) => g.offline)) return { error: NEEDS_DATABASE };
+    if (!s || !worldMapById(s.map)) return { spawn: null, ...(only && { name: giverName({ kind: only.kind, id: only.entry }, namesRef.current, storeRef.current) }) };
+    return { spawn: { kind: s.kind === 'gameobject' ? 'object' : 'creature', guid: s.guid, entry: s.entry, name: s.name, map: s.map, x: s.x, y: s.y, z: s.z, event: s.event ?? null, note: null } };
+  };
+  const placeOfRef = useRef(placeOf);
+  placeOfRef.current = placeOf;
+  const findRef = useRef<(spawn: FoundSpawn) => void>(() => {});
+  // The follow last dealt with (taken, dropped, or seen while the World was shown), by when it began
+  const followSeen = useRef(0);
+  // Show in World / Go to: the camera goes there, or a note says why it cannot
+  useEffect(() => {
+    if (!showRequest) return;
+    // Asked for just now: a quest followed on the way here would only be gone from at once
+    if (follow) followSeen.current = Math.max(followSeen.current, follow.at);
+    void (async () => {
+      const place = await placeOfRef.current(showRequest.target);
+      if ('error' in place) setNote(place.error);
+      else if (!place.spawn) setNote(place.name !== undefined ? `${place.name} has no spawn in the world yet.` : 'Nothing of this quest is placed in the world yet.');
+      else findRef.current(place.spawn);
+    })();
+    // Only a new request moves the camera
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [showRequest?.nonce]);
+  // A quest opened while the World was hidden: followed when the World is next shown, unless the camera moved since
+  const wasActive = useRef(active);
+  useEffect(() => {
+    const shown = active && !wasActive.current;
+    wasActive.current = active;
+    if (!active || !follow || follow.at <= followSeen.current) return;
+    followSeen.current = follow.at;
+    if (!shown || follow.at <= lastCameraMove.current) return;
+    const moved = lastCameraMove.current;
+    void (async () => {
+      const place = await placeOfRef.current({ questId: follow.questId });
+      // Nothing placed, or nothing could be read: the camera stays, with nothing said; nor does it go once the author has moved it
+      if ('error' in place || !place.spawn || lastCameraMove.current !== moved) return;
+      findRef.current(place.spawn);
+    })();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [active, follow?.at]);
   const teleport = (spot: TeleportSpot): void => {
     setTeleporting(false);
-    goTo({ x: spot.x, y: spot.y, z: spot.z }, spot.map);
+    jump({ x: spot.x, y: spot.y, z: spot.z }, spot.map);
   };
   const find = (spawn: FoundSpawn): void => {
     setFinding(false);
-    goTo({ x: spawn.x, y: spawn.y, z: spawn.z }, spawn.map);
+    jump({ x: spawn.x, y: spawn.y, z: spawn.z }, spawn.map);
     setFocus((previous) => ({
       kind: spawn.kind, guid: spawn.guid, entry: spawn.entry, name: spawn.name, x: spawn.x, y: spawn.y, z: spawn.z,
       event: spawn.event, added: spawn.note === 'placed', nonce: (previous?.nonce ?? 0) + 1,
     }));
+  };
+  findRef.current = find;
+  // A spawn group: the camera goes to the middle of its members, and its first spawn is focused
+  const findGroup = (view: GroupView): void => {
+    setFinding(false);
+    const placed = view.members.filter((m) => m.at);
+    if (placed.length > 0) {
+      const mean = (axis: 'x' | 'y' | 'z'): number => placed.reduce((sum, m) => sum + m.at![axis], 0) / placed.length;
+      jump({ x: mean('x'), y: mean('y'), z: mean('z') }, view.map);
+    }
+    const first = view.members.find((m) => m.type === 'spawn' && m.at);
+    const [prefix, guid] = first?.key.split(':') ?? [];
+    if (first?.at && (prefix === 'npc' || prefix === 'object') && Number.isFinite(Number(guid))) {
+      const at = first.at;
+      setFocus((previous) => ({
+        kind: prefix === 'npc' ? 'creature' : 'object', guid: Number(guid), entry: 0, name: first.name, x: at.x, y: at.y, z: at.z,
+        event: null, added: false, nonce: (previous?.nonce ?? 0) + 1,
+      }));
+    }
   };
   const parsed = { x: Number(typed.x), y: Number(typed.y), z: Number(typed.z) };
   const valid = [typed.x, typed.y, typed.z].every((v) => v.trim() !== '') && Object.values(parsed).every(Number.isFinite);
@@ -146,6 +377,13 @@ export function WorldWorkspace({
   useEffect(() => {
     if (!active) return;
     const onKeyDown = (e: KeyboardEvent): void => {
+      if (e.key === 'ArrowLeft' && e.altKey && !e.ctrlKey && !e.metaKey && !e.shiftKey) {
+        const el = e.target instanceof HTMLElement ? e.target : null;
+        if (el && (el.isContentEditable || ['INPUT', 'TEXTAREA', 'SELECT'].includes(el.tagName))) return;
+        e.preventDefault();
+        backRef.current();
+        return;
+      }
       if (e.key !== 'Escape') return;
       const open = panels.current;
       if (open.preset) setPreset(null);
@@ -205,14 +443,24 @@ export function WorldWorkspace({
         active={active}
         showArea={false}
         onArea={setArea}
-        onPlaceChange={(place) => writeLastPlace({ map: mapRef.current, ...place })}
+        onPlaceChange={(place) => {
+          // The place the camera was last sent to is reported back once it rests there; anything else is the author
+          // moving it. The author cannot move it while the World is hidden: a jump settling then is not a move
+          const was = placeRef.current;
+          if (active && Math.hypot(place.x - was.x, place.y - was.y, place.z - was.z) > 1) lastCameraMove.current = nowRef.current();
+          placeRef.current = place;
+          writeLastPlace({ map: mapRef.current, ...place });
+        }}
         own={own}
         onOwnEdit={
-          quest
+          project
             ? (edit) => {
-                const made = values.current ? ownEdit(values.current, edit) : null;
-                if (made) change(made.field, made.value);
-                return made !== null;
+                const next = ownEdit(storeRef.current, edit);
+                if (next) {
+                  storeRef.current = next;
+                  project?.setEntities(next);
+                }
+                return next !== null;
               }
             : undefined
         }
@@ -226,18 +474,46 @@ export function WorldWorkspace({
         }}
         onNewQuest={onNewQuest ? (giver, after) => onNewQuest(giver, after && quest ? quest.open.questId : null) : undefined}
         onShowSpawns={(groups, scope) => setPreset(presetOf(groups, scope))}
+        onCreateEntity={createEntity}
+        onEditEntity={(kind, entry) => void editEntity(kind, entry)}
+        onGoToSpawn={({ map, ...target }) => {
+          jump({ x: target.x, y: target.y, z: target.z }, map);
+          setFocus((previous) => ({ ...target, nonce: (previous?.nonce ?? 0) + 1 }));
+        }}
+        onSetLootable={setLootable}
       />
+      {note && (
+        <p className="world3d__note" role="status">
+          {note}
+          <button type="button" className="btn btn--icon" aria-label="Dismiss" onClick={() => setNote(null)}>
+            ✕
+          </button>
+        </p>
+      )}
+      {editor && project && (
+        <div className="modal-backdrop">
+          <EntityEditorHost entities={project.entities} onChange={(next) => project.setEntities(next)} quests={project.quests}
+            state={editor} onTab={(tab) => setEditor((was) => (was ? { ...was, tab } : was))} onClose={() => setEditor(null)}
+            onDelete={(kind, entry) => project.remove(kind, entry)} />
+        </div>
+      )}
       <section className="world-place glass" aria-label="Place">
         <h2 className="world-place__title">{area ?? mapName}</h2>
         {area && <p className="world-place__map section-label">{mapName}</p>}
         <div className="world-place__actions">
+          <button type="button" className="btn btn--icon" aria-label="Back" title={back.length > 0 ? `Back to ${back[back.length - 1].label}` : 'Back'} disabled={back.length === 0} onClick={goBack}>
+            ←
+          </button>
           <button type="button" className="btn" onClick={() => setTeleporting(true)}>
             Teleport
           </button>
           <button type="button" className="btn" onClick={() => setFinding(true)}>
             Find…
           </button>
-          <button type="button" className="btn" aria-expanded={coordinates} onClick={() => setCoordinates((open) => !open)}>
+          <button type="button" className="btn" aria-expanded={coordinates} onClick={() => {
+              mapPicked.current = false;
+              setCoordinates((open) => !open);
+            }}>
             Coordinates
           </button>
         </div>
@@ -247,7 +523,7 @@ export function WorldWorkspace({
             onSubmit={(e) => {
               e.preventDefault();
               if (!valid) return;
-              goTo(parsed);
+              goFromForm(parsed);
               setCoordinates(false);
             }}
           >
@@ -280,7 +556,7 @@ export function WorldWorkspace({
           onClose={() => leaveWelcome()}
         />
       )}
-      {finding && <FindDialog from={{ map: mapId, ...at }} onGo={find} onClose={() => setFinding(false)} />}
+      {finding && <FindDialog from={{ map: mapId, ...at }} onGo={find} onGoToGroup={findGroup} onClose={() => setFinding(false)} />}
       {preset && (
         <FindDialog
           from={{ map: mapId, ...at }}

@@ -14,18 +14,21 @@ import {
 } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
 import type { AppStore } from '../state/app-store';
-import type { CanvasNode } from '@shared/ipc';
+import type { CanvasNode, GroupMove, SpawnGroup } from '@shared/ipc';
 import { QuestNodeCard } from './QuestNodeCard';
 import { toFlowEdges } from './canvas-edges';
 import { QuestPreview } from './QuestPreview';
 import { QuestFlowView } from './QuestFlowView';
 import { AddExistingDialog } from './AddExistingDialog';
+import { RotationDialog } from './RotationDialog';
 import { QuestOrb } from '../components/QuestOrb';
 import { AnimatedButton } from '../components/AnimatedButton';
 import './CanvasHome.css';
 
 /** Drags and pans are queued locally and flushed together after the user pauses. */
 const FLUSH_DEBOUNCE_MS = 300;
+/** The keys that, held with a click, add a quest to the selection rather than replace it */
+const MULTI_SELECT_KEYS = ['Control', 'Meta', 'Shift'];
 
 interface QuestNodeData extends Record<string, unknown> {
   node: CanvasNode;
@@ -34,6 +37,8 @@ interface QuestNodeData extends Record<string, unknown> {
   onEdit: () => void;
   onRemove: () => void;
   onAddChain: () => void;
+  rotation: { name: string; daily: boolean } | null;
+  onRotation: () => void;
 }
 
 function QuestFlowNode({ data }: { data: QuestNodeData }): React.JSX.Element {
@@ -47,6 +52,8 @@ function QuestFlowNode({ data }: { data: QuestNodeData }): React.JSX.Element {
         onEdit={data.onEdit}
         onRemove={data.onRemove}
         onAddChain={data.onAddChain}
+        rotation={data.rotation}
+        onRotation={data.onRotation}
       />
       <Handle type="source" position={Position.Right} isConnectable={false} />
     </>
@@ -69,6 +76,7 @@ function CanvasInner({ store }: { store: AppStore }): React.JSX.Element {
   const removeNode = store((s) => s.removeNode);
   const addQuestChain = store((s) => s.addQuestChain);
   const projectEpoch = store((s) => s.projectEpoch);
+  const questPools = store((s) => s.questPools);
 
   const { screenToFlowPosition, fitView, setViewport: setFlowViewport } = useReactFlow();
   const [showAddExisting, setShowAddExisting] = useState(false);
@@ -76,6 +84,10 @@ function CanvasInner({ store }: { store: AppStore }): React.JSX.Element {
   // viewport has loaded, then mounts exactly once — never re-keyed, so nodes a test (or the user)
   // is holding a reference to never get silently detached from a remount.
   const [ready, setReady] = useState(false);
+  // The quests selected on the graph (Ctrl, Cmd or Shift+click adds one, Shift+drag boxes several)
+  const [selectedIds, setSelectedIds] = useState<ReadonlySet<number>>(new Set());
+  // The rotation being made or changed, and whether it is one already saved (which can be deleted)
+  const [rotationEdit, setRotationEdit] = useState<{ group: SpawnGroup; existing: boolean } | null>(null);
   const flushTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
@@ -103,11 +115,35 @@ function CanvasInner({ store }: { store: AppStore }): React.JSX.Element {
     }, FLUSH_DEBOUNCE_MS);
   }, [flushMoves]);
 
+  const poolOf = new Map(questPools.flatMap((p) => p.questIds.map((id) => [id, p] as const)));
+  const selected = nodes.filter((n) => selectedIds.has(n.questId)).map((n) => n.questId);
+
+  const openNewRotation = async (questIds: number[]): Promise<void> => {
+    const group = await store.getState().newRotation(questIds);
+    if (group) setRotationEdit({ group, existing: false });
+  };
+  const openRotation = async (id: number): Promise<void> => {
+    const group = await store.getState().readRotation(id);
+    if (group) setRotationEdit({ group, existing: true });
+  };
+  // Each quest's title and kind: the graph's, else the rotation's kind for a quest only the database has
+  const rotationTitles = (group: SpawnGroup): Map<number, { title: string; daily: boolean; weekly: boolean }> => {
+    const titles = new Map<number, { title: string; daily: boolean; weekly: boolean }>();
+    for (const n of nodes) titles.set(n.questId, { title: n.title.trim() || '(untitled quest)', daily: n.daily === true, weekly: n.weekly === true });
+    const pool = questPools.find((p) => p.id === group.id);
+    for (const m of group.members) {
+      if (m.type !== 'quest' || titles.has(m.questId) || !pool) continue;
+      titles.set(m.questId, { title: `Quest ${m.questId}`, daily: pool.daily, weekly: !pool.daily });
+    }
+    return titles;
+  };
+
   const flowNodes: Node[] = nodes.map((n) => ({
     id: String(n.questId),
     type: 'quest',
     position: { x: n.x, y: n.y },
     draggable: true,
+    selected: selectedIds.has(n.questId),
     data: {
       node: n,
       selected: open?.questId === n.questId,
@@ -116,6 +152,11 @@ function CanvasInner({ store }: { store: AppStore }): React.JSX.Element {
       onEdit: () => void openQuest(n.questId).then((opened) => opened && store.getState().editQuest()),
       onRemove: () => void removeNode(n.questId),
       onAddChain: () => void addQuestChain(n.questId),
+      rotation: poolOf.has(n.questId) ? { name: poolOf.get(n.questId)!.name || `Rotation ${poolOf.get(n.questId)!.id}`, daily: poolOf.get(n.questId)!.daily } : null,
+      onRotation: () => {
+        const pool = poolOf.get(n.questId);
+        if (pool) void openRotation(pool.id);
+      },
     } satisfies QuestNodeData,
   }));
 
@@ -140,6 +181,11 @@ function CanvasInner({ store }: { store: AppStore }): React.JSX.Element {
             <button type="button" className="btn" onClick={() => void fitView()}>
               Fit view
             </button>
+            {selected.length >= 2 && (
+              <button type="button" className="btn" onClick={() => void openNewRotation(selected)}>
+                Rotate these quests…
+              </button>
+            )}
           </div>
           {nodes.length === 0 && (
             <div className="canvas-empty">
@@ -180,11 +226,36 @@ function CanvasInner({ store }: { store: AppStore }): React.JSX.Element {
                 nodes={flowNodes}
                 edges={toFlowEdges(nodes)}
                 nodeTypes={nodeTypes}
+                // The selection is outlined only while it holds several quests: one selected by a plain
+                // click is the open quest, which has its own highlight that the outline could contradict
+                className={selected.length >= 2 ? 'canvas--multi' : undefined}
                 zoomOnDoubleClick={false}
                 defaultViewport={viewport}
                 nodesConnectable={false}
+                // A click selects (Ctrl, Cmd or Shift adds); a drag moves without selecting. Nothing is deleted by key.
+                multiSelectionKeyCode={MULTI_SELECT_KEYS}
+                selectNodesOnDrag={false}
+                deleteKeyCode={null}
+                // React Flow keeps a multi-selection when a quest already in it is clicked plainly;
+                // a plain click selects just that quest instead (the card itself opens it)
+                onNodeClick={(event, node) => {
+                  if (event.ctrlKey || event.metaKey || event.shiftKey) return;
+                  const id = Number(node.id);
+                  setSelectedIds((was) => (was.size === 1 && was.has(id) ? was : new Set([id])));
+                }}
                 // The nodes are controlled by the store, so a drag only shows if each step lands there.
                 onNodesChange={(changes) => {
+                  const picks = changes.flatMap((c) => (c.type === 'select' ? [c] : []));
+                  if (picks.length > 0) {
+                    setSelectedIds((was) => {
+                      const next = new Set(was);
+                      for (const pick of picks) {
+                        if (pick.selected) next.add(Number(pick.id));
+                        else next.delete(Number(pick.id));
+                      }
+                      return next;
+                    });
+                  }
                   for (const change of changes) {
                     if (change.type !== 'position') continue;
                     if (change.position) moveNode(Number(change.id), change.position.x, change.position.y);
@@ -213,6 +284,30 @@ function CanvasInner({ store }: { store: AppStore }): React.JSX.Element {
         {screen === 'edit' && <QuestFlowView store={store} />}
       </div>
       {showAddExisting && <AddExistingDialog store={store} onClose={() => setShowAddExisting(false)} />}
+      {rotationEdit && (
+        <RotationDialog
+          group={rotationEdit.group}
+          titles={rotationTitles(rotationEdit.group)}
+          projectQuests={nodes.map((n) => ({ questId: n.questId, title: n.title }))}
+          check={(group: SpawnGroup, moves: GroupMove[]) => store.getState().checkRotation(group, moves)}
+          onSave={(group, moves, makeKind) =>
+            void store
+              .getState()
+              .saveRotation(group, moves, makeKind)
+              .then((saved) => saved && setRotationEdit(null))
+          }
+          onDelete={
+            rotationEdit.existing
+              ? () =>
+                  void store
+                    .getState()
+                    .deleteRotation(rotationEdit.group.id, rotationEdit.group.name)
+                    .then((deleted) => deleted && setRotationEdit(null))
+              : undefined
+          }
+          onClose={() => setRotationEdit(null)}
+        />
+      )}
     </div>
   );
 }

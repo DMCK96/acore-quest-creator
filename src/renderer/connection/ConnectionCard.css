@@ -30,6 +30,14 @@
   text-shadow: var(--title-glow);
 }
 
+.conn-card__logo {
+  display: block;
+  width: min(19rem, 100%);
+  height: auto;
+  margin: -0.4rem auto 0;
+  filter: drop-shadow(0 0.15rem 0.6rem rgb(0 0 0 / 0.55));
+}
+
 .conn-card__subtitle {
   margin: 0.35rem 0 0;
   font-size: 0.9rem;

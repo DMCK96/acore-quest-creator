@@ -265,7 +265,7 @@ test.describe.serial('docs screenshots', () => {
     await panel.getByRole('button', { name: 'Add object' }).click();
     const crate = page.getByRole('dialog', { name: 'New object' });
     await crate.getByLabel('Name', { exact: true }).fill('Salvaged Crate');
-    await crate.getByLabel('Type').selectOption('Chest (can be looted)');
+    await crate.getByLabel('Type').selectOption('Lootable');
     await crate.getByRole('tab', { name: 'Look' }).click();
     await crate.getByRole('button', { name: 'Other ways' }).click();
     await crate.getByRole('combobox', { name: 'Browse models' }).fill('crate');
@@ -364,11 +364,13 @@ test.describe.serial('docs screenshots', () => {
     const at = (fx: number, fy: number) => ({ x: box.x + box.width * fx, y: box.y + box.height * fy });
     // A guard placed beside the marshal, given a path of three points
     const ground = at(0.62, 0.62);
+    // Project changes also counts the NPCs, objects and items the demo quest made above
+    const before = Number(/\((\d+)\)/.exec((await page.getByRole('button', { name: /^Project changes/ }).textContent()) ?? '')?.[1] ?? 0);
     await page.mouse.click(ground.x, ground.y, { button: 'right' });
     await page.getByRole('menuitem', { name: 'Place NPC here…' }).click();
     await page.getByRole('searchbox', { name: 'Find by name or ID' }).fill('Stormwind City Guard');
     await page.locator('.place-dialog__hit').first().click({ timeout: 30000 });
-    await expect(page.getByRole('button', { name: 'World changes (1)' })).toBeVisible({ timeout: 30000 });
+    await expect(page.getByRole('button', { name: `Project changes (${before + 1})` })).toBeVisible({ timeout: 30000 });
     await page.waitForTimeout(1500);
     const next = at(0.72, 0.55);
     await page.mouse.click(next.x, next.y, { button: 'right' });
@@ -379,8 +381,8 @@ test.describe.serial('docs screenshots', () => {
     await page.waitForTimeout(800);
     await page.locator('.world3d__stage canvas').focus();
     await page.keyboard.press('Enter');
-    await page.getByRole('button', { name: /^World changes/ }).click();
-    const changes = page.getByRole('dialog', { name: 'World changes' });
+    await page.getByRole('button', { name: /^Project changes/ }).click();
+    const changes = page.getByRole('dialog', { name: 'Project changes' });
     await expect(changes.getByText(/walks path/)).toBeVisible({ timeout: 30000 });
     await shot(page, 'world-changes');
     await changes.getByRole('button', { name: 'Close' }).first().click();

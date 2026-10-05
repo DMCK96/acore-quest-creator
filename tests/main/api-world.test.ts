@@ -14,12 +14,14 @@ async function setup(seed: (db: ReturnType<typeof forkDb>) => void = () => {}) {
   seed(db);
   const written = new Map<string, string>();
   const session = createProjectSession(defaultProjectMeta('P', 'C:\\out'));
-  const api = createApi({ store: openStore(':memory:', box), openWorldDb: async () => db, openDevDb: async () => { throw new Error('x'); },
+  // A second window onto the same project, never connected
+  const make = () => createApi({ store: openStore(':memory:', box), openWorldDb: async () => db, openDevDb: async () => { throw new Error('x'); },
     fs: { writeFile: async (p: string, t: string) => { written.set(p, t); }, ensureDir: async () => {}, listDir: async () => [...written.keys()].map((p) => p.split('\\').at(-1)!) },
     now: () => new Date('2026-10-03T12:00:00Z'), session, projects: {} as ProjectController });
+  const api = make();
   const rec: any = await api.saveProfile({ name: 'w', role: 'world', host: 'h', port: 1, user: 'u', database: 'd', password: 'p' });
   await api.connect(rec.value.id);
-  return { api, db, session, written };
+  return { api, db, session, written, offline: make };
 }
 
 const world = (db: ReturnType<typeof forkDb>) => {
@@ -61,6 +63,44 @@ describe('the world layer through the API', () => {
     const out: any = await api.worldMoveSpawn('creature', 4242, to(1));
     expect(out.ok).toBe(false);
     expect(out.error.message).toBe('Spawn 4242 is no longer in the database.');
+  });
+
+  it('records which NPCs walk a route at its first edit', async () => {
+    const { api } = await setup(world);
+    const out: any = await api.worldSetRoute(802, [{ x: 1, y: 2, z: 3, rest: {} }]);
+    expect(out.value.routes[0].walkerEntries).toEqual([{ entry: 1423, name: 'Stormwind Guard' }]);
+  });
+
+  it('fills in the walkers of a route edited before they were recorded, without an undo step or a save', async () => {
+    const { api, session } = await setup(world);
+    session.world.put({ spawns: [], added: [], routes: [{ pathId: 801, walkers: 1, original: [{ x: 10, y: 0, z: 1, rest: {} }], current: [] }] });
+    const steps = ((await api.historyList()) as any).value.steps.length;
+    session.markSaved('C:\p.json');
+    expect(session.dirty()).toBe(false);
+    const out: any = await api.worldLayer();
+    expect(out.value.routes[0].walkerEntries).toEqual([{ entry: 1423, name: 'Stormwind Guard' }]);
+    expect(((await api.historyList()) as any).value.steps.length).toBe(steps);
+    expect(session.dirty()).toBe(false);
+  });
+
+  it('fills in the type of an object placed before types were recorded, without an undo step or a save', async () => {
+    const { api, session } = await setup(world);
+    const look = { displayId: 1949, scale: 1, equipment: [0, 0, 0] as [number, number, number], preset: null };
+    const at = { x: 1, y: 2, z: 3, orientation: 0, rotation: null };
+    session.world.put({ spawns: [], routes: [], added: [{ kind: 'gameobject', guid: 9, entry: 143981, name: 'Mailbox', map: 0, placement: at, look }] });
+    const steps = ((await api.historyList()) as any).value.steps.length;
+    session.markSaved('C:\p.json');
+    const out: any = await api.worldLayer();
+    expect(out.value.added[0].look.objectType).toBe(19);
+    expect(session.world.get().added[0]!.look.objectType).toBe(19);
+    expect(((await api.historyList()) as any).value.steps.length).toBe(steps);
+    expect(session.dirty()).toBe(false);
+  });
+
+  it('keeps the name of an NPC that walks a route, for naming the change', async () => {
+    const { api } = await setup(world);
+    const out: any = await api.worldSetRoute(801, [{ x: 1, y: 2, z: 3, rest: {} }, { x: 4, y: 5, z: 6, rest: {} }]);
+    expect(out.value.routes[0].name).toBe('Stormwind Guard');
   });
 
   it('gives a route in point order with its other columns, and counts its walkers', async () => {
@@ -108,25 +148,25 @@ describe('the world layer through the API', () => {
     expect(out.value.map((c: any) => [c.type, c.guid, c.drifted])).toEqual([['spawn', 80330, true], ['spawn', 5, false]]);
   });
 
-  it('exports the world patch and its revert, numbered per day', async () => {
+  it('exports world changes in the project patch and its revert, numbered per day', async () => {
     const { api, written } = await setup(world);
-    expect(((await api.exportWorld()) as any).error.message).toBe('There are no world changes to export.');
+    expect(((await api.exportProject()) as any).error.message).toBe('There are no NPCs, objects, items or world changes to export.');
     await api.worldMoveSpawn('creature', 80330, to(-9470));
-    const out: any = await api.exportWorld();
-    expect(out.value.applyPath).toMatch(/2026_10_03_00_world\.sql$/);
-    expect(out.value.revertPath).toMatch(/2026_10_03_00_world_revert\.sql$/);
+    const out: any = await api.exportProject();
+    expect(out.value.applyPath).toMatch(/2026_10_03_00_project\.sql$/);
+    expect(out.value.revertPath).toMatch(/2026_10_03_00_project_revert\.sql$/);
     expect(written.get(out.value.applyPath)).toMatch(/UPDATE `creature` SET .*`position_x` = -9470.*WHERE `guid` = 80330/s);
     expect(written.get(out.value.revertPath)).toMatch(/`position_x` = -9481.31/);
-    expect(written.get(out.value.applyPath)).toContain('-- World changes');
-    const again: any = await api.exportWorld();
-    expect(again.value.applyPath).toMatch(/2026_10_03_01_world\.sql$/);
+    expect(written.get(out.value.applyPath)).toContain('-- Project changes');
+    const again: any = await api.exportProject();
+    expect(again.value.applyPath).toMatch(/2026_10_03_01_project\.sql$/);
   });
 
   it('exports a point added in 3D with every column the database has, at its default', async () => {
     const { api, written } = await setup(world);
     const first: any = await api.worldRoute(801);
     await api.worldSetRoute(801, [...first.value.points, { x: 30, y: 0, z: 1, rest: {} }]);
-    const out: any = await api.exportWorld();
+    const out: any = await api.exportProject();
     expect(out.ok).toBe(true);
     const sql = written.get(out.value.applyPath)!;
     expect(sql).toMatch(/INSERT INTO `waypoint_data` .*`velocity`.*VALUES \(801, 3, 30, 0, 1,/);
@@ -162,7 +202,8 @@ describe('the world layer through the API', () => {
       const { api, session } = await setup(templates);
       await Promise.all([api.worldAddSpawn('creature', 1423, 0, at), api.worldAddSpawn('creature', 1423, 0, at), api.worldAddSpawn('gameobject', 143981, 0, at)]);
       expect(session.world.get().added.map((a) => [a.kind, a.guid]).sort()).toEqual([['creature', 80333], ['creature', 80334], ['gameobject', 6]]);
-      expect(session.world.get().added.find((a) => a.kind === 'gameobject')!.look).toMatchObject({ displayId: 1949, scale: 1 });
+      expect(session.world.get().added.find((a) => a.kind === 'gameobject')!.look).toMatchObject({ displayId: 1949, scale: 1, objectType: 19 });
+      expect(session.world.get().added.find((a) => a.kind === 'creature')!.look.objectType).toBeUndefined();
     });
 
     it('refuses an NPC or object the database does not have', async () => {
@@ -203,7 +244,7 @@ describe('the world layer through the API', () => {
       const { api, written } = await setup(templates);
       await api.worldAddSpawn('creature', 1423, 0, at);
       await api.worldAddSpawn('gameobject', 143981, 0, { ...at, rotation: null });
-      const out: any = await api.exportWorld();
+      const out: any = await api.exportProject();
       expect(out.ok).toBe(true);
       const sql = written.get(out.value.applyPath)!;
       expect(sql).toMatch(/DELETE FROM `creature` WHERE `guid` = 80333;/);
@@ -232,9 +273,9 @@ describe('movement through the API', () => {
     await api.worldSetMovement(80331, { type: 'idle', wander: 0, pathId: null });
     const changes: any = await api.worldChanges();
     expect(changes.value[0]).toMatchObject({ type: 'movement', addonRow: false, original: { type: 'path', pathId: 802 } });
-    const out: any = await api.exportWorld();
+    const out: any = await api.exportProject();
     expect(out.value.sql).toMatch(/INSERT INTO `creature_addon`[^;]*80331/);
-    const revert = [...written.entries()].find(([path]) => path.endsWith('_world_revert.sql'))![1];
+    const revert = [...written.entries()].find(([path]) => path.endsWith('_project_revert.sql'))![1];
     expect(revert).toMatch(/DELETE FROM `creature_addon` WHERE[^;]*80331/);
   });
 
@@ -291,6 +332,19 @@ describe('movement through the API', () => {
     const out: any = await api.worldRevert({ kind: 'movement', guid: 80332 });
     expect(out.value.movements ?? []).toEqual([]);
   });
+
+  it('reads a spawn\'s respawn once, records the change, lists it and reverts it', async () => {
+    const { api, db } = await setup(world);
+    db.update('creature', { guid: '80330' }, { spawntimesecs: '300' });
+    const out: any = await api.worldSetRespawn('creature', 80330, 60);
+    expect(out.value.respawns).toEqual([{ kind: 'creature', guid: 80330, entry: 1423, name: 'Stormwind Guard', map: 0, original: 300, current: 60 }]);
+    const changes: any = await api.worldChanges();
+    expect(changes.value).toContainEqual(expect.objectContaining({ type: 'respawn', guid: 80330, drifted: false }));
+    db.update('creature', { guid: '80330' }, { spawntimesecs: '900' });
+    expect(((await api.worldChanges()) as any).value.find((c: any) => c.type === 'respawn').drifted).toBe(true);
+    const back: any = await api.worldRevert({ kind: 'respawn', spawnKind: 'creature', guid: 80330 });
+    expect(back.value.respawns).toEqual([]);
+  });
 });
 
 describe('the spawns a quest uses', () => {
@@ -301,18 +355,34 @@ describe('the spawns a quest uses', () => {
     const values = {
       ...created.value.aggregate.values,
       'quest_template.LogTitle': 'Guards',
-      creature_queststarter: [{ id: 1423 }],
+      creature_queststarter: [{ id: 1423 }, { id: 12000001 }],
       creature_questender: [{ id: 1423 }],
       'quest_template.RequiredNpcOrGo': [{ target: { target: 'gameobject', id: 143981 }, count: 1 }],
-      entities: writeEntities({ npcs: [{ ...newNpc(12000001), name: 'Hela', spawns: [{ ...newSpawn(900), map: 0, x: 1, y: 2, z: 3 }] }], objects: [], items: [] }),
     };
     await api.updateQuest({ ...created.value.aggregate, values });
+    await api.putProjectEntities({ npcs: [{ ...newNpc(12000001), name: 'Hela', spawns: [{ ...newSpawn(900), map: 0, x: 1, y: 2, z: 3 }] }], objects: [], items: [] });
     const out: any = await api.questSpawnList([questId]);
     const [group] = out.value;
     expect(group).toMatchObject({ questId, title: 'Guards', capped: false });
     const roles = group.spawns.map((s: any) => `${s.role}:${s.kind}:${s.guid}`).sort();
-    expect(roles).toEqual(['giver:creature:80330', 'giver:creature:80331', 'giver:creature:80332', 'objective:gameobject:5', 'own:creature:900'].sort());
-    expect(group.spawns.find((s: any) => s.role === 'own')).toMatchObject({ entry: 12000001, name: 'Hela', map: 0, x: 1, y: 2, z: 3 });
+    expect(roles).toEqual(['giver:creature:80330', 'giver:creature:80331', 'giver:creature:80332', 'objective:gameobject:5', 'giver:creature:900'].sort());
+    expect(group.spawns.find((s: any) => s.guid === 900)).toMatchObject({ entry: 12000001, name: 'Hela', map: 0, x: 1, y: 2, z: 3 });
+  });
+
+  it('gives a project NPC that gives the quest the giver part, so the quest is where its giver is', async () => {
+    const { api } = await setup(world);
+    const created: any = await api.newQuest();
+    const values = {
+      ...created.value.aggregate.values,
+      creature_queststarter: [{ id: 12000001 }],
+      'quest_template.RequiredNpcOrGo': [{ target: { target: 'creature', id: 1423 }, count: 1 }],
+    };
+    await api.updateQuest({ ...created.value.aggregate, values });
+    await api.putProjectEntities({ npcs: [{ ...newNpc(12000001), name: 'Hela', spawns: [{ ...newSpawn(900), map: 0, x: 1, y: 2, z: 3 }] }], objects: [], items: [] });
+    const out: any = await api.questSpawnList([created.value.questId]);
+    const spawns = out.value[0].spawns;
+    expect(spawns.find((s: any) => s.guid === 900).role).toBe('giver');
+    expect(spawns.filter((s: any) => s.role === 'objective').map((s: any) => s.guid).sort()).toEqual([80330, 80331, 80332]);
   });
 
   it('reads a template-only addon as the seed of the spawn row a new path writes, and keeps the raw wander for the revert', async () => {
@@ -321,10 +391,38 @@ describe('the spawns a quest uses', () => {
     db.update('creature_template_addon', { entry: '1423' }, { path_id: '0', mount: '2410' });
     await api.worldSetMovement(80331, { type: 'path', wander: 0, pathId: 803310 });
     await api.worldSetRoute(803310, [{ x: 1, y: 0, z: 0, rest: {} }, { x: 2, y: 0, z: 0, rest: {} }], { isNew: true });
-    const out: any = await api.exportWorld();
+    const out: any = await api.exportProject();
     expect(out.value.sql).toMatch(/INSERT INTO `creature_addon`[^;]*2410/);
-    const revert = [...written.entries()].find(([path]) => path.endsWith('_world_revert.sql'))![1];
+    const revert = [...written.entries()].find(([path]) => path.endsWith('_project_revert.sql'))![1];
     expect(revert).toMatch(/UPDATE `creature` SET `wander_distance` = 5, `MovementType` = 0 WHERE `guid` = 80331/);
+  });
+
+  it('lists a giver moved in the World where the layer has it, and a spawn placed there', async () => {
+    const { api } = await setup(world);
+    const created: any = await api.newQuest();
+    await api.updateQuest({ ...created.value.aggregate, values: { ...created.value.aggregate.values, creature_queststarter: [{ id: 1423 }] } });
+    await api.worldMoveSpawn('creature', 80330, to(-9000));
+    const added: any = await api.worldAddSpawn('creature', 1423, 0, { x: 5, y: 6, z: 7, orientation: 0, rotation: null });
+    const out: any = await api.questSpawnList([created.value.questId]);
+    const spawns = out.value[0].spawns;
+    expect(spawns.find((s: any) => s.guid === 80330)).toMatchObject({ role: 'giver', x: -9000, y: 74.42, z: 56.55 });
+    expect(spawns.find((s: any) => s.guid === added.value.guid)).toMatchObject({ role: 'giver', kind: 'creature', entry: 1423, map: 0, x: 5, y: 6, z: 7 });
+  });
+
+  it('without the world database, lists the project’s own spawns and the spawns placed in the World, and says the database was not read', async () => {
+    const { api, session, offline } = await setup(world);
+    const created: any = await api.newQuest();
+    const values = { ...created.value.aggregate.values, creature_queststarter: [{ id: 12000001 }], creature_questender: [{ id: 1423 }] };
+    await api.updateQuest({ ...created.value.aggregate, values });
+    await api.putProjectEntities({ npcs: [{ ...newNpc(12000001), name: 'Hela', spawns: [{ ...newSpawn(900), map: 0, x: 1, y: 2, z: 3 }] }], objects: [], items: [] });
+    const look = { displayId: 1, scale: 1, equipment: [0, 0, 0] as [number, number, number], preset: null };
+    const moved = { kind: 'creature' as const, guid: 80330, entry: 1423, name: 'Stormwind Guard', map: 0, original: to(1), current: to(-9000) };
+    session.world.put({ spawns: [moved], routes: [], added: [{ kind: 'creature', guid: 77, entry: 1423, name: 'Stormwind Guard', map: 0, placement: { x: 5, y: 6, z: 7, orientation: 0, rotation: null }, look }] });
+    const out: any = await offline().questSpawnList([created.value.questId]);
+    expect(out.ok).toBe(true);
+    expect(out.value[0].offline).toBe(true);
+    expect(out.value[0].spawns.map((s: any) => `${s.role}:${s.guid}`).sort()).toEqual(['ender:77', 'ender:80330', 'giver:900']);
+    expect(out.value[0].spawns.find((s: any) => s.guid === 80330)).toMatchObject({ x: -9000, map: 0 });
   });
 
   it('says how many NPCs or objects had more spawns than were listed', async () => {

@@ -5,6 +5,7 @@ import { act, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import type { LeafletMapProps } from '../../src/renderer/map/LeafletMap';
 import { QuestMapView } from '../../src/renderer/map/QuestMapView';
+import { MapWithStore } from './map-with-store';
 import { NamesProvider } from '../../src/renderer/state/names';
 import { makeMockApi, okv, sampleOpen } from './mock-api';
 import { ENTITIES_FIELD, newNpc, newSpawn, readEntities, writeEntities } from '../../src/core/entities/model';
@@ -24,7 +25,7 @@ const openWith = (npcs = [hela]) => {
   return { ...base, aggregate: { ...base.aggregate, values: { ...base.aggregate.values, [ENTITIES_FIELD]: writeEntities({ npcs, objects: [], items: [] }) } } };
 };
 const mount = (api = makeMockApi(), onChange = vi.fn(), open = openWith()) => {
-  render(<NamesProvider api={api}><QuestMapView open={open} onChange={onChange} focusId={null} onClose={vi.fn()} /></NamesProvider>);
+  render(<NamesProvider api={api}><MapWithStore open={open} onChange={onChange} focusId={null} onClose={vi.fn()} /></NamesProvider>);
   return { api, onChange };
 };
 
@@ -51,11 +52,11 @@ describe('quest map', () => {
 
   it('keeps the view where it is when a moved marker comes back in new values', async () => {
     const api = makeMockApi();
-    const view = render(<NamesProvider api={api}><QuestMapView open={openWith()} onChange={vi.fn()} focusId={null} onClose={vi.fn()} /></NamesProvider>);
+    const view = render(<NamesProvider api={api}><MapWithStore open={openWith()} onChange={vi.fn()} focusId={null} onClose={vi.fn()} /></NamesProvider>);
     await screen.findByRole('dialog', { name: 'Quest map' });
     expect(lastProps!.view).toMatchObject({ x: -8900, y: -160 });
     const moved = { ...hela, spawns: [{ ...hela.spawns[0]!, x: -8950, y: -170 }] };
-    view.rerender(<NamesProvider api={api}><QuestMapView open={openWith([moved])} onChange={vi.fn()} focusId={null} onClose={vi.fn()} /></NamesProvider>);
+    view.rerender(<NamesProvider api={api}><MapWithStore open={openWith([moved])} onChange={vi.fn()} focusId={null} onClose={vi.fn()} /></NamesProvider>);
     expect(lastProps!.markers.find((m) => m.id === 'spawn:npc:12000001:900')).toMatchObject({ x: -8950 });
     expect(lastProps!.view).toMatchObject({ x: -8900, y: -160 });
   });
@@ -105,7 +106,7 @@ describe('quest map', () => {
       const start = openWith([two]);
       const [values, setValues] = useState(start.aggregate.values);
       latest = values;
-      return <QuestMapView open={{ ...start, aggregate: { ...start.aggregate, values } }} onChange={(f, v) => setValues((prev) => ({ ...prev, [f]: v }))} focusId={null} onClose={vi.fn()} />;
+      return <MapWithStore open={{ ...start, aggregate: { ...start.aggregate, values } }} onChange={(f, v) => setValues((prev) => ({ ...prev, [f]: v }))} focusId={null} onClose={vi.fn()} />;
     }
     render(<NamesProvider api={api}><Live /></NamesProvider>);
     await screen.findByRole('dialog', { name: 'Quest map' });
@@ -141,7 +142,7 @@ describe('quest map', () => {
   });
 
   it('says why there is no terrain without a server data folder', async () => {
-    render(<NamesProvider api={makeMockApi()}><QuestMapView open={openWith()} onChange={vi.fn()} focusId={null} onClose={vi.fn()} hasServerData={false} /></NamesProvider>);
+    render(<NamesProvider api={makeMockApi()}><MapWithStore open={openWith()} onChange={vi.fn()} focusId={null} onClose={vi.fn()} hasServerData={false} /></NamesProvider>);
     expect(await screen.findByText('Set the server data folder on the connection to see the terrain and floors.')).toBeTruthy();
   });
 });
@@ -209,7 +210,7 @@ describe('quest map dots and zoom', () => {
     expect(lastProps!.dots).toEqual([]);
   });
   it('asks for the game client folder when the connection has none', async () => {
-    render(<NamesProvider api={makeMockApi()}><QuestMapView open={openWith()} onChange={vi.fn()} focusId={null} onClose={vi.fn()} hasClient={false} /></NamesProvider>);
+    render(<NamesProvider api={makeMockApi()}><MapWithStore open={openWith()} onChange={vi.fn()} focusId={null} onClose={vi.fn()} hasClient={false} /></NamesProvider>);
     expect(await screen.findByText('Set the game client folder on the connection to see the in-game map art.')).toBeTruthy();
   });
 });

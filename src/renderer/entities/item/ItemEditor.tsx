@@ -7,6 +7,7 @@ import { ItemAdvanced } from './ItemAdvanced';
 import { ItemBasics } from './ItemBasics';
 import { ItemGear } from './ItemGear';
 import { ItemSpells } from './ItemSpells';
+import type { ExistingFacts } from '../existing-facts';
 import '../../scripts/scripts.css';
 
 export const SHOW_ADVANCED_KEY = 'acqc.item.showAdvanced';
@@ -37,8 +38,12 @@ export function ItemEditor({
   columns,
   tab,
   onTab,
+  // An item has no loot, fight or placement, so nothing differs yet for an existing one
+  existing: _existing,
 }: {
   item: CustomItem;
+  /** Set when the database already has it */
+  existing?: ExistingFacts;
   onChange(next: CustomItem): void;
   allocatePage(): Promise<number | null>;
   copyLook(entry: number): Promise<Partial<CustomItem> | null>;

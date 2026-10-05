@@ -10,7 +10,7 @@ The **Scripts** module holds **scenes**: small "when this happens, do that" scri
 ![The Scripts editor with a scene where the NPC speaks when the quest is accepted](../../../assets/screenshots/scripts.png)
 
 :::note
-How an NPC fights is not a scene. That lives in the [combat wizard](/acore-quest-creator/guides/combat-wizard/).
+How an NPC fights is not a scene. That lives in the [combat wizard](/azeroth-world-editor/guides/combat-wizard/).
 :::
 
 ## Add a scene

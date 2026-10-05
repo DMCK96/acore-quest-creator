@@ -21,7 +21,7 @@ describe('object editor', () => {
   it('shows Contents only for objects that hold pages or loot', async () => {
     const { rerender } = render(<Live api={makeMockApi()} start={{ ...newObject(9100001), type: 'generic' }} />);
     expect(screen.getAllByRole('tab').map((t) => t.textContent)).toEqual(['Basics', 'Look', 'Placement']);
-    await userEvent.selectOptions(screen.getByLabelText('Type'), 'Chest (can be looted)');
+    await userEvent.selectOptions(screen.getByLabelText('Type'), 'Lootable');
     expect(screen.getAllByRole('tab').map((t) => t.textContent)).toEqual(['Basics', 'Look', 'Contents', 'Placement']);
     await tab('Contents');
     expect(screen.getByRole('button', { name: 'Add loot' })).toBeTruthy();

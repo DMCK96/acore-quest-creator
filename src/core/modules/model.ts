@@ -1,3 +1,4 @@
+import type { ProjectEntities } from '../entities/model';
 import type { FieldValue } from '../registry/types';
 import type { NameBook } from '../links/component';
 
@@ -31,5 +32,6 @@ export interface ModuleDef {
   description: string;
   kind: 'core' | 'optional';
   owns: readonly string[];
-  summary(values: Values, names: NameBook): string[];
+  /** `entities`: the project's NPCs, objects and items the quest uses */
+  summary(values: Values, names: NameBook, entities?: ProjectEntities): string[];
 }

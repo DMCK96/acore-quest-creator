@@ -4,7 +4,7 @@ import { SPAWN_VIEW_CAP, orderPath, pickPreset, toViewCreature, toViewObject, to
 const creatureRow = {
   guid: '79970', entry: '197', name: 'Marshal McBride', map: '0',
   position_x: '-8902.59', position_y: '-162.606', position_z: '82.0223', orientation: '1.5',
-  display_id: '1953', display_scale: '1.25', wander_distance: '5', MovementType: '1',
+  display_id: '1953', display_scale: '1.25', wander_distance: '5', MovementType: '1', spawntimesecs: '120',
 };
 
 describe('a creature spawn for the 3D view', () => {
@@ -13,7 +13,7 @@ describe('a creature spawn for the 3D view', () => {
     expect(c).toEqual({
       guid: 79970, entry: 197, name: 'Marshal McBride', map: 0,
       x: -8902.59, y: -162.606, z: 82.0223, orientation: 1.5,
-      displayId: 1953, scale: 1.25, wander: 5, path: null, equipment: [0, 0, 0], own: false, event: null, events: [], removedBy: [], pathId: 0, preset: null,
+      displayId: 1953, scale: 1.25, wander: 5, path: null, equipment: [0, 0, 0], own: false, event: null, events: [], removedBy: [], pathId: 0, preset: null, group: null, respawnSecs: 120,
     });
   });
 
@@ -61,6 +61,32 @@ describe('a spawn that belongs to a game event', () => {
     expect(toViewCreature(row, null, [0, 0, 0]).events).toEqual([{ id: 3, name: 'Darkmoon Faire: Elwynn, Goldshire' }]);
   });
 
+  it('counts the event its top-level group follows as one of its own, once', () => {
+    const during = { ...creatureRow, event_entry: '7', event_name: 'Lunar Festival', pool_event_entry: '12', pool_event_name: 'Darkmoon Faire', event_list: `7${FIELD}Lunar Festival` };
+    for (const spawn of [toViewCreature(during, null, [0, 0, 0]), toViewObject(during)]) {
+      expect(spawn.events).toEqual([{ id: 7, name: 'Lunar Festival' }, { id: 12, name: 'Darkmoon Faire' }]);
+      expect(spawn.event).toEqual({ id: 7, name: 'Lunar Festival' });
+    }
+    const only = toViewCreature({ ...creatureRow, pool_event_entry: '12', pool_event_name: 'Darkmoon Faire', event_list: `12${FIELD}Darkmoon Faire` }, null, [0, 0, 0]);
+    expect(only.events).toEqual([{ id: 12, name: 'Darkmoon Faire' }]);
+    expect(only.event).toEqual({ id: 12, name: 'Darkmoon Faire' });
+    const away = toViewObject({ ...creatureRow, pool_event_entry: '-12', pool_event_name: 'Darkmoon Faire' });
+    expect([away.events, away.removedBy, away.event]).toEqual([[], [{ id: 12, name: 'Darkmoon Faire' }], null]);
+  });
+
+  it('says which top-level group it is in and which of its events came from that group', () => {
+    const row = { ...creatureRow, pool_entry: '20', pool_top: '9', event_entry: '7', event_name: 'Lunar Festival', pool_event_entry: '12', pool_event_name: 'Darkmoon Faire', event_list: `7${FIELD}Lunar Festival` };
+    for (const spawn of [toViewCreature(row, null, [0, 0, 0]), toViewObject(row)]) {
+      expect(spawn.poolTop).toBe(9);
+      expect(spawn.poolEvent).toEqual({ pool: 9, id: 12, during: true, alsoOwn: false });
+    }
+    // Its own row for the same event stays when the group's goes
+    const both = toViewCreature({ ...row, pool_event_entry: '-7', event_list: `-7${FIELD}Lunar Festival` }, null, [0, 0, 0]);
+    expect(both.poolEvent).toEqual({ pool: 9, id: 7, during: false, alsoOwn: true });
+    const none = toViewCreature({ ...creatureRow, pool_entry: '20', pool_top: '20' }, null, [0, 0, 0]);
+    expect([none.poolTop, none.poolEvent]).toEqual([20, null]);
+  });
+
   it('has no events and is taken away by none when it has no event rows', () => {
     const c = toViewCreature({ ...creatureRow, event_list: null }, null, [0, 0, 0]);
     expect([c.events, c.removedBy]).toEqual([[], []]);
@@ -88,11 +114,11 @@ describe('an object spawn for the 3D view', () => {
       guid: '5', entry: '143981', name: 'Mailbox', map: '0',
       position_x: '-9000', position_y: '-100', position_z: '80',
       rotation0: '0', rotation1: '0', rotation2: '0.5', rotation3: '0.8660254',
-      display_id: '1949', size: '1.5',
+      display_id: '1949', size: '1.5', spawntimesecs: '45', type: '19',
     });
     expect(o).toEqual({
       guid: 5, entry: 143981, name: 'Mailbox', map: 0, x: -9000, y: -100, z: 80,
-      rotation: [0, 0, 0.5, 0.8660254], displayId: 1949, scale: 1.5, own: false, event: null, events: [], removedBy: [],
+      rotation: [0, 0, 0.5, 0.8660254], displayId: 1949, scale: 1.5, objectType: 19, own: false, event: null, events: [], removedBy: [], group: null, respawnSecs: 45,
     });
   });
 
@@ -100,6 +126,9 @@ describe('an object spawn for the 3D view', () => {
     const o = toViewObject({ guid: '5', entry: '1', name: null, map: '0', position_x: '0', position_y: '0', position_z: '0', rotation0: null, rotation1: null, rotation2: null, rotation3: null, display_id: null, size: null });
     expect(o.rotation).toEqual([0, 0, 0, 1]);
     expect([o.scale, o.name, o.displayId]).toEqual([1, '', 0]);
+    expect(o.respawnSecs).toBe(300);
+    // No template row: its type is not known
+    expect(o.objectType).toBe(-1);
   });
 });
 

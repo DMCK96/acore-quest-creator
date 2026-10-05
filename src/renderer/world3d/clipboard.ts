@@ -4,8 +4,7 @@ import type { SpawnInfo } from './scene/spawn/SpawnManager';
 /**
  * The 3D view's clipboard: spawns copied in the view, kept for the app's session (a map switch keeps
  * them, a restart does not). Each keeps its offset from the copied group's centre and how it faces,
- * so a paste puts the group down as it was laid out. A quest's own NPC is only pasted while that
- * quest is open, since only that quest can hold another spawn of it.
+ * so a paste puts the group down as it was laid out.
  */
 
 export interface ClipEntry {
@@ -13,14 +12,16 @@ export interface ClipEntry {
   entry: number;
   name: string;
   own: boolean;
-  /** The quest an own spawn belongs to; null for the world's */
-  questId: number | null;
   /** Offset from the copied group's anchor (its centre), in yards */
   dx: number;
   dy: number;
   dz: number;
   orientation: number;
   rotation: [number, number, number, number] | null;
+  /** Seconds before it respawns */
+  respawnSecs: number;
+  /** Its wander circle in yards; 0 for none, and for an NPC that walks a path */
+  wander: number;
 }
 
 let entries: ClipEntry[] = [];
@@ -28,7 +29,7 @@ let entries: ClipEntry[] = [];
 const mean = (values: number[]): number => values.reduce((sum, v) => sum + v, 0) / values.length;
 
 /** Spawns as clipboard entries, without copying them (a duplicate leaves what was copied alone) */
-export function entriesOf(spawns: readonly SpawnInfo[], questId: number | null): ClipEntry[] {
+export function entriesOf(spawns: readonly SpawnInfo[]): ClipEntry[] {
   if (spawns.length === 0) return [];
   const anchor = {
     x: mean(spawns.map((s) => s.placement.x)),
@@ -40,18 +41,19 @@ export function entriesOf(spawns: readonly SpawnInfo[], questId: number | null):
     entry: s.entry,
     name: s.name,
     own: s.own,
-    questId: s.own ? questId : null,
     dx: s.placement.x - anchor.x,
     dy: s.placement.y - anchor.y,
     dz: s.placement.z - anchor.z,
     orientation: s.placement.orientation,
     rotation: s.placement.rotation,
+    respawnSecs: s.respawnSecs,
+    wander: s.pathId > 0 ? 0 : s.wander,
   }));
 }
 
-/** Copies spawns, replacing what was copied before; `questId` is the open quest, which own spawns belong to */
-export function copySpawns(spawns: readonly SpawnInfo[], questId: number | null): ClipEntry[] {
-  if (spawns.length > 0) entries = entriesOf(spawns, questId);
+/** Copies spawns, replacing what was copied before */
+export function copySpawns(spawns: readonly SpawnInfo[]): ClipEntry[] {
+  if (spawns.length > 0) entries = entriesOf(spawns);
   return entries;
 }
 
@@ -73,15 +75,9 @@ export function layoutAt(list: readonly ClipEntry[], at: { x: number; y: number;
   }));
 }
 
-/** Which entries can be pasted with this quest open (own ones only when it is theirs), and why any were left out */
-export function pasteable(
-  list: readonly ClipEntry[],
-  openQuest: { id: number; title: string } | null,
-  titles: (questId: number) => string,
-): { entries: ClipEntry[]; blocked: string | null } {
-  const kept = list.filter((e) => !e.own || (openQuest !== null && e.questId === openQuest.id));
-  const left = list.find((e) => !kept.includes(e));
-  return { entries: kept, blocked: left ? `Open ${titles(left.questId ?? 0)} to paste its NPC` : null };
+/** Which entries can be pasted: every one, since the project's NPCs and objects belong to the project, not to a quest */
+export function pasteable(list: readonly ClipEntry[]): { entries: ClipEntry[]; blocked: null } {
+  return { entries: [...list], blocked: null };
 }
 
 /** Where a duplicate goes: two yards to the right of a camera looking along `direction` (X north, Y west) */

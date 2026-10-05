@@ -1,9 +1,12 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { ENTITIES_FIELD, newItem, newNpc, newObject, readEntities, writeEntities } from '@core/entities/model';
+import { EMPTY_ENTITIES } from '@core/entities/model';
+import { narrowTo, questUses } from '@core/entities/links';
+import { useProjectEntities } from '../state/project-entities';
 import { EntityEditorProvider, type EditorRequest, type OpenEditor } from '../entities/EntityEditorContext';
 import { EntityEditorHost, type EditorState } from '../entities/EntityEditorHost';
 import { MODULES, moduleById, offeredModules, presentModules } from '@core/modules/catalog';
 import { routeIssues, worstSeverity } from '@core/modules/issues';
+import { rotationLine } from '@core/modules/summaries';
 import type { AppStore } from '../state/app-store';
 import { useApi, useNameBook } from '../state/names';
 import { FidelityBanner } from '../components/FidelityBanner';
@@ -24,6 +27,7 @@ import './QuestFlowView.css';
 export function QuestFlowView({ store }: { store: AppStore }): React.JSX.Element | null {
   const open = store((s) => s.open);
   const api = useApi();
+  const project = useProjectEntities();
   const issues = store((s) => s.issues);
   const links = store((s) => s.links);
   const openPanel = store((s) => s.openPanel);
@@ -35,6 +39,7 @@ export function QuestFlowView({ store }: { store: AppStore }): React.JSX.Element
   const hasServerData = store((s) => Boolean(s.summary?.serverData?.dir));
   const hasClient = store((s) => Boolean(s.summary?.clientDir));
   const backToChain = store((s) => s.backToChain);
+  const questPools = store((s) => s.questPools);
   const names = useNameBook();
   const [menuOpen, setMenuOpen] = useState(false);
   /** What the map was opened to do, and the panel to go back to when it closes. */
@@ -78,9 +83,14 @@ export function QuestFlowView({ store }: { store: AppStore }): React.JSX.Element
   if (!open) return null;
 
   const values = open.aggregate.values;
-  const shown = presentModules(values, addedModules);
-  const offered = offeredModules(values, addedModules);
+  // The project's NPCs, objects and items this quest uses: they show its module and sum it up
+  const mine = project && open ? narrowTo(project.entities, questUses({ questId: open.questId, aggregate: open.aggregate }, project.entities)) : EMPTY_ENTITIES;
+  const tracking = (project?.tracked.length ?? 0) > 0;
+  const shown = presentModules(values, addedModules, tracking);
+  const offered = offeredModules(values, addedModules, tracking);
   const routed = routeIssues(issues);
+  const inRotation = rotationLine(open.questId, questPools);
+  const rotation = inRotation ? [inRotation] : [];
   const chips: ReadinessChip[] = shown.flatMap((id) => {
     const severity = worstSeverity(routed.byModule[id]);
     return severity ? [{ id, severity }] : [];
@@ -94,8 +104,8 @@ export function QuestFlowView({ store }: { store: AppStore }): React.JSX.Element
   };
 
   const box = (id: (typeof shown)[number]): React.JSX.Element => (
-    <ModuleBox key={id} def={moduleById(id)} values={values} names={names} severity={worstSeverity(routed.byModule[id])}
-      selected={openPanel === id} onOpen={() => setOpenPanel(id)} />
+    <ModuleBox key={id} def={moduleById(id)} values={values} names={names} entities={mine} severity={worstSeverity(routed.byModule[id])}
+      selected={openPanel === id} extra={id === 'behaviour' ? rotation : []} onOpen={() => setOpenPanel(id)} />
   );
 
   const openMap = (request: MapRequest | string | null): void => {
@@ -106,23 +116,20 @@ export function QuestFlowView({ store }: { store: AppStore }): React.JSX.Element
 
   const openEditor: OpenEditor = async (request) => {
     if (request.kind === 'npc' || request.kind === 'object' || request.kind === 'item') {
+      // An existing one is brought into the project first
+      const error = project ? await project.ensure({ kind: request.kind, entry: request.entry }) : null;
+      if (error) return error;
       setEditor({ kind: request.kind, entry: request.entry, isNew: false });
       return null;
     }
     if (!api) return 'Not connected.';
     // The first `if` returned for both existing kinds; TypeScript cannot narrow a union-typed `kind` out.
     const made = request as Extract<EditorRequest, { kind: 'newNpc' | 'newObject' | 'newItem' }>;
-    const result = await api.allocateIds(made.kind === 'newNpc' ? 'creature' : made.kind === 'newObject' ? 'gameobject' : 'item', 1);
-    if (!result.ok || result.value.length === 0) return result.ok ? 'No free ID could be found.' : result.error.message;
-    const entry = result.value[0]!;
-    // Created in the quest at once, from the values as they are now (never a draft).
-    const now = readEntities(store.getState().open?.aggregate.values ?? {});
-    const next = made.kind === 'newNpc'
-      ? { ...now, npcs: [...now.npcs, { ...newNpc(entry), ...made.preset, entry }] }
-      : made.kind === 'newObject'
-        ? { ...now, objects: [...now.objects, { ...newObject(entry), ...made.preset, entry }] }
-        : { ...now, items: [...now.items, { ...newItem(entry), ...made.preset, entry }] };
-    setValue(ENTITIES_FIELD, writeEntities(next));
+    // Created in the project at once (never a draft); a quest uses it once it names it (`onCreated`)
+    const kind = made.kind === 'newNpc' ? 'npc' : made.kind === 'newObject' ? 'object' : 'item';
+    const result = await store.getState().createEntity(kind, made.preset ?? {});
+    if ('error' in result) return result.error;
+    const entry = result.entry;
     made.onCreated?.(entry);
     setEditor({ kind: made.kind === 'newNpc' ? 'npc' : made.kind === 'newObject' ? 'object' : 'item', entry, isNew: true });
     return null;
@@ -206,7 +213,9 @@ export function QuestFlowView({ store }: { store: AppStore }): React.JSX.Element
         />
       )}
       {editor && openPanel !== 'map' && (
-        <EntityEditorHost values={values} onChange={setValue} state={editor} onTab={onEditorTab} onClose={closeEditor} hasServerData={hasServerData} />
+        <EntityEditorHost entities={project?.entities ?? EMPTY_ENTITIES} onChange={(next) => project?.setEntities(next)} quests={project?.quests ?? []}
+          state={editor} onTab={onEditorTab} onClose={closeEditor} hasServerData={hasServerData}
+          onDelete={(kind, entry) => store.getState().deleteEntity(kind, entry)} />
       )}
     </div>
     </MapOpenerProvider>

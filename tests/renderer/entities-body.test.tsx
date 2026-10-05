@@ -3,22 +3,33 @@ import { describe, expect, it, vi } from 'vitest';
 import { screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { mountBody } from './module-harness';
-import { ENTITIES_FIELD, newItem, newNpc, newObject, newSpawn, writeEntities } from '../../src/core/entities/model';
+import type { TrackedEntity } from '../../src/core/entities/entity';
 
-const values = { [ENTITIES_FIELD]: writeEntities({ npcs: [{ ...newNpc(12000001), name: 'Hela', displayId: 3167, minLevel: 10, maxLevel: 12, spawns: [newSpawn(900)] }], objects: [{ ...newObject(9100001), name: 'Crate', displayId: 1 }], items: [] }) };
+const tr = (kind: 'npc' | 'object' | 'item', entry: number, name: string): TrackedEntity =>
+  ({ kind, entry, name, origin: 'new', changes: ['new'], usedBy: [60001], goTo: null }) as TrackedEntity;
+const tracked = [tr('npc', 12000001, 'Hela'), tr('object', 9100001, 'Crate'), tr('item', 990300, 'Pearl')];
 
 describe('NPCs, objects & items module', () => {
-  it('lists each NPC and object in one row with Edit', async () => {
+  it('lists each tracked entity in one row with Edit', async () => {
     const openEditor = vi.fn(async () => null);
-    await mountBody('entities', values, { openEditor });
+    await mountBody('entities', {}, { openEditor, tracked });
     const hela = screen.getByRole('listitem', { name: 'Hela' });
-    expect(within(hela).getByText('Level 10–12 · placed')).toBeTruthy();
-    const crate = screen.getByRole('listitem', { name: 'Crate' });
-    expect(within(crate).getByText('Usable object · not placed')).toBeTruthy();
+    expect(within(hela).getByText('NPC 12000001 · New')).toBeTruthy();
     await userEvent.click(within(hela).getByRole('button', { name: 'Edit' }));
     expect(openEditor).toHaveBeenCalledWith({ kind: 'npc', entry: 12000001 });
+    const crate = screen.getByRole('listitem', { name: 'Crate' });
     await userEvent.click(within(crate).getByRole('button', { name: 'Edit' }));
     expect(openEditor).toHaveBeenCalledWith({ kind: 'object', entry: 9100001 });
+    const pearl = screen.getByRole('listitem', { name: 'Pearl' });
+    await userEvent.click(within(pearl).getByRole('button', { name: 'Edit' }));
+    expect(openEditor).toHaveBeenCalledWith({ kind: 'item', entry: 990300 });
+  });
+
+  it('edits an existing entity the project only changed too', async () => {
+    const openEditor = vi.fn(async () => null);
+    await mountBody('entities', {}, { openEditor, tracked: [{ ...tr('npc', 5, 'Guard'), origin: 'existing', changes: ['spawns'] } as TrackedEntity] });
+    await userEvent.click(within(screen.getByRole('listitem', { name: 'Guard' })).getByRole('button', { name: 'Edit' }));
+    expect(openEditor).toHaveBeenCalledWith({ kind: 'npc', entry: 5 });
   });
 
   it('adds NPCs and objects through the one editor, with no copy picker', async () => {
@@ -37,20 +48,10 @@ describe('NPCs, objects & items module', () => {
     expect(await screen.findByText('The database is not reachable.')).toBeTruthy();
   });
 
-  it('lists items and adds them through the editor', async () => {
+  it('adds items through the editor', async () => {
     const openEditor = vi.fn(async () => null);
-    await mountBody('entities', { [ENTITIES_FIELD]: writeEntities({ npcs: [], objects: [], items: [{ ...newItem(990300), name: 'Pearl', quality: 'epic' }] }) }, { openEditor });
-    const pearl = screen.getByRole('listitem', { name: 'Pearl' });
-    expect(within(pearl).getByText('Epic · Quest')).toBeTruthy();
-    await userEvent.click(within(pearl).getByRole('button', { name: 'Edit' }));
-    expect(openEditor).toHaveBeenCalledWith({ kind: 'item', entry: 990300 });
+    await mountBody('entities', {}, { openEditor });
     await userEvent.click(screen.getByRole('button', { name: 'Add item' }));
     expect(openEditor).toHaveBeenCalledWith({ kind: 'newItem' });
-  });
-
-  it('says on a row what an NPC or object still needs', async () => {
-    await mountBody('entities', { [ENTITIES_FIELD]: writeEntities({ npcs: [{ ...newNpc(12000001), name: 'Hela' }], objects: [newObject(9100001)], items: [] }) }, { openEditor: vi.fn(async () => null) });
-    expect(within(screen.getByRole('listitem', { name: 'Hela' })).getByText('Level 1 · not placed · still needs a look')).toBeTruthy();
-    expect(within(screen.getByRole('listitem', { name: 'New object 9100001' })).getByText('Usable object · not placed · still needs a name and a look')).toBeTruthy();
   });
 });

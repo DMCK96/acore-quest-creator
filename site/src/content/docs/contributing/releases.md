@@ -1,6 +1,6 @@
 ---
 title: Releases
-description: Cut a release of ACORE Quest Creator for Windows, macOS and Linux.
+description: Cut a release of Azeroth World Editor for Windows, macOS and Linux.
 sidebar:
   order: 5
 ---
@@ -30,7 +30,7 @@ Releases are built by the **Release** workflow when a version tag is pushed. It 
    - uploads everything to a draft release for the tag.
 4. Open the draft on the **Releases** page, edit the notes and publish it.
 
-Before a release, regenerate the [docs screenshots](/acore-quest-creator/contributing/docs-and-screenshots/) if screens changed.
+Before a release, regenerate the [docs screenshots](/azeroth-world-editor/contributing/docs-and-screenshots/) if screens changed.
 
 ## If something fails
 
@@ -39,7 +39,7 @@ Before a release, regenerate the [docs screenshots](/acore-quest-creator/contrib
 
 ## Signing and updates
 
-Builds are not code-signed, so Windows and macOS warn on first open; [Install](/acore-quest-creator/getting-started/install/) explains how to get past it. The app does not update itself.
+Builds are not code-signed, so Windows and macOS warn on first open; [Install](/azeroth-world-editor/getting-started/install/) explains how to get past it. The app does not update itself.
 
 ## Build locally
 
@@ -47,4 +47,4 @@ Builds are not code-signed, so Windows and macOS warn on first open; [Install](/
 
 ## The app icon
 
-Installers take their icon from `build/icon.png`. See [Docs and screenshots](/acore-quest-creator/contributing/docs-and-screenshots/#the-app-icon) to recapture it.
+Installers take their icon from `build/icon.png`. See [Docs and screenshots](/azeroth-world-editor/contributing/docs-and-screenshots/#the-app-icon) to recapture it.

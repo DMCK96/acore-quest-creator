@@ -1,7 +1,12 @@
 import { useEffect } from 'react';
 import { moduleById, presentModules } from '@core/modules/catalog';
+import { rotationLine } from '@core/modules/summaries';
 import type { AppStore } from '../state/app-store';
 import { useName, useNameBook } from '../state/names';
+import { EMPTY_ENTITIES } from '@core/entities/model';
+import { narrowTo, questUses } from '@core/entities/links';
+import { useProjectEntities } from '../state/project-entities';
+import { useShowInWorld } from '../world3d/ShowInWorldContext';
 import './QuestPreview.css';
 
 const plural = (n: number, word: string): string => `${n} ${word}${n === 1 ? '' : 's'}`;
@@ -12,11 +17,14 @@ const plural = (n: number, word: string): string => `${n} ${word}${n === 1 ? '' 
  */
 export function QuestPreview({ store }: { store: AppStore }): React.JSX.Element | null {
   const open = store((s) => s.open);
+  const project = useProjectEntities();
   const issues = store((s) => s.issues);
   const editQuest = store((s) => s.editQuest);
   const closeEditor = store((s) => s.closeEditor);
   const removeNode = store((s) => s.removeNode);
+  const questPools = store((s) => s.questPools);
   const names = useNameBook();
+  const showInWorld = useShowInWorld();
   // The quest log heading by name: a zone (positive) or a category (negative).
   const sortId = Number(open?.aggregate.values['quest_template.QuestSortID'] ?? 0);
   const sortLookup = useName('questSort', sortId);
@@ -32,6 +40,7 @@ export function QuestPreview({ store }: { store: AppStore }): React.JSX.Element 
   if (!open) return null;
 
   const values = open.aggregate.values;
+  const mine = project ? narrowTo(project.entities, questUses({ questId: open.questId, aggregate: open.aggregate }, project.entities)) : EMPTY_ENTITIES;
   const title = typeof values['quest_template.LogTitle'] === 'string' && values['quest_template.LogTitle'] !== ''
     ? values['quest_template.LogTitle']
     : '(untitled quest)';
@@ -62,9 +71,10 @@ export function QuestPreview({ store }: { store: AppStore }): React.JSX.Element 
         )}
       </header>
       <div className="quest-preview__body">
-        {presentModules(values, []).map((id) => {
+        {presentModules(values, [], (project?.tracked.length ?? 0) > 0).map((id) => {
           const def = moduleById(id);
-          const lines = def.summary(values, names);
+          const inRotation = id === 'behaviour' ? rotationLine(open.questId, questPools) : null;
+          const lines = [...def.summary(values, names, mine), ...(inRotation ? [inRotation] : [])];
           return (
             <section key={id} className="quest-preview__module">
               <h3 className="quest-preview__module-title">{def.label}</h3>
@@ -85,6 +95,11 @@ export function QuestPreview({ store }: { store: AppStore }): React.JSX.Element 
         <button type="button" className="btn quest-preview__edit" onClick={editQuest}>
           Edit quest
         </button>
+        {showInWorld && (
+          <button type="button" className="btn" onClick={() => showInWorld({ questId: open.questId })}>
+            Show in World
+          </button>
+        )}
         <button type="button" className="btn" onClick={() => void remove()}>
           Remove from canvas
         </button>

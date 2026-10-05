@@ -9,23 +9,40 @@ import type {
   CanvasNode,
   ConnectSummary,
   ExportResult,
+  GroupCheck,
+  GroupMove,
+  HistoryList,
+  HistoryResult,
   NodePosition,
   OpenResult,
   ProfileRecord,
   ProfileSave,
   ProjectState,
   QuestLinks,
+  QuestPoolSummary,
   RecentProject,
   RecoveryEntry,
   Result,
+  StepPlace,
   Viewport,
 } from '@shared/ipc';
+import { EMPTY_WORLD, groupsOf, type WorldLayer } from '@core/world/layer';
+import type { SpawnGroup } from '@core/world/groups';
+import type { QuestAggregate } from '@core/model/aggregate';
+import { EMPTY_ENTITIES, newItem, newNpc, newObject, type CustomItem, type CustomNpc, type CustomObject, type ProjectEntities } from '@core/entities/model';
+import { toggleRole } from '@core/modules/quest-roles';
 import type { ModuleId } from '@core/modules/model';
 import { resetModule } from '@core/modules/catalog';
 import { draftToSaves, savedDraft, type ConnectionDraft } from '../connection/draft';
 
 export interface AppState {
   screen: 'connect' | 'pick' | 'preview' | 'edit';
+  /**
+   * The moment (on `moment()`'s clock) the action that last opened a quest began; 0 before any. The
+   * shell brings the quests forward for it unless the author picked a workspace after that moment, so
+   * an open that lands late, or a screen change inside the open quest, never pulls them away.
+   */
+  questsAsked: number;
   profiles: ProfileRecord[];
   /** The profile launch puts on the login screen (seeded from `.env` in development); null when none. */
   startupProfileId: number | null;
@@ -43,6 +60,8 @@ export interface AppState {
   saving: boolean;
   dirty: boolean;
   nodes: CanvasNode[];
+  /** Every quest rotation (quest pool), the world layer's copy over the database's; loaded with the graph */
+  questPools: QuestPoolSummary[];
   viewport: Viewport;
   project: ProjectState;
   /** Goes up by one each time a different project is loaded (New, Open, Restore). */
@@ -51,11 +70,25 @@ export interface AppState {
   recoveries: RecoveryEntry[];
   preview: Difference[] | null;
   exportResult: ExportResult | null;
+  /** Where the project patch went when it was exported after a quest's (null until then) */
+  projectPatch: { applyPath: string; revertPath: string } | null;
   exportError: ApiError | null;
   hasDevProfile: boolean;
   pendingApply: { sql: string } | null;
   appliedCount: number | null;
   links: QuestLinks | null;
+  /** The project's undo history, as the main process last told it */
+  history: HistoryList;
+  /** What the last undo or redo did, for the note; null once dismissed */
+  historyNote: { text: string; where: StepPlace | null; skipped: string[] } | null;
+  /** The world layer as an undo or redo left it, with a count that moves each time, for the views to take */
+  worldLayer: { layer: WorldLayer; seq: number } | null;
+  /** The world layer: the project's changes to the world, kept here for the tracked list */
+  layer: WorldLayer;
+  /** The project's new NPCs, objects and items, as edited here (sent after a pause, like quest edits) */
+  entities: ProjectEntities;
+  /** Moves each time the store is replaced from the main process (an undo, a load), for the views to redraw */
+  entitiesSeq: number;
 
   loadProfiles(): Promise<void>;
   /** Launch: lists the saved profiles and which one to offer. Connecting is always the user's click. */
@@ -89,6 +122,33 @@ export interface AppState {
   addQuestChain(id: number, position?: NodePosition): Promise<void>;
   newQuest(position?: NodePosition): Promise<void>;
   setValue(fieldId: string, value: FieldValue): void;
+  /** Replaces the project's NPCs, objects and items here at once, and sends them after the pause */
+  setEntities(next: ProjectEntities): void;
+  /** Sends the project's NPCs, objects and items now if an edit is waiting */
+  flushEntities(): Promise<void>;
+  /** Reads the project's NPCs, objects and items from the main process */
+  loadEntities(): Promise<void>;
+  /** Reads the world layer from the main process */
+  loadLayer(): Promise<void>;
+  /** Keeps a layer the 3D view or a revert produced */
+  setLayer(layer: WorldLayer): void;
+  /**
+   * Deletes one of the project's NPCs, objects or items, emptying every giver card that named it, as one
+   * undo step; the open quest shows the cards as they now are. Returns the error to show, or null.
+   */
+  deleteEntity(kind: 'npc' | 'object' | 'item', entry: number): Promise<string | null>;
+  /**
+   * Makes a new NPC, object or item with a fresh ID, attached to no quest (a quest uses it by naming
+   * it), and sends it at once so it is its own undo step before an editor opens on it
+   */
+  createEntity(kind: 'npc' | 'object' | 'item', preset: Partial<CustomNpc> | Partial<CustomObject> | Partial<CustomItem>): Promise<{ entry: number } | { error: string }>;
+  /**
+   * Brings an NPC, object or item the database already has into the store, read as the database has it,
+   * and sends it at once as its own undo step; one the store has already is left as it is
+   */
+  adoptEntity(kind: 'npc' | 'object' | 'item', entry: number): Promise<{ entry: number } | { error: string }>;
+  /** Now, on the clock `questsAsked` is read against: a later call always gives a larger number. */
+  moment(): number;
   /** Switches the previewed quest into the module editor. */
   editQuest(): void;
   /** Leaves the editor for the chain canvas, sending any pending edit first; the quest stays previewed. */
@@ -101,6 +161,21 @@ export interface AppState {
   dismissError(): void;
   backToPicker(): Promise<void>;
   loadNodes(): Promise<void>;
+  loadQuestPools(): Promise<void>;
+  /**
+   * Saves a quest rotation as one step: first each of its quests not of `makeKind` is made it (that bit
+   * set, the other cleared) through the quest's own edit, then the rotation itself. False when it was
+   * refused (the reason is in `error`)
+   */
+  saveRotation(group: SpawnGroup, moves: GroupMove[], makeKind: 'daily' | 'weekly' | null): Promise<boolean>;
+  /** A new rotation of these quests, one offered each reset, with a free id; null when no id could be had */
+  newRotation(questIds: number[]): Promise<SpawnGroup | null>;
+  /** A rotation as the world layer has it, else as the database does; null when it is not there */
+  readRotation(id: number): Promise<SpawnGroup | null>;
+  /** Why a rotation cannot be saved as it stands, with `moves` taking its quests out of other rotations */
+  checkRotation(group: SpawnGroup, moves: GroupMove[]): Promise<GroupCheck>;
+  /** Deletes a quest rotation as one step; false when it was refused */
+  deleteRotation(id: number, name?: string): Promise<boolean>;
   moveNode(questId: number, x: number, y: number): void;
   setViewport(v: Viewport): void;
   flushMoves(): Promise<void>;
@@ -108,6 +183,8 @@ export interface AppState {
   closeEditor(): Promise<void>;
   loadPreview(): Promise<void>;
   exportQuest(): Promise<void>;
+  /** Writes the project patch (its new NPCs, objects, items and world changes) that the quest needs first */
+  exportProject(): Promise<void>;
   prepareApply(): Promise<void>;
   confirmApply(): Promise<void>;
   cancelApply(): void;
@@ -126,9 +203,33 @@ export interface AppState {
   /** Restores one crash copy and discards every other one listed: only one project can be open. */
   restoreRecovery(id: string): Promise<void>;
   discardRecovery(id: string): Promise<void>;
+  /** Sends what is pending, then puts the last change anywhere in the project back */
+  undo(): Promise<void>;
+  redo(): Promise<void>;
+  /** Undoes or redoes to stand just after a step of the history (0: before every step) */
+  jumpTo(stepId: number): Promise<void>;
+  /** Runs `work` as one step of the history: everything it changes, and the quest edit it leaves pending, is undone together */
+  historyStep(work: () => Promise<void>, label?: string, where?: StepPlace): Promise<void>;
+  /**
+   * Starts a new quest given and taken back by an NPC, after `previous` in its chain when that is set,
+   * as one step of the history
+   */
+  newQuestFrom(giver: { entry: number; name: string }, previous: number | null): Promise<void>;
+  setHistory(list: HistoryList): void;
+  /**
+   * Holds undo back while a change is on its way to the project (a 3D gesture waiting for the floor):
+   * an undo waits for it, so it takes that change back and not the one before. Returns the release
+   */
+  holdHistory(): () => void;
+  dismissHistoryNote(): void;
 }
 
 export type AppStore = UseBoundStore<StoreApi<AppState>>;
+
+/** quest_template.Flags, and its bits for a quest offered again each day or each week */
+const FLAGS_FIELD = 'quest_template.Flags';
+const QUEST_FLAG_DAILY = 0x1000;
+const QUEST_FLAG_WEEKLY = 0x8000;
 
 /**
  * A table this user may not read is not a table the fork lacks: one is fixed with a `GRANT`, the
@@ -154,12 +255,44 @@ const missingTablesMessage = (tables: string[], forbidden: string[] = []): strin
 export function createAppStore(api: Api, opts: { saveDelayMs?: number } = {}): AppStore {
   const saveDelayMs = opts.saveDelayMs ?? 400;
   let saveTimer: ReturnType<typeof setTimeout> | null = null;
+  // An edit to the project's NPCs waiting to be sent
+  let entitiesTimer: ReturnType<typeof setTimeout> | null = null;
+  let entitiesPending = false;
+  let entitiesSeq = 0;
   // Guards against an older, slower `search`/`openQuest` response landing after a newer one.
   let searchToken = 0;
   let openToken = 0;
+  let clock = 0;
   let nodesToken = 0;
+  // Each read of the project state is numbered when it is asked for; only the newest is kept, so a
+  // read waiting on the graph cannot put back an unsaved marker a later read has cleared
+  let projectToken = 0;
+  const readProject = async (): Promise<{ token: number; result: Result<ProjectState> }> => {
+    const token = ++projectToken;
+    return { token, result: await api.projectState() };
+  };
   // StrictMode runs effects twice in development; launch must still connect only once.
   let started = false;
+  // The world layers an undo hands the views are counted, never from zero again, so a view that saw
+  // one count in an earlier project still sees the next
+  let layerSeq = 0;
+  // Changes on their way to the project, which an undo waits for
+  const holds = new Set<Promise<void>>();
+  // Steps run one after another, so two that overlap (a paste during a drag) stay two steps
+  let stepChain: Promise<void> = Promise.resolve();
+  // Edits to the open quest made while an undo is on its way: kept on top of what the undo hands back
+  let lateEdits: Map<string, FieldValue> | null = null;
+  const hold = (): (() => void) => {
+    let release!: () => void;
+    const held = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    holds.add(held);
+    return () => {
+      holds.delete(held);
+      release();
+    };
+  };
   // The latest position per quest queued by a drag, and the latest queued viewport, cleared once
   // `flushMoves` has sent them. `lastSavedViewport` is what the API last saw, so an unchanged
   // viewport (e.g. a pan back to where it started) does not trigger a redundant save.
@@ -170,6 +303,7 @@ export function createAppStore(api: Api, opts: { saveDelayMs?: number } = {}): A
 
   const store = create<AppState>((set, get) => ({
     screen: 'connect',
+    questsAsked: 0,
     profiles: [],
     startupProfileId: null,
     summary: null,
@@ -183,6 +317,7 @@ export function createAppStore(api: Api, opts: { saveDelayMs?: number } = {}): A
     saving: false,
     dirty: false,
     nodes: [],
+    questPools: [],
     viewport: { x: 0, y: 0, zoom: 1 },
     project: { name: '', filePath: null, dirty: false, idRangeStart: 60000, idRangeEnd: 99999, outputDir: '', viewport: { x: 0, y: 0, zoom: 1 } },
     projectEpoch: 0,
@@ -190,11 +325,18 @@ export function createAppStore(api: Api, opts: { saveDelayMs?: number } = {}): A
     recoveries: [],
     preview: null,
     exportResult: null,
+    projectPatch: null,
     exportError: null,
     hasDevProfile: false,
     pendingApply: null,
     appliedCount: null,
     links: null,
+    history: { steps: [], current: 0, saved: 0 },
+    historyNote: null,
+    worldLayer: null,
+    layer: EMPTY_WORLD,
+    entities: structuredClone(EMPTY_ENTITIES),
+    entitiesSeq: 0,
 
     async loadProfiles() {
       const result = await api.listProfiles();
@@ -240,6 +382,9 @@ export function createAppStore(api: Api, opts: { saveDelayMs?: number } = {}): A
         return;
       }
       set((s) => ({ summary, error: null, screen: 'pick', connection: s.connection + 1 }));
+      await loadHistory();
+      await get().loadEntities();
+      await get().loadLayer();
     },
 
     async saveConnection(draft, original) {
@@ -293,6 +438,7 @@ export function createAppStore(api: Api, opts: { saveDelayMs?: number } = {}): A
         results: [],
         preview: null,
         exportResult: null,
+        projectPatch: null,
         exportError: null,
         pendingApply: null,
         appliedCount: null,
@@ -305,6 +451,7 @@ export function createAppStore(api: Api, opts: { saveDelayMs?: number } = {}): A
       set((s) => ({ summary, error: null, screen: 'pick', connection: s.connection + 1, ...closed }));
       // The canvas's links, starts and issue counts are read from the database just connected.
       await get().loadNodes();
+      await loadHistory();
       return null;
     },
 
@@ -322,6 +469,7 @@ export function createAppStore(api: Api, opts: { saveDelayMs?: number } = {}): A
 
     async openQuest(id, position) {
       const token = ++openToken;
+      const asked = ++clock;
       const result = position === undefined ? await api.openQuest(id) : await api.openQuest(id, position);
       if (token !== openToken) return false;
       if (!result.ok) {
@@ -333,6 +481,7 @@ export function createAppStore(api: Api, opts: { saveDelayMs?: number } = {}): A
         issues: result.value.issues,
         openPanel: null,
         screen: 'preview',
+        questsAsked: asked,
         error: null,
         dirty: false,
       });
@@ -343,6 +492,7 @@ export function createAppStore(api: Api, opts: { saveDelayMs?: number } = {}): A
 
     async addQuestChain(id, position) {
       const token = ++openToken;
+      const asked = ++clock;
       const result = position === undefined ? await api.addQuestChain(id) : await api.addQuestChain(id, position);
       if (token !== openToken) return;
       if (!result.ok) {
@@ -356,6 +506,7 @@ export function createAppStore(api: Api, opts: { saveDelayMs?: number } = {}): A
         issues: open.issues,
         openPanel: null,
         screen: 'preview',
+        questsAsked: asked,
         // A chain cut short is still a chain on the canvas, but the user has to know it is not all of it.
         error: truncated ? `Only the first ${questIds.length} quests of this chain were added.` : null,
         dirty: false,
@@ -366,6 +517,7 @@ export function createAppStore(api: Api, opts: { saveDelayMs?: number } = {}): A
 
     async newQuest(position) {
       const token = ++openToken;
+      const asked = ++clock;
       const result = position === undefined ? await api.newQuest() : await api.newQuest(position);
       if (token !== openToken) return;
       if (!result.ok) {
@@ -378,6 +530,7 @@ export function createAppStore(api: Api, opts: { saveDelayMs?: number } = {}): A
         openPanel: null,
         addedModules: [],
         screen: 'edit',
+        questsAsked: asked,
         error: null,
         dirty: false,
       });
@@ -388,6 +541,7 @@ export function createAppStore(api: Api, opts: { saveDelayMs?: number } = {}): A
     setValue(fieldId, value) {
       const { open } = get();
       if (!open) return;
+      lateEdits?.set(fieldId, value);
       set({
         open: { ...open, aggregate: { ...open.aggregate, values: { ...open.aggregate.values, [fieldId]: value } } },
         dirty: true,
@@ -398,6 +552,121 @@ export function createAppStore(api: Api, opts: { saveDelayMs?: number } = {}): A
         void get().flushSave();
       }, saveDelayMs);
     },
+
+    setEntities(next) {
+      set({ entities: next });
+      entitiesPending = true;
+      if (entitiesTimer) clearTimeout(entitiesTimer);
+      entitiesTimer = setTimeout(() => {
+        entitiesTimer = null;
+        void get().flushEntities();
+      }, saveDelayMs);
+    },
+
+    async flushEntities() {
+      if (entitiesTimer) clearTimeout(entitiesTimer);
+      entitiesTimer = null;
+      if (!entitiesPending) return;
+      entitiesPending = false;
+      const sent = await api.putProjectEntities(get().entities);
+      if (!sent.ok) {
+        set({ error: sent.error.message });
+        // What the main process holds is the truth: the edit it refused is not kept here
+        await get().loadEntities();
+        await get().loadLayer();
+        return;
+      }
+      // A spawn taken off an NPC or object left its spawn group
+      await get().loadLayer();
+      await get().loadProjectState();
+    },
+
+    async loadLayer() {
+      const read = await api.worldLayer();
+      if (read.ok) set({ layer: read.value });
+    },
+
+    setLayer(layer) {
+      const groupsChanged = JSON.stringify(groupsOf(get().layer)) !== JSON.stringify(groupsOf(layer));
+      set({ layer });
+      // A rotation's tags on the graph follow the layer's groups (a revert in Project changes)
+      if (groupsChanged) void get().loadQuestPools();
+    },
+
+    async loadEntities() {
+      const read = await api.projectEntities();
+      if (read.ok) set({ entities: read.value, entitiesSeq: ++entitiesSeq });
+    },
+
+    async deleteEntity(kind, entry) {
+      await get().flushAll();
+      const result = await api.deleteEntity(kind, entry);
+      if (!result.ok) {
+        set({ error: result.error.message });
+        return result.error.message;
+      }
+      set({ entities: result.value.entities, entitiesSeq: ++entitiesSeq });
+      // Its spawns left their spawn groups in the same step
+      await get().loadLayer();
+      const open = get().open;
+      const mine = open ? result.value.quests.find((q) => q.questId === open.questId) : undefined;
+      if (open && mine) set({ open: { ...open, aggregate: mine.aggregate }, dirty: false });
+      if (result.value.quests.length > 0) await get().loadNodes();
+      else await get().loadProjectState();
+      return null;
+    },
+
+    async createEntity(kind, preset) {
+      await get().flushEntities();
+      const allocated = await api.allocateIds(kind === 'npc' ? 'creature' : kind === 'object' ? 'gameobject' : 'item', 1);
+      if (!allocated.ok) return { error: allocated.error.message };
+      const entry = allocated.value[0];
+      if (entry === undefined) return { error: 'No free ID could be found.' };
+      const now = get().entities;
+      const next: ProjectEntities =
+        kind === 'npc'
+          ? { ...now, npcs: [...now.npcs, { ...newNpc(entry), ...(preset as Partial<CustomNpc>), entry }] }
+          : kind === 'object'
+            ? { ...now, objects: [...now.objects, { ...newObject(entry), ...(preset as Partial<CustomObject>), entry }] }
+            : { ...now, items: [...now.items, { ...newItem(entry), ...(preset as Partial<CustomItem>), entry }] };
+      set({ entities: next });
+      const sent = await api.putProjectEntities(next);
+      if (!sent.ok) {
+        await get().loadEntities();
+        await get().loadLayer();
+        return { error: sent.error.message };
+      }
+      await get().loadProjectState();
+      return { entry };
+    },
+
+    async adoptEntity(kind, entry) {
+      await get().flushEntities();
+      const listOf = (e: ProjectEntities) => (kind === 'npc' ? e.npcs : kind === 'object' ? e.objects : e.items);
+      if (listOf(get().entities).some((x) => x.entry === entry)) return { entry };
+      const read = await api.readExistingEntity(kind, entry);
+      if (!read.ok) return { error: read.error.message };
+      const now = get().entities;
+      // Read while it was waiting: another adopt may have brought it in meanwhile
+      if (listOf(now).some((x) => x.entry === entry)) return { entry };
+      const next: ProjectEntities =
+        kind === 'npc'
+          ? { ...now, npcs: [...now.npcs, read.value as CustomNpc] }
+          : kind === 'object'
+            ? { ...now, objects: [...now.objects, read.value as CustomObject] }
+            : { ...now, items: [...now.items, read.value as CustomItem] };
+      set({ entities: next });
+      const sent = await api.putProjectEntities(next);
+      if (!sent.ok) {
+        await get().loadEntities();
+        await get().loadLayer();
+        return { error: sent.error.message };
+      }
+      await get().loadProjectState();
+      return { entry };
+    },
+
+    moment: () => ++clock,
 
     editQuest() {
       if (!get().open) return;
@@ -479,13 +748,116 @@ export function createAppStore(api: Api, opts: { saveDelayMs?: number } = {}): A
 
     async loadNodes() {
       const token = ++nodesToken;
-      const [nodesResult, projectResult] = await Promise.all([api.listNodes(), api.projectState()]);
+      const [nodesResult, read, pools] = await Promise.all([api.listNodes(), readProject(), api.questPools()]);
       if (token !== nodesToken) return;
       if (nodesResult.ok) set({ nodes: nodesResult.value });
-      if (projectResult.ok) {
+      if (pools.ok) set({ questPools: pools.value });
+      const projectResult = read.result;
+      if (projectResult.ok && read.token === projectToken) {
         lastSavedViewport = projectResult.value.viewport;
         set({ viewport: projectResult.value.viewport, project: projectResult.value });
       }
+    },
+
+    async loadQuestPools() {
+      const pools = await api.questPools();
+      if (pools.ok) set({ questPools: pools.value });
+    },
+
+    async saveRotation(group, moves, makeKind) {
+      let saved = false;
+      await get().historyStep(async () => {
+        // The flags changed for the save, each with what it was: a refused save puts them back, so it leaves no step
+        const madeOpen: { questId: number; was: FieldValue }[] = [];
+        const madeOthers: QuestAggregate[] = [];
+        const putBack = async (): Promise<void> => {
+          for (const aggregate of madeOthers.reverse()) await api.updateQuest(aggregate);
+          for (const { questId, was } of madeOpen) if (get().open?.questId === questId) get().setValue(FLAGS_FIELD, was);
+        };
+        const refuse = async (message: string): Promise<void> => {
+          await putBack();
+          set({ error: message });
+        };
+        if (makeKind) {
+          const [set1, clear] = makeKind === 'daily' ? [QUEST_FLAG_DAILY, QUEST_FLAG_WEEKLY] : [QUEST_FLAG_WEEKLY, QUEST_FLAG_DAILY];
+          const remade = (flags: unknown): number | null => {
+            const was = Number(flags ?? 0) || 0;
+            const now = (was | set1) & ~clear;
+            return now === was ? null : now;
+          };
+          for (const member of group.members) {
+            if (member.type !== 'quest') continue;
+            const open = get().open;
+            if (open?.questId === member.questId) {
+              const was = open.aggregate.values[FLAGS_FIELD];
+              const now = remade(was);
+              if (now !== null) {
+                madeOpen.push({ questId: open.questId, was });
+                get().setValue(FLAGS_FIELD, now);
+              }
+              continue;
+            }
+            // Only a quest of the project is edited; one only the database has keeps its flags
+            if (!get().nodes.some((n) => n.questId === member.questId)) continue;
+            const read = await api.openQuest(member.questId);
+            if (!read.ok) return refuse(read.error.message);
+            const aggregate = read.value.aggregate;
+            const now = remade(aggregate.values[FLAGS_FIELD]);
+            if (now === null) continue;
+            const put = await api.updateQuest({ ...aggregate, values: { ...aggregate.values, [FLAGS_FIELD]: now } });
+            if (!put.ok) return refuse(put.error.message);
+            madeOthers.push(aggregate);
+          }
+          // The open quest's edit goes now, so it is in this step before the rotation is checked
+          await get().flushSave();
+        }
+        const result = await api.worldSetGroup(group, moves);
+        if (!result.ok) return refuse(result.error.message);
+        saved = true;
+        set({ worldLayer: { layer: result.value, seq: ++layerSeq }, layer: result.value });
+      }, `Saved rotation ${group.name || group.id}`);
+      await get().loadNodes();
+      return saved;
+    },
+
+    async newRotation(questIds) {
+      const id = await api.worldNewGroupId();
+      if (!id.ok) {
+        set({ error: id.error.message });
+        return null;
+      }
+      return { id: id.value, name: '', map: 0, maxActive: 1, members: questIds.map((questId) => ({ type: 'quest' as const, questId })), origin: { kind: 'new' }, event: null };
+    },
+
+    async readRotation(id) {
+      const found = await api.worldGroup(id);
+      if (!found.ok) {
+        set({ error: found.error.message });
+        return null;
+      }
+      if (!found.value) set({ error: 'That rotation is no longer there.' });
+      return found.value;
+    },
+
+    async checkRotation(group, moves) {
+      const found = await api.worldCheckGroup(group, moves);
+      if (!found.ok) throw new Error(found.error.message);
+      return found.value;
+    },
+
+    async deleteRotation(id, name) {
+      let deleted = false;
+      await get().historyStep(async () => {
+        const result = await api.worldDeleteGroup(id);
+        if (!result.ok) {
+          set({ error: result.error.message });
+          return;
+        }
+        deleted = true;
+        set({ worldLayer: { layer: result.value, seq: ++layerSeq }, layer: result.value });
+      }, `Deleted rotation ${name || id}`);
+      await get().loadQuestPools();
+      return deleted;
     },
 
     moveNode(questId, x, y) {
@@ -551,12 +923,19 @@ export function createAppStore(api: Api, opts: { saveDelayMs?: number } = {}): A
       const { open } = get();
       if (!open) return;
       await get().flushSave();
-      set({ exportError: null });
+      set({ exportError: null, projectPatch: null });
       const result = await api.exportQuest(open.questId);
       if (result.ok) set({ exportResult: result.value, exportError: null });
       else set({ exportResult: null, exportError: result.error });
       // Marking a quest exported is a change to the project.
       if (result.ok) await get().loadProjectState();
+    },
+
+    async exportProject() {
+      await get().flushSave();
+      const result = await api.exportProject();
+      if (result.ok) set({ projectPatch: { applyPath: result.value.applyPath, revertPath: result.value.revertPath }, exportError: null });
+      else set({ projectPatch: null, exportError: result.error });
     },
 
     async prepareApply() {
@@ -566,7 +945,8 @@ export function createAppStore(api: Api, opts: { saveDelayMs?: number } = {}): A
       set({ exportError: null });
       const result = await api.exportQuest(open.questId);
       if (result.ok) {
-        set({ exportResult: result.value, exportError: null, pendingApply: { sql: result.value.sql } });
+        const { projectSql, sql } = result.value;
+        set({ exportResult: result.value, exportError: null, pendingApply: { sql: projectSql ? `${projectSql}\n${sql}` : sql } });
       } else {
         set({ exportResult: null, exportError: result.error });
       }
@@ -599,12 +979,13 @@ export function createAppStore(api: Api, opts: { saveDelayMs?: number } = {}): A
     },
 
     async loadProjectState() {
-      const result = await api.projectState();
-      if (result.ok) set({ project: result.value });
+      const { token, result } = await readProject();
+      if (result.ok && token === projectToken) set({ project: result.value });
     },
 
     async flushAll() {
       await get().flushSave();
+      await get().flushEntities();
       await get().flushMoves();
     },
 
@@ -626,6 +1007,8 @@ export function createAppStore(api: Api, opts: { saveDelayMs?: number } = {}): A
         return;
       }
       if (result.value.done) await switchedProject();
+      // An older project's quest NPCs were moved into the project; what that had to say is shown
+      if (result.value.warnings && result.value.warnings.length > 0) set({ error: result.value.warnings.join(' ') });
     },
 
     async saveProject() {
@@ -686,7 +1069,139 @@ export function createAppStore(api: Api, opts: { saveDelayMs?: number } = {}): A
       }
       set((s) => ({ recoveries: s.recoveries.filter((r) => r.id !== id) }));
     },
+
+    undo: () => travel(() => api.historyUndo()),
+    redo: () => travel(() => api.historyRedo()),
+    jumpTo: (stepId) => travel(() => api.historyJump(stepId)),
+
+    async historyStep(work, label, where) {
+      const release = hold();
+      const step = async (): Promise<void> => {
+        // A quest edit typed before the step began is a step of its own
+        await get().flushSave();
+        await get().flushEntities();
+        const begun = await api.historyBegin(label, where);
+        if (!begun.ok) {
+          await work();
+          return;
+        }
+        try {
+          await work();
+          // A quest edit the work made is still on the debounce: it belongs to this step
+          await get().flushSave();
+          await get().flushEntities();
+        } finally {
+          await api.historyEnd(begun.value);
+        }
+      };
+      const mine = stepChain.then(step, step);
+      stepChain = mine.catch(() => undefined);
+      try {
+        await mine;
+      } finally {
+        release();
+      }
+    },
+
+    holdHistory: () => hold(),
+
+    async newQuestFrom(giver, previous) {
+      const label = `${previous === null ? 'New' : 'Next'} quest from ${giver.name}`;
+      await get().historyStep(async () => {
+        const was = get().open?.questId;
+        await get().newQuest();
+        const made = get().open;
+        // No new quest (it failed, or another open overtook it): the open one is not to be touched
+        if (!made || made.questId === was) return;
+        const target = { kind: 'creature' as const, id: giver.entry };
+        for (const role of ['giver', 'ender'] as const) {
+          const edits = toggleRole(get().open!.aggregate.values, role, target, true) ?? {};
+          for (const [fieldId, value] of Object.entries(edits)) get().setValue(fieldId, value);
+        }
+        if (previous !== null) get().setValue('quest_template_addon.PrevQuestID', previous);
+      }, label);
+    },
+
+    setHistory(list) {
+      set({ history: list });
+      // A step closed after its changes (a gesture's end) can be what leaves the project unsaved
+      void get().loadProjectState();
+    },
+
+    dismissHistoryNote() {
+      set({ historyNote: null });
+    },
   }));
+
+  async function loadHistory(): Promise<void> {
+    const list = await api.historyList();
+    if (list.ok) store.setState({ history: list.value });
+  }
+
+  /**
+   * An undo, redo or jump. What is pending goes first, so the undo takes back the newest change and
+   * not the one before it; if that could not be saved, nothing is undone.
+   */
+  async function travel(call: () => Promise<Result<HistoryResult>>): Promise<void> {
+    while (holds.size > 0) await Promise.all([...holds]);
+    await store.getState().flushAll();
+    if (store.getState().dirty) return;
+    lateEdits = new Map();
+    try {
+      const result = await call();
+      if (!result.ok) {
+        store.setState({ error: result.error.message });
+        return;
+      }
+      await applyHistory(result.value);
+    } finally {
+      // An undo that did not touch the open quest leaves its late edits where they are, already sent
+      lateEdits = null;
+    }
+  }
+
+  /** Shows the project as the undo left it: the open quest, the graph, the world layer, the name */
+  async function applyHistory(result: HistoryResult): Promise<void> {
+    const state = store.getState();
+    store.setState({ history: result.history });
+    const open = state.open;
+    const mine = open ? result.quests.find((q) => q.questId === open.questId) : undefined;
+    if (open && mine) {
+      if (mine.aggregate === null) {
+        store.setState({ screen: 'pick', open: null, dirty: false, links: null, openPanel: null });
+      } else {
+        const late = lateEdits;
+        lateEdits = null;
+        store.setState({ open: { ...open, aggregate: mine.aggregate }, dirty: false, exportResult: null });
+        // An edit made while the undo was on its way goes on top, and is sent as a change of its own
+        if (late) for (const [fieldId, value] of late) store.getState().setValue(fieldId, value);
+        // The Changes panel compares the quest as it was; it is read again for the quest as it now is
+        if (store.getState().preview !== null) await store.getState().loadPreview();
+        const issues = await api.validate(open.questId);
+        if (issues.ok) store.setState({ issues: issues.value });
+        await store.getState().loadLinks();
+      }
+    }
+    if (result.world) {
+      const world = result.world;
+      store.setState({ worldLayer: { layer: world, seq: ++layerSeq }, layer: world });
+    }
+    if (result.entities) store.setState({ entities: result.entities, entitiesSeq: ++entitiesSeq });
+    if (result.step) {
+      // A quest the undo took out of the project cannot be shown: opening it would put it back
+      const where = result.step.where;
+      const gone = where && 'questId' in where && result.quests.some((q) => q.questId === where.questId && q.aggregate === null);
+      store.setState({
+        historyNote: { text: `${result.direction === 'undo' ? 'Undid' : 'Redid'}: ${result.step.label}`, where: gone ? null : where, skipped: result.skipped },
+      });
+    }
+    if (result.positions || result.quests.length > 0) await store.getState().loadNodes();
+    else {
+      // A rotation's tags follow the world layer the undo left
+      if (result.world) await store.getState().loadQuestPools();
+      await store.getState().loadProjectState();
+    }
+  }
 
   /**
    * A different project is open: nothing the editor or the canvas holds belongs to it any more.
@@ -697,6 +1212,11 @@ export function createAppStore(api: Api, opts: { saveDelayMs?: number } = {}): A
       clearTimeout(saveTimer);
       saveTimer = null;
     }
+    if (entitiesTimer) {
+      clearTimeout(entitiesTimer);
+      entitiesTimer = null;
+    }
+    entitiesPending = false;
     pendingMoves.clear();
     pendingViewport = null;
     store.setState({
@@ -706,9 +1226,15 @@ export function createAppStore(api: Api, opts: { saveDelayMs?: number } = {}): A
       dirty: false,
       preview: null,
       exportResult: null,
+      projectPatch: null,
       exportError: null,
+      historyNote: null,
+      worldLayer: null,
+      layer: EMPTY_WORLD,
     });
     await store.getState().loadNodes();
+    await store.getState().loadEntities();
+    await store.getState().loadLayer();
     // Last, so the canvas applies the new project's viewport rather than the old one's.
     store.setState((s) => ({ projectEpoch: s.projectEpoch + 1 }));
   }

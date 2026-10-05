@@ -9,7 +9,7 @@ const E = 12000001;
 const NONE = { inserts: {}, deletes: {}, updates: [], flags: [], warnings: [] };
 const route = (pathId = 9000): Patrol => addPoint(addPoint(newPatrol(pathId), { x: 1, y: 0, z: 0 }), { x: 2, y: 0, z: 0 });
 const npcWith = (...patrols: Patrol[]) => ({ ...newNpc(E), spawns: patrols.map((p, i) => ({ ...newSpawn(900 + i), patrol: p })) });
-const compile = (npc = npcWith(route()), context = EMPTY_SCRIPT_CONTEXT, taken = NONE) => compilePatrols({ questId: Q, npcs: [npc], context, taken });
+const compile = (npc = npcWith(route()), context = EMPTY_SCRIPT_CONTEXT, taken = NONE) => compilePatrols({ npcs: [npc], context, taken });
 const act = (a: Omit<PointAction, 'id' | 'afterSecs'> & Partial<PointAction>): PointAction => ({ id: 'a1', afterSecs: 0, ...a } as PointAction);
 
 describe('point actions', () => {
@@ -25,7 +25,7 @@ describe('point actions', () => {
       entryorguid: String(E), source_type: '0', id: '0', event_type: '34', event_param1: '2', event_param2: '2', event_param3: '9000',
       action_type: '5', action_param1: '3', target_type: '1', event_chance: '100',
     })]);
-    expect(out.inserts.smart_scripts![0]!.comment.startsWith(`AQC q${Q} patrol${E}`)).toBe(true);
+    expect(out.inserts.smart_scripts![0]!.comment.startsWith(`AQC npc${E} patrol`)).toBe(true);
   });
 
   it('runs several actions from a timed list, each waiting for the one before', () => {
@@ -46,7 +46,7 @@ describe('point actions', () => {
       expect.objectContaining({ CreatureID: String(E), GroupID: '0', ID: '1', Text: 'WHO GOES THERE', Type: '14', Probability: '100' }),
     ]);
     expect(out.inserts.smart_scripts![0]).toMatchObject({ action_type: '1', action_param1: '0', event_chance: '25', target_type: '1' });
-    expect(out.inserts.creature_text![0]!.comment.startsWith(`AQC q${Q} patrol${E}`)).toBe(true);
+    expect(out.inserts.creature_text![0]!.comment.startsWith(`AQC npc${E} patrol`)).toBe(true);
   });
 
   it('holds a pose while it waits and stands up just before leaving', () => {
@@ -68,7 +68,7 @@ describe('point actions', () => {
     const rows = compile(npcWith(p)).inserts.smart_scripts!;
     const aggro = rows.filter((r) => r.event_type === '4');
     expect(aggro).toEqual([expect.objectContaining({ source_type: '0', action_type: '17', action_param1: '0', target_type: '1' })]);
-    expect(aggro[0]!.comment.startsWith(`AQC q${Q} patrol${E}`)).toBe(true);
+    expect(aggro[0]!.comment.startsWith(`AQC npc${E} patrol`)).toBe(true);
     expect(new Set(rows.filter((r) => r.source_type === '0').map((r) => r.id)).size).toBe(rows.filter((r) => r.source_type === '0').length);
     expect(compile(npcWith(addAction(route(), 0, act({ kind: 'emote', emote: 3 })))).inserts.smart_scripts!.some((r) => r.event_type === '4')).toBe(false);
   });

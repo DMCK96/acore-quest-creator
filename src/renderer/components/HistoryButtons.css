@@ -1,0 +1,123 @@
+/* Undo, Redo and the History list in the app bar. */
+.history {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.15em;
+  flex-shrink: 0;
+}
+
+.history__caret .app-bar__icon {
+  width: 0.8em;
+  height: 0.8em;
+}
+
+.history__menu {
+  position: absolute;
+  top: calc(100% + 6px);
+  left: 0;
+  z-index: 40;
+  display: flex;
+  flex-direction: column;
+  min-width: 260px;
+  max-width: min(420px, calc(100vw - 32px));
+  max-height: min(60vh, 520px);
+  overflow-y: auto;
+  padding: 6px;
+  background: var(--glass-bg-strong);
+}
+
+.history__empty {
+  margin: 6px 8px;
+  color: var(--text-muted);
+  font-size: 0.85em;
+}
+
+.history__step {
+  display: flex;
+  align-items: baseline;
+  gap: 0.6em;
+  width: 100%;
+  padding: 5px 8px;
+  border: 0;
+  border-radius: var(--radius);
+  background: none;
+  color: inherit;
+  font: inherit;
+  font-size: 0.85em;
+  text-align: left;
+  cursor: pointer;
+}
+
+.history__step:hover,
+.history__step:focus-visible {
+  background: var(--accent-soft);
+  outline: none;
+}
+
+.history__step[aria-current='step'] {
+  box-shadow: inset 2px 0 0 var(--accent);
+}
+
+/* Steps that would be done again: below the line where the project stands */
+.history__step--undone {
+  opacity: 0.55;
+}
+
+.history__step--start {
+  margin-top: 4px;
+  border-top: 1px solid var(--glass-border);
+  border-radius: 0 0 var(--radius) var(--radius);
+  color: var(--text-muted);
+}
+
+.history__kind {
+  flex-shrink: 0;
+  width: 4.2em;
+  color: var(--text-muted);
+  font-size: 0.85em;
+  font-variant: small-caps;
+  letter-spacing: 0.04em;
+}
+
+.history__label {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.history__saved {
+  flex-shrink: 0;
+  color: var(--accent);
+  font-size: 0.8em;
+}
+
+/* The note that says what an undo did */
+.history-note {
+  position: fixed;
+  left: 50%;
+  bottom: 24px;
+  z-index: 50;
+  display: flex;
+  align-items: flex-start;
+  gap: 0.8em;
+  max-width: min(560px, calc(100vw - 32px));
+  padding: 10px 12px;
+  transform: translateX(-50%);
+  font-size: 0.9em;
+}
+
+.history-note__text {
+  flex: 1;
+  min-width: 0;
+}
+
+.history-note__skipped {
+  margin: 4px 0 0;
+  padding: 0;
+  list-style: none;
+  color: var(--text-muted);
+  font-size: 0.9em;
+}

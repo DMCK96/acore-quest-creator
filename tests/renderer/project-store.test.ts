@@ -43,10 +43,10 @@ describe('project actions in the renderer store', () => {
   });
 
   it('a failed open shows the reason and keeps the current project', async () => {
-    const { store } = await connected({ openProject: async () => errv('PROJECT_FILE', 'This file is not an ACORE Quest Creator project.') });
+    const { store } = await connected({ openProject: async () => errv('PROJECT_FILE', 'This file is not an Azeroth World Editor project.') });
     await store.getState().loadNodes();
     await store.getState().openProject('C:\\w\\bad.aqc');
-    expect(store.getState().error).toBe('This file is not an ACORE Quest Creator project.');
+    expect(store.getState().error).toBe('This file is not an Azeroth World Editor project.');
     expect(store.getState().projectEpoch).toBe(0);
     expect(store.getState().project.name).toBe('Northshire');
   });

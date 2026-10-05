@@ -133,6 +133,9 @@ function escapeLike(text: string): string {
   return text.replace(/[\\%_]/g, (c) => `\\${c}`);
 }
 
+/** How many pools up the view follows a spawn's group to find the top-level one an event is on (the server's nest no deeper) */
+const VIEW_POOL_DEPTH = 4;
+
 const INTEGER_TEXT = /^-?\d+$/;
 const DECIMAL_TEXT = /^-?\d+(\.\d+)?$/;
 const FLOAT_TYPES: ReadonlySet<string> = new Set(['float', 'double', 'decimal']);
@@ -334,6 +337,7 @@ class MysqlWorldDb implements WorldDb {
     const entry = ident(spawnEntryColumn('creature', (await this.knownColumns('creature')).map((c) => c.name)));
     await this.knownColumns('creature_template_model');
     const creatureEvents = await eventOf('game_event_creature');
+    const creaturePools = await this.viewPoolJoin('pool_creature');
     // A spawn with an addon row of its own walks that row's route (none when it is 0), else its
     // template's (a whole kind of NPC walking one route), as the server reads them
     const templateRoutes = (await this.columns('creature_template_addon')).length > 0;
@@ -342,11 +346,11 @@ class MysqlWorldDb implements WorldDb {
       ' LEFT JOIN creature_addon ad ON ad.guid = s.guid' + (templateRoutes ? ` LEFT JOIN creature_template_addon ta ON ta.entry = s.${entry}` : '');
     const creatureRows = await query(
       'reading creature',
-      `SELECT s.guid, s.${entry} AS entry, s.map, s.position_x, s.position_y, s.position_z, s.orientation, s.wander_distance, s.MovementType, s.equipment_id, ` +
-        `t.name, m.CreatureDisplayID AS display_id, m.DisplayScale AS display_scale, ${pathColumn} AS path_id${creatureEvents.columns} ` +
+      `SELECT s.guid, s.${entry} AS entry, s.map, s.position_x, s.position_y, s.position_z, s.orientation, s.wander_distance, s.MovementType, s.equipment_id, s.spawntimesecs, ` +
+        `t.name, m.CreatureDisplayID AS display_id, m.DisplayScale AS display_scale, ${pathColumn} AS path_id${creatureEvents.columns}${creaturePools.columns} ` +
         `FROM creature s LEFT JOIN creature_template t ON t.entry = s.${entry}${routeJoins} ` +
         `LEFT JOIN (SELECT CreatureID, MIN(Idx) AS Idx FROM creature_template_model GROUP BY CreatureID) f ON f.CreatureID = s.${entry} ` +
-        `LEFT JOIN creature_template_model m ON m.CreatureID = f.CreatureID AND m.Idx = f.Idx${creatureEvents.joins} ` +
+        `LEFT JOIN creature_template_model m ON m.CreatureID = f.CreatureID AND m.Idx = f.Idx${creatureEvents.joins}${creaturePools.joins} ` +
         `WHERE ${boxed} ORDER BY s.guid LIMIT ?`,
       [...boxParams, take],
     );
@@ -392,10 +396,11 @@ class MysqlWorldDb implements WorldDb {
     });
 
     const objectEvents = await eventOf('game_event_gameobject');
+    const objectPools = await this.viewPoolJoin('pool_gameobject');
     const objectRows = await query(
       'reading gameobject',
-      `SELECT s.guid, s.id AS entry, s.map, s.position_x, s.position_y, s.position_z, s.rotation0, s.rotation1, s.rotation2, s.rotation3, ` +
-        `t.name, t.displayId AS display_id, t.size${objectEvents.columns} FROM gameobject s LEFT JOIN gameobject_template t ON t.entry = s.id${objectEvents.joins} ` +
+      `SELECT s.guid, s.id AS entry, s.map, s.position_x, s.position_y, s.position_z, s.rotation0, s.rotation1, s.rotation2, s.rotation3, s.spawntimesecs, ` +
+        `t.name, t.type, t.displayId AS display_id, t.size${objectEvents.columns}${objectPools.columns} FROM gameobject s LEFT JOIN gameobject_template t ON t.entry = s.id${objectEvents.joins}${objectPools.joins} ` +
         `WHERE ${boxed} ORDER BY s.guid LIMIT ?`,
       [...boxParams, take],
     );
@@ -423,6 +428,27 @@ class MysqlWorldDb implements WorldDb {
             ` LEFT JOIN game_event ge ON ge.eventEntry = ev.eventEntry`,
         }
       : { columns: '', joins: '' };
+  }
+
+  /**
+   * The spawn group a spawn (`s`) is in: the column and join that add `pool_entry` from `table`
+   * (`pool_creature` or `pool_gameobject`). A database without the table has none.
+   */
+  private async viewPoolJoin(table: 'pool_creature' | 'pool_gameobject'): Promise<{ columns: string; joins: string }> {
+    if ((await this.columns(table)).length === 0) return { columns: '', joins: '' };
+    const pool = { columns: ', pc.pool_entry AS pool_entry', joins: ` LEFT JOIN ${table} pc ON pc.guid = s.guid` };
+    const hasEvents = (await this.columns('game_event_pool')).length > 0 && (await this.columns('game_event')).length > 0;
+    if (!hasEvents) return pool;
+    // The event of the spawn's top-level group: up the pool_pool chain (each pool has at most one
+    // mother), then its game_event_pool row (signed: negative takes the spawns away) and that event's name
+    const nested = (await this.columns('pool_pool')).length > 0;
+    const chain = nested ? Array.from({ length: VIEW_POOL_DEPTH }, (_, i) => `pp${i + 1}`) : [];
+    const chainJoins = chain.map((alias, i) => ` LEFT JOIN pool_pool ${alias} ON ${alias}.pool_id = ${i === 0 ? 'pc.pool_entry' : `${chain[i - 1]}.mother_pool`}`).join('');
+    const top = `COALESCE(${[...chain.map((alias) => `${alias}.mother_pool`).reverse(), 'pc.pool_entry'].join(', ')})`;
+    return {
+      columns: `${pool.columns}, ${top} AS pool_top, gp.eventEntry AS pool_event_entry, gpe.description AS pool_event_name`,
+      joins: `${pool.joins}${chainJoins} LEFT JOIN game_event_pool gp ON gp.pool_entry = ${top} LEFT JOIN game_event gpe ON gpe.eventEntry = ABS(gp.eventEntry)`,
+    };
   }
 
   /**

@@ -29,15 +29,16 @@ describe('fights through the API', () => {
     const q = aggregate.questId;
     aggregate.values['quest_template.LogTitle'] = 'Defeat Hela';
     const fight = { ...emptyFight(), abilities: [{ ...newAbility(emptyFight()), spellId: 116 }] };
-    aggregate.values[ENTITIES_FIELD] = writeEntities({ npcs: [{ ...newNpc(11000240), name: 'Hela', displayId: 1234, spawns: [{ ...newSpawn(5300800), x: 5 }], fight }], objects: [], items: [] });
+    await api.putProjectEntities({ npcs: [{ ...newNpc(11000240), name: 'Hela', displayId: 1234, spawns: [{ ...newSpawn(5300800), x: 5 }], fight }], objects: [], items: [] });
+    aggregate.values.creature_queststarter = [{ id: 11000240 }];
     aggregate.values[SCRIPTS_FIELD] = writeScenes([{ id: 's1', name: '', owner: { kind: 'creature', entry: 11000240 }, trigger: { kind: 'dies' }, gates: [], steps: [{ kind: 'eventCredit', group: false, waitMs: 0 }] }]);
     await api.updateQuest(aggregate);
 
     const out: any = await api.exportQuest(q);
     expect(out.ok).toBe(true);
-    const sql: string = out.value.sql;
+    const sql: string = `${out.value.projectSql}\n${out.value.sql}`;
     expect(sql).toMatch(/INSERT INTO `creature_template` \(.*\) VALUES \(11000240,.*'SmartAI'/);
-    expect(sql).toContain(`'AQC q${q} fight11000240: Casts spell 116 on its current target every 8–12 s (first after 2–4 s)'`);
+    expect(sql).toContain(`'AQC npc11000240 fight: Casts spell 116 on its current target every 8–12 s (first after 2–4 s)'`);
     const smartInserts = sql.split('\n').filter((l) => l.startsWith('INSERT INTO `smart_scripts`'));
     const ids = smartInserts.map((l) => /VALUES \(11000240, 0, (\d+),/.exec(l)?.[1]).filter(Boolean);
     expect(new Set(ids).size).toBe(ids.length);
@@ -50,11 +51,14 @@ describe('fights through the API', () => {
     const aggregate = opened.value.aggregate;
     aggregate.values['quest_template.LogTitle'] = 'Defeat Hela';
     const fight = { ...emptyFight(), abilities: [newAbility(emptyFight())] };
-    aggregate.values[ENTITIES_FIELD] = writeEntities({ npcs: [{ ...newNpc(11000241), name: 'Hela', displayId: 1234, spawns: [{ ...newSpawn(5300801), x: 5 }], fight }], objects: [], items: [] });
+    await api.putProjectEntities({ npcs: [{ ...newNpc(11000241), name: 'Hela', displayId: 1234, spawns: [{ ...newSpawn(5300801), x: 5 }], fight }], objects: [], items: [] });
+    aggregate.values.creature_queststarter = [{ id: 11000241 }];
     await api.updateQuest(aggregate);
     const issues: any = await api.validate(aggregate.questId);
     expect(issues.value.map((i: any) => i.code)).toContain('FIGHT_NO_SPELL');
-    const out: any = await api.exportQuest(aggregate.questId);
+    // The NPC is the project's: its errors block the project patch and Apply to dev, not the quest's own patch
+    const out: any = await api.exportProject();
     expect(out.ok).toBe(false);
+    expect(out.error.message).toBe("Fix the errors on the project's NPCs, objects and items first.");
   });
 });

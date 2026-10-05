@@ -13,7 +13,7 @@ sidebar:
 
 ## The map is blank or has no zone art
 
-The zone art and minimap come from the **game client folder**. Set it in [Settings](/acore-quest-creator/reference/settings/) to the folder with `Wow.exe`. The top bar shows **Game client** once it opened.
+The zone art and minimap come from the **game client folder**. Set it in [Settings](/azeroth-world-editor/reference/settings/) to the folder with `Wow.exe`. The top bar shows **Game client** once it opened.
 
 ## No heights, floors or ground snapping
 
@@ -30,18 +30,18 @@ Searching spells and creature or object models by name needs the **server data f
 
 ## Apply to dev DB is greyed out
 
-Add a dev database in [Settings](/acore-quest-creator/reference/settings/#dev-database).
+Add a dev database in [Settings](/azeroth-world-editor/reference/settings/#dev-database).
 
 ## My change does not show in game
 
-Some changes only load after a server restart: new spawns, new or changed patrols and new objects. [Test in game](/acore-quest-creator/guides/test-in-game/) lists which reload commands your quest needs.
+Some changes only load after a server restart: new spawns, new or changed patrols and new objects. [Test in game](/azeroth-world-editor/guides/test-in-game/) lists which reload commands your quest needs.
 
 ## Installing
 
 - **Windows says "Windows protected your PC"**: choose **More info**, then **Run anyway**.
-- **macOS will not open it, or says it "is damaged"**: see [Install](/acore-quest-creator/getting-started/install/#macos).
-- **The Linux AppImage does not start**: see [Install](/acore-quest-creator/getting-started/install/#linux).
+- **macOS will not open it, or says it "is damaged"**: see [Install](/azeroth-world-editor/getting-started/install/#macos).
+- **The Linux AppImage does not start**: see [Install](/azeroth-world-editor/getting-started/install/#linux).
 
 ## Report a problem
 
-Open an issue on [GitHub](https://github.com/DMCK96/acore-quest-creator/issues) with your app version, your system, what you did and what happened. A screenshot helps.
+Open an issue on [GitHub](https://github.com/DMCK96/azeroth-world-editor/issues) with your app version, your system, what you did and what happened. A screenshot helps.

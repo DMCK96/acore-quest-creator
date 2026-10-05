@@ -3,6 +3,7 @@ import type { SceneStep } from '@core/scripts/model';
 import { PositionInput } from '../scripts/PositionInput';
 import { defaultStep, StepFields } from '../scripts/StepEditor';
 import { CheckField, EntityField, NumberField, SelectField } from '../scripts/fields';
+import { useCreditQuests } from './credit-quests';
 import { TARGET_OPTIONS } from './AbilityEditor';
 import { PhaseChecks } from './PhaseList';
 import { SpellField } from './SpellField';
@@ -90,6 +91,7 @@ export function ReactionEditor({
   onRemove(): void;
 }): React.JSX.Element {
   const { when, steps } = reaction;
+  const credit = useCreditQuests();
   // Only a hurt-friend reaction has a friend to cast on; other reactions go back to the current target.
   const setWhen = (next: ReactionWhen): void =>
     onChange({
@@ -107,7 +109,8 @@ export function ReactionEditor({
   };
   function add(kind: FightStepKind): void {
     const phase = Math.max(2, fight.phases.length + 1);
-    onChange({ ...reaction, steps: [...steps, newStep(kind, phase)] }, kind === 'goToPhase' ? phase : undefined);
+    const step = newStep(kind, phase);
+    onChange({ ...reaction, steps: [...steps, step.kind === 'credit' ? { ...step, quest: credit.defaultQuest } : step] }, kind === 'goToPhase' ? phase : undefined);
   }
 
   return (
@@ -213,6 +216,7 @@ function FightStepFields({
     case 'credit':
       return (
         <>
+          <CreditQuestField step={step} onChange={onChange} />
           <SelectField
             label="Objective"
             value={String(step.objective) as '1' | '2' | '3' | '4'}
@@ -274,4 +278,17 @@ function FightStepFields({
     case 'surrender':
       return null;
   }
+}
+
+/** The quest a credit step gives credit for, from the project's quests */
+function CreditQuestField({ step, onChange }: { step: Extract<FightStep, { kind: 'credit' }>; onChange(next: FightStep): void }): React.JSX.Element {
+  const { quests } = useCreditQuests();
+  // A quest no longer in the project is still shown, by its id, until another is picked
+  const known = step.quest === 0 || quests.some((q) => q.questId === step.quest);
+  const options = [
+    ['0', 'Pick a quest'] as const,
+    ...quests.map((q) => [String(q.questId), q.title] as const),
+    ...(known ? [] : [[String(step.quest), `Quest ${step.quest}`] as const]),
+  ];
+  return <SelectField label="Quest" value={String(step.quest)} options={options} onChange={(v) => onChange({ ...step, quest: Number(v) })} />;
 }

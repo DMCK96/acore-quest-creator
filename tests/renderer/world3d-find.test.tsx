@@ -4,7 +4,7 @@ import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { NamesProvider } from '../../src/renderer/state/names';
 import { makeMockApi, okv } from './mock-api';
-import { foundSpawns } from '../../src/renderer/world3d/FindDialog';
+import { foundSpawns, FindDialog } from '../../src/renderer/world3d/FindDialog';
 
 const worlds = vi.hoisted(() => [] as any[]);
 vi.mock('../../src/renderer/world3d/world3d', () => ({
@@ -160,5 +160,53 @@ describe('the find panel in the 3D screen', () => {
     const { errv } = await import('./mock-api');
     await open({ findSpawns: vi.fn(async () => errv('NOT_CONNECTED', 'Connect to a world database first.')) });
     expect(await screen.findByText('Connect to a world database first.')).toBeTruthy();
+  });
+});
+
+describe('finding a spawn group', () => {
+  it("finds the map's spawn groups by name and goes to one", async () => {
+    const view = { id: 32492, name: 'Path 1', map: 571, maxActive: 1, members: [{ key: 'npc:39203', type: 'spawn' as const, name: 'Drake', chance: 10, at: { x: 10, y: 0, z: 0 } }] };
+    const api = makeMockApi({ worldGroupsOnMap: vi.fn(async () => okv([{ id: 32492, name: 'Path 1', maxActive: 1, members: 2, groups: [] }, { id: 32493, name: 'Path 2', maxActive: 1, members: 2, groups: [] }])),
+      worldGroupView: vi.fn(async () => okv(view)) });
+    const onGoToGroup = vi.fn();
+    render(<NamesProvider api={api}><FindDialog from={{ map: 571, x: 0, y: 0, z: 0 }} onGo={vi.fn()} onGoToGroup={onGoToGroup} onClose={vi.fn()} /></NamesProvider>);
+    await userEvent.click(screen.getByRole('radio', { name: 'Spawn group' }));
+    await userEvent.type(screen.getByRole('searchbox', { name: 'Find by name or ID' }), 'path 1');
+    await userEvent.click(await screen.findByRole('button', { name: /Path 1 · 1 of 2 at a time/ }));
+    await waitFor(() => expect(onGoToGroup).toHaveBeenCalledWith(view));
+    expect(screen.queryByRole('button', { name: /Path 2/ })).toBeNull();
+  });
+
+  const drakes = [
+    { id: 32491, name: 'Time-Lost Proto Drake / Vyragosa', maxActive: 1, members: 2, groups: [32492, 32493] },
+    { id: 32492, name: 'Path 1', maxActive: 1, members: 2, groups: [] },
+    { id: 32493, name: 'Path 2', maxActive: 1, members: 2, groups: [] },
+  ];
+  const openDrakes = async () => {
+    const view = { id: 32493, name: 'Path 2', map: 571, maxActive: 1, members: [] };
+    const api = makeMockApi({ worldGroupsOnMap: vi.fn(async () => okv(drakes)), worldGroupView: vi.fn(async () => okv(view)) });
+    const onGoToGroup = vi.fn();
+    render(<NamesProvider api={api}><FindDialog from={{ map: 571, x: 0, y: 0, z: 0 }} onGo={vi.fn()} onGoToGroup={onGoToGroup} onClose={vi.fn()} /></NamesProvider>);
+    await userEvent.click(screen.getByRole('radio', { name: 'Spawn group' }));
+    return { view, onGoToGroup };
+  };
+
+  it('lists a group inside a group under its mother, not also at the top', async () => {
+    await openDrakes();
+    const top = await screen.findByRole('list', { name: 'Matches' });
+    const nestedList = await within(top).findByRole('list', { name: 'Groups in Time-Lost Proto Drake / Vyragosa' });
+    expect(within(nestedList).getByRole('button', { name: /Path 1/ })).toBeTruthy();
+    expect(within(nestedList).getByRole('button', { name: /Path 2/ })).toBeTruthy();
+    expect(within(top).getAllByRole('button', { name: /Path 1/ })).toHaveLength(1);
+  });
+
+  it('shows a matching nested group under its mother, and goes to it', async () => {
+    const { view, onGoToGroup } = await openDrakes();
+    await userEvent.type(screen.getByRole('searchbox', { name: 'Find by name or ID' }), 'path 2');
+    const nestedList = await screen.findByRole('list', { name: 'Groups in Time-Lost Proto Drake / Vyragosa' });
+    expect(screen.getByRole('button', { name: /Time-Lost Proto Drake/ })).toBeTruthy();
+    expect(within(nestedList).queryByRole('button', { name: /Path 1/ })).toBeNull();
+    await userEvent.click(within(nestedList).getByRole('button', { name: /Path 2/ }));
+    await waitFor(() => expect(onGoToGroup).toHaveBeenCalledWith(view));
   });
 });

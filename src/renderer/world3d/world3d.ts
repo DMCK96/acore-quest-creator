@@ -5,6 +5,7 @@ import { CharacterTexture } from './scene/character/CharacterTexture';
 import { getAssetUrl } from './scene/asset';
 import { spawnBounds, type PickedSpawn, type SpawnSource, type SpawnStatus, type SpawnVisibility } from './scene/spawn/SpawnManager';
 import type { ViewSpawns } from '@core/db/view-spawns';
+import type { EntityLooks } from '@core/entities/view-spawns';
 import { clearProblems, onProblems } from './scene/diagnostics';
 import { ASSET_BASE_URL } from '@core/client/asset-url';
 import type { WorldLayer } from '@core/world/layer';
@@ -42,8 +43,10 @@ export interface World3DOptions {
   spawns?: SpawnSource;
   /** Told which NPC or object was clicked, or null when a click hit neither (or Esc cleared it). */
   onSelect?(spawn: PickedSpawn | null): void;
-  /** Told each edit made in the view: a whole placement or a whole route, to store. */
-  onEdit?(edit: SpawnEdit): void;
+  /** Told each gesture made in the view: its whole placements and routes, to store as one step. */
+  onGesture?(edits: SpawnEdit[]): void;
+  /** A gesture has started on its way to the host; undo waits until the release is called. */
+  onGestureStart?(): () => void;
   /** The server's floor nearest a height at a place, or null when it has none there. */
   floorZ?(x: number, y: number, nearZ: number): Promise<number | null>;
   /** Asked once per route before the first change to a world route that is not the quest's. */
@@ -69,6 +72,13 @@ export interface World3DOptions {
 }
 
 /** How much is selected: NPCs, objects, and route points with how many routes they are on */
+/** A spawn group as the view draws it: its centre, its spawn members, and where each member stands */
+export type GroupDrawing = {
+  centre: { x: number; y: number; z: number };
+  members: { kind: 'creature' | 'object'; guid: number }[];
+  points: { x: number; y: number; z: number }[];
+};
+
 export type SelectionSummary = { creatures: number; objects: number; points: number; routes: number };
 
 /** Which of the world's scenery is drawn */
@@ -85,6 +95,8 @@ export interface World3D {
   setSpawnVisibility(visibility: SpawnVisibility): void;
   /** Whether a kind of spawn was capped, or why none could be read. */
   spawnStatus(): SpawnStatus;
+  /** The looks of edited existing NPCs and objects, drawn on their database spawns. */
+  setLooks(looks: EntityLooks): void;
   /** The open quest's own NPCs and objects, drawn with the world's in place of their database rows. */
   setOwnSpawns(spawns: ViewSpawns): void;
   /** Selects one spawn (outlined while it is drawn, its route active), or clears the selection. */
@@ -95,24 +107,26 @@ export interface World3D {
   setFalloff(falloff: Falloff): void;
   /** Draws the world layer's edits over the database's spawns and routes. */
   setWorldLayer(layer: WorldLayer): void;
+  /** Every spawn under each top-level layer group with an event, through all its levels, by group id. */
+  setGroupSpawns(byGroup: ReadonlyMap<number, readonly { kind: 'npc' | 'object'; guid: number }[]>): void;
   /** Whether the gizmo moves or rotates. */
   setMode(mode: 'move' | 'rotate'): void;
   /** Starts placing an existing NPC or object (each click on the ground places one), or stops with null. */
   setPlacing(target: PlaceTarget | null): void;
-  undo(): void;
-  redo(): void;
-  /** One undo step for edits the host made itself (a placement, a movement): remembered, not sent again. */
-  record(before: SpawnEdit[], after: SpawnEdit[]): void;
   /** Starts drawing a new path for a drawn NPC, its first point at `first`; each click then adds a point. */
   startPath(guid: number, pathId: number, first: { x: number; y: number; z: number }): void;
   /** Ends the path being drawn (one of fewer than two points is cancelled). */
   finishPath(): void;
   /** Puts back everything the path being drawn changed. */
   cancelPath(): void;
+  /** Drops a drag under way, putting what was dragged back, with no edit */
+  cancelDrag(): void;
   /** Takes back the last point of the path being drawn. */
   undoPoint(): void;
   /** Rings the spawns a quest uses, under each that is drawn; null takes the rings away. */
   setMarked(spawns: { kind: 'creature' | 'object'; guid: number }[] | null): void;
+  /** Shows a spawn group: rings under its drawn members and thin lines from its centre to each member; null takes it away. */
+  setGroupView(view: GroupDrawing | null): void;
   /** The selected spawns, as the menu describes them. */
   selectedSpawns(): SpawnInfo[];
   /** Selects these spawns (a paste selects what it put down). */
@@ -157,6 +171,8 @@ const RING_LIFT = 0.2;
 /** The ring under a spawn a quest uses: a warm gold, apart from the selection's outline, and its size in yards */
 const MARK_COLOUR = 0xf2c14e;
 const MARK_RADIUS = 1.5;
+/** A shown spawn group's rings and lines: a cool blue, apart from the quest's gold rings */
+const GROUP_COLOUR = 0x6fb7ff;
 
 const HOST = { baseUrl: ASSET_BASE_URL, normalizePath: true };
 /** Textures and database tables are the same for every map, so every world shares them (and their workers). */
@@ -212,6 +228,8 @@ export function createWorld3D(options: World3DOptions): World3D {
 
   // No Three lights: terrain, models, buildings and liquids all light themselves from the map's light
   const scene = new THREE.Scene();
+  // Never moved: if it were worked out each frame, it would force every object under it to be too
+  scene.matrixAutoUpdate = false;
   const camera = new THREE.PerspectiveCamera(FOV, 1, NEAR, 1000);
   // Z is up in the game's world, and the orbit controls turn about the camera's up axis.
   camera.up.set(0, 0, 1);
@@ -292,7 +310,11 @@ export function createWorld3D(options: World3DOptions): World3D {
     return { spawns: spawn ? [{ kind: spawn.kind, guid: spawn.guid }] : [] };
   };
   const modifierOf = (keys: ClickKeys): Modifier => (keys.ctrl ? 'remove' : keys.shift ? 'add' : 'replace');
+  // Plain clicks in a row that hit nothing: a click on nothing keeps the selection, two (a double-click) clear it
+  let misses = 0;
   const click = (x: number, y: number, keys: ClickKeys): void => {
+    const missed = misses;
+    misses = 0;
     // While a path is drawn, each click on the ground is its next point
     if (editor.appendPoint(x, y)) return;
     if (placing) {
@@ -303,7 +325,13 @@ export function createWorld3D(options: World3DOptions): World3D {
     if ((tool === 'camera' ? keys.shift : keys.alt) && editor.insertPoint(x, y)) return;
     const hit = hitAt(x, y);
     if ('points' in hit) options.onNotice?.(null);
+    const caught = 'spawns' in hit ? hit.spawns : hit.points;
+    if (caught.length === 0 && !keys.shift && !keys.ctrl && !keys.alt) misses = missed + 1;
     setSelection(combine(selection, hit, tool === 'select' ? modifierOf(keys) : 'replace'));
+  };
+  const doubleClick = (): void => {
+    if (misses >= 2 && !isEmpty(selection)) setSelection(EMPTY_SELECTION);
+    misses = 0;
   };
   // A box drawn in Select mode: the route points or spawns inside it, by where they land on screen
   const box = (rect: Rect, keys: ClickKeys): void => {
@@ -337,6 +365,7 @@ export function createWorld3D(options: World3DOptions): World3D {
   const controls = new WorldControls(camera, renderer.domElement, {
     pick,
     onClick: click,
+    onDoubleClick: doubleClick,
     onBox: box,
     onWheel: (deltaY) => editor.wheel(deltaY),
     onModeChange: (next) => {
@@ -368,7 +397,8 @@ export function createWorld3D(options: World3DOptions): World3D {
       spawnMovement: (guid) => manager.movement(guid),
     },
     {
-      onEdit: options.onEdit,
+      onGesture: options.onGesture,
+      onGestureStart: options.onGestureStart,
       floorZ: options.floorZ,
       beforeRouteEdit: options.beforeRouteEdit,
       onNotice: options.onNotice,
@@ -378,6 +408,12 @@ export function createWorld3D(options: World3DOptions): World3D {
       onDrawing: (drawing) => options.onDrawing?.(drawing),
     },
   );
+  // A new layer or new own spawns drop what was drawn as pending: the editor draws a path being drawn
+  // again at once, and lets go of picked points once the routes are drawn as they now are
+  const followLayer = (redrawn: void | Promise<void>): void => {
+    editor.layerChanged();
+    void Promise.resolve(redrawn).then(() => editor.layerChanged());
+  };
   // The editing keys, on the view itself so they only act while it has focus; a key used here goes
   // no further (Esc that clears a selection must not also close the screen or the quest editor)
   const onKeyDown = (event: KeyboardEvent): void => {
@@ -467,14 +503,54 @@ export function createWorld3D(options: World3DOptions): World3D {
       ring.updateMatrixWorld(true);
     });
   };
+  // A shown spawn group: a ring under each drawn member, re-found each frame, and lines from its centre
+  let groupMembers: { kind: 'creature' | 'object'; guid: number }[] = [];
+  const groupRings: THREE.LineLoop[] = [];
+  const groupMaterial = new THREE.LineBasicMaterial({ color: GROUP_COLOUR, depthTest: false });
+  const groupLines = new THREE.LineSegments(new THREE.BufferGeometry(), groupMaterial);
+  groupLines.renderOrder = 2;
+  groupLines.frustumCulled = false;
+  groupLines.visible = false;
+  scene.add(groupLines);
+  const followGroup = (): void => {
+    const drawn = groupMembers.flatMap((s) => manager.findSpawn(s.kind, s.guid) ?? []);
+    pooled(groupRings, drawn.length, () => {
+      const ring = new THREE.LineLoop(ringGeometry, groupMaterial);
+      ring.renderOrder = 2;
+      return ring;
+    }).forEach((ring, i) => {
+      const at = drawn[i]!.position;
+      ring.position.set(at.x, at.y, at.z + RING_LIFT);
+      ring.scale.set(MARK_RADIUS, MARK_RADIUS, 1);
+      ring.updateMatrixWorld(true);
+    });
+  };
+  const showGroup = (view: GroupDrawing | null): void => {
+    groupMembers = view ? [...view.members] : [];
+    groupLines.geometry.dispose();
+    const ends = view ? view.points.flatMap((p) => [new THREE.Vector3(view.centre.x, view.centre.y, view.centre.z + RING_LIFT), new THREE.Vector3(p.x, p.y, p.z + RING_LIFT)]) : [];
+    groupLines.geometry = new THREE.BufferGeometry().setFromPoints(ends);
+    groupLines.visible = ends.length > 0;
+    followGroup();
+  };
   const { textures, databases, characterTexture } = sharedManagers();
   // The drawn ground a short way below a point, for standing NPCs on it
   const down = new THREE.Raycaster();
+  /** Whether a loaded area's terrain or buildings reach over a point; its bounds are worked out once */
+  const reaches = (group: THREE.Object3D, x: number, y: number): boolean => {
+    let bounds: THREE.Box3 | undefined = group.userData.floorBounds;
+    if (!bounds) {
+      if (group.children.length === 0) return false;
+      bounds = group.userData.floorBounds = new THREE.Box3().setFromObject(group);
+    }
+    return x >= bounds.min.x && x <= bounds.max.x && y >= bounds.min.y && y <= bounds.max.y;
+  };
   const groundBelow = (x: number, y: number, fromZ: number, distance: number): number | null => {
     down.set(new THREE.Vector3(x, y, fromZ), new THREE.Vector3(0, 0, -1));
     down.far = distance;
-    // Every floor, shown or not: where an NPC stands does not change with what is drawn
-    const floors = manager.root.children.filter((group) => group.name === 'terrain' || group.name === 'buildings');
+    // Every floor, shown or not: where an NPC stands does not change with what is drawn. Only an
+    // area's floors that reach over the point are tried: trying every loaded one took 2 ms a ray.
+    const floors = manager.root.children.filter((group) => (group.name === 'terrain' || group.name === 'buildings') && reaches(group, x, y));
     return down.intersectObjects(floors, true)[0]?.point.z ?? null;
   };
   const manager = new MapManager({ host: HOST, textureManager: textures, dbManager: databases, characterTexture, soundManager: SILENT, groundBelow });
@@ -529,6 +605,7 @@ export function createWorld3D(options: World3DOptions): World3D {
       manager.update(delta, camera);
       followSelected();
       followMarked();
+      followGroup();
       editor.update();
       renderer.setClearColor(manager.clearColor);
       renderer.render(scene, camera);
@@ -551,11 +628,13 @@ export function createWorld3D(options: World3DOptions): World3D {
       manager.setScenery(scenery);
     },
     spawnStatus: () => manager.spawnStatus,
-    setOwnSpawns: (spawns) => manager.setOwnSpawns(spawns),
+    setLooks: (looks) => followLayer(manager.setLooks(looks)),
+    setOwnSpawns: (spawns) => followLayer(manager.setOwnSpawns(spawns)),
     select: (spawn) => setSelection(spawn ? combine(EMPTY_SELECTION, { spawns: [spawn] }, 'replace') : EMPTY_SELECTION, false),
     setTool: (next) => applyTool(next),
     setFalloff: (falloff) => editor.setFalloff(falloff),
-    setWorldLayer: (layer) => manager.setWorldLayer(layer),
+    setWorldLayer: (layer) => followLayer(manager.setWorldLayer(layer)),
+    setGroupSpawns: (byGroup) => followLayer(manager.setGroupSpawns(byGroup)),
     setMode: (mode) => editor.setMode(mode),
     setPlacing: (target) => {
       placing = target;
@@ -563,17 +642,16 @@ export function createWorld3D(options: World3DOptions): World3D {
       if (target && !isEmpty(selection)) setSelection(EMPTY_SELECTION);
       refreshEscape();
     },
-    undo: () => editor.undo(),
-    redo: () => editor.redo(),
-    record: (before, after) => editor.record(before, after),
     startPath: (guid, pathId, first) => editor.startPath(guid, pathId, first),
     finishPath: () => editor.finishPath(),
     cancelPath: () => editor.cancelPath(),
+    cancelDrag: () => editor.cancelDrag(),
     undoPoint: () => editor.undoPoint(),
     setMarked(spawns) {
       marked = spawns ? [...spawns] : [];
       followMarked();
     },
+    setGroupView: (view) => showGroup(view),
     selectedSpawns: () => selectedInfo(),
     selectSpawns: (spawns) => setSelection(spawns.length > 0 ? combine(EMPTY_SELECTION, { spawns }, 'replace') : EMPTY_SELECTION),
     setPendingMovement: (guid, movement) => manager.setPendingMovement(guid, movement),
@@ -611,7 +689,7 @@ export function createWorld3D(options: World3DOptions): World3D {
       cancelAnimationFrame(frame);
       observer.disconnect();
       // Nothing here may throw: this runs while React unmounts the view, and a throw would take the whole screen with it.
-      for (const step of [() => controls.dispose?.(), () => renderer.domElement.removeEventListener('keydown', onKeyDown), () => editor.dispose(), stopProblems, () => manager.dispose(), () => release(manager.root), () => outlines.forEach(release), () => rings.forEach((ring) => ring.removeFromParent()), () => marks.forEach((ring) => ring.removeFromParent()), () => ringGeometry.dispose(), () => ringMaterial.dispose(), () => markMaterial.dispose(), () => renderer.dispose()]) {
+      for (const step of [() => controls.dispose?.(), () => renderer.domElement.removeEventListener('keydown', onKeyDown), () => editor.dispose(), stopProblems, () => manager.dispose(), () => release(manager.root), () => outlines.forEach(release), () => rings.forEach((ring) => ring.removeFromParent()), () => marks.forEach((ring) => ring.removeFromParent()), () => groupRings.forEach((ring) => ring.removeFromParent()), () => groupLines.removeFromParent(), () => groupLines.geometry.dispose(), () => groupMaterial.dispose(), () => ringGeometry.dispose(), () => ringMaterial.dispose(), () => markMaterial.dispose(), () => renderer.dispose()]) {
         try {
           step();
         } catch (error) {

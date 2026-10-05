@@ -13,7 +13,7 @@ The **Quest Giver** module says who offers the quest (**Starts at**) and who tak
 
 1. Open **Quest Giver** and choose **Add quest giver**.
 2. Pick the **Kind**: an NPC or an object.
-3. Either type the name or ID of one that already exists, or choose **New NPC** to make one just for this quest. The [NPC editor](/acore-quest-creator/guides/npcs-and-objects/) opens; choose **Done** when it looks right.
+3. Either type the name or ID of one that already exists, or choose **New NPC** to make one just for this quest. The [NPC editor](/azeroth-world-editor/guides/npcs-and-objects/) opens; choose **Done** when it looks right.
 
 A new NPC is marked **Made with this quest**. Its card offers **Edit NPC**, **Place on map** and, once placed, **Draw patrol**.
 
@@ -29,4 +29,4 @@ Choose **Add quest ender** and pick who takes the quest back in the same way. Wi
 
 ## Put the giver in the world
 
-Choose **Place on map** on the giver's card to open the [quest map](/acore-quest-creator/guides/quest-map/) and click where the NPC should stand. From there you can also draw its [patrol](/acore-quest-creator/guides/patrols/).
+Choose **Place on map** on the giver's card to open the [quest map](/azeroth-world-editor/guides/quest-map/) and click where the NPC should stand. From there you can also draw its [patrol](/azeroth-world-editor/guides/patrols/).

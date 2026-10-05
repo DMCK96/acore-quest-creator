@@ -1,4 +1,4 @@
-import { ENTITIES_FIELD, newSpawn, readEntities, writeEntities, type QuestEntities } from '../entities/model';
+import { newSpawn, type ProjectEntities } from '../entities/model';
 import type { FieldValue } from '../registry/types';
 import { movePoint, newPatrol, setPatrol } from './patrol';
 import type { Movement } from '../world/movement';
@@ -7,7 +7,7 @@ import { readScenes, SCRIPTS_FIELD, writeScenes, type Position, type QuestScene,
 /**
  * Every position a quest uses, as markers for its map, and the edits a map makes: moving one
  * position, or adding a spawn. A marker's id names where its position lives, so a move changes
- * exactly that one value.
+ * exactly that one value: a field of the quest (its scenes), or the project's NPCs and objects.
  */
 
 export type MarkerKind = 'npcSpawn' | 'objectSpawn' | 'patrolPoint' | 'scenePoint' | 'escortPoint' | 'fightPoint' | 'area' | 'poi';
@@ -28,7 +28,10 @@ export interface QuestMarker {
 }
 
 type Values = Readonly<Record<string, unknown>>;
-type Edit = { field: string; value: FieldValue } | null;
+/** A change to the project's NPCs, objects and items; null when there was nothing to change */
+type EntitiesEdit = ProjectEntities | null;
+/** What moving a marker changes: a field of the quest, or the project's NPCs and objects */
+export type MarkerEdit = { field: string; value: FieldValue } | { entities: ProjectEntities } | null;
 
 const NO_MAP_NOTE = 'Its NPC has no spawn yet, so its map is not known.';
 
@@ -37,7 +40,7 @@ const npcName = (name: string, entry: number): string => name.trim() || `New NPC
 const objectName = (name: string, entry: number): string => name.trim() || `New object ${entry}`;
 
 /** The map of the quest's own NPCs and objects, from their first spawn, overriding what the database says. */
-function ownerMaps(entities: QuestEntities, knownMaps: ReadonlyMap<string, number>): Map<string, number> {
+function ownerMaps(entities: ProjectEntities, knownMaps: ReadonlyMap<string, number>): Map<string, number> {
   const maps = new Map(knownMaps);
   for (const npc of entities.npcs) if (npc.spawns[0]) maps.set(`creature:${npc.entry}`, npc.spawns[0].map);
   for (const object of entities.objects) if (object.spawns[0]) maps.set(`gameobject:${object.entry}`, object.spawns[0].map);
@@ -50,8 +53,8 @@ const num = (v: unknown): number => {
 };
 const rowsOf = (v: unknown): Record<string, unknown>[] => (Array.isArray(v) ? (v as Record<string, unknown>[]) : []);
 
-export function questMarkers(values: Values, knownMaps: ReadonlyMap<string, number> = new Map()): QuestMarker[] {
-  const entities = readEntities(values);
+/** The markers of a quest: from its own values and the project's NPCs and objects it uses (`entities`) */
+export function questMarkers(values: Values, entities: ProjectEntities, knownMaps: ReadonlyMap<string, number> = new Map()): QuestMarker[] {
   const scenes = readScenes(values);
   const maps = ownerMaps(entities, knownMaps);
   const markers: QuestMarker[] = [];
@@ -130,8 +133,8 @@ export interface QuestRoute {
   facings: { x: number; y: number; o: number }[];
 }
 
-export function questRoutes(values: Values): QuestRoute[] {
-  return readEntities(values).npcs.flatMap((npc) =>
+export function questRoutes(entities: ProjectEntities): QuestRoute[] {
+  return entities.npcs.flatMap((npc) =>
     npc.spawns.flatMap((s) => {
       const points = s.patrol?.points ?? [];
       if (points.length === 0) return [];
@@ -148,19 +151,18 @@ export function questRoutes(values: Values): QuestRoute[] {
 type To = { x: number; y: number; z: number };
 
 /**
- * Places one of the quest's own spawns as the 3D view left it: where it stands, its facing, and for
- * an object its whole rotation (an NPC only turns). Null for a spawn that is not the quest's.
+ * Places one of the project's own spawns as the 3D view left it: where it stands, its facing, and for
+ * an object its whole rotation (an NPC only turns). Null for a spawn that is not the project's.
  */
 export function placeSpawn(
-  values: Values,
+  entities: ProjectEntities,
   id: string,
   to: { x: number; y: number; z: number; orientation: number; rotation: [number, number, number, number] | null },
-): Edit {
+): EntitiesEdit {
   const [prefix, kind, entryText, guidText] = id.split(':');
   if (prefix !== 'spawn' || (kind !== 'npc' && kind !== 'obj')) return null;
   const entry = Number(entryText);
   const guid = Number(guidText);
-  const entities = readEntities(values);
   const owners: { entry: number; spawns: { guid: number }[] }[] = kind === 'npc' ? entities.npcs : entities.objects;
   if (!owners.some((e) => e.entry === entry && e.spawns.some((s) => s.guid === guid))) return null;
   const rotation = kind === 'obj' ? to.rotation : null;
@@ -168,33 +170,31 @@ export function placeSpawn(
     list.map((e) =>
       e.entry !== entry ? e : { ...e, spawns: e.spawns.map((s) => (s.guid === guid ? { ...s, x: to.x, y: to.y, z: to.z, o: to.orientation, rotation } : s)) },
     );
-  const next = kind === 'npc' ? { ...entities, npcs: place(entities.npcs) } : { ...entities, objects: place(entities.objects) };
-  return { field: ENTITIES_FIELD, value: writeEntities(next) };
+  return kind === 'npc' ? { ...entities, npcs: place(entities.npcs) } : { ...entities, objects: place(entities.objects) };
 }
 const moved = (p: Position, to: To): Position => ({ ...p, x: to.x, y: to.y, z: to.z });
 
-export function moveMarker(values: Values, id: string, to: To): Edit {
+export function moveMarker(values: Values, entities: ProjectEntities, id: string, to: To): MarkerEdit {
   const parts = id.split(':');
   if (parts[0] === 'spawn') {
     const [, kind, entryText, guidText] = parts;
     const entry = Number(entryText);
     const guid = Number(guidText);
-    const entities = readEntities(values);
     const owners: { entry: number; spawns: { guid: number }[] }[] = kind === 'npc' ? entities.npcs : kind === 'obj' ? entities.objects : [];
     if (!owners.some((e) => e.entry === entry && e.spawns.some((s) => s.guid === guid))) return null;
     const move = <T extends { entry: number; spawns: { guid: number; x: number; y: number; z: number }[] }>(list: T[]): T[] =>
       list.map((e) => (e.entry !== entry ? e : { ...e, spawns: e.spawns.map((s) => (s.guid === guid ? { ...s, x: to.x, y: to.y, z: to.z } : s)) }));
-    const next = kind === 'npc' ? { ...entities, npcs: move(entities.npcs) } : { ...entities, objects: move(entities.objects) };
-    return { field: ENTITIES_FIELD, value: writeEntities(next) };
+    return { entities: kind === 'npc' ? { ...entities, npcs: move(entities.npcs) } : { ...entities, objects: move(entities.objects) } };
   }
   if (parts[0] === 'patrol') {
     const [, entryText, guidText, indexText] = parts;
     const entry = Number(entryText);
     const guid = Number(guidText);
     const index = Number(indexText);
-    const patrol = readEntities(values).npcs.find((n) => n.entry === entry)?.spawns.find((s) => s.guid === guid)?.patrol;
+    const patrol = entities.npcs.find((n) => n.entry === entry)?.spawns.find((s) => s.guid === guid)?.patrol;
     if (!patrol || !Number.isInteger(index) || index < 0 || index >= patrol.points.length) return null;
-    return setPatrol(values, entry, guid, movePoint(patrol, index, to));
+    const next = setPatrol(entities, entry, guid, movePoint(patrol, index, to));
+    return next ? { entities: next } : null;
   }
   if (parts[0] === 'scene' || parts[0] === 'area') {
     const scenes = readScenes(values);
@@ -220,7 +220,6 @@ export function moveMarker(values: Values, id: string, to: To): Edit {
   }
   if (parts[0] === 'fight') {
     const [, entryText, reactionId, stepText] = parts;
-    const entities = readEntities(values);
     const npc = entities.npcs.find((n) => n.entry === Number(entryText));
     const reaction = npc?.fight?.reactions.find((r) => r.id === reactionId);
     const s = Number(stepText);
@@ -228,32 +227,30 @@ export function moveMarker(values: Values, id: string, to: To): Edit {
     if (!npc || !npc.fight || !reaction || !step || step.kind !== 'summonAdds' || step.at === 'aroundMe') return null;
     const nextStep = { ...step, at: moved(step.at, to) };
     const fight = { ...npc.fight, reactions: npc.fight.reactions.map((r) => (r === reaction ? { ...r, steps: r.steps.map((x, k) => (k === s ? nextStep : x)) } : r)) };
-    return { field: ENTITIES_FIELD, value: writeEntities({ ...entities, npcs: entities.npcs.map((n) => (n === npc ? { ...n, fight } : n)) }) };
+    return { entities: { ...entities, npcs: entities.npcs.map((n) => (n === npc ? { ...n, fight } : n)) } };
   }
   return null;
 }
 
 export function addSpawn(
-  values: Values,
+  entities: ProjectEntities,
   target: { kind: 'npc' | 'object'; entry: number },
   spawn: { guid: number; map: number; x: number; y: number; z: number; o: number },
-): Edit {
-  const entities = readEntities(values);
+): EntitiesEdit {
   const add = <T extends { entry: number; spawns: ReturnType<typeof newSpawn>[] }>(list: T[]): T[] | null => {
     if (!list.some((e) => e.entry === target.entry)) return null;
     return list.map((e) => (e.entry === target.entry ? { ...e, spawns: [...e.spawns, { ...newSpawn(spawn.guid), ...spawn }] } : e));
   };
   if (target.kind === 'npc') {
     const npcs = add(entities.npcs);
-    return npcs ? { field: ENTITIES_FIELD, value: writeEntities({ ...entities, npcs }) } : null;
+    return npcs ? { ...entities, npcs } : null;
   }
   const objects = add(entities.objects);
-  return objects ? { field: ENTITIES_FIELD, value: writeEntities({ ...entities, objects }) } : null;
+  return objects ? { ...entities, objects } : null;
 }
 
-/** Takes one of the quest's own spawns away; null when the quest has no such spawn */
-export function removeSpawn(values: Values, target: { kind: 'npc' | 'object'; entry: number }, guid: number): Edit {
-  const entities = readEntities(values);
+/** Takes one of the project's own spawns away; null when it has no such spawn */
+export function removeSpawn(entities: ProjectEntities, target: { kind: 'npc' | 'object'; entry: number }, guid: number): EntitiesEdit {
   const remove = <T extends { entry: number; spawns: { guid: number }[] }>(list: T[]): T[] | null => {
     const owner = list.find((e) => e.entry === target.entry);
     if (!owner || !owner.spawns.some((s) => s.guid === guid)) return null;
@@ -261,18 +258,32 @@ export function removeSpawn(values: Values, target: { kind: 'npc' | 'object'; en
   };
   if (target.kind === 'npc') {
     const npcs = remove(entities.npcs);
-    return npcs ? { field: ENTITIES_FIELD, value: writeEntities({ ...entities, npcs }) } : null;
+    return npcs ? { ...entities, npcs } : null;
   }
   const objects = remove(entities.objects);
-  return objects ? { field: ENTITIES_FIELD, value: writeEntities({ ...entities, objects }) } : null;
+  return objects ? { ...entities, objects } : null;
+}
+
+/** How long one of the project's own spawns takes to respawn; null when it has no such spawn */
+export function setSpawnRespawn(entities: ProjectEntities, kind: 'npc' | 'object', entry: number, guid: number, secs: number): EntitiesEdit {
+  const timed = <T extends { entry: number; spawns: { guid: number; respawnSecs: number }[] }>(list: T[]): T[] | null => {
+    const owner = list.find((e) => e.entry === entry);
+    if (!owner || !owner.spawns.some((s) => s.guid === guid)) return null;
+    return list.map((e) => (e === owner ? { ...e, spawns: e.spawns.map((s) => (s.guid === guid ? { ...s, respawnSecs: secs } : s)) } : e));
+  };
+  if (kind === 'npc') {
+    const npcs = timed(entities.npcs);
+    return npcs ? { ...entities, npcs } : null;
+  }
+  const objects = timed(entities.objects);
+  return objects ? { ...entities, objects } : null;
 }
 
 /**
- * How one of the quest's own NPC spawns moves: a path keeps the patrol it has (a new one when its id
- * differs), wander and standing still drop the patrol. Null when the quest has no such spawn.
+ * How one of the project's own NPC spawns moves: a path keeps the patrol it has (a new one when its id
+ * differs), wander and standing still drop the patrol. Null when there is no such spawn.
  */
-export function setSpawnMovement(values: Values, entry: number, guid: number, to: Movement): Edit {
-  const entities = readEntities(values);
+export function setSpawnMovement(entities: ProjectEntities, entry: number, guid: number, to: Movement): EntitiesEdit {
   const npc = entities.npcs.find((n) => n.entry === entry);
   if (!npc || !npc.spawns.some((s) => s.guid === guid)) return null;
   const spawns = npc.spawns.map((s) => {
@@ -280,5 +291,5 @@ export function setSpawnMovement(values: Values, entry: number, guid: number, to
     if (to.type === 'path') return { ...s, wander: 0, patrol: s.patrol && s.patrol.pathId === to.pathId ? s.patrol : newPatrol(to.pathId ?? 0) };
     return { ...s, wander: to.type === 'wander' ? to.wander : 0, patrol: null };
   });
-  return { field: ENTITIES_FIELD, value: writeEntities({ ...entities, npcs: entities.npcs.map((n) => (n === npc ? { ...n, spawns } : n)) }) };
+  return { ...entities, npcs: entities.npcs.map((n) => (n === npc ? { ...n, spawns } : n)) };
 }

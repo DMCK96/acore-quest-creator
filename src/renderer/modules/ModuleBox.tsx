@@ -1,20 +1,25 @@
 import type { ModuleDef, Values } from '@core/modules/model';
 import { isModulePresent } from '@core/modules/catalog';
 import type { NameBook } from '@core/links/component';
+import type { ProjectEntities } from '@core/entities/model';
 
 export interface ModuleBoxProps {
   def: ModuleDef;
   values: Values;
   names: NameBook;
+  /** The project's NPCs, objects and items the quest uses */
+  entities?: ProjectEntities;
   severity: 'error' | 'warning' | null;
   selected: boolean;
+  /** Lines the module's own summary cannot know, after it (the rotation the quest is in) */
+  extra?: readonly string[];
   onOpen(): void;
 }
 
 /** One module in the flow: its name and a line per thing set up in it, dashed while still empty. */
-export function ModuleBox({ def, values, names, severity, selected, onOpen }: ModuleBoxProps): React.JSX.Element {
-  const lines = def.summary(values, names);
-  const empty = !isModulePresent(def.id, values);
+export function ModuleBox({ def, values, names, entities, severity, selected, extra = [], onOpen }: ModuleBoxProps): React.JSX.Element {
+  const lines = [...def.summary(values, names, entities), ...extra];
+  const empty = def.id === 'entities' ? lines.length === 0 : !isModulePresent(def.id, values);
   const classes = ['module-box', empty && 'module-box--empty', selected && 'module-box--selected', severity && `module-box--${severity}`]
     .filter(Boolean)
     .join(' ');

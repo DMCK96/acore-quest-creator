@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
-  EMPTY_WORLD, NEW_POINT_REST, addSpawn, hasWorldChanges, isAdded, moveSpawn, movementsOf, revertMovement, revertRoute, revertSpawn, setMovement, setRoute, worldStatements,
+  EMPTY_WORLD, NEW_POINT_REST, addSpawn, deleteGroup, dropMember, groupsOf, hasWorldChanges, isAdded, moveSpawn, movementsOf, putGroup, respawnsOf, revertGroup, revertMovement, revertRespawn, revertRoute, revertSpawn, setMovement, setRespawn, setRoute, worldStatements,
   type Placement, type RoutePoint, type WorldAddedSpawn, type WorldMovementEdit, type WorldSpawnEdit,
 } from '../../../src/core/world/layer';
 import { IDLE } from '../../../src/core/world/movement';
@@ -267,5 +267,165 @@ describe('world layer: a new path and the movement that walks it', () => {
   it('reverting an existing route leaves movements alone', () => {
     const layer = setRoute(setMovement(EMPTY_WORLD, walker, { type: 'wander', wander: 3, pathId: 801 }), route, [point(5), point(6)]);
     expect(movementsOf(revertRoute(layer, 801))).toHaveLength(1);
+  });
+});
+
+describe('spawn groups in the layer', () => {
+  const drake = { type: 'spawn' as const, kind: 'npc' as const, guid: 39203, entry: 32491, chance: 10 };
+  const vyragosa = { type: 'spawn' as const, kind: 'npc' as const, guid: 39207, entry: 32630, chance: 0 };
+  const fresh = { id: 900001, name: 'Path 1', map: 571, maxActive: 1, event: null, members: [drake, vyragosa], origin: { kind: 'new' as const } };
+  const original = {
+    template: { entry: '32492', max_limit: '1', description: 'Path 1' },
+    members: [
+      { table: 'pool_creature' as const, row: { guid: '39203', pool_entry: '32492', chance: '10', description: 'Path 1' } },
+      { table: 'pool_creature' as const, row: { guid: '39207', pool_entry: '32492', chance: '0', description: 'Path 1' } },
+    ],
+    event: null,
+  };
+  const existing = { ...fresh, id: 32492, origin: { kind: 'existing' as const, original } };
+
+  it('puts, replaces and reverts a group; deleting a new one forgets it, an existing one is kept as removed', () => {
+    const one = putGroup(EMPTY_WORLD, fresh);
+    expect(groupsOf(putGroup(one, { ...fresh, maxActive: 2 }))).toEqual([{ ...fresh, maxActive: 2 }]);
+    expect(groupsOf(deleteGroup(one, fresh))).toEqual([]);
+    expect(groupsOf(deleteGroup(EMPTY_WORLD, existing))).toEqual([{ ...existing, removed: true }]);
+    expect(groupsOf(revertGroup(one, 900001))).toEqual([]);
+    expect(hasWorldChanges(one)).toBe(true);
+  });
+
+  it('dropping a spawn takes it out of its groups, and a new group left empty goes', () => {
+    const one = putGroup(EMPTY_WORLD, { ...fresh, members: [drake] });
+    expect(groupsOf(dropMember(one, 'npc', 39203))).toEqual([]);
+    const two = putGroup(EMPTY_WORLD, existing);
+    expect(groupsOf(dropMember(two, 'npc', 39203))[0]!.members).toEqual([vyragosa]);
+  });
+
+  it('writes a new group with its members, and the revert takes them away', () => {
+    const mother = { id: 900002, name: 'Drake', map: 571, maxActive: 1, event: null, members: [{ type: 'group' as const, id: 900001, chance: 0 }], origin: { kind: 'new' as const } };
+    const { apply, revert } = worldStatements(putGroup(putGroup(EMPTY_WORLD, fresh), mother));
+    expect(apply).toEqual(expect.arrayContaining([
+      { kind: 'delete', table: 'pool_template', key: { entry: '900001' } },
+      { kind: 'delete', table: 'pool_creature', key: { pool_entry: '900001' } },
+      { kind: 'insert', table: 'pool_template', row: { entry: '900001', max_limit: '1', description: 'Path 1' } },
+      { kind: 'insert', table: 'pool_creature', row: { guid: '39203', pool_entry: '900001', chance: '10', description: 'Path 1' } },
+      { kind: 'insert', table: 'pool_creature', row: { guid: '39207', pool_entry: '900001', chance: '0', description: 'Path 1' } },
+      { kind: 'insert', table: 'pool_pool', row: { pool_id: '900001', mother_pool: '900002', chance: '0', description: 'Drake' } },
+    ]));
+    expect(revert).toEqual(expect.arrayContaining([
+      { kind: 'delete', table: 'pool_template', key: { entry: '900001' } },
+      { kind: 'delete', table: 'pool_pool', key: { mother_pool: '900002' } },
+    ]));
+    expect(revert.some((s) => s.kind === 'insert')).toBe(false);
+  });
+
+  it('an edited existing group is rewritten and its original rows come back on revert; a removed one only goes', () => {
+    const edited = worldStatements(putGroup(EMPTY_WORLD, { ...existing, members: [{ ...drake, chance: 50 }, { ...vyragosa, chance: 50 }] }));
+    expect(edited.apply).toContainEqual({ kind: 'insert', table: 'pool_creature', row: { guid: '39203', pool_entry: '32492', chance: '50', description: 'Path 1' } });
+    expect(edited.revert).toEqual(expect.arrayContaining([
+      { kind: 'insert', table: 'pool_template', row: original.template },
+      { kind: 'insert', table: 'pool_creature', row: original.members[0]!.row },
+    ]));
+    const removed = worldStatements(deleteGroup(EMPTY_WORLD, existing));
+    expect(removed.apply.some((s) => s.kind === 'insert')).toBe(false);
+    expect(removed.apply).toContainEqual({ kind: 'delete', table: 'pool_template', key: { entry: '32492' } });
+    expect(removed.revert).toContainEqual({ kind: 'insert', table: 'pool_template', row: original.template });
+  });
+
+  /** A tiny pool database that refuses a second row with the same primary key, as the server does */
+  function runPools(start: { table: string; row: Record<string, string | null> }[], statements: { kind: string; table: string; key?: Record<string, string>; row?: Record<string, string | null> }[]) {
+    const pk: Record<string, string> = { pool_template: 'entry', pool_creature: 'guid', pool_gameobject: 'guid', pool_pool: 'pool_id' };
+    let rows = start.map((r) => ({ ...r }));
+    for (const s of statements) {
+      if (!(s.table in pk)) continue;
+      if (s.kind === 'delete') rows = rows.filter((r) => !(r.table === s.table && Object.entries(s.key!).every(([c, v]) => r.row[c] === v)));
+      else if (s.kind === 'insert') {
+        const k = pk[s.table]!;
+        if (rows.some((r) => r.table === s.table && r.row[k] === s.row![k])) throw new Error(`Duplicate entry '${s.row![k]}' for key ${s.table}.PRIMARY`);
+        rows.push({ table: s.table, row: s.row! });
+      }
+    }
+    return rows;
+  }
+
+  it('moving a spawn from an existing group into another applies and reverts without a duplicate key, in either order', () => {
+    const db = [{ table: 'pool_template', row: original.template }, ...original.members];
+    const left = { ...existing, members: [vyragosa], maxActive: 1 };
+    const taker = { ...fresh, members: [drake] };
+    for (const layer of [putGroup(putGroup(EMPTY_WORLD, left), taker), putGroup(putGroup(EMPTY_WORLD, taker), left)]) {
+      const { apply, revert } = worldStatements(layer);
+      const after = runPools(db, apply);
+      expect(after.filter((r) => r.table === 'pool_creature' && r.row.guid === '39203').map((r) => r.row.pool_entry)).toEqual(['900001']);
+      const back = runPools(after, revert);
+      expect(back).toEqual(expect.arrayContaining(db));
+      expect(back).toHaveLength(db.length);
+    }
+  });
+});
+
+describe('respawn time', () => {
+  const edit = { kind: 'creature' as const, guid: 80330, entry: 1423, name: 'Stormwind Guard', map: 0, original: 300 };
+  it('keeps the first original, and drops an edit set back to it', () => {
+    const once = setRespawn(EMPTY_WORLD, edit, 60);
+    expect(respawnsOf(once)).toEqual([{ ...edit, current: 60 }]);
+    const twice = setRespawn(once, { ...edit, original: 999 }, 120);
+    expect(respawnsOf(twice)).toEqual([{ ...edit, current: 120 }]);
+    expect(respawnsOf(setRespawn(twice, edit, 300))).toEqual([]);
+  });
+
+  it("sets a placed spawn's own respawn instead of an edit", () => {
+    const look = { displayId: 1, scale: 1, equipment: [0, 0, 0] as [number, number, number], preset: null };
+    const placed = addSpawn(EMPTY_WORLD, { kind: 'creature', guid: 9, entry: 1423, name: 'G', map: 0, placement: { x: 0, y: 0, z: 0, orientation: 0, rotation: null }, look });
+    const next = setRespawn(placed, { ...edit, guid: 9 }, 45);
+    expect(next.added[0]!.respawnSecs).toBe(45);
+    expect(respawnsOf(next)).toEqual([]);
+  });
+
+  it('writes respawn edits as updates, put back by the revert, and a placed spawn with its own time', () => {
+    const look = { displayId: 1, scale: 1, equipment: [0, 0, 0] as [number, number, number], preset: null };
+    const layer = setRespawn(addSpawn(EMPTY_WORLD, { kind: 'gameobject', guid: 9, entry: 2843, name: 'Chest', map: 0, placement: { x: 0, y: 0, z: 0, orientation: 0, rotation: null }, look, respawnSecs: 30 }), edit, 60);
+    const { apply, revert } = worldStatements(layer, undefined, { gameobject: { guid: null, id: null, map: null, spawntimesecs: null } });
+    expect(apply).toContainEqual({ kind: 'update', table: 'creature', key: { guid: '80330' }, set: { spawntimesecs: '60' } });
+    expect(revert).toContainEqual({ kind: 'update', table: 'creature', key: { guid: '80330' }, set: { spawntimesecs: '300' } });
+    expect((apply.find((s) => s.kind === 'insert' && s.table === 'gameobject') as any).row.spawntimesecs).toBe('30');
+    expect(hasWorldChanges({ ...EMPTY_WORLD, respawns: [{ ...edit, current: 60 }] })).toBe(true);
+    expect(respawnsOf(revertRespawn(layer, 'creature', 80330))).toEqual([]);
+  });
+});
+
+describe('rotations and events in the patch', () => {
+  const rotation = { id: 900010, name: 'Dailies', map: 0, maxActive: 1, members: [{ type: 'quest' as const, questId: 60001 }, { type: 'quest' as const, questId: 60002 }], origin: { kind: 'new' as const }, event: null };
+
+  it('writes a new rotation as a template and pool_quest rows, deletes first, and the revert removes them', () => {
+    const { apply, revert } = worldStatements(putGroup(EMPTY_WORLD, rotation));
+    expect(apply).toEqual(expect.arrayContaining([
+      { kind: 'delete', table: 'pool_quest', key: { pool_entry: '900010' } },
+      { kind: 'insert', table: 'pool_template', row: { entry: '900010', max_limit: '1', description: 'Dailies' } },
+      { kind: 'insert', table: 'pool_quest', row: { entry: '60001', pool_entry: '900010', description: 'Dailies' } },
+      { kind: 'insert', table: 'pool_quest', row: { entry: '60002', pool_entry: '900010', description: 'Dailies' } },
+    ]));
+    const lastDelete = Math.max(...apply.map((s, i) => (s.kind === 'delete' ? i : -1)));
+    const firstInsert = apply.findIndex((s) => s.kind === 'insert');
+    expect(lastDelete).toBeLessThan(firstInsert);
+    expect(revert).toContainEqual({ kind: 'delete', table: 'pool_quest', key: { pool_entry: '900010' } });
+  });
+
+  it("writes a new group's event, during as positive and except during as negative", () => {
+    const camp = { id: 900020, name: 'Camp', map: 0, maxActive: 1, members: [{ type: 'spawn' as const, kind: 'npc' as const, guid: 1, entry: 1, chance: 0 }], origin: { kind: 'new' as const }, event: { id: 4, during: false } };
+    const { apply, revert } = worldStatements(putGroup(EMPTY_WORLD, camp));
+    expect(apply).toContainEqual({ kind: 'delete', table: 'game_event_pool', key: { pool_entry: '900020' } });
+    expect(apply).toContainEqual({ kind: 'insert', table: 'game_event_pool', row: { eventEntry: '-4', pool_entry: '900020' } });
+    expect(revert).toContainEqual({ kind: 'delete', table: 'game_event_pool', key: { pool_entry: '900020' } });
+  });
+
+  it("leaves an existing group's event row alone when its event did not change, and puts it back when it did", () => {
+    const eventRow = { eventEntry: '12', pool_entry: '32492' };
+    const existing = { id: 32492, name: 'Path 1', map: 571, maxActive: 1, members: [{ type: 'spawn' as const, kind: 'npc' as const, guid: 39203, entry: 32491, chance: 0 }],
+      origin: { kind: 'existing' as const, original: { template: { entry: '32492', max_limit: '1', description: 'Path 1' }, members: [], event: eventRow } }, event: { id: 12, during: true } };
+    const same = worldStatements(putGroup(EMPTY_WORLD, { ...existing, maxActive: 1 }));
+    expect([...same.apply, ...same.revert].some((s) => s.table === 'game_event_pool')).toBe(false);
+    const changed = worldStatements(putGroup(EMPTY_WORLD, { ...existing, event: null }));
+    expect(changed.apply).toContainEqual({ kind: 'delete', table: 'game_event_pool', key: { pool_entry: '32492' } });
+    expect(changed.apply.some((s) => s.kind === 'insert' && s.table === 'game_event_pool')).toBe(false);
+    expect(changed.revert).toContainEqual({ kind: 'insert', table: 'game_event_pool', row: eventRow });
   });
 });

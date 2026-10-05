@@ -12,7 +12,7 @@ const groups: MenuGroup[] = [
     { id: 'paste-here', label: 'Paste here', disabledReason: 'Copy something first' },
   ] },
   { id: 'quest', items: [
-    { id: 'spawn-quest-npc-here', label: 'Spawn quest NPC here', children: [{ id: 'hela', label: 'Hela', action: { kind: 'spawnQuestEntity', target: { kind: 'creature', entry: 1, name: 'Hela', own: true }, at } }] },
+    { id: 'quests', label: 'Quests', children: [{ id: 'show-quest-spawns', label: 'Show quest spawns', action: { kind: 'showSpawns', scope: 'quest' } }] },
     { id: 'quest-giver', label: 'Quest giver', checked: true, action: { kind: 'hideSpawns' } },
   ] },
 ];
@@ -51,15 +51,15 @@ describe('the 3D view’s right-click menu', () => {
 
   it('opens a submenu with the right arrow, and the left arrow closes only it', async () => {
     const { onPick, onClose } = open();
-    screen.getByRole('menuitem', { name: 'Spawn quest NPC here' }).focus();
+    screen.getByRole('menuitem', { name: 'Quests' }).focus();
     await userEvent.keyboard('{ArrowRight}');
-    expect(screen.getByRole('menuitem', { name: 'Hela' })).toHaveFocus();
+    expect(screen.getByRole('menuitem', { name: 'Show quest spawns' })).toHaveFocus();
     await userEvent.keyboard('{ArrowLeft}');
-    expect(screen.queryByRole('menuitem', { name: 'Hela' })).toBeNull();
-    expect(screen.getByRole('menuitem', { name: 'Spawn quest NPC here' })).toHaveFocus();
+    expect(screen.queryByRole('menuitem', { name: 'Show quest spawns' })).toBeNull();
+    expect(screen.getByRole('menuitem', { name: 'Quests' })).toHaveFocus();
     expect(onClose).not.toHaveBeenCalled();
     await userEvent.keyboard('{ArrowRight}{Enter}');
-    expect(onPick).toHaveBeenCalledWith(expect.objectContaining({ kind: 'spawnQuestEntity' }));
+    expect(onPick).toHaveBeenCalledWith({ kind: 'showSpawns', scope: 'quest' });
   });
 
   it('shows a check on a checked item', () => {

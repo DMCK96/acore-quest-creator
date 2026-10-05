@@ -1,13 +1,13 @@
 ---
 title: What gets written to the database
-description: The world database tables each feature of ACORE Quest Creator writes, for server admins reviewing patches.
+description: The world database tables each feature of Azeroth World Editor writes, for server admins reviewing patches.
 sidebar:
   order: 3
 ---
 
 For server admins reviewing a patch: which world database tables each part of the app writes. The **Changes** dialog lists the exact rows for any quest.
 
-The app only writes when you **Export patch** or **Export world patch** (to a file), or **Apply to dev DB** (to your dev database). It never writes to the world database you connect with.
+The app only writes when you **Export patch** or **Export project patch** (to a file), or **Apply to dev DB** (to your dev database). It never writes to the world database you connect with.
 
 | Feature | Tables |
 | --- | --- |
@@ -24,7 +24,7 @@ The app only writes when you **Export patch** or **Export world patch** (to a fi
 | Quest scripting scenes | `smart_scripts`, `creature_text`, `gossip_menu`, `gossip_menu_option`, `npc_text`, `conditions`, `areatrigger`, `areatrigger_scripts`, `waypoints` (escort paths) |
 | Combat wizard | `smart_scripts`, `creature_text` |
 | Patrols | `creature_addon`, `waypoint_data`, and `smart_scripts` / `creature_text` for point actions |
-| World changes (the world patch) | `creature` and `gameobject` (moved and placed spawns; an NPC's `wander_distance` and `MovementType`), `creature_addon` (an NPC's path), `waypoint_data` (routes) |
+| World changes (in the project patch) | `creature` and `gameobject` (moved and placed spawns; an NPC's `wander_distance` and `MovementType`), `creature_addon` (an NPC's path), `waypoint_data` (routes) |
 
 ## IDs for new rows
 

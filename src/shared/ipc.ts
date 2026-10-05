@@ -4,10 +4,14 @@ import type { EntityHit, QuestSummary, SearchKind } from '@core/db/world-db';
 import type { SpellFacts } from '@core/game/spells';
 import type { MapBox, SpawnDot } from '@core/db/spawns';
 import type { ViewSpawns } from '@core/db/view-spawns';
-import type { Placement, RoutePoint, WorldAddedSpawn, WorldLayer, WorldMovementEdit, WorldRouteEdit, WorldSpawnEdit, WorldSpawnKind } from '@core/world/layer';
+import type { Placement, RoutePoint, WorldAddedSpawn, WorldLayer, WorldMovementEdit, WorldRespawnEdit, WorldRouteEdit, WorldSpawnEdit, WorldSpawnKind } from '@core/world/layer';
 import type { Movement } from '@core/world/movement';
+import type { GroupMember, SpawnGroup } from '@core/world/groups';
+import type { ProjectEntities } from '@core/entities/model';
+import type { QuestUse } from '@core/entities/links';
 
-export type { Movement, Placement, RoutePoint, WorldAddedSpawn, WorldLayer, WorldMovementEdit, WorldRouteEdit, WorldSpawnEdit, WorldSpawnKind };
+export type { GroupMember, SpawnGroup };
+export type { Movement, Placement, RoutePoint, WorldAddedSpawn, WorldLayer, WorldMovementEdit, WorldRespawnEdit, WorldRouteEdit, WorldSpawnEdit, WorldSpawnKind };
 
 /** One world layer entry as the World changes list shows it, and whether the database has moved off its original since. */
 export type WorldChange =
@@ -16,13 +20,49 @@ export type WorldChange =
   /** A spawn placed in the view; `drifted` when the database now has a spawn with its id */
   | (WorldAddedSpawn & { type: 'added'; drifted: boolean })
   /** An NPC's movement; `drifted` when the database's no longer matches its original */
-  | (WorldMovementEdit & { type: 'movement'; drifted: boolean });
+  | (WorldMovementEdit & { type: 'movement'; drifted: boolean })
+  /** A database spawn's respawn time; `drifted` when the database's no longer matches its original */
+  | (WorldRespawnEdit & { type: 'respawn'; drifted: boolean })
+  /** A spawn group; `drifted` when the database's pool no longer matches its original (or, for a new one, now has its id) */
+  | (SpawnGroup & { type: 'group'; drifted: boolean });
+
+/** A spawn group as the 3D view describes it: each member by name, and where it stands (a group member at its spawns' centre) */
+export interface GroupView {
+  id: number;
+  name: string;
+  map: number;
+  maxActive: number;
+  /** The game event it follows, by name; null for always */
+  event: { id: number; name: string; during: boolean } | null;
+  members: { key: string; type: 'spawn' | 'group'; name: string; chance: number; at: { x: number; y: number; z: number } | null }[];
+}
+
+/** Spawns a group save moves out of the group they were in */
+/** A member to take out of the group it is in when a group is saved: a spawn, or a quest leaving its rotation */
+export type GroupMove = { kind: 'npc' | 'object'; guid: number } | { kind: 'quest'; questId: number };
+
+/** A spawn group check: the reasons it cannot be saved, and notes that do not block it */
+/** A quest pool (rotation) in the database: its quests, how many are offered each reset, and whether they are daily (else weekly). */
+export interface QuestPoolSummary {
+  id: number;
+  name: string;
+  maxActive: number;
+  daily: boolean;
+  questIds: number[];
+}
+
+export interface GroupCheck {
+  reasons: string[];
+  notes: string[];
+}
 
 /** What a world revert takes back: one spawn, one route, or one NPC's movement. */
 export type WorldRevertTarget =
   | { kind: 'spawn'; spawnKind: WorldSpawnKind; guid: number }
   | { kind: 'route'; pathId: number }
-  | { kind: 'movement'; guid: number };
+  | { kind: 'movement'; guid: number }
+  | { kind: 'respawn'; spawnKind: WorldSpawnKind; guid: number }
+  | { kind: 'group'; id: number };
 import type { PatchWarning } from '@core/export/build-patch';
 import type { UnmodelledColumn } from '@core/import/unmodelled';
 import type { UnavailableComponent } from '@core/links/availability';
@@ -32,9 +72,11 @@ import type { FieldValue } from '@core/registry/types';
 import type { Difference } from '@core/roundtrip/compare';
 import type { ForeignScene } from '@core/scripts/decompile';
 import type { CustomItem, CustomNpc, CustomObject } from '@core/entities/model';
+import type { EntityRef } from '@core/entities/entity';
 import type { ColumnInfo } from '@core/db/types';
 import type { TestCommands } from '@core/testing/gm';
 import type { FidelityReport } from '@core/roundtrip/verify';
+import type { HistoryList, HistoryResult, StepPlace } from './history';
 import type { SchemaDiff } from '@core/schema/diff';
 import type { Issue } from '@core/validate/validate';
 
@@ -97,6 +139,8 @@ export interface QuestSpawnGroup {
   spawns: QuestSpawn[];
   capped: boolean;
   cut: number;
+  /** The world database was not read: only the project's own spawns and the World layer's are listed */
+  offline?: boolean;
 }
 
 /** What `spellFacts` answers: the spells found, or why spell names are not available. */
@@ -192,6 +236,8 @@ export interface RecentProject {
 /** New, Open and Save can each be cancelled by the user part way; `done` says whether it happened. */
 export interface ProjectActionResult {
   done: boolean;
+  /** What opening an older project had to say about moving its quests' NPCs into the project */
+  warnings?: string[];
 }
 
 /** Unsaved work a crash left behind, offered back on the next launch. */
@@ -268,6 +314,10 @@ export interface ExportResult {
   sql: string;
   warnings: PatchWarning[];
   issues: Issue[];
+  /** How many of the project's new NPCs, objects and items the quest uses: they are in the project patch */
+  usesProject: number;
+  /** The project patch Apply to dev runs before the quest; null when the project has nothing of its own */
+  projectSql: string | null;
 }
 
 /** One quest as the canvas draws it. */
@@ -293,6 +343,14 @@ export interface CanvasNode {
   offCanvasLinks: number;
   /** Shares no edge with any other quest on the canvas; also counted in `warnings`. */
   notConnected: boolean;
+  /** The project's new NPCs, objects and items the quest uses (the ones it names, and NPCs crediting it) */
+  uses: QuestUse;
+  /** Everything the quest references, whether or not the project has it */
+  refs: QuestUse;
+  /** Offered again each day (quest_template.Flags 0x1000) */
+  daily?: boolean;
+  /** Offered again each week (quest_template.Flags 0x8000) */
+  weekly?: boolean;
 }
 
 /** How a quest is offered, reduced to the few kinds a canvas node has room to show. */
@@ -400,6 +458,17 @@ export interface Api {
   mapSpawns(map: number, box: MapBox): Promise<Result<{ dots: SpawnDot[]; capped: boolean }>>;
   /** NPCs and objects in an area of a map as the 3D view draws them; each kind capped at 2000. */
   viewSpawns(map: number, box: MapBox): Promise<Result<ViewSpawns>>;
+  /** The project's new NPCs, objects and items. */
+  projectEntities(): Promise<Result<ProjectEntities>>;
+  /** Replaces the project's new NPCs, objects and items: one undo step (typing in one merges). */
+  putProjectEntities(next: ProjectEntities): Promise<Result<true>>;
+  /**
+   * Deletes one of the project's NPCs, objects or items and empties every quest's giver card that named
+   * it, as one undo step; gives the store and the quests it changed, as they now are.
+   */
+  readExistingEntity(kind: 'npc' | 'object' | 'item', entry: number): Promise<Result<CustomNpc | CustomObject | CustomItem>>;
+  existingDrift(): Promise<Result<EntityRef[]>>;
+  deleteEntity(kind: 'npc' | 'object' | 'item', entry: number): Promise<Result<{ entities: ProjectEntities; quests: { questId: number; aggregate: QuestAggregate }[] }>>;
   /** The project's edits to spawns and routes outside any quest. */
   worldLayer(): Promise<Result<WorldLayer>>;
   /** Moves or turns an existing spawn in the world layer; its original is read from the database at the first edit. */
@@ -415,18 +484,59 @@ export interface Api {
   worldSetRoute(pathId: number, points: RoutePoint[], options?: { isNew?: boolean }): Promise<Result<WorldLayer>>;
   /** Sets an NPC's movement (wander, movement type, its spawn's path); its original is read at the first edit. */
   worldSetMovement(guid: number, to: Movement): Promise<Result<WorldLayer>>;
+  /** Sets a spawn's respawn time in seconds; a database spawn's original is read at the first edit. */
+  worldSetRespawn(kind: WorldSpawnKind, guid: number, secs: number): Promise<Result<WorldLayer>>;
   /** A free path id for a new path of an NPC: its guid times ten when that is free, else one past the highest in use. */
   worldNewPathId(guid: number): Promise<Result<number>>;
   /** Takes one spawn or route out of the world layer. */
   worldRevert(target: WorldRevertTarget): Promise<Result<WorldLayer>>;
   /** Every world layer entry, with whether the database has moved off its original. */
   worldChanges(): Promise<Result<WorldChange[]>>;
+  /** A spawn group as the layer has it, else as the database's pool; null when there is none. */
+  worldGroup(id: number): Promise<Result<SpawnGroup | null>>;
+  /** Every spawn under a group through all its levels (the layer's copy of each group, else the database's), by kind and guid. */
+  worldGroupSpawns(id: number): Promise<Result<{ kind: 'npc' | 'object'; guid: number }[]>>;
+  /** A spawn group described for the view: its members by name and where they stand. */
+  worldGroupView(id: number): Promise<Result<GroupView | null>>;
+  /** The spawn groups on a map (the database's and the layer's), by name. */
+  worldGroupsOnMap(map: number): Promise<Result<{ id: number; name: string; maxActive: number; members: number; groups: number[] }[]>>;
+  /** An id no spawn group uses yet. */
+  worldNewGroupId(): Promise<Result<number>>;
+  /**
+   * Why the server would refuse or misread a group, or a group its `moves` (spawns the save takes out of
+   * their group) leave; none when it is fine. Notes name left groups the save empties and deletes.
+   */
+  worldCheckGroup(group: SpawnGroup, moves: GroupMove[]): Promise<Result<GroupCheck>>;
+  /** Saves a spawn group in the world layer as one step, moving `moves` out of the group they were in; refused with why when it is not valid. */
+  worldSetGroup(group: SpawnGroup, moves: GroupMove[]): Promise<Result<WorldLayer>>;
+  /** Deletes a spawn group: a new one is forgotten, an existing one is removed on export. */
+  worldDeleteGroup(id: number): Promise<Result<WorldLayer>>;
+  /** Takes a spawn out of every group in the world layer. */
+  worldDropMember(kind: 'npc' | 'object', guid: number): Promise<Result<WorldLayer>>;
+  /** Every quest pool (rotation) in the database with its member quests, and whether its quests are daily. */
+  questPools(): Promise<Result<QuestPoolSummary[]>>;
+  /** The game events in the database, by id, with their descriptions as names. */
+  gameEvents(): Promise<Result<{ id: number; name: string }[]>>;
+  /** The project's undo history: its steps, the last one applied, and the saved one. */
+  historyList(): Promise<Result<HistoryList>>;
+  /** Puts the last step back as it was before it, and says what changed. */
+  historyUndo(): Promise<Result<HistoryResult>>;
+  /** Does the last undone step again, and says what changed. */
+  historyRedo(): Promise<Result<HistoryResult>>;
+  /** Undoes or redoes to stand just after a step (0: before every step), and says what changed. */
+  historyJump(stepId: number): Promise<Result<HistoryResult>>;
+  /** Opens a step: every change until its end is one undo step, with this name and place when given. */
+  historyBegin(label?: string, where?: StepPlace): Promise<Result<number>>;
+  historyEnd(token: number): Promise<Result<true>>;
   /** Writes the world patch and its revert to the export folder. */
-  exportWorld(): Promise<Result<{ applyPath: string; revertPath: string; sql: string }>>;
+  /** Writes the project patch (new NPCs, objects, items and world changes) and its revert. */
+  exportProject(): Promise<Result<{ applyPath: string; revertPath: string; sql: string; warnings: string[] }>>;
   /** Where an NPC or object stands in the world, for jumping to it on the map. */
   entitySpawns(kind: 'creature' | 'gameobject', entry: number): Promise<Result<SpawnDot[]>>;
   /** Every spawn of one NPC or object (up to a few hundred, `capped` when there are more), for jumping to them in the 3D view. */
   findSpawns(kind: 'creature' | 'gameobject', entry: number): Promise<Result<{ spawns: SpawnDot[]; capped: boolean }>>;
+  /** Where one spawn stands: as moved or placed in the project, else as the database has it; null when it is gone. For Go to. */
+  spawnPlacement(kind: 'npc' | 'object', guid: number): Promise<Result<{ x: number; y: number; z: number } | null>>;
   /** The existing spawns of the quest's givers, enders and objectives. */
   questMapRefs(questId: number): Promise<Result<QuestMapRef[]>>;
   /** Every spawn each quest uses (its givers', enders' and objectives', and its own), for the 3D view to list and mark. */
@@ -465,7 +575,8 @@ export interface Api {
  */
 
 // The method and channel names live in a zod-free module so the sandboxed preload can import them.
-export { API_METHODS, channelFor } from './api-methods';
+export { API_METHODS, channelFor, HISTORY_CHANNEL } from './api-methods';
+export type { HistoryList, HistoryPart, HistoryResult, QuestEdit, StepPlace, StepSummary } from './history';
 
 const REF_KINDS = [
   'item',
@@ -509,7 +620,45 @@ const viewportSchema = z.object({ x: z.number(), y: z.number(), zoom: z.number()
 const finite = z.number().finite();
 const worldKindArg = z.enum(['creature', 'gameobject']);
 const movementArg = z.object({ type: z.enum(['idle', 'wander', 'path']), wander: z.number().min(0), pathId: z.number().int().min(1).nullable() });
+const stepPlaceArg = z.union([
+  z.object({ questId: z.number().int(), module: z.string().max(64).optional() }),
+  z.object({ map: z.number().int(), x: finite, y: finite, z: finite, spawn: z.object({ kind: worldKindArg, guid: z.number().int() }).optional() }),
+]);
 const placementArg = z.object({ x: finite, y: finite, z: finite, orientation: finite, rotation: z.tuple([finite, finite, finite, finite]).nullable() });
+const rowArg = z.record(z.string(), z.string().nullable());
+const groupMemberArg = z.discriminatedUnion('type', [
+  z.object({ type: z.literal('spawn'), kind: z.enum(['npc', 'object']), guid: z.number().int().min(1), entry: z.number().int().min(0), chance: z.number().min(0).max(100) }),
+  z.object({ type: z.literal('group'), id: z.number().int().min(1), chance: z.number().min(0).max(100) }),
+  z.object({ type: z.literal('quest'), questId: z.number().int().min(1) }),
+]);
+const spawnGroupArg = z.object({
+  id: z.number().int().min(1),
+  name: z.string().max(255),
+  map: z.number().int().min(0),
+  maxActive: z.number().int().min(0),
+  members: z.array(groupMemberArg).max(1000),
+  event: z.object({ id: z.number().int().min(1), during: z.boolean() }).nullable(),
+  origin: z.discriminatedUnion('kind', [
+    z.object({ kind: z.literal('new') }),
+    z.object({
+      kind: z.literal('existing'),
+      original: z.object({
+        template: rowArg,
+        members: z.array(z.object({ table: z.enum(['pool_creature', 'pool_gameobject', 'pool_pool', 'pool_quest']), row: rowArg })),
+        event: rowArg.nullable(),
+      }),
+    }),
+  ]),
+  removed: z.boolean().optional(),
+});
+const groupMovesArg = z
+  .array(
+    z.union([
+      z.object({ kind: z.enum(['npc', 'object']), guid: z.number().int().min(1) }),
+      z.object({ kind: z.literal('quest'), questId: z.number().int().min(1) }),
+    ]),
+  )
+  .max(1000);
 const routePointArg = z.object({ x: finite, y: finite, z: finite, rest: z.record(z.string(), z.string().nullable()) });
 
 const profileFields = {
@@ -581,22 +730,49 @@ const REQUEST_SCHEMAS: Record<keyof Api, z.ZodType<unknown[]>> = {
   mapFloors: z.tuple([z.number().int(), z.number().finite(), z.number().finite()]),
   mapSpawns: z.tuple([z.number().int(), z.object({ minX: z.number().finite(), maxX: z.number().finite(), minY: z.number().finite(), maxY: z.number().finite() })]),
   viewSpawns: z.tuple([z.number().int(), z.object({ minX: z.number().finite(), maxX: z.number().finite(), minY: z.number().finite(), maxY: z.number().finite() })]),
+  projectEntities: z.tuple([]),
+  // Each entry is checked against the entity schemas by the main process
+  putProjectEntities: z.tuple([z.object({ npcs: z.array(z.unknown()), objects: z.array(z.unknown()), items: z.array(z.unknown()) })]),
+  readExistingEntity: z.tuple([z.enum(['npc', 'object', 'item']), z.number().int().min(1)]),
+  existingDrift: z.tuple([]),
+  deleteEntity: z.tuple([z.enum(['npc', 'object', 'item']), z.number().int().min(1)]),
   worldLayer: z.tuple([]),
   worldMoveSpawn: z.tuple([worldKindArg, z.number().int(), placementArg]),
   worldAddSpawn: z.tuple([worldKindArg, z.number().int().min(1), z.number().int().min(0), placementArg, z.number().int().min(1).optional()]),
   worldRoute: z.tuple([z.number().int().min(1)]),
   worldSetRoute: z.tuple([z.number().int().min(1), z.array(routePointArg), z.object({ isNew: z.boolean().optional() }).optional()]),
   worldSetMovement: z.tuple([z.number().int().min(1), movementArg]),
+  worldSetRespawn: z.tuple([z.enum(['creature', 'gameobject']), z.number().int().min(1), z.number().int().min(0)]),
   worldNewPathId: z.tuple([z.number().int().min(1)]),
   worldRevert: z.tuple([z.discriminatedUnion('kind', [
     z.object({ kind: z.literal('spawn'), spawnKind: worldKindArg, guid: z.number().int() }),
     z.object({ kind: z.literal('route'), pathId: z.number().int() }),
     z.object({ kind: z.literal('movement'), guid: z.number().int() }),
+    z.object({ kind: z.literal('respawn'), spawnKind: worldKindArg, guid: z.number().int() }),
+    z.object({ kind: z.literal('group'), id: z.number().int() }),
   ])]),
   worldChanges: z.tuple([]),
-  exportWorld: z.tuple([]),
+  worldGroup: z.tuple([z.number().int().min(1)]),
+  worldGroupView: z.tuple([z.number().int().min(1)]),
+  worldGroupSpawns: z.tuple([z.number().int().min(1)]),
+  worldGroupsOnMap: z.tuple([z.number().int().min(0)]),
+  worldNewGroupId: z.tuple([]),
+  worldCheckGroup: z.tuple([spawnGroupArg, groupMovesArg]),
+  worldSetGroup: z.tuple([spawnGroupArg, groupMovesArg]),
+  worldDeleteGroup: z.tuple([z.number().int().min(1)]),
+  worldDropMember: z.tuple([z.enum(['npc', 'object']), z.number().int().min(1)]),
+  questPools: z.tuple([]),
+  gameEvents: z.tuple([]),
+  historyList: z.tuple([]),
+  historyUndo: z.tuple([]),
+  historyRedo: z.tuple([]),
+  historyJump: z.tuple([z.number().int().min(0)]),
+  historyBegin: z.tuple([z.string().max(200).optional(), stepPlaceArg.optional()]),
+  historyEnd: z.tuple([z.number().int().min(1)]),
+  exportProject: z.tuple([]),
   entitySpawns: z.tuple([z.enum(['creature', 'gameobject']), z.number().int()]),
   findSpawns: z.tuple([z.enum(['creature', 'gameobject']), z.number().int()]),
+  spawnPlacement: z.tuple([z.enum(['npc', 'object']), z.number().int()]),
   questMapRefs: z.tuple([z.number()]),
   questSpawnList: z.tuple([z.array(z.number().int().min(1)).max(50)]),
   allocateIds: z.tuple([z.enum(['creature', 'gameobject', 'creatureSpawn', 'gameobjectSpawn', 'page', 'item']), z.number().int().min(1).max(50)]),

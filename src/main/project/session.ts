@@ -1,14 +1,20 @@
 import { randomUUID } from 'node:crypto';
+import { isDeepStrictEqual } from 'node:util';
 import type { Viewport } from '../../shared/ipc';
 import { EMPTY_WORLD, type WorldLayer } from '../../core/world/layer';
+import { EMPTY_ENTITIES, type ProjectEntities } from '../../core/entities/model';
 import { InvalidNameError, type ProjectDocument, type ProjectMeta, type ProjectQuest } from './project-file';
+import { createHistory, type HistoryStep, type ProjectHistory } from './history';
+import type { NodeMove, QuestEdit } from '../../shared/history';
 
 /**
  * The open project, held in memory. Nothing here touches a disk: saving is the controller's job,
  * and until then the only other copy is the periodic recovery file.
  *
- * A *change* is anything the user would lose by not saving; it sets `dirty` and bumps `revision`,
- * which is how the recovery timer knows whether there is anything new to write.
+ * A *change* is anything the user would lose by not saving; it bumps `revision`, which is how the
+ * recovery timer knows whether there is anything new to write. Every change the user made is also a
+ * step of the history, so it can be undone; the project is unsaved while it stands away from the
+ * step it was saved at, or after a change that is not undone (a quest marked exported).
  */
 export interface ProjectSession {
   /** Names this session's recovery file; new on every `reset` and `load`. */
@@ -33,8 +39,22 @@ export interface ProjectSession {
   world: {
     get(): WorldLayer;
     put(layer: WorldLayer): void;
+    /** Replaces the layer without a history step or a dirty mark (filling in what was read from the database) */
+    fill(layer: WorldLayer): void;
+  };
+  /** The project's new NPCs, objects and items; a put is a change */
+  entities: {
+    get(): ProjectEntities;
+    put(next: ProjectEntities): void;
   };
   rename(name: string): void;
+  /** The undo history of this project; cleared by `reset` and `load` */
+  history: ProjectHistory;
+  /**
+   * Puts a step's parts back as they were before it ('undo') or after it ('redo'), as one change and
+   * without recording it; the parts at the indexes in `skip` are left alone
+   */
+  applyStep(step: HistoryStep, direction: 'undo' | 'redo', skip?: ReadonlySet<number>): void;
   /** Kept and saved, but panning around is not editing, so it is not a change. */
   setViewport(v: Viewport): void;
   reset(meta: ProjectMeta): void;
@@ -45,27 +65,51 @@ export interface ProjectSession {
   onChange(listener: () => void): () => void;
 }
 
-export function createProjectSession(initial: ProjectMeta, newId: () => string = randomUUID): ProjectSession {
+/** A quest as the history keeps it: everything but where it was last exported */
+const editOf = (q: ProjectQuest): QuestEdit => {
+  const { lastExportPath: _exported, ...edit } = structuredClone(q);
+  return edit;
+};
+
+export function createProjectSession(initial: ProjectMeta, newId: () => string = randomUUID, opts: { now?: () => number } = {}): ProjectSession {
   let id = newId();
   let meta: ProjectMeta = structuredClone(initial);
   let quests = new Map<number, ProjectQuest>();
   let world: WorldLayer = structuredClone(EMPTY_WORLD);
+  let entities: ProjectEntities = structuredClone(EMPTY_ENTITIES);
   let filePath: string | null = null;
-  let dirty = false;
+  // A change that is not a step of the history (marking a quest exported) still needs saving
+  let extraDirty = false;
   let revision = 0;
+  const history = createHistory({ now: opts.now });
+  // Where removed quests were last exported, so undoing a removal brings that back too
+  const removedExports = new Map<number, string | null>();
+  const dirty = (): boolean => extraDirty || !history.atSaved();
+  // A step closed later (the end of a gesture) can leave the project unsaved without a change of its own
+  let toldDirty = false;
+  // A change under way tells its own listeners when it is done
+  let mutating = false;
+  history.onChange(() => {
+    if (!mutating && dirty() !== toldDirty) notify();
+  });
   const listeners = new Set<() => void>();
 
   const notify = (): void => {
+    toldDirty = dirty();
     for (const l of listeners) l();
   };
   /** Runs `mutate`, then tells listeners if anything the title shows moved. */
   const watched = (mutate: () => void, always = false): void => {
-    const before = [meta.name, filePath, dirty];
-    mutate();
-    if (always || before[0] !== meta.name || before[1] !== filePath || before[2] !== dirty) notify();
+    const before = [meta.name, filePath, dirty()];
+    mutating = true;
+    try {
+      mutate();
+    } finally {
+      mutating = false;
+    }
+    if (always || before[0] !== meta.name || before[1] !== filePath || before[2] !== dirty()) notify();
   };
   const change = (): void => {
-    dirty = true;
     revision += 1;
   };
 
@@ -73,7 +117,7 @@ export function createProjectSession(initial: ProjectMeta, newId: () => string =
     id: () => id,
     meta: () => structuredClone(meta),
     filePath: () => filePath,
-    dirty: () => dirty,
+    dirty,
     revision: () => revision,
     quests: {
       get: (questId) => {
@@ -81,37 +125,54 @@ export function createProjectSession(initial: ProjectMeta, newId: () => string =
         return q ? structuredClone(q) : undefined;
       },
       list: () => [...quests.values()].sort((a, b) => a.questId - b.questId).map((q) => structuredClone(q)),
-      put(q, opts) {
+      put(q, putOpts) {
+        const was = quests.get(q.questId);
+        if (putOpts?.quiet) {
+          quests.set(q.questId, structuredClone(q));
+          return;
+        }
+        // The same quest put back is not a change, so it is no step either
+        if (was && isDeepStrictEqual(was, q)) return;
         watched(() => {
           quests.set(q.questId, structuredClone(q));
-          if (!opts?.quiet) change();
+          history.record({ kind: 'quest', questId: q.questId, before: was ? editOf(was) : null, after: editOf(q) });
+          change();
         });
       },
       remove(questId) {
-        if (!quests.has(questId)) return;
+        const was = quests.get(questId);
+        if (!was) return;
         watched(() => {
           quests.delete(questId);
+          removedExports.set(questId, was.lastExportPath);
+          history.record({ kind: 'quest', questId, before: editOf(was), after: null });
           change();
         });
       },
       setPositions(moves) {
         watched(() => {
-          let moved = false;
+          const before: NodeMove[] = [];
+          const after: NodeMove[] = [];
           for (const m of moves) {
             const q = quests.get(m.questId);
             if (!q || (q.x === m.x && q.y === m.y)) continue;
+            before.push({ questId: q.questId, x: q.x, y: q.y });
+            after.push({ questId: q.questId, x: m.x, y: m.y });
             q.x = m.x;
             q.y = m.y;
-            moved = true;
           }
-          if (moved) change();
+          if (after.length === 0) return;
+          history.record({ kind: 'positions', before, after });
+          change();
         });
       },
       markExported(questId, path) {
         const q = quests.get(questId);
         if (!q) return;
+        // A file was written: the project records where, but there is nothing to undo
         watched(() => {
           q.lastExportPath = path;
+          extraDirty = true;
           change();
         });
       },
@@ -120,8 +181,26 @@ export function createProjectSession(initial: ProjectMeta, newId: () => string =
     world: {
       get: () => structuredClone(world),
       put(layer) {
+        if (isDeepStrictEqual(world, layer)) return;
         watched(() => {
+          const was = world;
           world = structuredClone(layer);
+          history.record({ kind: 'world', before: was, after: structuredClone(layer) });
+          change();
+        });
+      },
+      fill(layer) {
+        world = structuredClone(layer);
+      },
+    },
+    entities: {
+      get: () => structuredClone(entities),
+      put(next) {
+        if (isDeepStrictEqual(entities, next)) return;
+        watched(() => {
+          const was = entities;
+          entities = structuredClone(next);
+          history.record({ kind: 'entities', before: was, after: structuredClone(next) });
           change();
         });
       },
@@ -131,6 +210,7 @@ export function createProjectSession(initial: ProjectMeta, newId: () => string =
       if (trimmed === '') throw new InvalidNameError('A project needs a name.');
       if (trimmed === meta.name) return;
       watched(() => {
+        history.record({ kind: 'name', before: meta.name, after: trimmed });
         meta = { ...meta, name: trimmed };
         change();
       });
@@ -144,33 +224,70 @@ export function createProjectSession(initial: ProjectMeta, newId: () => string =
         meta = structuredClone(next);
         quests = new Map();
         world = structuredClone(EMPTY_WORLD);
+        entities = structuredClone(EMPTY_ENTITIES);
         filePath = null;
-        dirty = false;
+        extraDirty = false;
+        history.clear();
+        removedExports.clear();
         revision = 0;
       }, true);
     },
-    load(doc, path, opts) {
+    load(doc, path, loadOpts) {
       watched(() => {
-        const { quests: docQuests, world: docWorld, ...docMeta } = structuredClone(doc);
+        const { quests: docQuests, world: docWorld, entities: docEntities, migrationWarnings: _warnings, ...docMeta } = structuredClone(doc);
         id = newId();
         meta = docMeta;
         world = docWorld ?? structuredClone(EMPTY_WORLD);
+        entities = docEntities ?? structuredClone(EMPTY_ENTITIES);
         quests = new Map(docQuests.map((q) => [q.questId, q]));
         filePath = path;
-        dirty = opts.dirty;
-        revision = opts.dirty ? 1 : 0;
+        history.clear();
+        removedExports.clear();
+        extraDirty = loadOpts.dirty;
+        revision = loadOpts.dirty ? 1 : 0;
       }, true);
     },
     toDocument: () => ({
       ...structuredClone(meta),
       quests: [...quests.values()].sort((a, b) => a.questId - b.questId).map((q) => structuredClone(q)),
       world: structuredClone(world),
+      entities: structuredClone(entities),
     }),
     markSaved(path) {
       watched(() => {
         filePath = path;
-        dirty = false;
+        extraDirty = false;
+        history.markSaved();
       });
+    },
+    history,
+    applyStep(step, direction, skip) {
+      watched(() => {
+        step.parts.forEach((part, i) => {
+          if (skip?.has(i)) return;
+          const undoing = direction === 'undo';
+          if (part.kind === 'quest') {
+            const edit = undoing ? part.before : part.after;
+            if (!edit) quests.delete(part.questId);
+            else quests.set(part.questId, { ...structuredClone(edit), lastExportPath: quests.get(part.questId)?.lastExportPath ?? removedExports.get(part.questId) ?? null });
+          } else if (part.kind === 'positions') {
+            for (const m of undoing ? part.before : part.after) {
+              const q = quests.get(m.questId);
+              if (q) {
+                q.x = m.x;
+                q.y = m.y;
+              }
+            }
+          } else if (part.kind === 'world') {
+            world = structuredClone(undoing ? part.before : part.after);
+          } else if (part.kind === 'entities') {
+            entities = structuredClone(undoing ? part.before : part.after);
+          } else {
+            meta = { ...meta, name: undoing ? part.before : part.after };
+          }
+        });
+        change();
+      }, true);
     },
     onChange(listener) {
       listeners.add(listener);

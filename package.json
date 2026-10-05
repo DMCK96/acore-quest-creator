@@ -1,14 +1,14 @@
 {
-  "name": "acore-quest-creator",
+  "name": "azeroth-world-editor",
   "version": "0.1.0",
   "private": true,
-  "description": "ACORE Quest Creator",
+  "description": "Azeroth World Editor (AWE): a world and quest editor for AzerothCore",
   "author": "Daniel Mckibbin <vyrus@fourtwenty.games>",
   "license": "GPL-3.0-or-later",
-  "homepage": "https://dmck96.github.io/acore-quest-creator/",
+  "homepage": "https://dmck96.github.io/azeroth-world-editor/",
   "repository": {
     "type": "git",
-    "url": "https://github.com/DMCK96/acore-quest-creator.git"
+    "url": "https://github.com/DMCK96/azeroth-world-editor.git"
   },
   "type": "module",
   "main": "./out/main/index.js",

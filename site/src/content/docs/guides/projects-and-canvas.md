@@ -28,7 +28,7 @@ When you are inside a quest, **← Back to chain** returns to the canvas.
 
 Everything in the app, the quests and your changes to the world, is one **project**. Choose **Project** in the top bar to:
 
-- **Save** or **Save As…** the project as an `.aqc` file,
+- **Save** or **Save As…** the project as an `.awe` file (projects saved as `.aqc` by older versions open too),
 - **Open…** another project, or pick one from **Recent projects**,
 - start a **New project…**.
 

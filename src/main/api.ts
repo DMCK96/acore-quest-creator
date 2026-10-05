@@ -34,15 +34,21 @@ import { diffSchema, hasBlockingDrift } from '../core/schema/diff';
 import { loadSchema } from '../core/schema/load';
 import { refCheckerFor, validateQuest, type Issue, type RefChecker } from '../core/validate/validate';
 import { TOOL_VERSION } from '../core/version';
-import { addSpawn, hasWorldChanges, isAdded, moveSpawn, movementsOf, revertMovement, revertRoute, revertSpawn, setMovement, setRoute, worldStatements, type RoutePoint, type SpawnDefaults, type WorldLayer } from '../core/world/layer';
+import { addSpawn, deleteGroup, dropGroupMember, dropMember, dropQuestMember, groupsOf, hasWorldChanges, isAdded, moveSpawn, movementsOf, putGroup, respawnsOf, revertGroup, revertMovement, revertRespawn, revertRoute, revertSpawn, setMovement, setRespawn, setRoute, worldStatements, type RoutePoint, type SpawnDefaults, type WorldLayer } from '../core/world/layer';
+import { isQuestPool, memberKey, validateGroup, type GroupMember, type SpawnGroup } from '../core/world/groups';
+import { databaseQuestFacts, groupContext, groupDrifted, listPools, projectQuestFacts, readGroup, spawnsUnder } from './world/groups-api';
 import { IDLE } from '../core/world/movement';
-import { addedDrifted, countWalkers, movementDrifted, readMovement, readPlacement, readRoute, readTemplateLook, routeDrifted, spawnDrifted, worldSchema } from './world/world-api';
+import { describeStep } from './project/step-labels';
+import type { HistoryStep } from './project/history';
+import type { HistoryPart, HistoryResult, QuestEdit, StepSummary } from '../shared/history';
+import { addedDrifted, countWalkers, routeWalkerName, movementDrifted, readMovement, readPlacement, readRespawn, readRoute, readTemplateLook, readWalkerEntries, respawnDrifted, routeDrifted, spawnDrifted, worldSchema } from './world/world-api';
 import type {
   Api,
   ApiError,
   CanvasNode,
   ClientStatus,
   ErrorCode,
+  GroupView,
   NodeGroup,
   NodeLink,
   NodePosition,
@@ -73,7 +79,12 @@ import { sceneIssues } from '../core/scripts/validate';
 import { compileEntities } from '../core/entities/compile';
 import { compilePatrols, hasPointActions } from '../core/patrol/compile';
 import { ENTITY_KEYS, ENTITY_TABLES, readEntityContext } from '../core/entities/context';
-import { ENTITIES_FIELD, NPC_TYPE_VALUE, OBJECT_TYPE_VALUE, RANK_VALUE, readEntities, writeEntities, type QuestEntities } from '../core/entities/model';
+import { emptyGiversOf } from '../core/modules/givers';
+import { narrowTo, objectivesOf, questItemsOf, questRefs, questUses, relationOwners } from '../core/entities/links';
+import { existingDrift, existingStatements, newLootIds } from '../core/entities/existing';
+import { newOnly, projectEntitiesSchema, readProjectEntities, type ProjectEntities, type QuestEntities } from '../core/entities/model';
+import { itemFromRows, npcFromRows, objectFromRows } from '../core/entities/from-rows';
+import { readExistingRows } from './entities/existing';
 import { entityIssues } from '../core/entities/validate';
 import { gmCommands } from '../core/testing/gm';
 import { TerrainFormatError, gridFileName, parseMapFile, terrainHeight, type TerrainFile } from '../core/game/terrain';
@@ -355,6 +366,201 @@ export function createApi(deps: ApiDeps): Api {
   };
 
   const quests = deps.session.quests;
+  const history = deps.session.history;
+  /** Runs work as one step of the history, however many changes it makes */
+  const asOneStep = async <T,>(work: () => Promise<T>): Promise<T> => {
+    const token = history.begin();
+    try {
+      return await work();
+    } finally {
+      history.end(token);
+    }
+  };
+  const historyList = () => history.list(describeStep);
+  /**
+   * Puts the project's NPCs, objects and items; a spawn of theirs that is gone (its NPC deleted, or the
+   * spawn taken off it) leaves its spawn group too. Run inside a step, so both are undone together.
+   */
+  const putEntities = (next: ProjectEntities): void => {
+    const guids = (store: ProjectEntities, kind: 'npc' | 'object') => new Set((kind === 'npc' ? store.npcs : store.objects).flatMap((e) => e.spawns.map((s) => s.guid)));
+    const before = deps.session.entities.get();
+    deps.session.entities.put(next);
+    const layer = deps.session.world.get();
+    let after = layer;
+    for (const kind of ['npc', 'object'] as const) {
+      const kept = guids(next, kind);
+      for (const guid of guids(before, kind)) if (!kept.has(guid)) after = dropMember(after, kind, guid);
+    }
+    if (!isDeepStrictEqual(groupsOf(after), groupsOf(layer))) deps.session.world.put(after);
+  };
+  /** The spawns and new quests the steps would bring back that the database has taken since */
+  const takenBy = async (steps: HistoryStep[], direction: 'undo' | 'redo'): Promise<Taken> => {
+    const spawns = new Set<string>();
+    const quests = new Set<number>();
+    const entities = new Set<string>();
+    const db = session?.db ?? null;
+    if (!db) return { spawns, quests, entities };
+    // NPCs, objects and items a step would bring back, and their spawns, walked like the world layer
+    let store = deps.session.entities.get();
+    const entityAsks: { key: string; kind: 'creature' | 'gameobject' | 'item'; entry: number; guids: number[] }[] = [];
+    // Walked against the project as it will stand at each step, not the step's own other side
+    let added = deps.session.world.get().added;
+    const present = new Set(quests_present());
+    const spawnAsks: { key: string; kind: WorldLayer['added'][number]['kind']; guid: number }[] = [];
+    const questAsks: number[] = [];
+    for (const step of steps) {
+      for (const part of step.parts) {
+        const to = direction === 'undo' ? part.before : part.after;
+        if (part.kind === 'world') {
+          const layer = to as WorldLayer;
+          for (const a of layer.added) {
+            const key = `${a.kind}:${a.guid}`;
+            if (!added.some((b) => b.kind === a.kind && b.guid === a.guid) && !spawnAsks.some((x) => x.key === key)) spawnAsks.push({ key, kind: a.kind, guid: a.guid });
+          }
+          added = layer.added;
+        } else if (part.kind === 'quest') {
+          const quest = to as QuestEdit | null;
+          if (quest && quest.isNew && !present.has(part.questId) && !questAsks.includes(part.questId)) questAsks.push(part.questId);
+          if (quest) present.add(part.questId);
+          else present.delete(part.questId);
+        } else if (part.kind === 'entities') {
+          const next = to as ProjectEntities;
+          for (const [list, kind] of [['npcs', 'creature'], ['objects', 'gameobject'], ['items', 'item']] as const) {
+            for (const e of next[list] as { entry: number; spawns?: { guid: number }[] }[]) {
+              const key = `${list}:${e.entry}`;
+              const had = (store[list] as { entry: number }[]).some((x) => x.entry === e.entry);
+              if (!had && !entityAsks.some((x) => x.key === key)) entityAsks.push({ key, kind, entry: e.entry, guids: (e.spawns ?? []).map((sp) => sp.guid) });
+            }
+          }
+          store = next;
+        }
+      }
+    }
+    for (const ask of spawnAsks) if ((await readPlacement(db, ask.kind, ask.guid)) !== null) spawns.add(ask.key);
+    if (questAsks.length > 0) for (const id of await db.existingIds('quest', questAsks)) quests.add(id);
+    for (const ask of entityAsks) {
+      const template = (await db.existingIds(ask.kind, [ask.entry])).has(ask.entry);
+      let spawned = false;
+      if (!template && ask.kind !== 'item') {
+        for (const guid of ask.guids) if ((await readPlacement(db, ask.kind, guid)) !== null) spawned = true;
+      }
+      if (template || spawned) entities.add(ask.key);
+    }
+    return { spawns, quests, entities };
+  };
+  const quests_present = (): number[] => quests.list().map((q) => q.questId);
+  type Taken = { spawns: Set<string>; quests: Set<number>; entities: Set<string> };
+
+  /** A layer without the placed spawns (and their movements) whose ids the database has taken */
+  const withoutTaken = (layer: WorldLayer, taken: Set<string>): WorldLayer => {
+    if (taken.size === 0) return layer;
+    const gone = (kind: string, guid: number) => taken.has(`${kind}:${guid}`);
+    return {
+      ...layer,
+      added: layer.added.filter((a) => !gone(a.kind, a.guid)),
+      ...(layer.movements ? { movements: layer.movements.filter((m) => !gone('creature', m.guid)) } : {}),
+    };
+  };
+
+  /**
+   * An undo, redo or jump. The database is asked first, about what the steps would bring back; then,
+   * with nothing awaited, the steps are taken from the history and applied, so no other change can
+   * land in between. If the project changed while the database was asked, it is planned again.
+   */
+  const travel = async (
+    plan: () => { direction: 'undo' | 'redo'; steps: HistoryStep[] },
+    take: () => { direction: 'undo' | 'redo'; steps: HistoryStep[] },
+  ): Promise<HistoryResult> => {
+    for (let attempt = 0; ; attempt++) {
+      history.endAll();
+      const revision = deps.session.revision();
+      const planned = plan();
+      const taken = await takenBy(planned.steps, planned.direction);
+      const again = plan();
+      const same = again.steps.length === planned.steps.length && again.steps.every((st, i) => st.id === planned.steps[i]!.id);
+      if ((!same || deps.session.revision() !== revision) && attempt < 3) continue;
+      return applySteps(take(), taken);
+    }
+  };
+
+  /** Applies steps in order, with nothing awaited, leaving out what the database has taken, and says what they changed */
+  const applySteps = ({ direction, steps }: { direction: 'undo' | 'redo'; steps: HistoryStep[] }, taken: Taken): HistoryResult => {
+    const verb = direction === 'undo' ? 'undo' : 'redo';
+    const left = new Set<string>();
+    const touched: number[] = [];
+    let positions = false;
+    let world = false;
+    let entities = false;
+    let name = false;
+    let last: StepSummary | null = null;
+    for (const step of steps) {
+      const skip = new Set<number>();
+      const parts = step.parts.map((part, i): HistoryPart => {
+        if (part.kind === 'world') {
+          const to = direction === 'undo' ? part.before : part.after;
+          const kept = withoutTaken(to, taken.spawns);
+          for (const a of to.added) if (!kept.added.includes(a)) left.add(`Could not ${verb}: spawn ${a.guid} is now in the database`);
+          return direction === 'undo' ? { ...part, before: kept } : { ...part, after: kept };
+        }
+        if (part.kind === 'entities' && taken.entities.size > 0) {
+          const to = direction === 'undo' ? part.before : part.after;
+          const now = deps.session.entities.get();
+          const kept: ProjectEntities = { npcs: [], objects: [], items: [] };
+          for (const list of ['npcs', 'objects', 'items'] as const) {
+            for (const e of to[list] as { entry: number; name: string }[]) {
+              const back = !(now[list] as { entry: number }[]).some((x) => x.entry === e.entry);
+              if (back && taken.entities.has(`${list}:${e.entry}`)) {
+                const word = list === 'npcs' ? 'NPC' : list === 'objects' ? 'Object' : 'Item';
+                left.add(`${e.name.trim() || `${word} ${e.entry}`} was left out: its ID is now used in the database.`);
+                continue;
+              }
+              (kept[list] as unknown[]).push(e);
+            }
+          }
+          return direction === 'undo' ? { ...part, before: kept } : { ...part, after: kept };
+        }
+        if (part.kind === 'quest') {
+          const to = direction === 'undo' ? part.before : part.after;
+          if (to && to.isNew && taken.quests.has(part.questId) && !quests.get(part.questId)) {
+            left.add(`Could not ${verb}: quest ${part.questId} is now in the database`);
+            skip.add(i);
+          }
+        }
+        return part;
+      });
+      deps.session.applyStep({ ...step, parts }, direction, skip);
+      step.parts.forEach((part, i) => {
+        if (skip.has(i)) return;
+        if (part.kind === 'quest') {
+          if (!touched.includes(part.questId)) touched.push(part.questId);
+          if (part.before === null || part.after === null) positions = true;
+        } else if (part.kind === 'positions') positions = true;
+        else if (part.kind === 'world') world = true;
+        else if (part.kind === 'entities') entities = true;
+        else name = true;
+      });
+      last = { id: step.id, ...describeStep(step) };
+    }
+    const layer = deps.session.world.get();
+    return {
+      step: last,
+      direction,
+      quests: touched.map((questId) => ({ questId, aggregate: quests.get(questId)?.aggregate ?? null })),
+      positions,
+      world: world ? { ...layer, movements: movementsOf(layer) } : null,
+      entities: entities ? deps.session.entities.get() : null,
+      name,
+      skipped: [...left],
+      history: historyList(),
+    };
+  };
+  // Undo, redo and jump one at a time: Ctrl+Z held down sends them faster than they finish
+  let travelling: Promise<unknown> = Promise.resolve();
+  const queued = <T,>(work: () => Promise<T>): Promise<T> => {
+    const next = travelling.then(work, work);
+    travelling = next.catch(() => undefined);
+    return next;
+  };
 
   const questOf = (questId: number): ProjectQuest => {
     const quest = quests.get(questId);
@@ -391,7 +597,7 @@ export function createApi(deps: ApiDeps): Api {
     return [
       ...own,
       ...(await scriptIssues(live, aggregate)),
-      ...(await newEntityIssues(live, aggregate)),
+      ...(await newEntityIssues(live, questEntities(aggregate))),
       ...linkIssues(questId, await linksFor(live, [questId])),
     ];
   }
@@ -475,11 +681,12 @@ export function createApi(deps: ApiDeps): Api {
 
   /** The schema exports render with: the registry's tables, plus the ones quest scripting writes. */
   /** A route as the database has it, with how many spawns walk it; refused when it is gone */
-  const routeFromDatabase = async (pathId: number): Promise<{ original: RoutePoint[]; walkers: number }> => {
+  const routeFromDatabase = async (pathId: number): Promise<{ original: RoutePoint[]; walkers: number; walkerEntries: { entry: number; name: string }[]; name?: string }> => {
     const db = connected().db;
     const original = await readRoute(db, pathId);
     if (original.length === 0) throw fail('BAD_REQUEST', `Route ${pathId} is no longer in the database.`);
-    return { original, walkers: await countWalkers(db, pathId) };
+    const name = await routeWalkerName(db, pathId);
+    return { original, walkers: await countWalkers(db, pathId), walkerEntries: await readWalkerEntries(db, pathId), ...(name ? { name } : {}) };
   };
 
   const exportSchema = (live: Session): SchemaInfo => ({
@@ -489,33 +696,6 @@ export function createApi(deps: ApiDeps): Api {
 
   const missingScriptTables = (live: Session): string[] =>
     SCRIPT_TABLES.filter((t) => !live.scriptSchema.tables[t]);
-
-  /** The four NPC-or-object objectives as signed entries: creatures positive, objects negative, none 0. */
-  function objectivesOf(aggregate: QuestAggregate): number[] {
-    const rows = aggregate.values['quest_template.RequiredNpcOrGo'];
-    const list = Array.isArray(rows) ? (rows as Array<Record<string, unknown>>) : [];
-    return [0, 1, 2, 3].map((i) => {
-      const target = list[i]?.target as { target?: string; id?: number } | undefined;
-      if (!target || typeof target.id !== 'number') return 0;
-      return target.target === 'gameobject' ? -target.id : target.id;
-    });
-  }
-
-  /** The quest's starters or enders as scene owners. */
-  function relationOwners(aggregate: QuestAggregate, kind: 'starter' | 'ender'): SceneOwner[] {
-    const owners: SceneOwner[] = [];
-    for (const [fieldId, ownerKind] of [
-      [`creature_quest${kind}`, 'creature'],
-      [`gameobject_quest${kind}`, 'gameobject'],
-    ] as const) {
-      const rows = aggregate.values[fieldId];
-      if (!Array.isArray(rows)) continue;
-      for (const row of rows as Array<Record<string, unknown>>) {
-        if (typeof row.id === 'number' && row.id > 0) owners.push({ kind: ownerKind, entry: row.id });
-      }
-    }
-    return owners;
-  }
 
   /** The scene issues of a quest, which need the owners' templates to tell whether a C++ script runs them. */
   async function scriptIssues(live: Session, aggregate: QuestAggregate): Promise<Issue[]> {
@@ -542,13 +722,6 @@ export function createApi(deps: ApiDeps): Api {
       missingTables: missingScriptTables(live),
       specialFlags: typeof flags === 'number' ? flags : 0,
     });
-  }
-
-  /** The items the quest asks for: their drops are set in Objectives, never by a loot list. */
-  function questItemsOf(aggregate: QuestAggregate): number[] {
-    const rows = aggregate.values['quest_template.RequiredItems'];
-    if (!Array.isArray(rows)) return [];
-    return (rows as Array<Record<string, unknown>>).flatMap((r) => (typeof r.item === 'number' && r.item > 0 ? [r.item] : []));
   }
 
   /**
@@ -592,15 +765,14 @@ export function createApi(deps: ApiDeps): Api {
   }
 
   /** Every new NPC, object and item in the project, from every quest. */
-  function projectEntities(): QuestEntities {
-    const all: QuestEntities = { npcs: [], objects: [], items: [] };
-    for (const quest of quests.list()) {
-      const { npcs, objects, items } = readEntities(quest.aggregate.values);
-      all.npcs.push(...npcs);
-      all.objects.push(...objects);
-      all.items.push(...items);
-    }
-    return all;
+  function projectEntities(): ProjectEntities {
+    return deps.session.entities.get();
+  }
+
+  /** The project's NPCs, objects and items a quest uses: the ones it names, and the NPCs whose fights credit it */
+  function questEntities(aggregate: QuestAggregate): ProjectEntities {
+    const store = projectEntities();
+    return narrowTo(store, questUses({ questId: aggregate.questId, aggregate }, store));
   }
 
   /**
@@ -627,8 +799,10 @@ export function createApi(deps: ApiDeps): Api {
     };
   }
 
-  async function newEntityIssues(live: Session, aggregate: QuestAggregate): Promise<Issue[]> {
-    const entities = readEntities(aggregate.values);
+  /** Each project quest's NPC-or-object objectives, by quest id, for fights that give credit */
+  const objectivesByQuest = (): Map<number, readonly number[]> => new Map(quests.list().map((q) => [q.questId, objectivesOf(q.aggregate)]));
+
+  async function newEntityIssues(live: Session, entities: ProjectEntities): Promise<Issue[]> {
     if (entities.npcs.length + entities.objects.length + entities.items.length === 0) return [];
     const startedQuests = [...new Set(entities.items.map((i) => i.startsQuest).filter((q) => q > 0))];
     const [creatures, objects, itemRows, questRows] = await Promise.all([
@@ -650,7 +824,7 @@ export function createApi(deps: ApiDeps): Api {
     const items = held.length > 0 ? await rowsOrNone(live.db, 'item_template', { entry: held.map(String) }) : [];
     const itemInventoryTypes = new Map(items.map((r) => [Number(r.entry), Number(r.InventoryType ?? 0)]));
     return entityIssues({
-      entities, dbNames, questItems: questItemsOf(aggregate), objectives: objectivesOf(aggregate),
+      entities, dbNames, questItems: [...new Set(quests.list().flatMap((q) => questItemsOf(q.aggregate)))], objectives: objectivesByQuest(),
       knownSpell: spells ? (id) => spells.get(id) !== undefined : null, itemInventoryTypes,
       knownQuest: (id) => knownQuests.has(id), itemColumnTypes: itemColumnTypes.size > 0 ? itemColumnTypes : null,
     });
@@ -890,16 +1064,280 @@ export function createApi(deps: ApiDeps): Api {
    */
   async function compileFor(live: Session, aggregate: QuestAggregate): Promise<{ context: ScriptContext; compiled: CompiledScripts }> {
     const scenes = readScenes(aggregate.values);
-    const { npcs } = readEntities(aggregate.values);
-    const fighters = npcs.filter((n) => !fightIsEmpty(n.fight) || hasPointActions(n)).map((n) => n.entry);
-    const context = await readScriptContext(live.db, aggregate.questId, scenes, fighters);
-    const objectives = objectivesOf(aggregate);
-    const sceneRows = compileScenes({ questId: aggregate.questId, scenes, objectives, context });
-    const fightRows = compileFights({ questId: aggregate.questId, npcs, objectives, context, taken: sceneRows });
-    const before = mergeCompiled(sceneRows, fightRows);
-    // Every project NPC goes in, so the rows of point actions since removed are deleted.
-    const patrolRows = compilePatrols({ questId: aggregate.questId, npcs, context, taken: before });
-    return { context, compiled: mergeCompiled(before, patrolRows) };
+    const context = await readScriptContext(live.db, aggregate.questId, scenes);
+    // The project patch's fight and patrol rows go in first (Apply to dev runs it first): scenes keep off them
+    const project = await projectScripts(live);
+    const compiled = compileScenes({ questId: aggregate.questId, scenes, objectives: objectivesOf(aggregate), context, taken: project.compiled });
+    return { context, compiled };
+  }
+
+  /**
+   * The SmartAI rows of the project's NPCs: their fights, then what they do at patrol points. Every
+   * project NPC goes in, so the rows of a fight or point action since removed are deleted.
+   */
+  async function projectScripts(live: Session): Promise<{ context: ScriptContext; compiled: CompiledScripts }> {
+    const { npcs } = projectEntities();
+    const context = await readScriptContext(live.db, 0, [], npcs.map((n) => n.entry));
+    const none: CompiledScripts = { inserts: {}, deletes: {}, updates: [], flags: [], warnings: [] };
+    const fights = compileFights({ npcs, objectives: objectivesByQuest(), context, taken: none });
+    const patrols = compilePatrols({ npcs, context, taken: fights });
+    return { context, compiled: mergeCompiled(fights, patrols) };
+  }
+
+  /**
+   * The project patch: every new NPC, object and item and their SmartAI rows, the edited existing
+   * ones over their own rows, then the world layer's edits, with a revert that deletes what the first
+   * part writes, puts the existing ones' original rows back and puts the world back.
+   */
+  /**
+   * Every pool with its map (and a quest pool with its quests), read once per connection (a new
+   * connection has its own database object) rather than on each Find, group dialog open or graph
+   * load: on a large database that is tens of thousands of rows. Read again after an export, since
+   * the patch is about to change the pools.
+   */
+  let poolCache: { db: WorldDb; pools: ReturnType<typeof listPools> } | null = null;
+  const pools = (db: WorldDb): ReturnType<typeof listPools> => {
+    if (poolCache?.db !== db) {
+      const read = listPools(db);
+      poolCache = { db, pools: read };
+      // A failed read is not kept
+      read.catch(() => {
+        if (poolCache?.pools === read) poolCache = null;
+      });
+    }
+    return poolCache.pools;
+  };
+
+  async function projectPatch(live: Session): Promise<{ apply: PatchStatement[]; revert: PatchStatement[]; schema: SchemaInfo; warnings: string[]; lootWarnings: string[] }> {
+    const store = projectEntities();
+    const layer: WorldLayer = deps.session.world.get();
+    const all = quests.list();
+    const ws = await worldSchema(live.db, live.schema.hash);
+    const base = exportSchema(live);
+    const schema: SchemaInfo = { ...base, tables: { ...ws.tables, ...base.tables } };
+    const givers = all.flatMap((q) => [...relationOwners(q.aggregate, 'starter'), ...relationOwners(q.aggregate, 'ender')]).flatMap((o) => (o.kind === 'creature' ? [o.entry] : []));
+    const questItems = all.flatMap((q) => questItemsOf(q.aggregate).map((item) => ({ item, questId: q.questId })));
+    // Existing entities edited here are written as edits of their own rows, not compiled as new ones
+    const made = newOnly(store);
+    const entityContext = await readEntityContext(live.db, made, all.map((q) => q.questId));
+    const compiledEntities = compileEntities({
+      entities: made, givers, questItems, context: entityContext,
+      itemColumns: live.scriptSchema.tables.item_template ? new Set(live.scriptSchema.tables.item_template.map((c) => c.name)) : null,
+    });
+    const scripts = await projectScripts(live);
+    const entityStatements = scriptStatements(compiledEntities, schema).statements;
+    const scriptRows = scriptStatements(scripts.compiled, schema).statements;
+    let world: { apply: PatchStatement[]; revert: PatchStatement[] } = { apply: [], revert: [] };
+    if (hasWorldChanges(layer)) {
+      // The rows of placed spawns are made of the database's own columns, so a fork's extra ones are filled
+      const spawnDefaults: SpawnDefaults = {};
+      for (const kind of ['creature', 'gameobject'] as const) {
+        if (layer.added.some((a) => a.kind === kind)) spawnDefaults[kind] = defaultColumnValues(kind, ws);
+      }
+      // A spawn given a path without an addon row of its own gets one, made of the table's own columns
+      const writesAddon = movementsOf(layer).some((m) => !m.addonRow && m.current.pathId !== m.original.pathId);
+      const addonDefaults = writesAddon ? defaultColumnValues('creature_addon', ws) : undefined;
+      world = worldStatements(layer, defaultColumnValues('waypoint_data', ws), spawnDefaults, addonDefaults);
+    }
+    // Existing entities edited here: their own rows, written over and put back
+    // One given its first loot takes a free loot id when its entry is already someone else's list
+    const loot = await newLootIds(live.db, store);
+    const existing = existingStatements(store, givers, loot.ids);
+    const of = (list: readonly PatchStatement[], kind: PatchStatement['kind']) => list.filter((st) => st.kind === kind);
+    // Deletes first; the entities before the SmartAI rows that act on them; the world's edits last
+    const apply = [
+      ...of(entityStatements, 'delete'), ...of(scriptRows, 'delete'),
+      ...of(entityStatements, 'insert'),
+      ...existing.apply,
+      ...of(scriptRows, 'set-flag'), ...of(entityStatements, 'update'), ...of(scriptRows, 'update'), ...of(scriptRows, 'insert'),
+      ...world.apply,
+    ];
+    // The revert takes away every row the entities part wrote, the last written first
+    const keysOf = (table: string): readonly string[] => ENTITY_KEYS[table] ?? SCRIPT_KEYS[table] ?? [];
+    const written = [...of(entityStatements, 'insert'), ...of(scriptRows, 'insert')].reverse();
+    const revert: PatchStatement[] = [];
+    const seen = new Set<string>();
+    for (const st of written) {
+      if (st.kind !== 'insert') continue;
+      const key = Object.fromEntries(keysOf(st.table).map((c) => [c, String(st.row[c] ?? '')]));
+      const text = `${st.table}:${JSON.stringify(key)}`;
+      if (Object.keys(key).length === 0 || seen.has(text)) continue;
+      seen.add(text);
+      revert.push({ kind: 'delete', table: st.table, key });
+    }
+    revert.push(...existing.revert);
+    revert.push(...world.revert);
+    return { apply, revert, schema, warnings: [...compiledEntities.warnings, ...scripts.compiled.warnings, ...loot.warnings], lootWarnings: loot.warnings };
+  }
+
+  /** The project's NPCs, objects and items checked; throws when they have errors */
+  async function guardProject(live: Session): Promise<void> {
+    const issues = await newEntityIssues(live, projectEntities());
+    if (issues.some((i) => i.severity === 'error')) {
+      throw fail('VALIDATION', "Fix the errors on the project's NPCs, objects and items first.", { issues });
+    }
+    const groupIssues = await layerGroupIssues(live);
+    if (groupIssues.length > 0) throw fail('VALIDATION', 'Fix the spawn groups first.', { issues: groupIssues });
+  }
+
+  /** Why each spawn group in the world layer (but the removed ones) would be refused, each named by its group */
+  async function layerGroupIssues(live: Session): Promise<Issue[]> {
+    const layer = deps.session.world.get();
+    const store = projectEntities();
+    const issues: Issue[] = [];
+    for (const group of groupsOf(layer).filter((g) => !g.removed)) {
+      const reasons = validateGroup(group, await groupContext(live.db, layer, store, [], group, quests.list()));
+      issues.push(...reasons.map((reason): Issue => ({ severity: 'error', code: 'GROUP', message: `${group.name}: ${reason}` })));
+      // Applying a new group deletes the rows of a pool with its id, so one the database has gained since is refused
+      if (group.origin.kind === 'new' && (await rowsOrNone(live.db, 'pool_template', { entry: [String(group.id)] })).length > 0) {
+        issues.push({ severity: 'error', code: 'GROUP', message:
+          `Spawn group "${group.name || `Group ${group.id}`}": the database now has a pool with id ${group.id}; open the group and save it again to give it a new id.` });
+      }
+    }
+    return issues;
+  }
+
+  type GroupMoveArg = { kind: 'npc' | 'object'; guid: number } | { kind: 'quest'; questId: number };
+  /** Whether a member is one `moves` takes out of the group it is in */
+  const isMoved = (m: GroupMember, moves: readonly GroupMoveArg[]): boolean =>
+    moves.some((mv) => (mv.kind === 'quest' ? m.type === 'quest' && m.questId === mv.questId : m.type === 'spawn' && m.kind === mv.kind && m.guid === mv.guid));
+  type LeftGroup = { after: SpawnGroup; read: SpawnGroup | null; mother: SpawnGroup | null };
+
+  /** A spawn group as the layer has it, else as the database's pool; null when there is neither */
+  async function groupOf(db: WorldDb, id: number): Promise<SpawnGroup | null> {
+    const known = groupsOf(deps.session.world.get()).find((g) => g.id === id);
+    return known ?? (await readGroup(db, id));
+  }
+
+  /**
+   * A group sent by the renderer as main saves or checks it: its origin is the layer copy's, else the
+   * database pool's (with the rows it was read from), else new; the origin and `removed` it was sent with
+   * are not trusted. A new group (the layer's, or one sent as new) whose id the database has taken for a
+   * pool since gets the next free id.
+   */
+  async function trustedGroup(db: WorldDb, sent: SpawnGroup): Promise<SpawnGroup> {
+    const { removed: _removed, origin: claimed, ...fields } = sent;
+    const copy = groupsOf(deps.session.world.get()).find((g) => g.id === sent.id);
+    if (copy && copy.origin.kind === 'existing') return { ...fields, origin: copy.origin };
+    const pool = await readGroup(db, sent.id);
+    if (copy || claimed.kind === 'new') return { ...fields, id: pool ? await freeGroupId(db) : sent.id, origin: { kind: 'new' } };
+    return { ...fields, origin: pool ? pool.origin : { kind: 'new' } };
+  }
+
+  /**
+   * A sent group as main would save it; why the server would refuse it or a group its moves leave (each
+   * reason of a left group named by it); notes on left groups the moves empty, which the save deletes;
+   * and the left groups themselves
+   */
+  async function checkGroup(
+    db: WorldDb,
+    sent: SpawnGroup,
+    moves: readonly GroupMoveArg[],
+  ): Promise<{ group: SpawnGroup; reasons: string[]; notes: string[]; left: LeftGroup[] }> {
+    const layer = deps.session.world.get();
+    const store = projectEntities();
+    const group = await trustedGroup(db, sent);
+    // A layer group given a new id is checked by the id the layer knows it by
+    const asKnown = groupsOf(layer).some((g) => g.id === sent.id) ? { ...group, id: sent.id } : group;
+    const reasons = validateGroup(asKnown, await groupContext(db, layer, store, moves, asKnown, quests.list()));
+    const notes: string[] = [];
+    const left = await leftGroups(db, layer, new Set([sent.id, group.id]), moves);
+    for (const { after } of left) {
+      const name = after.name || `Group ${after.id}`;
+      if (after.members.length === 0) notes.push(`${name} would then be empty and is deleted.`);
+      else if (isQuestPool(after) && after.members.length < 2) notes.push(`${name} would then have one quest and is deleted.`);
+      else reasons.push(...validateGroup(after, await groupContext(db, layer, store, moves, after, quests.list())).map((reason) => `${name} would then: ${reason}`));
+    }
+    return { group, reasons, notes, left };
+  }
+
+  /**
+   * The groups `moves` take spawns or quests out of, but those in `skip`: each as it would be after (without them, and
+   * no more of it up than it has members), with the database copy to read into the layer when the layer has
+   * none, and for one left empty the database group holding it that must let go of it
+   */
+  async function leftGroups(db: WorldDb, layer: WorldLayer, skip: ReadonlySet<number>, moves: readonly GroupMoveArg[]): Promise<LeftGroup[]> {
+    const found = new Map<number, { group: SpawnGroup; read: SpawnGroup | null }>();
+    for (const move of moves) {
+      const held = groupsOf(layer).find((g) => !g.removed && g.members.some((m) => isMoved(m, [move])));
+      if (held) {
+        if (!skip.has(held.id)) found.set(held.id, { group: held, read: null });
+        continue;
+      }
+      const [row] =
+        move.kind === 'quest'
+          ? await rowsOrNone(db, 'pool_quest', { entry: [String(move.questId)] })
+          : await rowsOrNone(db, move.kind === 'npc' ? 'pool_creature' : 'pool_gameobject', { guid: [String(move.guid)] });
+      const pool = row ? Number(row.pool_entry) : null;
+      // A database group the layer has changed is known by the layer's copy, which does not hold it
+      if (pool === null || skip.has(pool) || found.has(pool) || groupsOf(layer).some((g) => g.id === pool)) continue;
+      const read = await readGroup(db, pool);
+      if (read) found.set(pool, { group: read, read });
+    }
+    const out: LeftGroup[] = [];
+    for (const { group, read } of found.values()) {
+      const members = group.members.filter((m) => !isMoved(m, moves));
+      const after = { ...group, members, maxActive: members.length === 0 ? group.maxActive : Math.max(1, Math.min(group.maxActive, members.length)) };
+      out.push({ after, read, mother: members.length === 0 ? await motherToRead(db, layer, group.id) : null });
+    }
+    return out;
+  }
+
+  /** The database group holding group `id`, when the layer has no copy of it and no layer group holds `id` */
+  async function motherToRead(db: WorldDb, layer: WorldLayer, id: number): Promise<SpawnGroup | null> {
+    const heldInLayer = groupsOf(layer).some((g) => !g.removed && g.members.some((m) => m.type === 'group' && m.id === id));
+    const [row] = heldInLayer ? [] : await rowsOrNone(db, 'pool_pool', { pool_id: String(id) });
+    const motherId = row ? Number(row.mother_pool) : null;
+    return motherId !== null && !groupsOf(layer).some((g) => g.id === motherId) ? await readGroup(db, motherId) : null;
+  }
+
+  /** Points every layer group that holds group `from` at group `to` instead */
+  function renumberGroup(layer: WorldLayer, from: number, to: number): WorldLayer {
+    const groups = groupsOf(layer).map((g) =>
+      g.members.some((m) => m.type === 'group' && m.id === from)
+        ? { ...g, members: g.members.map((m) => (m.type === 'group' && m.id === from ? { ...m, id: to } : m)) }
+        : g,
+    );
+    return { ...layer, groups };
+  }
+
+  /** An id no spawn group uses yet: past the database's pools and the layer's groups */
+  async function freeGroupId(db: WorldDb): Promise<number> {
+    let dbMax = 0;
+    try {
+      dbMax = (await db.selectMax?.('pool_template', 'entry')) ?? 0;
+    } catch {
+      dbMax = 0;
+    }
+    return Math.max(dbMax, ...groupsOf(deps.session.world.get()).map((g) => g.id), 0) + 1;
+  }
+
+  /** Where a spawn stands: as moved or placed in the layer, as the project has it, else as the database has it */
+  async function spawnAt(db: WorldDb, kind: 'npc' | 'object', guid: number): Promise<{ x: number; y: number; z: number } | null> {
+    const table = kind === 'npc' ? 'creature' : 'gameobject';
+    const layer = deps.session.world.get();
+    const at =
+      layer.spawns.find((s) => s.kind === table && s.guid === guid)?.current ??
+      layer.added.find((a) => a.kind === table && a.guid === guid)?.placement ??
+      (kind === 'npc' ? projectEntities().npcs : projectEntities().objects).flatMap((e) => e.spawns).find((s) => s.guid === guid) ??
+      (await readPlacement(db, table, guid))?.placement;
+    return at ? { x: at.x, y: at.y, z: at.z } : null;
+  }
+
+  /** Every spawn under a group, through its member groups, where it stands */
+  async function groupSpots(db: WorldDb, id: number, seen: Set<number>): Promise<{ x: number; y: number; z: number }[]> {
+    if (seen.has(id)) return [];
+    seen.add(id);
+    const group = await groupOf(db, id);
+    const spots: { x: number; y: number; z: number }[] = [];
+    for (const m of group?.members ?? []) {
+      if (m.type === 'group') spots.push(...(await groupSpots(db, m.id, seen)));
+      else if (m.type === 'spawn') {
+        const at = await spawnAt(db, m.kind, m.guid);
+        if (at) spots.push(at);
+      }
+    }
+    return spots;
   }
 
   /**
@@ -926,7 +1364,6 @@ export function createApi(deps: ApiDeps): Api {
     const issues = [
       ...(await validateQuest(quest.aggregate, refsFor(live))),
       ...(await scriptIssues(live, quest.aggregate)),
-      ...(await newEntityIssues(live, quest.aggregate)),
     ];
     if (issues.some((i) => i.severity === 'error')) {
       throw fail('VALIDATION', 'Fix the errors on this quest before exporting it.', { issues });
@@ -960,23 +1397,13 @@ export function createApi(deps: ApiDeps): Api {
     });
     const { context: scriptContext, compiled } = await compileFor(live, quest.aggregate);
     const scripts = scriptStatements(compiled, exportSchema(live));
-    const entities = readEntities(quest.aggregate.values);
-    const givers = [...relationOwners(quest.aggregate, 'starter'), ...relationOwners(quest.aggregate, 'ender')]
-      .flatMap((o) => (o.kind === 'creature' ? [o.entry] : []));
-    const entityContext = await readEntityContext(live.db, quest.questId, entities);
-    const newEntities = scriptStatements(
-      compileEntities({
-        questId: quest.questId, entities, givers, questItems: questItemsOf(quest.aggregate), context: entityContext,
-        itemColumns: live.scriptSchema.tables.item_template ? new Set(live.scriptSchema.tables.item_template.map((c) => c.name)) : null,
-      }),
-      exportSchema(live),
-    );
+    // The project's new NPCs, objects and items are the project patch's; a quest patch writes none
+    const newEntities = { statements: [] as PatchStatement[] };
     const of = (list: readonly PatchStatement[], kind: PatchStatement['kind']) => list.filter((s) => s.kind === kind);
-    // Deletes before anything is written; new NPCs and objects before the flags and updates quest
-    // scripting puts on them; the quest's and the scenes' rows last.
+    // Deletes before anything is written; the flags and updates quest scripting puts on NPCs, then
+    // the quest's and the scenes' rows.
     const merged = [
-      ...of(statements, 'delete'), ...of(scripts.statements, 'delete'), ...of(newEntities.statements, 'delete'),
-      ...of(newEntities.statements, 'insert'),
+      ...of(statements, 'delete'), ...of(scripts.statements, 'delete'),
       ...of(statements, 'set-flag'), ...of(scripts.statements, 'set-flag'),
       ...of(statements, 'update'), ...of(scripts.statements, 'update'),
       ...of(statements, 'insert'), ...of(scripts.statements, 'insert'),
@@ -1131,40 +1558,29 @@ export function createApi(deps: ApiDeps): Api {
     entityTemplate: (kind, entry) =>
       run(async () => {
         const live = connected();
-        const numberOf = (raw: string | null | undefined, fallback = 0): number => {
-          const n = Number(raw);
-          return raw === null || raw === undefined || !Number.isFinite(n) ? fallback : n;
-        };
-        const nameOf = <T extends Record<string, number>>(map: T, value: number, fallback: keyof T): keyof T =>
-          (Object.keys(map) as (keyof T)[]).find((k) => map[k] === value) ?? fallback;
+        const key = [String(entry)];
+        const none = { sharedLoot: 0, spawnCount: 0 };
         if (kind === 'creature') {
-          const [row] = await rowsOrNone(live.db, 'creature_template', { entry: [String(entry)] });
-          if (!row) return null;
-          const [model] = await rowsOrNone(live.db, 'creature_template_model', { CreatureID: [String(entry)], Idx: ['0'] });
-          const [gear] = await rowsOrNone(live.db, 'creature_equip_template', { CreatureID: [String(entry)], ID: ['1'] });
+          const creature_template = await rowsOrNone(live.db, 'creature_template', { entry: key });
+          if (creature_template.length === 0) return null;
+          const creature_template_model = await rowsOrNone(live.db, 'creature_template_model', { CreatureID: key, Idx: ['0'] });
+          const creature_equip_template = await rowsOrNone(live.db, 'creature_equip_template', { CreatureID: key, ID: ['1'] });
+          const n = npcFromRows(entry, { creature_template, creature_template_model, creature_equip_template }, none);
           return {
-            name: row.name ?? '', subname: row.subname ?? '',
-            minLevel: numberOf(row.minlevel, 1), maxLevel: numberOf(row.maxlevel, 1), faction: numberOf(row.faction, 35),
-            rank: nameOf(RANK_VALUE, numberOf(row.rank), 'normal'), type: nameOf(NPC_TYPE_VALUE, numberOf(row.type), 'none'),
-            healthModifier: numberOf(row.HealthModifier, 1), damageModifier: numberOf(row.DamageModifier, 1),
-            displayId: numberOf(model?.CreatureDisplayID), scale: numberOf(model?.DisplayScale, 1),
-            equipment: { mainHand: numberOf(gear?.ItemID1), offHand: numberOf(gear?.ItemID2), ranged: numberOf(gear?.ItemID3) },
+            name: n.name, subname: n.subname, minLevel: n.minLevel, maxLevel: n.maxLevel, faction: n.faction, rank: n.rank, type: n.type,
+            healthModifier: n.healthModifier, damageModifier: n.damageModifier, displayId: n.displayId, scale: n.scale, equipment: n.equipment,
           };
         }
         if (kind === 'item') {
-          const [item] = await rowsOrNone(live.db, 'item_template', { entry: [String(entry)] });
-          if (!item) return null;
-          return {
-            name: item.name ?? '', displayId: numberOf(item.displayid), itemClass: numberOf(item.class), subclass: numberOf(item.subclass),
-            inventoryType: numberOf(item.InventoryType),
-          };
+          const item_template = await rowsOrNone(live.db, 'item_template', { entry: key });
+          if (item_template.length === 0) return null;
+          const i = itemFromRows(entry, { item_template });
+          return { name: i.name, displayId: i.displayId, itemClass: i.itemClass, subclass: i.subclass, inventoryType: i.inventoryType };
         }
-        const [row] = await rowsOrNone(live.db, 'gameobject_template', { entry: [String(entry)] });
-        if (!row) return null;
-        return {
-          name: row.name ?? '', type: nameOf(OBJECT_TYPE_VALUE, numberOf(row.type), 'generic'),
-          displayId: numberOf(row.displayId), size: numberOf(row.size, 1),
-        };
+        const gameobject_template = await rowsOrNone(live.db, 'gameobject_template', { entry: key });
+        if (gameobject_template.length === 0) return null;
+        const o = objectFromRows(entry, { gameobject_template }, none);
+        return { name: o.name, type: o.type, displayId: o.displayId, size: o.size };
       }),
 
     itemColumns: () => run(async () => exportSchema(connected()).tables.item_template ?? []),
@@ -1172,7 +1588,8 @@ export function createApi(deps: ApiDeps): Api {
     openQuest: (questId, position) => run(async () => openOne(questId, position)),
 
     addQuestChain: (questId, position) =>
-      run(async () => {
+      // The picked quest and every quest chained to it are one step
+      run(() => asOneStep(async () => {
         const live = usable();
         const chain = await findQuestChain(live.db, questId, MAX_CHAIN_QUESTS, undefined, withProjectStarters(live.itemStarters));
         const slots = layoutChain(chain.questIds, chain.links);
@@ -1207,7 +1624,7 @@ export function createApi(deps: ApiDeps): Api {
           });
         }
         return { open, questIds: chain.questIds, truncated: chain.truncated };
-      }),
+      })),
 
     newQuest: (position) =>
       run(async () => {
@@ -1219,7 +1636,7 @@ export function createApi(deps: ApiDeps): Api {
         const created = createNewAggregate(live.schema, registry, questId);
         const aggregate = {
           ...created,
-          values: { ...created.values, [SCRIPTS_FIELD]: writeScenes([]), [ENTITIES_FIELD]: writeEntities({ npcs: [], objects: [], items: [] }) },
+          values: { ...created.values, [SCRIPTS_FIELD]: writeScenes([]) },
         };
         const fidelity: FidelityReport = { ok: true };
 
@@ -1255,6 +1672,7 @@ export function createApi(deps: ApiDeps): Api {
         // One checker for the whole canvas: the same NPC or item is asked about once, not per node.
         const refs = refsFor(live);
         const projectQuests = quests.list();
+        const store = projectEntities();
         const canvasIds = projectQuests.map((d) => d.questId);
         const onCanvas = new Set(canvasIds);
         // One link snapshot for the whole canvas, so the context is read once rather than per node.
@@ -1284,6 +1702,7 @@ export function createApi(deps: ApiDeps): Api {
           const questId = quest.questId;
           const issues = [...(await validateQuest(quest.aggregate, refs)), ...linkIssues(questId, snapshot)];
           const notConnected = disconnected.has(questId);
+          const facts = projectQuestFacts(quest);
 
           const links = new Map<string, NodeLink>();
           const neighbours = new Set<number>();
@@ -1328,6 +1747,10 @@ export function createApi(deps: ApiDeps): Api {
             groups,
             offCanvasLinks: [...neighbours].filter((id) => existing.has(id)).length,
             notConnected,
+            uses: questUses(quest, store),
+            refs: questRefs(quest),
+            daily: facts.daily,
+            weekly: facts.weekly,
           });
         }
         return nodes;
@@ -1599,7 +2022,77 @@ export function createApi(deps: ApiDeps): Api {
         };
       }),
 
-    worldLayer: () => run(async () => deps.session.world.get()),
+    projectEntities: () => run(async () => deps.session.entities.get()),
+
+    putProjectEntities: (next) =>
+      run(async () => {
+        const parsed = projectEntitiesSchema.safeParse(next);
+        if (!parsed.success) throw fail('BAD_REQUEST', 'The NPCs, objects and items sent are not valid.');
+        await asOneStep(async () => putEntities(parsed.data));
+        return true as const;
+      }),
+
+    readExistingEntity: (kind, entry) =>
+      run(async () => {
+        const db = connected().db;
+        const read = await readExistingRows(db, kind, entry);
+        if (!read) throw fail('BAD_REQUEST', 'Not in the database any more');
+        const counts = { sharedLoot: read.sharedLoot, spawnCount: read.spawnCount };
+        return kind === 'npc' ? npcFromRows(entry, read.rows, counts) : kind === 'object' ? objectFromRows(entry, read.rows, counts) : itemFromRows(entry, read.rows);
+      }),
+
+    existingDrift: () =>
+      run(async () => {
+        // The same check the export warns from, so the badge and the warning agree
+        const drifted = await existingDrift(connected().db, projectEntities());
+        return drifted.map(({ kind, entry }) => ({ kind, entry }));
+      }),
+
+    deleteEntity: (kind, entry) =>
+      run(() => asOneStep(async () => {
+        const store = projectEntities();
+        const list = kind === 'npc' ? 'npcs' : kind === 'object' ? 'objects' : 'items';
+        if (!(store[list] as { entry: number }[]).some((e) => e.entry === entry)) throw fail('BAD_REQUEST', `There is no such ${kind === 'npc' ? 'NPC' : kind} in the project.`);
+        putEntities({ ...store, [list]: (store[list] as { entry: number }[]).filter((e) => e.entry !== entry) } as ProjectEntities);
+        // An item is never a giver; an NPC or object comes off every quest's giver cards
+        const changed: { questId: number; aggregate: QuestAggregate }[] = [];
+        if (kind !== 'item') {
+          for (const quest of quests.list()) {
+            const edits = emptyGiversOf(quest.aggregate.values, kind === 'npc' ? 'creature' : 'gameobject', entry);
+            if (Object.keys(edits).length === 0) continue;
+            const aggregate = { ...quest.aggregate, values: { ...quest.aggregate.values, ...edits } };
+            quests.put({ ...quest, aggregate });
+            changed.push({ questId: quest.questId, aggregate });
+          }
+        }
+        return { entities: deps.session.entities.get(), quests: changed };
+      })),
+
+    worldLayer: () =>
+      run(async () => {
+        const layer = deps.session.world.get();
+        const stale = layer.routes.filter((r) => r.original.length > 0 && !r.walkerEntries);
+        // Objects placed before their type was recorded
+        const untyped = [...new Set(layer.added.filter((a) => a.kind === 'gameobject' && a.look.objectType === undefined).map((a) => a.entry))];
+        if ((stale.length === 0 && untyped.length === 0) || !session) return layer;
+        const db = connected().db;
+        const filled = new Map<number, { entry: number; name: string }[]>();
+        for (const r of stale) filled.set(r.pathId, await readWalkerEntries(db, r.pathId));
+        const types = new Map<number, number>();
+        for (const entry of untyped) {
+          const type = (await readTemplateLook(db, 'gameobject', entry))?.look.objectType;
+          if (type !== undefined) types.set(entry, type);
+        }
+        // Re-read the layer: an edit made while the database was read is kept
+        const current = deps.session.world.get();
+        const next = {
+          ...current,
+          routes: current.routes.map((r) => (!r.walkerEntries && filled.has(r.pathId) ? { ...r, walkerEntries: filled.get(r.pathId)! } : r)),
+          added: current.added.map((a) => (a.kind === 'gameobject' && a.look.objectType === undefined && types.has(a.entry) ? { ...a, look: { ...a.look, objectType: types.get(a.entry)! } } : a)),
+        };
+        deps.session.world.fill(next);
+        return next;
+      }),
 
     worldAddSpawn: (kind, entry, map, at, wanted) =>
       run(async () => {
@@ -1714,16 +2207,43 @@ export function createApi(deps: ApiDeps): Api {
         return next;
       }),
 
+    worldSetRespawn: (kind, guid, secs) =>
+      run(async () => {
+        const db = connected().db;
+        const knownIn = (layer: WorldLayer) => respawnsOf(layer).find((r) => r.kind === kind && r.guid === guid);
+        // A spawn placed in the view carries its own respawn; the database does not have it
+        const placedIn = (layer: WorldLayer) => isAdded(layer, kind, guid);
+        const start = deps.session.world.get();
+        let read = knownIn(start) || placedIn(start) ? null : await readRespawn(db, kind, guid);
+        let layer = deps.session.world.get();
+        let known = knownIn(layer);
+        if (!known && !read && !placedIn(layer)) {
+          read = await readRespawn(db, kind, guid);
+          layer = deps.session.world.get();
+          known = knownIn(layer);
+        }
+        if (!known && !read && !placedIn(layer)) throw fail('BAD_REQUEST', `Spawn ${guid} is no longer in the database.`);
+        const edit = known ?? (read
+          ? { kind, guid, entry: read.entry, name: read.name, map: read.map, original: read.secs }
+          : { kind, guid, entry: 0, name: '', map: 0, original: 0 });
+        const next = setRespawn(layer, edit, secs);
+        deps.session.world.put(next);
+        return next;
+      }),
+
     worldRevert: (target) =>
       run(async () => {
         const layer = deps.session.world.get();
         const next =
           target.kind === 'spawn' ? revertSpawn(layer, target.spawnKind, target.guid)
           : target.kind === 'route' ? revertRoute(layer, target.pathId)
+          : target.kind === 'respawn' ? revertRespawn(layer, target.spawnKind, target.guid)
+          : target.kind === 'group' ? revertGroup(layer, target.id)
           : revertMovement(layer, target.guid);
         const changed =
           next.spawns.length !== layer.spawns.length || next.routes.length !== layer.routes.length || next.added.length !== layer.added.length ||
-          movementsOf(next).length !== movementsOf(layer).length;
+          movementsOf(next).length !== movementsOf(layer).length || respawnsOf(next).length !== respawnsOf(layer).length ||
+          groupsOf(next).length !== groupsOf(layer).length;
         if (changed) deps.session.world.put(next);
         return next;
       }),
@@ -1739,38 +2259,244 @@ export function createApi(deps: ApiDeps): Api {
           ...(await Promise.all(
             movementsOf(layer).map(async (m) => ({ ...m, type: 'movement' as const, drifted: await movementDrifted(db, m, isAdded(layer, 'creature', m.guid)) })),
           )),
+          ...(await Promise.all(respawnsOf(layer).map(async (r) => ({ ...r, type: 'respawn' as const, drifted: await respawnDrifted(db, r) })))),
+          ...(await Promise.all(groupsOf(layer).map(async (g) => ({ ...g, type: 'group' as const, drifted: await groupDrifted(db, g) })))),
         ];
       }),
 
-    exportWorld: () =>
+    worldGroup: (id) => run(async () => groupOf(connected().db, id)),
+
+    worldGroupSpawns: (id) =>
+      run(async () => {
+        const db = connected().db;
+        return spawnsUnder(db, deps.session.world.get(), await pools(db), id);
+      }),
+
+    worldGroupView: (id) =>
+      run(async () => {
+        const db = connected().db;
+        const group = await groupOf(db, id);
+        if (!group) return null;
+        const store = projectEntities();
+        const members: GroupView['members'] = [];
+        for (const m of group.members) {
+          // Quest members are not shown in the 3D view's group card
+          if (m.type === 'quest') continue;
+          if (m.type === 'group') {
+            const child = await groupOf(db, m.id);
+            // A group member stands at the centre of every spawn under it
+            const spots = await groupSpots(db, m.id, new Set([group.id]));
+            const mean = (axis: 'x' | 'y' | 'z') => spots.reduce((sum, s) => sum + s[axis], 0) / spots.length;
+            members.push({
+              key: memberKey(m), type: 'group', name: child?.name ?? `Group ${m.id}`, chance: m.chance,
+              at: spots.length > 0 ? { x: mean('x'), y: mean('y'), z: mean('z') } : null,
+            });
+            continue;
+          }
+          const table = m.kind === 'npc' ? 'creature' : 'gameobject';
+          const own = (m.kind === 'npc' ? store.npcs : store.objects).find((e) => e.entry === m.entry);
+          const placedName = deps.session.world.get().added.find((a) => a.kind === table && a.guid === m.guid)?.name;
+          const name = own?.name ?? placedName ?? (await db.lookupNames(table, [m.entry])).get(m.entry) ?? '';
+          members.push({ key: memberKey(m), type: 'spawn', name, chance: m.chance, at: await spawnAt(db, m.kind, m.guid) });
+        }
+        let event: GroupView['event'] = null;
+        if (group.event) {
+          const named = (await db.columns('game_event')).length > 0 ? await db.selectRows('game_event', { eventEntry: String(group.event.id) }) : [];
+          event = { id: group.event.id, name: named[0]?.description || `Event ${group.event.id}`, during: group.event.during };
+        }
+        return { id: group.id, name: group.name, map: group.map, maxActive: group.maxActive, event, members };
+      }),
+
+    worldGroupsOnMap: (map) =>
+      run(async () => {
+        const db = connected().db;
+        const layer = groupsOf(deps.session.world.get());
+        const byId = new Map<number, { id: number; name: string; maxActive: number; members: number; groups: number[] }>();
+        for (const pool of await pools(db)) {
+          if (pool.map === map) byId.set(pool.id, { id: pool.id, name: pool.name, maxActive: pool.maxActive, members: pool.members, groups: pool.groups });
+        }
+        // The layer's copy wins; one removed there, or moved to another map, is left out, as is a rotation (it has no map)
+        for (const g of layer) {
+          byId.delete(g.id);
+          if (!g.removed && !isQuestPool(g) && g.map === map) byId.set(g.id, { id: g.id, name: g.name, maxActive: g.maxActive, members: g.members.length, groups: g.members.flatMap((m) => (m.type === 'group' ? [m.id] : [])) });
+        }
+        // Only member groups the map lists are named, so a listed group never points at one that is not there
+        for (const g of byId.values()) g.groups = g.groups.filter((id) => byId.has(id));
+        return [...byId.values()].sort((a, b) => a.name.localeCompare(b.name) || a.id - b.id);
+      }),
+
+    worldNewGroupId: () => run(async () => freeGroupId(connected().db)),
+
+    questPools: () =>
+      run(async () => {
+        const db = connected().db;
+        const byId = new Map<number, { id: number; name: string; maxActive: number; daily: boolean; questIds: number[] }>();
+        for (const pool of await pools(db)) {
+          if (pool.quests.length > 0) byId.set(pool.id, { id: pool.id, name: pool.name, maxActive: pool.maxActive, daily: pool.daily, questIds: [...pool.quests] });
+        }
+        // The layer's copy wins; one removed there, or no longer a rotation, is left out
+        const layerPools = groupsOf(deps.session.world.get());
+        for (const g of layerPools) byId.delete(g.id);
+        const rotations = layerPools.filter((g) => !g.removed && isQuestPool(g));
+        if (rotations.length > 0) {
+          const own = quests.list();
+          const questIds = rotations.flatMap((g) => g.members.flatMap((m) => (m.type === 'quest' ? [m.questId] : [])));
+          const fromDb = await databaseQuestFacts(db, questIds.filter((id) => !own.some((q) => q.questId === id)));
+          const facts = (id: number) => {
+            const mine = own.find((q) => q.questId === id);
+            return mine ? projectQuestFacts(mine) : (fromDb.get(id) ?? null);
+          };
+          for (const g of rotations) {
+            const ids = g.members.flatMap((m) => (m.type === 'quest' ? [m.questId] : []));
+            const kinds = ids.map(facts);
+            // Daily unless its quests are weekly, as the database's are read
+            const daily = kinds.some((k) => k?.daily) || !kinds.some((k) => k?.weekly);
+            byId.set(g.id, { id: g.id, name: g.name, maxActive: g.maxActive, daily, questIds: ids });
+          }
+        }
+        return [...byId.values()].sort((a, b) => a.name.localeCompare(b.name) || a.id - b.id);
+      }),
+
+    gameEvents: () =>
+      run(async () => {
+        const db = connected().db;
+        if ((await db.columns('game_event')).length === 0) return [];
+        return (await db.selectRows('game_event', {}))
+          .map((row) => ({ id: Number(row.eventEntry), name: row.description ?? '' }))
+          .filter((e) => Number.isInteger(e.id) && e.id > 0)
+          .sort((a, b) => a.id - b.id);
+      }),
+
+    worldCheckGroup: (sent, moves) =>
+      run(async () => {
+        const { reasons, notes } = await checkGroup(connected().db, sent, moves);
+        return { reasons, notes };
+      }),
+
+    worldSetGroup: (sent, moves) =>
+      run(() => asOneStep(async () => {
+        const db = connected().db;
+        const { group, reasons, left } = await checkGroup(db, sent, moves);
+        if (reasons.length > 0) {
+          throw fail('VALIDATION', 'This spawn group cannot be saved.', { issues: reasons.map((message): Issue => ({ severity: 'error', code: 'GROUP', message })) });
+        }
+        // Nothing is awaited from here to the layer being put back, so an edit made meanwhile is kept.
+        // The database group each moved spawn leaves is read into the layer first, so it is kept there without it.
+        const absent = (layer: WorldLayer, id: number) => !groupsOf(layer).some((g) => g.id === id);
+        let next = deps.session.world.get();
+        for (const { read, mother } of left) {
+          if (read && absent(next, read.id)) next = putGroup(next, read);
+          if (mother && absent(next, mother.id)) next = putGroup(next, mother);
+        }
+        for (const move of moves) next = move.kind === 'quest' ? dropQuestMember(next, move.questId) : dropMember(next, move.kind, move.guid);
+        for (const { after } of left) {
+          const now = groupsOf(next).find((g) => g.id === after.id);
+          if (!now || now.members.length === 0 || (isQuestPool(now) && now.members.length < 2)) {
+            // Emptied, or a rotation left with one quest: deleted, as Delete group would, and let go of by the group holding it
+            next = dropGroupMember(next, after.id);
+            if (now) next = deleteGroup(next, now);
+          } else {
+            next = putGroup(next, { ...now, maxActive: Math.max(1, Math.min(now.maxActive, now.members.length)) });
+          }
+        }
+        // A new group given a new id leaves its old one, and a group holding it follows it there
+        if (group.id !== sent.id) next = renumberGroup(revertGroup(next, sent.id), sent.id, group.id);
+        next = putGroup(next, group);
+        deps.session.world.put(next);
+        return next;
+      })),
+
+    worldDeleteGroup: (id) =>
+      run(async () => {
+        const db = connected().db;
+        const group = await groupOf(db, id);
+        if (!group) throw fail('BAD_REQUEST', `There is no spawn group ${id}.`);
+        // A database group that holds it, and that the layer has not changed, is read in so it can let go of it
+        const mother = await motherToRead(db, deps.session.world.get(), id);
+        // Nothing is awaited from here to the layer being put back, so it is one step
+        let next = deps.session.world.get();
+        if (mother && !groupsOf(next).some((g) => g.id === mother.id)) next = putGroup(next, mother);
+        next = deleteGroup(dropGroupMember(next, id), group);
+        deps.session.world.put(next);
+        return next;
+      }),
+
+    worldDropMember: (kind, guid) =>
+      run(async () => {
+        const layer = deps.session.world.get();
+        const next = dropMember(layer, kind, guid);
+        if (!isDeepStrictEqual(groupsOf(next), groupsOf(layer))) deps.session.world.put(next);
+        return next;
+      }),
+
+    historyList: () => run(async () => historyList()),
+
+    historyUndo: () =>
+      run(() =>
+        queued(() =>
+          travel(
+            () => ({ direction: 'undo', steps: history.peekUndo() ? [history.peekUndo()!] : [] }),
+            () => {
+              const step = history.undo();
+              return { direction: 'undo', steps: step ? [step] : [] };
+            },
+          ),
+        ),
+      ),
+
+    historyRedo: () =>
+      run(() =>
+        queued(() =>
+          travel(
+            () => ({ direction: 'redo', steps: history.peekRedo() ? [history.peekRedo()!] : [] }),
+            () => {
+              const step = history.redo();
+              return { direction: 'redo', steps: step ? [step] : [] };
+            },
+          ),
+        ),
+      ),
+
+    historyJump: (stepId) => run(() => queued(() => travel(() => history.peekJump(stepId), () => history.jump(stepId)))),
+
+    historyBegin: (label, where) => run(async () => history.begin(label, where)),
+
+    historyEnd: (token) =>
+      run(async () => {
+        history.end(token);
+        return true as const;
+      }),
+
+    exportProject: () =>
       run(async () => {
         const live = connected();
+        const store = projectEntities();
         const layer: WorldLayer = deps.session.world.get();
-        if (!hasWorldChanges(layer)) throw fail('BAD_REQUEST', 'There are no world changes to export.');
-        const schema = await worldSchema(live.db, live.schema.hash);
-        // The rows of placed spawns are made of the database's own columns, so a fork's extra ones are filled
-        const spawnDefaults: SpawnDefaults = {};
-        for (const kind of ['creature', 'gameobject'] as const) {
-          if (layer.added.some((a) => a.kind === kind)) spawnDefaults[kind] = defaultColumnValues(kind, schema);
+        if (store.npcs.length + store.objects.length + store.items.length === 0 && !hasWorldChanges(layer)) {
+          throw fail('BAD_REQUEST', 'There are no NPCs, objects, items or world changes to export.');
         }
-        // A spawn given a path without an addon row of its own gets one, made of the table's own columns
-        const writesAddon = movementsOf(layer).some((m) => !m.addonRow && m.current.pathId !== m.original.pathId);
-        const addonDefaults = writesAddon ? defaultColumnValues('creature_addon', schema) : undefined;
-        const { apply, revert } = worldStatements(layer, defaultColumnValues('waypoint_data', schema), spawnDefaults, addonDefaults);
+        await guardProject(live);
+        const { apply, revert, schema, lootWarnings } = await projectPatch(live);
+        // Applying writes the rows as edited here, so whatever the database changed since is overwritten
+        const warnings = [
+          ...(await existingDrift(live.db, store)).map((e) => `"${e.name}" changed in the database since it was edited here; applying the patch overwrites that.`),
+          ...lootWarnings,
+        ];
         const date = patchDate(deps.now());
-        const sql = renderPatch(apply, schema, { toolVersion: TOOL_VERSION, date, label: 'World changes' });
-        const revertSql = renderPatch(revert, schema, { toolVersion: TOOL_VERSION, date, label: 'World changes: revert' });
+        const sql = renderPatch(apply, schema, { toolVersion: TOOL_VERSION, date, label: 'Project changes' });
+        const revertSql = renderPatch(revert, schema, { toolVersion: TOOL_VERSION, date, label: 'Project changes: revert' });
 
         // The same folder a quest's patch goes to, numbered per day like quest exports
         const outputDir = deps.exportDirOverride || live.exportDir || deps.defaultExportDir || deps.session.meta().outputDir;
         await deps.fs.ensureDir(outputDir);
         const existing = await deps.fs.listDir(outputDir);
-        const sequence = String(existing.filter((name) => name.startsWith(`${date}_`) && name.endsWith('_world.sql')).length).padStart(2, '0');
-        const applyPath = join(outputDir, `${date}_${sequence}_world.sql`);
-        const revertPath = join(outputDir, `${date}_${sequence}_world_revert.sql`);
+        const sequence = String(existing.filter((name) => name.startsWith(`${date}_`) && name.endsWith('_project.sql')).length).padStart(2, '0');
+        const applyPath = join(outputDir, `${date}_${sequence}_project.sql`);
+        const revertPath = join(outputDir, `${date}_${sequence}_project_revert.sql`);
         await deps.fs.writeFile(applyPath, sql);
         await deps.fs.writeFile(revertPath, revertSql);
-        return { applyPath, revertPath, sql };
+        poolCache = null;
+        return { applyPath, revertPath, sql, warnings };
       }),
 
     entitySpawns: (kind, entry) =>
@@ -1782,12 +2508,14 @@ export function createApi(deps: ApiDeps): Api {
         return { spawns: found.slice(0, FIND_SPAWNS_LIMIT), capped: found.length > FIND_SPAWNS_LIMIT };
       }),
 
+    spawnPlacement: (kind, guid) => run(async () => spawnAt(connected().db, kind, guid)),
+
     questMapRefs: (questId) =>
       run(async () => {
         const db = connected().db;
         if (!db.spawnsOfEntries) return [];
         const aggregate = questOf(questId).aggregate;
-        const { npcs, objects } = readEntities(aggregate.values);
+        const { npcs, objects } = questEntities(aggregate);
         // The quest's own NPCs and objects are markers already.
         const own = new Set([...npcs.map((n) => `creature:${n.entry}`), ...objects.map((o) => `gameobject:${o.entry}`)]);
         const wanted = wantedOf(aggregate);
@@ -1808,12 +2536,13 @@ export function createApi(deps: ApiDeps): Api {
 
     questSpawnList: (questIds) =>
       run(async () => {
-        const db = connected().db;
+        // Without the world database, only the project's own spawns and the layer's are listed
+        const db = session?.db;
         const groups: QuestSpawnGroup[] = [];
         for (const questId of questIds) {
           const aggregate = questOf(questId).aggregate;
           const title = aggregate.values['quest_template.LogTitle'];
-          const { npcs, objects } = readEntities(aggregate.values);
+          const { npcs, objects } = questEntities(aggregate);
           const spawns: QuestSpawn[] = [];
           const seen = new Set<string>();
           const add = (spawn: QuestSpawn): void => {
@@ -1822,23 +2551,43 @@ export function createApi(deps: ApiDeps): Api {
             seen.add(key);
             spawns.push(spawn);
           };
+          const wanted = wantedOf(aggregate);
+          // A project NPC or object takes the first part the quest names it in (giver, ender, objective), else 'own'
+          const partOf = (kind: 'creature' | 'gameobject', entry: number): QuestSpawn['role'] =>
+            wanted.find((w) => w.kind === kind && w.entry === entry)?.role ?? 'own';
           // The quest's own NPCs and objects, where it puts them
           for (const [kind, owners] of [['creature', npcs], ['gameobject', objects]] as const) {
             for (const owner of owners) {
-              for (const s of owner.spawns) add({ kind, guid: s.guid, entry: owner.entry, name: owner.name, map: s.map, x: s.x, y: s.y, z: s.z, role: 'own' });
+              const role = partOf(kind, owner.entry);
+              for (const s of owner.spawns) add({ kind, guid: s.guid, entry: owner.entry, name: owner.name, map: s.map, x: s.x, y: s.y, z: s.z, role });
             }
           }
           const own = new Set([...npcs.map((n) => `creature:${n.entry}`), ...objects.map((o) => `gameobject:${o.entry}`)]);
           let cut = 0;
-          if (db.spawnsOfEntries) {
-            for (const want of wantedOf(aggregate)) {
-              if (own.has(`${want.kind}:${want.entry}`)) continue;
+          // Existing NPCs and objects: where the World's layer moved them, and the spawns placed there
+          const layer = deps.session.world.get();
+          for (const want of wanted) {
+            if (own.has(`${want.kind}:${want.entry}`)) continue;
+            if (db?.spawnsOfEntries) {
               const dots: SpawnDot[] = await db.spawnsOfEntries(want.kind, [want.entry], QUEST_SPAWNS_PER_ENTRY + 1);
               if (dots.length > QUEST_SPAWNS_PER_ENTRY) cut += 1;
-              for (const dot of dots.slice(0, QUEST_SPAWNS_PER_ENTRY)) add({ ...dot, role: want.role });
+              for (const dot of dots.slice(0, QUEST_SPAWNS_PER_ENTRY)) {
+                const at = layer.spawns.find((m) => m.kind === dot.kind && m.guid === dot.guid)?.current;
+                add({ ...dot, ...(at ? { x: at.x, y: at.y, z: at.z } : {}), role: want.role });
+              }
+            } else {
+              // Offline, the database spawns the layer moved are still known
+              for (const m of layer.spawns) {
+                if (m.kind !== want.kind || m.entry !== want.entry) continue;
+                add({ kind: m.kind, guid: m.guid, entry: m.entry, name: m.name, map: m.map, x: m.current.x, y: m.current.y, z: m.current.z, role: want.role });
+              }
+            }
+            for (const a of layer.added) {
+              if (a.kind !== want.kind || a.entry !== want.entry) continue;
+              add({ kind: a.kind, guid: a.guid, entry: a.entry, name: a.name, map: a.map, x: a.placement.x, y: a.placement.y, z: a.placement.z, role: want.role });
             }
           }
-          groups.push({ questId, title: typeof title === 'string' && title !== '' ? title : `Quest ${questId}`, spawns, capped: cut > 0, cut });
+          groups.push({ questId, title: typeof title === 'string' && title !== '' ? title : `Quest ${questId}`, spawns, capped: cut > 0, cut, ...(db ? {} : { offline: true }) });
         }
         return groups;
       }),
@@ -1847,14 +2596,16 @@ export function createApi(deps: ApiDeps): Api {
       run(async () => {
         const live = connected();
         const quest = questOf(questId);
-        const { statements } = await patchFor(live, quest);
+        // What Apply to dev writes: the project patch, then the quest's
+        const project = await projectPatch(live);
+        const statements = [...project.apply, ...(await patchFor(live, quest)).statements];
         const tables = new Set(statements.map((s) => s.table));
         const creatureTemplates = statements.flatMap((s) => {
           if (s.table !== 'creature_template') return [];
           const entry = s.kind === 'insert' ? s.row.entry : s.key.entry;
           return entry === undefined || entry === null ? [] : [Number(entry)];
         });
-        const { npcs, objects } = readEntities(quest.aggregate.values);
+        const { npcs, objects } = questEntities(quest.aggregate);
         const spawns = [...npcs, ...objects].flatMap((e) => e.spawns.map((s) => ({ name: e.name || `#${e.entry}`, map: s.map, x: s.x, y: s.y, z: s.z })));
         return gmCommands({
           questId,
@@ -1912,6 +2663,8 @@ export function createApi(deps: ApiDeps): Api {
         const quest = questOf(questId);
         const issues = await guardWrite(live, quest);
         const { statements, warnings } = await patchFor(live, quest);
+        const used = questEntities(quest.aggregate);
+        const usesProject = used.npcs.length + used.objects.length + used.items.length;
 
         const date = patchDate(deps.now());
         const sql = renderPatch(statements, exportSchema(live), { toolVersion: TOOL_VERSION, questId, date });
@@ -1931,7 +2684,15 @@ export function createApi(deps: ApiDeps): Api {
         await deps.fs.writeFile(path, sql);
         quests.markExported(questId, path);
 
-        return { path, sql, warnings, issues: issues.filter((i) => i.severity !== 'error') };
+        // What Apply to dev runs before this quest; none when the project has nothing of its own
+        const store = projectEntities();
+        const hasProject = store.npcs.length + store.objects.length + store.items.length > 0 || hasWorldChanges(deps.session.world.get());
+        let projectSql: string | null = null;
+        if (hasProject) {
+          const project = await projectPatch(live);
+          projectSql = renderPatch(project.apply, project.schema, { toolVersion: TOOL_VERSION, date, label: 'Project changes' });
+        }
+        return { path, sql, warnings, issues: issues.filter((i) => i.severity !== 'error'), usesProject, projectSql };
       }),
 
     applyToDev: (questId, confirm) =>
@@ -1947,8 +2708,14 @@ export function createApi(deps: ApiDeps): Api {
           throw fail('NO_DEV_PROFILE', 'Add a dev database profile before applying a patch to it.');
         }
         await guardWrite(live, quest);
+        await guardProject(live);
         const { statements } = await patchFor(live, quest);
-        const rendered = statements.map((s) => renderStatement(s, exportSchema(live)));
+        // The project patch first, so the quest's new NPCs, objects and items are there to test
+        const project = await projectPatch(live);
+        const rendered = [
+          ...project.apply.map((s) => renderStatement(s, project.schema)),
+          ...statements.map((s) => renderStatement(s, exportSchema(live))),
+        ];
 
         const dev = await deps.openDevDb(deps.store.profiles.getWithPassword(devProfile.id));
         try {

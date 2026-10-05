@@ -33,6 +33,8 @@ export function sampleOpen(overrides: Partial<OpenResult> = {}): OpenResult {
 
 export function nodeOf(overrides: Partial<CanvasNode> = {}): CanvasNode {
   const base: CanvasNode = {
+    uses: { npcs: [], objects: [], items: [] },
+    refs: { npcs: [], objects: [], items: [] },
     questId: 60001,
     title: 'Wolves',
     level: 10,
@@ -56,6 +58,12 @@ export function nodeOf(overrides: Partial<CanvasNode> = {}): CanvasNode {
  * Builds a mock `Api` where every method not overridden is a `vi.fn` answering with a sensible
  * empty success, so tests can assert on calls without wiring every method by hand.
  */
+/** An undo or redo that found nothing to do */
+export const emptyHistoryResult = {
+  step: null, direction: 'undo' as const, quests: [], positions: false, world: null, name: false, skipped: [] as string[],
+  history: { steps: [], current: 0, saved: 0 as number | null },
+};
+
 export function makeMockApi(overrides: Partial<Record<keyof Api, (...args: any[]) => any>> = {}): Api {
   const defaults: Record<keyof Api, (...args: any[]) => any> = {
     testConnection: vi.fn(async () => okv({ ok: true as const })),
@@ -92,19 +100,43 @@ export function makeMockApi(overrides: Partial<Record<keyof Api, (...args: any[]
     mapFloors: vi.fn(async () => okv({ reason: 'x' })),
     mapSpawns: vi.fn(async () => okv({ dots: [], capped: false })),
     viewSpawns: vi.fn(async () => okv({ creatures: [], objects: [], capped: { creatures: false, objects: false } })),
+    projectEntities: vi.fn(async () => okv({ npcs: [], objects: [], items: [] })),
+    putProjectEntities: vi.fn(async () => okv(true as const)),
+    readExistingEntity: vi.fn(async () => okv(null as never)),
+    existingDrift: vi.fn(async () => okv([])),
+    deleteEntity: vi.fn(async () => okv({ entities: { npcs: [], objects: [], items: [] }, quests: [] })),
     worldLayer: vi.fn(async () => okv({ spawns: [], routes: [], added: [] })),
     worldMoveSpawn: vi.fn(async () => okv({ spawns: [], routes: [], added: [] })),
     worldAddSpawn: vi.fn(async () => okv({ layer: { spawns: [], routes: [], added: [] }, guid: 1 })),
     worldRoute: vi.fn(async () => okv({ points: [], walkers: 1 })),
     worldSetRoute: vi.fn(async () => okv({ spawns: [], routes: [], added: [] })),
     worldRevert: vi.fn(async () => okv({ spawns: [], routes: [], added: [] })),
+    worldSetRespawn: vi.fn(async () => okv({ spawns: [], routes: [], added: [] })),
     worldSetMovement: vi.fn(async () => okv({ spawns: [], routes: [], added: [] })),
     worldNewPathId: vi.fn(async () => okv(1)),
     questSpawnList: vi.fn(async () => okv([])),
     worldChanges: vi.fn(async () => okv([])),
-    exportWorld: vi.fn(async () => okv({ applyPath: '', revertPath: '', sql: '' })),
+    worldGroup: vi.fn(async () => okv(null)),
+    worldGroupView: vi.fn(async () => okv(null)),
+    worldGroupSpawns: vi.fn(async () => okv([])),
+    worldGroupsOnMap: vi.fn(async () => okv([])),
+    worldNewGroupId: vi.fn(async () => okv(900001)),
+    worldCheckGroup: vi.fn(async () => okv({ reasons: [], notes: [] })),
+    worldSetGroup: vi.fn(async () => okv({ spawns: [], routes: [], added: [] })),
+    worldDeleteGroup: vi.fn(async () => okv({ spawns: [], routes: [], added: [] })),
+    questPools: vi.fn(async () => okv([])),
+    gameEvents: vi.fn(async () => okv([])),
+    worldDropMember: vi.fn(async () => okv({ spawns: [], routes: [], added: [] })),
+    historyList: vi.fn(async () => okv(emptyHistoryResult.history)),
+    historyUndo: vi.fn(async () => okv(emptyHistoryResult)),
+    historyRedo: vi.fn(async () => okv({ ...emptyHistoryResult, direction: 'redo' })),
+    historyJump: vi.fn(async () => okv(emptyHistoryResult)),
+    historyBegin: vi.fn(async () => okv(1)),
+    historyEnd: vi.fn(async () => okv(true)),
+    exportProject: vi.fn(async () => okv({ applyPath: '', revertPath: '', sql: '' })),
     entitySpawns: vi.fn(async () => okv([])),
     findSpawns: vi.fn(async () => okv({ spawns: [], capped: false })),
+    spawnPlacement: vi.fn(async () => okv(null)),
     questMapRefs: vi.fn(async () => okv([])),
     testCommands: vi.fn(async () => okv({ reload: [], restart: [], go: [], quest: [] })),
     questScripts: vi.fn(async () => okv({ foreign: [], unreadable: [], missingTables: [] })),

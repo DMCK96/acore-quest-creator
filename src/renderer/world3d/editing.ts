@@ -2,8 +2,7 @@ import * as THREE from 'three';
 import type { Placement } from '@core/world/layer';
 import { IDLE, type Movement } from '@core/world/movement';
 import type { EditPoint, SpawnEdit, SpawnRef } from './edits';
-import { Gizmo, placementOf, quaternionOf, type GizmoChange, type GizmoMode, type GizmoTurns } from './scene/edit/Gizmo';
-import { createHistory } from './scene/edit/history';
+import { Gizmo, placementOf, type GizmoChange, type GizmoMode, type GizmoTurns } from './scene/edit/Gizmo';
 import { legIndex, MIN_ROUTE_POINTS } from './scene/edit/route';
 import { afterRouteChange, EMPTY_SELECTION, type Selection } from './scene/edit/selection';
 import { FALLOFF_DEFAULT, falloffWeights, stepRadius, type Falloff } from './scene/edit/falloff';
@@ -12,9 +11,10 @@ import { centreOf, movedBy, turnedAbout, turnQuaternion } from './scene/edit/gro
 /**
  * Editing in the 3D view: one gizmo on the middle of what is selected (NPCs, objects, points of
  * routes), moving or turning all of it together; with falloff, the other points of those routes
- * nearby follow by a share. Delete takes picked points out, a click inserts one, and undo goes back
- * a whole gesture at a time. Every edit is emitted as a whole placement or a whole route, for the
- * view's host to store; the world draws it at once and keeps it until the host says.
+ * nearby follow by a share. Delete takes picked points out and a click inserts one. Each gesture's
+ * edits (whole placements and whole routes) are emitted together, for the view's host to store as one
+ * step of the project's history; the world draws them at once and keeps them until the host says.
+ * Undo is the project's: an undo hands the view a new layer, and `layerChanged` follows it.
  */
 
 export const NOT_SNAPPED = 'The height is from the drawn ground, not the server.';
@@ -52,7 +52,10 @@ export interface EditingWorld {
 }
 
 export interface EditingOptions {
-  onEdit?(edit: SpawnEdit): void;
+  /** One gesture's edits, to be stored as one step */
+  onGesture?(edits: SpawnEdit[]): void;
+  /** A gesture has started on its way (waiting for the floor or a question); undo waits until the release is called */
+  onGestureStart?(): () => void;
   /** The server's floor nearest a height at a place, or null when it has none there */
   floorZ?(x: number, y: number, nearZ: number): Promise<number | null>;
   /** Asked once per route before the first change to a world route; false leaves it as it was */
@@ -71,8 +74,11 @@ type DraggedSpawn = { kind: Kind; guid: number; start: THREE.Vector3; quaternion
 /** A route with picked points being dragged: its points as they stood, and as they are now */
 type DraggedRoute = { guid: number; before: EditPoint[]; current: EditPoint[]; picked: Set<number> };
 
-/** A new path being drawn for an NPC: each click adds a point, each point is its own undo step */
-type Drawing = { guid: number; pathId: number; ref: SpawnRef; points: EditPoint[]; steps: number };
+/**
+ * A new path being drawn for an NPC: drawn in the view as it grows and sent only when finished, so the
+ * whole path is one step. `was` is how the NPC moved before
+ */
+type Drawing = { guid: number; pathId: number; ref: SpawnRef; points: EditPoint[]; was: Movement };
 
 type Drag = {
   spawns: DraggedSpawn[];
@@ -92,7 +98,8 @@ export class Editor {
   readonly #world: EditingWorld;
   readonly #options: EditingOptions;
   readonly #gizmo: Gizmo;
-  readonly #history = createHistory();
+  /** How many points each route with picked points had when last seen, to know when a new layer reshaped it */
+  readonly #lengths = new Map<number, number>();
   /** Each world route's answer to "change it for every spawn that walks it?" */
   readonly #answers = new Map<number, Promise<boolean>>();
   #selection: Selection = EMPTY_SELECTION;
@@ -130,6 +137,38 @@ export class Editor {
   /** What the host selected; the editor tells it back only about changes it makes itself */
   setSelection(selection: Selection): void {
     this.#selection = selection;
+    this.#rememberLengths();
+  }
+
+  /**
+   * The view drew a new layer or new own spawns (an undo, or an answer): what was pending is gone, so a
+   * path being drawn is drawn again, and picked points of a route that gained or lost points are let
+   * go, since they would name other points now
+   */
+  layerChanged(): void {
+    const drawing = this.#drawing;
+    if (drawing) this.#drawPending(drawing);
+    const kept = this.#selection.points.filter((p) => {
+      const route = this.#world.spawnRoute(p.guid);
+      const known = this.#lengths.get(p.guid);
+      return !!route && p.index < route.points.length && (known === undefined || known === route.points.length);
+    });
+    if (kept.length !== this.#selection.points.length) this.#select({ ...this.#selection, points: kept });
+    this.#rememberLengths();
+  }
+
+  #rememberLengths(): void {
+    this.#lengths.clear();
+    for (const p of this.#selection.points) {
+      const route = this.#world.spawnRoute(p.guid);
+      if (route) this.#lengths.set(p.guid, route.points.length);
+    }
+  }
+
+  /** Draws a route as edited, remembering its shape for `layerChanged` */
+  #pend(guid: number, points: EditPoint[]): void {
+    this.#world.setPendingRoute(guid, points);
+    if (this.#lengths.has(guid)) this.#lengths.set(guid, points.length);
   }
 
   get falloff(): Falloff {
@@ -196,8 +235,8 @@ export class Editor {
   }
 
   /**
-   * Starts a new path for a drawn NPC at a point: it now walks that path, which has the one point.
-   * Another path being drawn is finished first. One undo step.
+   * Starts a new path for a drawn NPC at a point: it is drawn walking that path, which has the one
+   * point. Another path being drawn is finished first. Nothing is sent until the path is finished
    */
   startPath(guid: number, pathId: number, first: At): void {
     if (this.#drawing) this.finishPath();
@@ -206,14 +245,8 @@ export class Editor {
     // A path made here is this NPC's alone: there is nobody to ask about changing it
     this.#answers.set(pathId, Promise.resolve(true));
     const was = this.#world.spawnMovement(guid) ?? IDLE;
-    const walks: Movement = { type: 'path', wander: 0, pathId };
-    const point: EditPoint = { x: first.x, y: first.y, z: first.z };
-    this.#drawing = { guid, pathId, ref, points: [point], steps: 1 };
-    this.#world.setPendingMovement(guid, walks);
-    this.#now(
-      [this.#pathEdit([]), { kind: 'movement', spawn: ref, to: was }],
-      [{ kind: 'movement', spawn: ref, to: walks }, this.#pathEdit([point])],
-    );
+    this.#drawing = { guid, pathId, ref, points: [{ x: first.x, y: first.y, z: first.z }], was };
+    this.#drawPending(this.#drawing);
     this.#tellDrawing();
   }
 
@@ -223,29 +256,45 @@ export class Editor {
     if (!drawing) return false;
     const ground = this.#world.pickGround(ndcX, ndcY);
     if (!ground) return true;
-    const before = this.#pathEdit(drawing.points);
     drawing.points = [...drawing.points, { x: ground.x, y: ground.y, z: ground.z }];
-    drawing.steps += 1;
-    this.#now([before], [this.#pathEdit(drawing.points)]);
+    this.#drawPending(drawing);
     this.#tellDrawing();
     return true;
+  }
+
+  /**
+   * Drops a drag under way without an edit: everything dragged goes back where it was drawn before it.
+   * An undo arriving mid-drag does this first, so the drag cannot land on top of what the undo put back
+   */
+  cancelDrag(): void {
+    const drag = this.#drag;
+    if (!drag) return;
+    this.#drag = null;
+    for (const spawn of drag.spawns) {
+      const object = this.#world.findSpawn(spawn.kind, spawn.guid);
+      if (!object) continue;
+      object.position.copy(spawn.start);
+      object.quaternion.copy(spawn.quaternion);
+      object.updateMatrixWorld(true);
+      if (spawn.kind === 'creature') this.#world.previewHome(spawn.guid, { x: spawn.start.x, y: spawn.start.y, z: spawn.start.z });
+    }
+    for (const route of drag.routes) this.#world.previewRoute(route.guid, route.before);
   }
 
   /** Takes back the path's last point; taking back its first cancels the path */
   undoPoint(): void {
     const drawing = this.#drawing;
     if (!drawing) return;
-    if (drawing.steps <= 1) {
+    if (drawing.points.length <= 1) {
       this.cancelPath();
       return;
     }
-    this.undo();
-    drawing.steps -= 1;
     drawing.points = drawing.points.slice(0, -1);
+    this.#drawPending(drawing);
     this.#tellDrawing();
   }
 
-  /** Ends the path being drawn; one with fewer than two points is cancelled, as no NPC can walk it */
+  /** Ends the path being drawn and sends it as one gesture; one with fewer than two points is cancelled, as no NPC can walk it */
   finishPath(): void {
     const drawing = this.#drawing;
     if (!drawing) return;
@@ -256,32 +305,34 @@ export class Editor {
     }
     this.#drawing = null;
     this.#tellDrawing();
+    this.#options.onGesture?.([{ kind: 'movement', spawn: drawing.ref, to: this.#walks(drawing) }, this.#pathEdit(drawing, drawing.points)]);
   }
 
-  /** Puts back everything the path being drawn changed; it cannot be redone */
+  /** Puts back how the NPC was drawn before the path was started; nothing was sent */
   cancelPath(): void {
     const drawing = this.#drawing;
     if (!drawing) return;
     this.#drawing = null;
-    for (let i = 0; i < drawing.steps; i++) this.undo();
-    this.#history.forgetRedo();
+    this.#world.setPendingRoute(drawing.guid, []);
+    this.#world.setPendingMovement(drawing.guid, drawing.was);
     this.#tellDrawing();
   }
 
-  #pathEdit(points: EditPoint[]): SpawnEdit {
-    const drawing = this.#drawing!;
+  #walks(drawing: Drawing): Movement {
+    return { type: 'path', wander: 0, pathId: drawing.pathId };
+  }
+
+  #drawPending(drawing: Drawing): void {
+    this.#world.setPendingMovement(drawing.guid, this.#walks(drawing));
+    this.#world.setPendingRoute(drawing.guid, drawing.points);
+  }
+
+  #pathEdit(drawing: Drawing, points: EditPoint[]): SpawnEdit {
     return { kind: 'route', spawn: drawing.ref, pathId: drawing.pathId, points };
   }
 
   #tellDrawing(): void {
     this.#options.onDrawing?.(this.drawing);
-  }
-
-  /** Edits nobody need be asked about: drawn at once, remembered as one undo step and sent */
-  #now(before: SpawnEdit[], after: SpawnEdit[]): void {
-    for (const edit of after) if (edit.kind === 'route') this.#world.setPendingRoute(edit.spawn.guid, edit.points);
-    this.#history.push(before, after);
-    for (const edit of after) this.#options.onEdit?.(edit);
   }
 
   /** A wheel turn during a falloff drag grows or shrinks the radius; true when it was used */
@@ -297,7 +348,7 @@ export class Editor {
   /** The editing keys; true when the key was one of them */
   keyDown(event: KeyboardEvent): boolean {
     const ctrl = event.ctrlKey || event.metaKey;
-    // While a path is drawn, Enter finishes it and Ctrl+Z takes back its last point
+    // While a path is drawn, Enter finishes it and Ctrl+Z takes back its last point; redo waits until it is finished
     if (this.#drawing && event.code === 'Enter') {
       this.finishPath();
       return true;
@@ -306,17 +357,8 @@ export class Editor {
       this.undoPoint();
       return true;
     }
-    // Nothing else may step the history while a path is drawn: its own steps must stay the last ones
     if (this.#drawing && ctrl && (event.code === 'KeyY' || event.code === 'KeyZ')) return true;
-    if (ctrl && event.code === 'KeyZ') {
-      if (event.shiftKey) this.redo();
-      else this.undo();
-      return true;
-    }
-    if (ctrl && event.code === 'KeyY') {
-      this.redo();
-      return true;
-    }
+    // Otherwise undo and redo are the project's, handled by the app
     if (ctrl) return false;
     switch (event.code) {
       case 'KeyG':
@@ -339,19 +381,6 @@ export class Editor {
         return true;
     }
     return false;
-  }
-
-  /** One undo step for edits the host made itself (a placement, a movement): remembered, not sent again */
-  record(before: SpawnEdit[], after: SpawnEdit[]): void {
-    this.#history.push(before, after);
-  }
-
-  undo(): void {
-    for (const edit of this.#history.undo() ?? []) this.#apply(edit);
-  }
-
-  redo(): void {
-    for (const edit of this.#history.redo() ?? []) this.#apply(edit);
   }
 
   /** Every frame: keeps the gizmo on the middle of what is selected, which a redraw may have replaced */
@@ -386,7 +415,6 @@ export class Editor {
   }
 
   dispose(): void {
-    this.#history.clear();
     this.#gizmo.dispose();
   }
 
@@ -494,56 +522,62 @@ export class Editor {
     // A lone object tilted on its X or Y ring has turned, though not about Z
     const tilted = !!change && attached?.turns === 'all' && change.quaternion.angleTo(attached.quaternion) > 1e-9;
     if (!drag || !change || (change.delta.lengthSq() === 0 && change.angle === 0 && !tilted)) return;
-    const moving = this.#mode === 'move' || this.#attached?.turns === 'none';
+    // An undo waits until this gesture is sent: the floor and any question come first
+    const release = this.#options.onGestureStart?.();
+    try {
+      const moving = this.#mode === 'move' || this.#attached?.turns === 'none';
 
-    const spawns = drag.spawns.flatMap((s) => {
-      const object = this.#world.findSpawn(s.kind, s.guid);
-      return object ? [{ ...s, object }] : [];
-    });
-    const routes = drag.routes.map((r) => ({ ...r, changed: r.current.flatMap((p, i) => (p === r.before[i] ? [] : [i])) }));
-    // Drawn where they were dragged from now on, while the server's floor and any question are awaited,
-    // so the gizmo stays with them and a quick second drag starts from there
-    for (const r of routes) if (r.changed.length > 0) this.#world.setPendingRoute(r.guid, r.current);
+      const spawns = drag.spawns.flatMap((s) => {
+        const object = this.#world.findSpawn(s.kind, s.guid);
+        return object ? [{ ...s, object }] : [];
+      });
+      const routes = drag.routes.map((r) => ({ ...r, changed: r.current.flatMap((p, i) => (p === r.before[i] ? [] : [i])) }));
+      // Drawn where they were dragged from now on, while the server's floor and any question are awaited,
+      // so the gizmo stays with them and a quick second drag starts from there
+      for (const r of routes) if (r.changed.length > 0) this.#pend(r.guid, r.current);
 
-    // Dropped along the ground: onto the server's floor nearest where each thing was dragged, when it has one
-    if (moving && !lifted && this.#options.floorZ) {
-      const floorZ = this.#options.floorZ;
-      const asks = [
-        ...spawns.map(async (s) => {
-          const floor = await floorZ(s.object.position.x, s.object.position.y, s.object.position.z);
-          if (floor !== null) s.object.position.z = floor;
-          return floor !== null;
-        }),
-        ...routes.flatMap((r) =>
-          r.changed.map(async (i) => {
-            const p = r.current[i]!;
-            const floor = await floorZ(p.x, p.y, p.z);
-            if (floor !== null) r.current[i] = { ...p, z: floor };
+      // Dropped along the ground: onto the server's floor nearest where each thing was dragged, when it has one
+      if (moving && !lifted && this.#options.floorZ) {
+        const floorZ = this.#options.floorZ;
+        const asks = [
+          ...spawns.map(async (s) => {
+            const floor = await floorZ(s.object.position.x, s.object.position.y, s.object.position.z);
+            if (floor !== null) s.object.position.z = floor;
             return floor !== null;
           }),
-        ),
-      ];
-      const unfloored = (await Promise.all(asks)).filter((found) => !found).length;
-      this.#options.onNotice?.(unfloored === 0 ? null : unfloored === 1 ? NOT_SNAPPED : `${unfloored} of them: the height is from the drawn ground, not the server.`);
-    }
+          ...routes.flatMap((r) =>
+            r.changed.map(async (i) => {
+              const p = r.current[i]!;
+              const floor = await floorZ(p.x, p.y, p.z);
+              if (floor !== null) r.current[i] = { ...p, z: floor };
+              return floor !== null;
+            }),
+          ),
+        ];
+        const unfloored = (await Promise.all(asks)).filter((found) => !found).length;
+        this.#options.onNotice?.(unfloored === 0 ? null : unfloored === 1 ? NOT_SNAPPED : `${unfloored} of them: the height is from the drawn ground, not the server.`);
+      }
 
-    const before: SpawnEdit[] = [];
-    const after: SpawnEdit[] = [];
-    for (const s of spawns) {
-      // A move puts the NPC where it was dragged to, so what it was lifted onto the ground by no longer applies
-      if (moving) s.object.userData.lift = 0;
-      s.object.updateMatrixWorld(true);
-      const spawn = this.#ref(s.kind, s.guid);
-      if (!spawn) continue;
-      before.push({ kind: 'place', spawn, to: s.before });
-      after.push({ kind: 'place', spawn, to: placementOf(s.object, s.kind) });
+      const before: SpawnEdit[] = [];
+      const after: SpawnEdit[] = [];
+      for (const s of spawns) {
+        // A move puts the NPC where it was dragged to, so what it was lifted onto the ground by no longer applies
+        if (moving) s.object.userData.lift = 0;
+        s.object.updateMatrixWorld(true);
+        const spawn = this.#ref(s.kind, s.guid);
+        if (!spawn) continue;
+        before.push({ kind: 'place', spawn, to: s.before });
+        after.push({ kind: 'place', spawn, to: placementOf(s.object, s.kind) });
+      }
+      for (const r of routes) {
+        if (r.changed.length === 0) continue;
+        before.push(this.#routeEdit(r.guid, r.before));
+        after.push(this.#routeEdit(r.guid, r.current));
+      }
+      await this.#commit(before, after);
+    } finally {
+      release?.();
     }
-    for (const r of routes) {
-      if (r.changed.length === 0) continue;
-      before.push(this.#routeEdit(r.guid, r.before));
-      after.push(this.#routeEdit(r.guid, r.current));
-    }
-    await this.#commit(before, after);
   }
 
   /** Delete: every picked point out of its route; a route that would be too short to walk is left as it was */
@@ -571,56 +605,36 @@ export class Editor {
 
   /**
    * One gesture's edits: a world route others walk is asked about first (one question at a time, once
-   * per route); one answered no is drawn back and left out. The rest are drawn, remembered as one
-   * undo step and emitted.
+   * per route); one answered no is drawn back and left out. The rest are drawn and emitted as one
+   * gesture.
    */
   async #commit(before: SpawnEdit[], after: SpawnEdit[]): Promise<void> {
-    const kept: number[] = [];
-    for (let i = 0; i < after.length; i++) {
-      const edit = after[i]!;
-      if (edit.kind === 'route' && !edit.spawn.own) {
-        let answer = this.#answers.get(edit.pathId);
-        if (!answer) {
-          answer = this.#options.beforeRouteEdit?.(edit.spawn, edit.pathId) ?? Promise.resolve(true);
-          this.#answers.set(edit.pathId, answer);
+    // An undo waits while a shared route is asked about
+    const release = this.#options.onGestureStart?.();
+    try {
+      const kept: number[] = [];
+      for (let i = 0; i < after.length; i++) {
+        const edit = after[i]!;
+        if (edit.kind === 'route' && !edit.spawn.own) {
+          let answer = this.#answers.get(edit.pathId);
+          if (!answer) {
+            answer = this.#options.beforeRouteEdit?.(edit.spawn, edit.pathId) ?? Promise.resolve(true);
+            this.#answers.set(edit.pathId, answer);
+          }
+          if (!(await answer)) {
+            const was = before[i]!;
+            if (was.kind === 'route') this.#pend(was.spawn.guid, was.points);
+            continue;
+          }
         }
-        if (!(await answer)) {
-          const was = before[i]!;
-          if (was.kind === 'route') this.#world.setPendingRoute(was.spawn.guid, was.points);
-          continue;
-        }
+        kept.push(i);
       }
-      kept.push(i);
+      if (kept.length === 0) return;
+      const done = kept.map((i) => after[i]!);
+      for (const edit of done) if (edit.kind === 'route') this.#pend(edit.spawn.guid, edit.points);
+      this.#options.onGesture?.(done);
+    } finally {
+      release?.();
     }
-    if (kept.length === 0) return;
-    const done = kept.map((i) => after[i]!);
-    for (const edit of done) if (edit.kind === 'route') this.#world.setPendingRoute(edit.spawn.guid, edit.points);
-    this.#history.push(kept.map((i) => before[i]!), done);
-    for (const edit of done) this.#options.onEdit?.(edit);
-  }
-
-  /** An undone or redone edit: drawn at once, and sent on like any other */
-  #apply(edit: SpawnEdit): void {
-    if (edit.kind === 'movement') {
-      this.#world.setPendingMovement(edit.spawn.guid, edit.to);
-    } else if (edit.kind === 'presence') {
-      // Put in or taken out by the host, which draws the layer it gets back
-    } else if (edit.kind === 'place') {
-      const object = this.#world.findSpawn(edit.spawn.kind, edit.spawn.guid);
-      if (object) {
-        object.position.set(edit.to.x, edit.to.y, edit.to.z);
-        object.quaternion.copy(quaternionOf(edit.to));
-        object.updateMatrixWorld(true);
-      }
-    } else {
-      // A route that gains or loses points lets go of its picked ones, which would name other points now;
-      // a move keeps them picked
-      const drawn = this.#world.spawnRoute(edit.spawn.guid);
-      const reshaped = !drawn || drawn.points.length !== edit.points.length;
-      const kept = this.#selection.points.filter((p) => p.guid !== edit.spawn.guid || !reshaped);
-      if (kept.length !== this.#selection.points.length) this.#select({ ...this.#selection, points: kept });
-      this.#world.setPendingRoute(edit.spawn.guid, edit.points);
-    }
-    this.#options.onEdit?.(edit);
   }
 }

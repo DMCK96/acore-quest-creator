@@ -57,7 +57,7 @@ test('new, name, save, reopen from recent, and recover after a crash', async () 
   const nodeCount = await page.getByTestId('quest-node').count();
   expect(nodeCount).toBeGreaterThan(0);
 
-  await page.getByRole('button', { name: 'Project' }).click();
+  await page.getByRole('button', { name: 'Project', exact: true }).click();
   const modal = page.getByRole('dialog', { name: 'Project' });
   await modal.getByLabel('Project name').fill('E2E project');
   await modal.getByLabel('Project name').press('Enter');
@@ -65,23 +65,23 @@ test('new, name, save, reopen from recent, and recover after a crash', async () 
   await modal.getByRole('button', { name: 'Save As…' }).click();
   await expect(page.getByLabel('Unsaved changes')).toHaveCount(0);
   const onDisk = JSON.parse(readFileSync(saved, 'utf8'));
-  expect(onDisk).toMatchObject({ format: 'acore-quest-creator/project', version: 3, name: 'E2E project' });
+  expect(onDisk).toMatchObject({ format: 'acore-quest-creator/project', version: 4, name: 'E2E project' });
   expect(onDisk.quests).toHaveLength(nodeCount);
 
-  await page.getByRole('button', { name: 'Project' }).click();
+  await page.getByRole('button', { name: 'Project', exact: true }).click();
   await modal.getByRole('button', { name: 'New project…' }).click();
   await modal.getByLabel('New project name').fill('Second');
   await modal.getByRole('button', { name: 'Create' }).click();
   await expect(heading).toHaveText('Second');
   await expect(page.getByTestId('quest-node')).toHaveCount(0);
 
-  await page.getByRole('button', { name: 'Project' }).click();
+  await page.getByRole('button', { name: 'Project', exact: true }).click();
   await modal.getByRole('button', { name: /^Open E2E project/ }).click();
   await expect(heading).toHaveText('E2E project');
   await expect(page.getByTestId('quest-node')).toHaveCount(nodeCount);
 
   // Unsaved work, then a crash.
-  await page.getByRole('button', { name: 'Project' }).click();
+  await page.getByRole('button', { name: 'Project', exact: true }).click();
   await modal.getByLabel('Project name').fill('Crashed name');
   await modal.getByLabel('Project name').press('Enter');
   await expect.poll(() => (existsSync(recoveryDir) ? readdirSync(recoveryDir).length : 0), { timeout: 5000 }).toBe(1);

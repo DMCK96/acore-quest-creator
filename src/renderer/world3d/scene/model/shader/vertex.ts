@@ -11,6 +11,8 @@ const VERTEX_SHADER_PRECISIONS = ['highp float'];
 
 const VERTEX_SHADER_UNIFORMS = [
   { name: 'boneTexture', type: 'highp sampler2D', if: 'USE_SKINNING' },
+  // Carries a pose made for an earlier camera to this one (identity when posed this frame)
+  { name: 'boneView', type: 'mat4', if: 'USE_SKINNING' },
   { name: 'modelMatrix', type: 'mat4' },
   { name: 'modelViewMatrix', type: 'mat4' },
   { name: 'normalMatrix', type: 'mat3' },
@@ -24,14 +26,16 @@ const VERTEX_SHADER_INPUTS = [
   { name: 'normal', type: 'vec3' },
   { name: 'skinIndex', type: 'vec4', if: 'USE_SKINNING' },
   { name: 'skinWeight', type: 'vec4', if: 'USE_SKINNING' },
+  // Many copies of one doodad drawn in one call: where each copy stands
+  { name: 'instanceMatrix', type: 'mat4', if: 'USE_INSTANCING' },
 ];
 
 const VERTEX_SHADER_OUTPUTS = [{ name: 'vViewNormal', type: 'vec3' }];
 
 const VERTEX_SHADER_SPHERE_MAP = `
-vec2 sphereMap(vec3 position, vec3 normal) {
-  vec3 viewPosition = normalize(vec3(modelViewMatrix * vec4(position, 1.0)));
-  vec3 viewNormal = normalize(normalMatrix * normal);
+vec2 sphereMap(vec3 position, vec3 normal, mat4 viewModel, mat3 viewNormalMatrix) {
+  vec3 viewPosition = normalize(vec3(viewModel * vec4(position, 1.0)));
+  vec3 viewNormal = normalize(viewNormalMatrix * normal);
 
   vec3 temp = (-viewPosition - (viewNormal * (2.0 * dot(-viewPosition, viewNormal))));
   temp = vec3(temp.x, temp.y, temp.z + 1.0);
@@ -79,26 +83,40 @@ const VERTEX_SHADER_MAIN_SKINNING = `
 #endif
 `;
 
+// The model's matrices, or a copy's when many are drawn at once (doodads scale evenly, so the
+// model-view matrix's rotation part turns normals as the normal matrix would)
+const VERTEX_SHADER_MAIN_MATRICES = `
+#ifdef USE_INSTANCING
+  mat4 viewModel = modelViewMatrix * instanceMatrix;
+  mat3 viewNormalMatrix = mat3(viewModel);
+  mat4 worldModel = modelMatrix * instanceMatrix;
+#else
+  mat4 viewModel = modelViewMatrix;
+  mat3 viewNormalMatrix = normalMatrix;
+  mat4 worldModel = modelMatrix;
+#endif
+`;
+
 const VERTEX_SHADER_MAIN_NORMAL = `
 #ifdef USE_SKINNING
-  vViewNormal = normalize(mat3(skinMatrix) * normal);
+  vViewNormal = normalize(mat3(boneView) * mat3(skinMatrix) * normal);
 #else
-  vViewNormal = normalize(normalMatrix * normal);
+  vViewNormal = normalize(viewNormalMatrix * normal);
 #endif
 `;
 
 const VERTEX_SHADER_MAIN_FOG = `
 // Calculate camera distance for fog coloring in fragment shader
-vec4 worldPosition = modelMatrix * vec4(position, 1.0);
+vec4 worldPosition = worldModel * vec4(position, 1.0);
 float cameraDistance = distance(cameraPosition, worldPosition.xyz);
 ${VARIABLE_FOG_FACTOR.name} = calculateFogFactor(${UNIFORM_FOG_PARAMS.name}, cameraDistance);
 `;
 
 const VERTEX_SHADER_MAIN_POSITION = `
 #ifdef USE_SKINNING
-  gl_Position = projectionMatrix * skinMatrix * vec4(position, 1.0);
+  gl_Position = projectionMatrix * boneView * skinMatrix * vec4(position, 1.0);
 #else
-  gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+  gl_Position = projectionMatrix * viewModel * vec4(position, 1.0);
 #endif
 `;
 
@@ -147,7 +165,7 @@ const createVertexShader = (texCoord1?: M2_TEXTURE_COORD, texCoord2?: M2_TEXTURE
 
   // Main
 
-  const main = [];
+  const main = [VERTEX_SHADER_MAIN_MATRICES];
 
   if (texCoord1 === M2_TEXTURE_COORD.COORD_T1) {
     main.push(
@@ -170,7 +188,7 @@ const createVertexShader = (texCoord1?: M2_TEXTURE_COORD, texCoord2?: M2_TEXTURE
       ],
     );
   } else if (texCoord1 === M2_TEXTURE_COORD.COORD_ENV) {
-    main.push(`vTexCoord1 = sphereMap(position, normal);`);
+    main.push(`vTexCoord1 = sphereMap(position, normal, viewModel, viewNormalMatrix);`);
   }
 
   if (texCoord2 === M2_TEXTURE_COORD.COORD_T1) {
@@ -194,7 +212,7 @@ const createVertexShader = (texCoord1?: M2_TEXTURE_COORD, texCoord2?: M2_TEXTURE
       ],
     );
   } else if (texCoord2 === M2_TEXTURE_COORD.COORD_ENV) {
-    main.push(`vTexCoord2 = sphereMap(position, normal);`);
+    main.push(`vTexCoord2 = sphereMap(position, normal, viewModel, viewNormalMatrix);`);
   }
 
   main.push(VERTEX_SHADER_MAIN_SKINNING);

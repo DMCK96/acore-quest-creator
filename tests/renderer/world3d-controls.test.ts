@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import * as THREE from 'three';
-import { beforeEach, describe, expect, it } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { WorldControls } from '../../src/renderer/world3d/controls';
 
 const setup = (pick: (x: number, y: number) => THREE.Vector3 | null = () => null) => {
@@ -121,7 +121,7 @@ const fire = (target: EventTarget, type: string, x: number, y: number, init: Mou
   return event;
 };
 
-const selectSetup = (extra: { onWheel?(deltaY: number): boolean } = {}) => {
+const selectSetup = (extra: { onWheel?(deltaY: number): boolean; onDoubleClick?(x: number, y: number): void } = {}) => {
   const camera = new THREE.PerspectiveCamera(60, 2, 0.5, 1000);
   camera.up.set(0, 0, 1);
   const host = document.createElement('div');
@@ -185,6 +185,55 @@ describe('Select mode', () => {
     fire(dom, 'pointerup', 100, 50, { button: 0, ctrlKey: true });
     expect(boxes).toEqual([]);
     expect(clicks).toEqual([{ x: 0, y: 0, keys: { shift: false, ctrl: true, alt: false } }]);
+  });
+
+  it('a press on the gizmo that does not move is still a click (what is under a handle can be picked); a gizmo drag is not', () => {
+    const camera = new THREE.PerspectiveCamera(60, 2, 0.5, 1000);
+    const dom = document.createElement('canvas');
+    document.body.appendChild(dom);
+    dom.getBoundingClientRect = () => ({ left: 0, top: 0, width: 200, height: 100, right: 200, bottom: 100, x: 0, y: 0, toJSON() {} }) as DOMRect;
+    const clicks: unknown[] = [];
+    const boxes: unknown[] = [];
+    const controls = new WorldControls(camera, dom, { blocked: () => true, onClick: (x, y, keys) => clicks.push({ x, y, keys }), onBox: (rect) => boxes.push(rect) });
+    controls.setView(new THREE.Vector3(0, 0, 0), new THREE.Vector3(-30, -30, 30));
+    for (const mode of ['camera', 'select'] as const) {
+      controls.setMode(mode);
+      const before = camera.position.clone();
+      fire(dom, 'pointerdown', 100, 50, { button: 0 });
+      fire(dom, 'pointerup', 101, 50, { button: 0 });
+      fire(dom, 'pointerdown', 100, 50, { button: 0 });
+      fire(dom, 'pointermove', 160, 50, { button: 0 });
+      fire(dom, 'pointerup', 160, 50, { button: 0 });
+      expect(camera.position.distanceTo(before)).toBe(0);
+    }
+    expect(clicks).toEqual([
+      { x: expect.closeTo(0.01), y: 0, keys: { shift: false, ctrl: false, alt: false } },
+      { x: expect.closeTo(0.01), y: 0, keys: { shift: false, ctrl: false, alt: false } },
+    ]);
+    expect(boxes).toEqual([]);
+  });
+
+  it('a second click soon after at the same place is also a double-click; a slow or distant one is not', () => {
+    const doubles: unknown[] = [];
+    const { dom } = selectSetup({ onDoubleClick: (x, y) => doubles.push({ x, y }) });
+    let now = 1000;
+    const clock = vi.spyOn(performance, 'now').mockImplementation(() => now);
+    const click = (x: number, y: number, at: number) => {
+      now = at;
+      fire(dom, 'pointerdown', x, y, { button: 0 });
+      fire(dom, 'pointerup', x, y, { button: 0 });
+    };
+    click(100, 50, 1000);
+    click(101, 50, 1200);
+    expect(doubles).toEqual([{ x: expect.closeTo(0.01), y: 0 }]);
+    // A third click is not a second double-click
+    click(100, 50, 1300);
+    expect(doubles).toHaveLength(1);
+    click(100, 50, 3000);
+    click(100, 50, 3800);
+    click(160, 50, 3900);
+    expect(doubles).toHaveLength(1);
+    clock.mockRestore();
   });
 
   it('in Camera mode a left-drag still orbits and draws no box', () => {

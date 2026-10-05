@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import type { FieldValue } from '../registry/types';
 import { fightSchema } from '../combat/model';
+import type { EntityOrigin } from './entity';
 
 /**
  * New NPCs and objects a quest needs, and where they stand. Stored in the quest's values under
@@ -85,6 +86,28 @@ export const OBJECT_TYPE_VALUE = { questGiver: 2, chest: 3, generic: 5, text: 9,
 
 const keysOf = <T extends Record<string, number>>(o: T) => Object.keys(o) as [keyof T & string, ...(keyof T & string)[]];
 
+/** What of an existing entity the project may not change, because other things share it */
+export type EntityLock = 'type' | 'loot' | 'fight';
+/** An existing entity's rows as the database had them, by table name */
+export type OriginalRows = Record<string, Record<string, string | null>[]>;
+
+/**
+ * Where a stored entity came from: made in the project, or an existing one edited here, with its
+ * rows as the database had them (put back on revert), how many other entries share its loot, how
+ * many spawns it has and what may not be changed.
+ */
+const originSchema = z.discriminatedUnion('kind', [
+  z.object({ kind: z.literal('new') }),
+  z.object({
+    kind: z.literal('existing'),
+    original: z.record(z.string(), z.array(z.record(z.string(), z.string().nullable()))),
+    sharedLoot: int.min(0),
+    spawnCount: int.min(0),
+    locked: z.array(z.enum(['type', 'loot', 'fight'])),
+  }),
+]);
+const NEW_ORIGIN = { kind: 'new' } as const;
+
 const lootSchema = z.object({ item: int, chance: num, min: int, max: int, questOnly: z.boolean() });
 
 const npcSchema = z.object({
@@ -109,6 +132,8 @@ const npcSchema = z.object({
   fight: fightSchema.nullable().default(null),
   // Added with the NPC editor (slice M): the weapons it holds, as items; none keeps older NPCs unarmed.
   equipment: z.object({ mainHand: int, offHand: int, ranged: int }).default({ mainHand: 0, offHand: 0, ranged: 0 }),
+  // Added with editing existing entities; anything saved before then was made in the project.
+  origin: originSchema.default(NEW_ORIGIN),
 });
 
 const pageSchema = z.object({ id: int, text: z.string() });
@@ -122,8 +147,10 @@ const objectSchema = z.object({
   spawns: z.array(spawnSchema),
   // Added with readable objects (slice E); defaults keep objects saved before then as they were.
   pages: z.array(pageSchema).default([]),
-  onlyDuringQuest: z.boolean().default(false),
+  // The quest a player must have in their log to use or loot it, or null for anyone.
+  onlyDuringQuest: int.nullable().default(null),
   loot: z.array(lootSchema).default([]),
+  origin: originSchema.default(NEW_ORIGIN),
 });
 
 export const ITEM_QUALITY_VALUE = { poor: 0, common: 1, uncommon: 2, rare: 3, epic: 4, legendary: 5, artifact: 6, heirloom: 7 } as const;
@@ -162,8 +189,10 @@ const itemSchema = z.object({
   stats: z.array(itemStatSchema).max(10),
   spells: z.array(itemSpellSchema).max(5),
   advanced: z.record(z.string(), z.string()),
+  origin: originSchema.default(NEW_ORIGIN),
 });
 
+export type StoredOrigin = z.infer<typeof originSchema>;
 export type Spawn = z.infer<typeof spawnSchema>;
 export type Pace = (typeof PACES)[number];
 export type PointAction = z.infer<typeof pointActionSchema>;
@@ -184,10 +213,39 @@ export type ItemSpell = z.infer<typeof itemSpellSchema>;
 export type ItemQuality = CustomItem['quality'];
 export type Bonding = CustomItem['bonding'];
 
-export interface QuestEntities {
+/** The project's new NPCs, objects and items: one store; a quest uses one by naming it. */
+export interface ProjectEntities {
   npcs: CustomNpc[];
   objects: CustomObject[];
   items: CustomItem[];
+}
+
+export type QuestEntities = ProjectEntities;
+
+export const EMPTY_ENTITIES: ProjectEntities = { npcs: [], objects: [], items: [] };
+
+/** The schema a whole store is checked against when the window sends it. */
+export const projectEntitiesSchema = z.object({ npcs: z.array(npcSchema), objects: z.array(objectSchema), items: z.array(itemSchema) });
+
+/** Whether a stored entity was made in the project or is an existing one edited here */
+export function originOf(entity: { origin: StoredOrigin }): EntityOrigin {
+  return entity.origin.kind;
+}
+
+const byOrigin = (store: ProjectEntities, kind: EntityOrigin): ProjectEntities => ({
+  npcs: store.npcs.filter((n) => n.origin.kind === kind),
+  objects: store.objects.filter((o) => o.origin.kind === kind),
+  items: store.items.filter((i) => i.origin.kind === kind),
+});
+
+/** The store's entities made in the project */
+export function newOnly(store: ProjectEntities): ProjectEntities {
+  return byOrigin(store, 'new');
+}
+
+/** The store's existing entities edited here */
+export function existingOnly(store: ProjectEntities): ProjectEntities {
+  return byOrigin(store, 'existing');
 }
 
 const validItems = <T>(schema: z.ZodType<T>, raw: unknown): T[] =>
@@ -198,7 +256,13 @@ const validItems = <T>(schema: z.ZodType<T>, raw: unknown): T[] =>
       })
     : [];
 
-/** The quest's new NPCs, objects and items; anything not valid is left out, never thrown. */
+/** The project's store; anything not valid is left out, never thrown. */
+export function readProjectEntities(raw: unknown): ProjectEntities {
+  const record = typeof raw === 'object' && raw !== null && !Array.isArray(raw) ? (raw as Record<string, unknown>) : {};
+  return { npcs: validItems(npcSchema, record.npcs), objects: validItems(objectSchema, record.objects), items: validItems(itemSchema, record.items) };
+}
+
+/** A quest's new NPCs, objects and items as projects before version 4 kept them; read only to move them. */
 export function readEntities(values: Readonly<Record<string, unknown>>): QuestEntities {
   const raw = values[ENTITIES_FIELD];
   const record = typeof raw === 'object' && raw !== null && !Array.isArray(raw) ? (raw as Record<string, unknown>) : {};
@@ -230,11 +294,12 @@ export function newNpc(entry: number): CustomNpc {
     loot: [],
     fight: null,
     equipment: { mainHand: 0, offHand: 0, ranged: 0 },
+    origin: { kind: 'new' },
   };
 }
 
 export function newObject(entry: number): CustomObject {
-  return { entry, name: '', type: 'goober', displayId: 0, size: 1, spawns: [], pages: [], onlyDuringQuest: false, loot: [] };
+  return { entry, name: '', type: 'goober', displayId: 0, size: 1, spawns: [], pages: [], onlyDuringQuest: null, loot: [], origin: { kind: 'new' } };
 }
 
 export function newSpawn(guid: number): Spawn {
@@ -246,6 +311,6 @@ export function newItem(entry: number): CustomItem {
   return {
     entry, name: '', description: '', quality: 'common', itemClass: 12, subclass: 0, inventoryType: 0, displayId: 0,
     itemLevel: 1, requiredLevel: 0, stackable: 1, maxCount: 1, bonding: 'quest', buyPrice: 0, sellPrice: 0, startsQuest: 0,
-    pages: [], armor: 0, damage: [], delayMs: 0, stats: [], spells: [], advanced: {},
+    pages: [], armor: 0, damage: [], delayMs: 0, stats: [], spells: [], advanced: {}, origin: { kind: 'new' },
   };
 }

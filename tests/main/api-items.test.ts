@@ -26,7 +26,7 @@ describe('custom items through the API', () => {
     expect(((await api.allocateIds('item', 1)) as any).value).toEqual([990101]);
     const opened: any = await api.newQuest();
     const aggregate = opened.value.aggregate;
-    aggregate.values[ENTITIES_FIELD] = writeEntities({ npcs: [], objects: [], items: [{ ...newItem(990105), name: 'Pearl' }] });
+    await api.putProjectEntities({ npcs: [], objects: [], items: [{ ...newItem(990105), name: 'Pearl' }] });
     await api.updateQuest(aggregate);
     expect(((await api.allocateIds('item', 1)) as any).value).toEqual([990106]);
   });
@@ -35,7 +35,7 @@ describe('custom items through the API', () => {
     const opened: any = await api.newQuest();
     const aggregate = opened.value.aggregate;
     aggregate.values['quest_template.LogTitle'] = 'Pearls';
-    aggregate.values[ENTITIES_FIELD] = writeEntities({ npcs: [], objects: [], items: [{ ...newItem(990110), name: 'Golden Pearl', displayId: 7040 }] });
+    await api.putProjectEntities({ npcs: [], objects: [], items: [{ ...newItem(990110), name: 'Golden Pearl', displayId: 7040 }] });
     aggregate.values['quest_template.RewardItems'] = [{ item: 990110, amount: 1 }, { item: 0, amount: 0 }, { item: 0, amount: 0 }, { item: 0, amount: 0 }];
     await api.updateQuest(aggregate);
     expect(((await api.searchEntities('item', 'Pearl')) as any).value[0]).toMatchObject({ id: 990110, name: 'Golden Pearl', detail: 'new' });
@@ -43,7 +43,7 @@ describe('custom items through the API', () => {
     const issues: any = await api.validate(aggregate.questId);
     expect(issues.value.filter((i: any) => i.severity === 'error')).toEqual([]);
     const out: any = await api.exportQuest(aggregate.questId);
-    expect(out.value.sql).toMatch(/INSERT INTO `item_template` \(.*\) VALUES \(990110,/);
+    expect(out.value.projectSql).toMatch(/INSERT INTO `item_template` \(.*\) VALUES \(990110,/);
   });
   it('copies a look from an existing item and lists the columns for the advanced tab', async () => {
     const { api, db } = await setup();
@@ -56,7 +56,7 @@ describe('custom items through the API', () => {
     const { api } = await setup();
     const opened: any = await api.newQuest();
     const aggregate = opened.value.aggregate;
-    aggregate.values[ENTITIES_FIELD] = writeEntities({ npcs: [], objects: [], items: [{ ...newItem(990120), name: 'Torn Letter', startsQuest: aggregate.questId }] });
+    await api.putProjectEntities({ npcs: [], objects: [], items: [{ ...newItem(990120), name: 'Torn Letter', startsQuest: aggregate.questId }] });
     await api.updateQuest(aggregate);
     const links: any = await api.questLinks([aggregate.questId]);
     expect(JSON.stringify(links.value)).toContain('990120');

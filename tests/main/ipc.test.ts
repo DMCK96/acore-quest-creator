@@ -9,9 +9,11 @@ describe('parseRequest', () => {
     expect([...API_METHODS].sort()).toEqual([
       'addQuestChain', 'applyToDev', 'chooseServerDataDir', 'connect', 'exportQuest', 'projectState', 'listNodes', 'listProfiles', 'deleteProfile', 'lookupNames', 'moveNodes', 'newQuest',
       'openQuest', 'previewChanges', 'questLinks', 'removeNode', 'rewardTables', 'updateQuest', 'saveProfile', 'saveViewport', 'searchQuests', 'searchEntities', 'startupProfile',
-      'testConnection', 'validate', 'questScripts', 'testCommands', 'groundHeight', 'spellFacts', 'mapList', 'mapFloors', 'mapSpawns', 'viewSpawns', 'entitySpawns', 'findSpawns', 'questMapRefs', 'allocateIds', 'entityTemplate', 'itemColumns',
+      'testConnection', 'validate', 'questScripts', 'testCommands', 'groundHeight', 'spellFacts', 'mapList', 'mapFloors', 'mapSpawns', 'viewSpawns', 'entitySpawns', 'findSpawns', 'spawnPlacement', 'questMapRefs', 'allocateIds', 'entityTemplate', 'itemColumns',
       'patrolPathId', 'renameProject', 'newProject', 'openProject', 'saveProject', 'saveProjectAs', 'recentProjects', 'forgetRecent', 'recoveries', 'restoreRecovery', 'discardRecovery',
-      'worldLayer', 'worldMoveSpawn', 'worldAddSpawn', 'worldRoute', 'worldSetRoute', 'worldRevert', 'worldChanges', 'exportWorld', 'worldSetMovement', 'worldNewPathId', 'questSpawnList',
+      'projectEntities', 'putProjectEntities', 'deleteEntity', 'readExistingEntity', 'existingDrift', 'worldLayer', 'worldMoveSpawn', 'worldAddSpawn', 'worldRoute', 'worldSetRoute', 'worldRevert', 'worldChanges', 'exportProject', 'worldSetMovement', 'worldSetRespawn', 'worldNewPathId', 'questSpawnList',
+      'worldGroup', 'worldGroupView', 'worldGroupSpawns', 'worldGroupsOnMap', 'worldNewGroupId', 'worldCheckGroup', 'worldSetGroup', 'worldDeleteGroup', 'worldDropMember', 'questPools', 'gameEvents',
+      'historyList', 'historyUndo', 'historyRedo', 'historyJump', 'historyBegin', 'historyEnd',
     ].sort());
   });
   it('refuses world edits with a bad kind, a missing rotation or a point without its columns', () => {
@@ -24,6 +26,15 @@ describe('parseRequest', () => {
     expect(parseRequest('worldMoveSpawn', ['creature', 5, { x: 1, y: 2, z: 3, orientation: 0 }]).ok).toBe(false);
     expect(parseRequest('worldSetRoute', [801, [{ x: 1, y: 2, z: 3 }]]).ok).toBe(false);
     expect(parseRequest('worldRevert', [{ kind: 'route', pathId: 801 }]).ok).toBe(true);
+  });
+  it('checks history requests', () => {
+    expect(parseRequest('historyJump', [3]).ok).toBe(true);
+    expect(parseRequest('historyJump', [-1]).ok).toBe(false);
+    expect(parseRequest('historyBegin', []).ok).toBe(true);
+    expect(parseRequest('historyBegin', ['Paste 3 spawns', { map: 0, x: 1, y: 2, z: 3 }]).ok).toBe(true);
+    expect(parseRequest('historyBegin', ['x'.repeat(201)]).ok).toBe(false);
+    expect(parseRequest('historyEnd', [1]).ok).toBe(true);
+    expect(parseRequest('historyUndo', []).ok).toBe(true);
   });
   it('checks movement and new-path requests', () => {
     const at = { x: 1, y: 2, z: 3, orientation: 0, rotation: null };
@@ -91,5 +102,19 @@ describe('parseRequest', () => {
   it('bounds search text and id lists', () => {
     expect(parseRequest('searchQuests', ['x'.repeat(201)]).ok).toBe(false);
     expect(parseRequest('lookupNames', ['item', Array.from({ length: 5001 }, (_, i) => i)]).ok).toBe(false);
+  });
+  it('lets a rotation, a group event and a quest move through the window-to-main checks', () => {
+    const rotation = {
+      id: 900002, name: 'Dailies', map: 0, maxActive: 1, event: { id: 12, during: true },
+      members: [{ type: 'quest', questId: 60001 }, { type: 'quest', questId: 60002 }],
+      origin: { kind: 'existing', original: { template: { entry: '900002' }, members: [{ table: 'pool_quest', row: { entry: '60001', pool_entry: '900002' } }], event: { eventEntry: '12', pool_entry: '900002' } } },
+    };
+    for (const method of ['worldCheckGroup', 'worldSetGroup'] as const) {
+      const r = parseRequest(method, [rotation, [{ kind: 'quest', questId: 60001 }]]);
+      expect(r.ok).toBe(true);
+      if (r.ok) expect((r.args[0] as any).event).toEqual({ id: 12, during: true });
+    }
+    expect(parseRequest('worldCheckGroup', [{ ...rotation, event: { id: 12 } }, []]).ok).toBe(false);
+    expect(parseRequest('worldCheckGroup', [{ ...rotation, event: null }, []]).ok).toBe(true);
   });
 });

@@ -1,5 +1,5 @@
-appId: local.acore.questcreator
-productName: ACORE Quest Creator
+appId: local.azeroth.worldeditor
+productName: Azeroth World Editor
 directories:
   output: dist
 files:

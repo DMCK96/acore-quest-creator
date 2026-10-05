@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { EMPTY_WORLD } from '../../src/core/world/layer';
+import { EMPTY_ENTITIES } from '../../src/core/entities/model';
 import { join } from 'node:path';
 import { createProjectController, suggestedFileName, type Dialogs, type UnsavedAnswer } from '../../src/main/project/controller';
 import { createProjectSession } from '../../src/main/project/session';
@@ -36,9 +37,9 @@ function setup(answers: { save?: (string | null)[]; open?: (string | null)[]; un
 
 describe('suggestedFileName', () => {
   it('replaces characters Windows forbids and adds the extension', () => {
-    expect(suggestedFileName('Wolves: part 2/3')).toBe('Wolves_ part 2_3.aqc');
-    expect(suggestedFileName('a<b>c"d\\e|f?g*h')).toBe('a_b_c_d_e_f_g_h.aqc');
-    expect(suggestedFileName('  ')).toBe('Untitled Project.aqc');
+    expect(suggestedFileName('Wolves: part 2/3')).toBe('Wolves_ part 2_3.awe');
+    expect(suggestedFileName('a<b>c"d\\e|f?g*h')).toBe('a_b_c_d_e_f_g_h.awe');
+    expect(suggestedFileName('  ')).toBe('Untitled Project.awe');
   });
 });
 
@@ -54,7 +55,7 @@ describe('ProjectController', () => {
     await recovery.tick(session);
     expect(recoveryFiles(fs)).toHaveLength(1);
     expect(await c.saveAs()).toEqual({ done: true });
-    expect(asked.save).toEqual(['Untitled Project.aqc']);
+    expect(asked.save).toEqual(['Untitled Project.awe']);
     expect(parseProject(fs.files.get(P)!).quests.map((x) => x.questId)).toEqual([60000]);
     expect(c.state()).toMatchObject({ filePath: P, dirty: false });
     expect(store.recent.list()).toEqual([{ path: P, name: 'Untitled Project', openedAt: now().toISOString() }]);
@@ -161,7 +162,7 @@ describe('ProjectController', () => {
   });
 
   it('Open loads a file, from a dialog or a given path, and remembers it', async () => {
-    const fs = memFs({ [P]: serializeProject({ ...defaultProjectMeta('North', 'D:\\sql'), quests: [q(60005)], world: EMPTY_WORLD }) });
+    const fs = memFs({ [P]: serializeProject({ ...defaultProjectMeta('North', 'D:\\sql'), quests: [q(60005)], world: EMPTY_WORLD, entities: EMPTY_ENTITIES }) });
     const { c, session, store, asked } = setup({ open: [P] }, fs);
     expect(await c.open()).toEqual({ done: true });
     expect(asked.open).toBe(1);
@@ -172,13 +173,26 @@ describe('ProjectController', () => {
     expect(asked.open).toBe(1);
   });
 
+  it('Open of an older project with a duplicate quest NPC says what it kept', async () => {
+    const v3 = JSON.parse(serializeProject({ ...defaultProjectMeta('Old', 'D:\sql'), quests: [q(60001), q(60002)], world: EMPTY_WORLD, entities: EMPTY_ENTITIES }));
+    v3.version = 3;
+    delete v3.entities;
+    const npc = { entry: 12000001, name: 'Hela', subname: '', minLevel: 1, maxLevel: 1, faction: 35, displayId: 1, scale: 1, rank: 'normal', type: 'humanoid',
+      questGiver: false, gossip: false, healthModifier: 1, damageModifier: 1, spawns: [] };
+    for (const quest of v3.quests) quest.aggregate.values.entities = { npcs: [npc], objects: [], items: [] };
+    const { c, session } = setup({}, memFs({ [P]: JSON.stringify(v3) }));
+    expect(await c.open(P)).toEqual({ done: true, warnings: ['NPC 12000001 was in quests 60001 and 60002; the one from quest 60001 was kept.'] });
+    expect(session.entities.get().npcs.map((n) => n.name)).toEqual(['Hela']);
+    expect(session.entities.get().npcs[0]).not.toHaveProperty('madeFor');
+  });
+
   it('Open with the dialog cancelled does nothing', async () => {
     const { c } = setup({ open: [null] });
     expect(await c.open()).toEqual({ done: false });
   });
 
   it('opening the file that is already open, with unsaved changes, still asks first', async () => {
-    const fs = memFs({ [P]: serializeProject({ ...defaultProjectMeta('North', 'C:\\out'), quests: [], world: EMPTY_WORLD }) });
+    const fs = memFs({ [P]: serializeProject({ ...defaultProjectMeta('North', 'C:\\out'), quests: [], world: EMPTY_WORLD, entities: EMPTY_ENTITIES }) });
     const { c, session, asked } = setup({ unsaved: ['cancel'] }, fs);
     await c.open(P);
     session.quests.put(q(1));
@@ -200,7 +214,7 @@ describe('ProjectController', () => {
   });
 
   it('a recent project whose file is gone is flagged, and a failed open keeps it listed', async () => {
-    const fs = memFs({ [P]: serializeProject({ ...defaultProjectMeta('North', 'C:\\out'), quests: [], world: EMPTY_WORLD }) });
+    const fs = memFs({ [P]: serializeProject({ ...defaultProjectMeta('North', 'C:\\out'), quests: [], world: EMPTY_WORLD, entities: EMPTY_ENTITIES }) });
     const { c, store } = setup({}, fs);
     await c.open(P);
     fs.files.delete(P);
@@ -220,7 +234,7 @@ describe('ProjectController', () => {
   it('restores unsaved work left by a crash, as unsaved, against its original file', async () => {
     const fs = memFs();
     const before = setup({}, fs);
-    before.session.load({ ...defaultProjectMeta('North', 'C:\\out'), quests: [q(60000)], world: EMPTY_WORLD }, P, { dirty: true });
+    before.session.load({ ...defaultProjectMeta('North', 'C:\\out'), quests: [q(60000)], world: EMPTY_WORLD, entities: EMPTY_ENTITIES }, P, { dirty: true });
     await before.recovery.tick(before.session);
     const after = setup({}, fs);
     const [entry] = await after.c.recoveries();

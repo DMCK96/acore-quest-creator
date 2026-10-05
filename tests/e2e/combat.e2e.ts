@@ -1,8 +1,9 @@
 import { test, expect, _electron as electron, type ElectronApplication } from '@playwright/test';
-import { mkdtempSync, readdirSync, readFileSync } from 'node:fs';
+import { mkdtempSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { mysqlUrl } from '../helpers/env';
+import { exportProjectPatch } from './project-patch';
 
 const withoutConnectionEnv = (env: NodeJS.ProcessEnv): Record<string, string> =>
   Object.fromEntries(Object.entries(env).filter((e): e is [string, string] => e[1] !== undefined && !/^ACQC_(WORLD|DEV)_DB_/.test(e[0])));
@@ -63,17 +64,12 @@ test('a new NPC gets a two-phase fight that exports as SmartAI', async () => {
   await card.getByRole('button', { name: 'Done' }).click();
   await page.keyboard.press('Escape');
 
-  await page.getByRole('button', { name: 'Changes' }).click();
-  const changes = page.getByRole('dialog', { name: 'Changes' });
-  await expect(changes.getByRole('heading', { name: 'smart_scripts', exact: true })).toBeVisible();
-  await page.keyboard.press('Escape');
-
+  // The fight is the NPC's: its SmartAI rows are in the project patch, which the quest's export offers
   await page.getByRole('button', { name: 'Export patch' }).click();
   await expect(page.getByText(/\.sql$/)).toBeVisible();
-  const [file] = readdirSync(outDir);
-  const sql = readFileSync(join(outDir, file!), 'utf8');
-  expect(sql).toMatch(/fight\d+: Casts spell 116 on its current target every 10–15 s \(first after 3–6 s\) \(in Phase 1\)/);
-  expect(sql).toMatch(/fight\d+: When it enters combat: go to phase 1: Phase 1 \(added automatically\)/);
-  expect(sql).toMatch(/fight\d+: At 50% health \(in Phase 1\): go to phase 2: Phase 2/);
+  const sql = await exportProjectPatch(page);
+  expect(sql).toMatch(/npc\d+ fight: Casts spell 116 on its current target every 10–15 s \(first after 3–6 s\) \(in Phase 1\)/);
+  expect(sql).toMatch(/npc\d+ fight: When it enters combat: go to phase 1: Phase 1 \(added automatically\)/);
+  expect(sql).toMatch(/npc\d+ fight: At 50% health \(in Phase 1\): go to phase 2: Phase 2/);
   expect(sql).toContain("'SmartAI'");
 });

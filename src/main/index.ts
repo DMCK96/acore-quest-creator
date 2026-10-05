@@ -4,7 +4,8 @@ import { mkdir, readdir, readFile, writeFile } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
 import { openMysqlDevDb } from '../core/db/mysql-dev-db';
 import { openMysqlWorldDb } from '../core/db/mysql-world-db';
-import { FLUSH_DONE_CHANNEL, FLUSH_REQUEST_CHANNEL } from '../shared/api-methods';
+import { FLUSH_DONE_CHANNEL, FLUSH_REQUEST_CHANNEL, HISTORY_CHANNEL } from '../shared/api-methods';
+import { describeStep } from './project/step-labels';
 import { API_METHODS, channelFor, parseRequest, type Api, type ApiError } from '../shared/ipc';
 import { createApi, type ApiDeps } from './api';
 import { seedEnvProfiles } from './env-profiles';
@@ -13,8 +14,9 @@ import { createClientImagery, nodeClientFs } from './client-imagery';
 import { ASSET_SCHEME, parseAssetUrl } from '../core/client/asset-url';
 import { createMapTiles, parseTileUrl, type MapTiles } from './map-tiles';
 import { createSecretBox } from './secret-box';
+import { moveProfileFromOldName } from './profile-move';
 import { openStore, type Store } from './store/store';
-import { DEFAULT_PROJECT_NAME, PROJECT_EXTENSION, defaultProjectMeta } from './project/project-file';
+import { DEFAULT_PROJECT_NAME, PROJECT_EXTENSIONS, defaultProjectMeta } from './project/project-file';
 import { createProjectSession, type ProjectSession } from './project/session';
 import { createProjectController, type Dialogs, type ProjectController } from './project/controller';
 import { createCloseGuard, windowTitle } from './project/close-guard';
@@ -36,6 +38,7 @@ const STORE_FILE = 'quest-creator.sqlite';
  */
 const userDataOverride = process.env['ACQC_USER_DATA'];
 if (userDataOverride) app.setPath('userData', userDataOverride);
+else moveProfileFromOldName(app.getPath('appData'), app.getPath('userData'));
 
 /**
  * An unpackaged app (`npm run dev`, or `electron out/main/index.js` as Playwright launches it) reads
@@ -47,7 +50,7 @@ const envFile = process.env['ACQC_ENV_FILE'] ?? (app.isPackaged ? 'none' : join(
 if (envFile !== 'none' && existsSync(envFile)) process.loadEnvFile(envFile);
 
 /** Where patches go when the connection names no export folder (Settings → Export folder). */
-const defaultOutputDir = (): string => join(app.getPath('documents'), 'ACORE Quest Creator', 'sql');
+const defaultOutputDir = (): string => join(app.getPath('documents'), 'Azeroth World Editor', 'sql');
 
 /**
  * Drizzle's migration files. In development they sit in the repo, two levels above this bundle
@@ -161,7 +164,7 @@ function registerIpc(api: Api): void {
 /** Recovery copies are written this often while there are unsaved changes (the e2e test shortens it). */
 const recoveryIntervalMs = (): number => Number(process.env['ACQC_RECOVERY_INTERVAL_MS']) || 30000;
 
-const PROJECT_FILTERS = [{ name: 'Quest Creator project', extensions: [PROJECT_EXTENSION] }];
+const PROJECT_FILTERS = [{ name: 'Azeroth World Editor project', extensions: [...PROJECT_EXTENSIONS] }];
 
 /**
  * The native dialogs, parented to whichever window is focused. `dialog.*` is looked up on every
@@ -203,7 +206,7 @@ function createWindow(session: ProjectSession, recovery: Recovery, projects: Pro
     minWidth: 720,
     minHeight: 500,
     show: false,
-    title: 'ACORE Quest Creator',
+    title: 'Azeroth World Editor',
     webPreferences: {
       preload: join(__dirname, '../preload/index.cjs'),
       contextIsolation: true,
@@ -214,11 +217,32 @@ function createWindow(session: ProjectSession, recovery: Recovery, projects: Pro
 
   win.on('ready-to-show', () => win.show());
 
+  // No File/Edit/View bar: the app bar carries its own commands. Removing the menu also drops its
+  // shortcuts, so unpackaged builds get DevTools and reload back by hand.
+  win.removeMenu();
+  if (!app.isPackaged) {
+    win.webContents.on('before-input-event', (event, input) => {
+      if (input.type !== 'keyDown') return;
+      const key = input.key.toLowerCase();
+      if (input.key === 'F12' || (input.control && input.shift && key === 'i')) {
+        win.webContents.toggleDevTools();
+        event.preventDefault();
+      } else if (input.control && key === 'r') {
+        win.webContents.reload();
+        event.preventDefault();
+      }
+    });
+  }
+
   // The title carries the project name and the unsaved marker, so the page's own <title> is ignored.
   const showTitle = (): void => win.setTitle(windowTitle(session.meta().name, session.dirty()));
   win.on('page-title-updated', (event) => event.preventDefault());
   showTitle();
   const stopTitle = session.onChange(showTitle);
+  // The window's Undo buttons and History list follow every step, whatever made it
+  const stopHistory = session.history.onChange(() => {
+    if (!win.isDestroyed()) win.webContents.send(HISTORY_CHANNEL, session.history.list(describeStep));
+  });
 
   const tick = (): void => {
     recovery.tick(session).catch((error: unknown) => console.error('Could not write the recovery copy:', error));
@@ -249,6 +273,7 @@ function createWindow(session: ProjectSession, recovery: Recovery, projects: Pro
   win.on('closed', () => {
     clearInterval(timer);
     stopTitle();
+    stopHistory();
   });
 
   if (process.env['ELECTRON_RENDERER_URL']) {

@@ -48,6 +48,27 @@ afterEach(() => {
 const tab = (name: string) => screen.getByRole('tab', { name });
 
 describe('the app shell', () => {
+  it('Ctrl+Z on a keyboard whose letters are not Latin still undoes', async () => {
+    const { api } = await shell();
+    fireEvent.keyDown(document.body, { key: 'я', code: 'KeyZ', ctrlKey: true });
+    await waitFor(() => expect(api.historyUndo).toHaveBeenCalledTimes(1));
+  });
+
+  it('Ctrl+Z and Ctrl+Y undo and redo outside text fields, and leave text fields alone', async () => {
+    const { api } = await shell();
+    fireEvent.keyDown(document.body, { key: 'z', ctrlKey: true });
+    await waitFor(() => expect(api.historyUndo).toHaveBeenCalledTimes(1));
+    fireEvent.keyDown(document.body, { key: 'y', ctrlKey: true });
+    fireEvent.keyDown(document.body, { key: 'Z', ctrlKey: true, shiftKey: true });
+    await waitFor(() => expect(api.historyRedo).toHaveBeenCalledTimes(2));
+    const field = document.createElement('input');
+    document.body.appendChild(field);
+    fireEvent.keyDown(field, { key: 'z', ctrlKey: true });
+    await new Promise((r) => setTimeout(r, 20));
+    expect(api.historyUndo).toHaveBeenCalledTimes(1);
+    field.remove();
+  });
+
   it('opens on the world, with the quests one tab away', async () => {
     await shell();
     expect(tab('World')).toHaveAttribute('aria-selected', 'true');
@@ -83,6 +104,47 @@ describe('the app shell', () => {
 
   it('brings the user to the quests when a quest opens', async () => {
     const { store } = await shell();
+    await store.getState().openQuest(60001);
+    await waitFor(() => expect(tab('Quests')).toHaveAttribute('aria-selected', 'true'));
+  });
+
+  it('a quest preview that opens after the author chose the world leaves them on the world', async () => {
+    let finishSave: (value: unknown) => void = () => {};
+    const { store } = await shell({ updateQuest: () => new Promise((resolve) => { finishSave = resolve; }) });
+    await store.getState().openQuest(60001);
+    store.getState().editQuest();
+    store.getState().setValue('quest_template.LogTitle', 'Edited');
+    await waitFor(() => expect(tab('Quests')).toHaveAttribute('aria-selected', 'true'));
+    // Back to chain saves first; the author goes to the world before the save comes back
+    const back = store.getState().backToChain();
+    await userEvent.click(tab('World'));
+    expect(tab('World')).toHaveAttribute('aria-selected', 'true');
+    await act(async () => {
+      finishSave(okv(true));
+      await back;
+    });
+    expect(store.getState().screen).toBe('preview');
+    expect(tab('World')).toHaveAttribute('aria-selected', 'true');
+  });
+
+  it('a quest that finishes opening after the author chose the world leaves them on the world', async () => {
+    let finishOpen: (value: unknown) => void = () => {};
+    const { store } = await shell({ openQuest: () => new Promise((resolve) => { finishOpen = resolve; }) });
+    await userEvent.click(tab('Quests'));
+    const opening = store.getState().openQuest(60001);
+    await userEvent.click(tab('World'));
+    await act(async () => {
+      finishOpen(okv(sampleOpen()));
+      await opening;
+    });
+    expect(store.getState().screen).toBe('preview');
+    expect(tab('World')).toHaveAttribute('aria-selected', 'true');
+  });
+
+  it('brings the quests forward again for a quest opened after the author chose the world', async () => {
+    const { store } = await shell();
+    await store.getState().openQuest(60001);
+    await userEvent.click(tab('World'));
     await store.getState().openQuest(60001);
     await waitFor(() => expect(tab('Quests')).toHaveAttribute('aria-selected', 'true'));
   });
@@ -137,6 +199,7 @@ describe('the app shell', () => {
     await waitFor(() => expect(created).toHaveLength(1));
     const guard = { kind: 'creature', guid: 80330, entry: 1423, name: 'Guard', own: false, added: false, pathId: 0, wander: 0, map: 0, placement: { x: 1, y: 2, z: 3, orientation: 0, rotation: null } };
     act(() => created[0]!.options.onContextMenu({ ground: { x: 1, y: 2, z: 3 }, hit: { type: 'spawn', spawn: guard }, selection: [guard] }, { x: 10, y: 10 }));
+    await userEvent.click(screen.getByRole('menuitem', { name: 'Quests' }));
     await userEvent.click(screen.getByRole('menuitem', { name: 'Start the next quest in this chain' }));
     await waitFor(() => expect(store.getState().open?.questId).toBe(60003));
     await waitFor(() => expect(store.getState().open!.aggregate.values['quest_template_addon.PrevQuestID']).toBe(60001));
@@ -153,6 +216,7 @@ describe('the app shell', () => {
     await waitFor(() => expect(created).toHaveLength(1));
     const guard = { kind: 'creature', guid: 80330, entry: 1423, name: 'Guard', own: false, added: false, pathId: 0, wander: 0, map: 0, placement: { x: 1, y: 2, z: 3, orientation: 0, rotation: null } };
     act(() => created[0]!.options.onContextMenu({ ground: { x: 1, y: 2, z: 3 }, hit: { type: 'spawn', spawn: guard }, selection: [guard] }, { x: 10, y: 10 }));
+    await userEvent.click(screen.getByRole('menuitem', { name: 'Quests' }));
     await userEvent.click(screen.getByRole('menuitem', { name: 'Start the next quest in this chain' }));
     await new Promise((resolve) => setTimeout(resolve, 50));
     const values = store.getState().open?.aggregate.values ?? {};

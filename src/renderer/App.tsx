@@ -4,17 +4,20 @@ import { LoginScreen } from './views/LoginScreen';
 import { AppShell } from './views/AppShell';
 import { NamesProvider, localNamesOf } from './state/names';
 import { RewardTablesProvider } from './state/reward-tables';
+import { HistoryProvider } from './state/history-context';
+import { searchingFresh } from './state/project-entities';
 import './App.css';
 
 const inApp = (screen: AppState['screen']): boolean => screen === 'pick' || screen === 'preview' || screen === 'edit';
 
 export function App(): React.JSX.Element {
   const store = useMemo(() => createAppStore(window.api), []);
+  const api = useMemo(() => searchingFresh(window.api, () => store.getState().flushEntities()), [store]);
   const screen = store((s) => s.screen);
   const connection = store((s) => s.connection);
-  // The open quest's new NPCs and objects, named in pickers before the main process has them.
-  const openValues = store((s) => s.open?.aggregate.values);
-  const local = useMemo(() => localNamesOf(openValues), [openValues]);
+  // The project's new NPCs and objects, named in pickers before the main process has them.
+  const entities = store((s) => s.entities);
+  const local = useMemo(() => localNamesOf(entities), [entities]);
   // Connecting from the login screen keeps it on top of the app for a moment while it leaves: its
   // orb spins down into the welcome's, or the app bar's (see LoginScreen's `leaving`).
   const [leaving, setLeaving] = useState(false);
@@ -29,6 +32,8 @@ export function App(): React.JSX.Element {
     void store.getState().start();
     // Closing the window asks for pending edits first, so the unsaved-changes check sees them.
     window.appEvents?.onFlushRequest(() => store.getState().flushAll());
+    // The Undo buttons follow every step the main process records, whatever made it
+    window.appEvents?.onHistory?.((list) => store.getState().setHistory(list));
   }, [store]);
 
   // Both stay in the same slots, so the login screen is not remounted when the canvas appears.
@@ -36,9 +41,11 @@ export function App(): React.JSX.Element {
     <>
       {inApp(screen) && (
         <div className={leaving ? 'app-arriving' : undefined} style={{ display: 'contents' }}>
-          <NamesProvider api={window.api} epoch={connection} local={local}>
+          <NamesProvider api={api} epoch={connection} local={local}>
             <RewardTablesProvider api={window.api} epoch={connection}>
-              <AppShell store={store} />
+              <HistoryProvider store={store}>
+                <AppShell store={store} />
+              </HistoryProvider>
             </RewardTablesProvider>
           </NamesProvider>
         </div>

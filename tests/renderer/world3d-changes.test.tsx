@@ -2,18 +2,37 @@
 import { describe, expect, it, vi } from 'vitest';
 import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { WorldChanges } from '../../src/renderer/world3d/WorldChanges';
+import { ProjectChanges } from '../../src/renderer/world3d/ProjectChanges';
+import { NamesProvider } from '../../src/renderer/state/names';
+import { ProjectEntitiesProvider } from '../../src/renderer/state/project-entities';
+import { EMPTY_ENTITIES } from '../../src/core/entities/model';
+import { HistoryProvider } from '../../src/renderer/state/history-context';
+import { createAppStore } from '../../src/renderer/state/app-store';
 import { makeMockApi, okv } from './mock-api';
+
+const worlds = vi.hoisted(() => [] as any[]);
+vi.mock('../../src/renderer/world3d/world3d', () => ({
+  createWorld3D: (options: any) => {
+    const world = { options, dispose: vi.fn(), lookAt: vi.fn(), setSpawnVisibility: vi.fn(), setOwnSpawns: vi.fn(), select: vi.fn(), selectSpawns: vi.fn(),
+      setWorldLayer: vi.fn(), setMode: vi.fn(), setPlacing: vi.fn(), cancelDrag: vi.fn(), setMarked: vi.fn(), setActive: vi.fn(), setScenery: vi.fn(), setTool: vi.fn(),
+      setFalloff: vi.fn(), setPendingMovement: vi.fn(), cancelPath: vi.fn(), selectedSpawns: vi.fn(() => []), hasSpawn: vi.fn(() => true), routeOf: vi.fn(() => null),
+      camera: () => ({ position: { x: 0, y: 0, z: 0 }, direction: { x: 1, y: 0, z: 0 } }), target: () => ({ x: 0, y: 0, z: 0 }),
+      spawnStatus: () => ({ capped: { creatures: false, objects: false }, error: null }) };
+    worlds.push(world);
+    return world;
+  },
+}));
+import { World3DView } from '../../src/renderer/world3d/World3DView';
 
 const spawn = { type: 'spawn', kind: 'creature', guid: 80330, entry: 1423, name: 'Stormwind Guard', map: 0, drifted: true,
   original: { x: -9481.31, y: 74.42, z: 56.55, orientation: 1.5, rotation: null }, current: { x: -9470, y: 74.42, z: 56.55, orientation: 2, rotation: null } };
 const route = { type: 'route', pathId: 802, walkers: 3, drifted: false, original: [{ x: 1, y: 1, z: 1, rest: {} }, { x: 2, y: 2, z: 2, rest: {} }], current: [{ x: 1, y: 1, z: 1, rest: {} }] };
 
-describe('the World changes modal', () => {
+describe('the Project changes modal', () => {
   it('lists each change with before and after, and says when the database moved since', async () => {
     const api = makeMockApi({ worldChanges: vi.fn(async () => okv([spawn, route])) });
-    render(<WorldChanges api={api} onLayer={vi.fn()} onClose={vi.fn()} />);
-    const dialog = await screen.findByRole('dialog', { name: 'World changes' });
+    render(<ProjectChanges api={api} onLayer={vi.fn()} onClose={vi.fn()} />);
+    const dialog = await screen.findByRole('dialog', { name: 'Project changes' });
     const rows = await within(dialog).findAllByRole('row');
     expect(rows[1]).toHaveTextContent('Stormwind Guard');
     expect(rows[1]).toHaveTextContent('80330');
@@ -31,7 +50,7 @@ describe('the World changes modal', () => {
     const worldRevert = vi.fn(async () => okv(layer));
     const worldChanges = vi.fn().mockResolvedValueOnce(okv([spawn])).mockResolvedValue(okv([]));
     const onLayer = vi.fn();
-    render(<WorldChanges api={makeMockApi({ worldChanges, worldRevert })} onLayer={onLayer} onClose={vi.fn()} />);
+    render(<ProjectChanges api={makeMockApi({ worldChanges, worldRevert })} onLayer={onLayer} onClose={vi.fn()} />);
     await userEvent.click(await screen.findByRole('button', { name: 'Revert Stormwind Guard' }));
     expect(worldRevert).toHaveBeenCalledWith({ kind: 'spawn', spawnKind: 'creature', guid: 80330 });
     await waitFor(() => expect(onLayer).toHaveBeenCalledWith(layer));
@@ -39,15 +58,15 @@ describe('the World changes modal', () => {
   });
 
   it('exports and shows where the two files went', async () => {
-    const exportWorld = vi.fn(async () => okv({ applyPath: 'C:\\out\\2026-10-03_00_world.sql', revertPath: 'C:\\out\\2026-10-03_00_world_revert.sql', sql: '' }));
-    render(<WorldChanges api={makeMockApi({ worldChanges: vi.fn(async () => okv([spawn])), exportWorld })} onLayer={vi.fn()} onClose={vi.fn()} />);
-    await userEvent.click(await screen.findByRole('button', { name: 'Export world patch' }));
+    const exportProject = vi.fn(async () => okv({ applyPath: 'C:\\out\\2026-10-03_00_world.sql', revertPath: 'C:\\out\\2026-10-03_00_world_revert.sql', sql: '' }));
+    render(<ProjectChanges api={makeMockApi({ worldChanges: vi.fn(async () => okv([spawn])), exportProject })} onLayer={vi.fn()} onClose={vi.fn()} />);
+    await userEvent.click(await screen.findByRole('button', { name: 'Export project patch' }));
     expect(await screen.findByText('C:\\out\\2026-10-03_00_world.sql')).toBeTruthy();
     expect(screen.getByText('C:\\out\\2026-10-03_00_world_revert.sql')).toBeTruthy();
   });
 
   it('says one spawn, not one spawns', async () => {
-    render(<WorldChanges api={makeMockApi({ worldChanges: vi.fn(async () => okv([{ ...route, walkers: 1 }])) })} onLayer={vi.fn()} onClose={vi.fn()} />);
+    render(<ProjectChanges api={makeMockApi({ worldChanges: vi.fn(async () => okv([{ ...route, walkers: 1 }])) })} onLayer={vi.fn()} onClose={vi.fn()} />);
     const rows = await screen.findAllByRole('row');
     expect(rows[1]).toHaveTextContent('Route 802 · 1 spawn');
     expect(rows[1]).not.toHaveTextContent('1 spawns');
@@ -57,11 +76,39 @@ describe('the World changes modal', () => {
     const movement = { type: 'movement', guid: 80330, entry: 1423, name: 'Stormwind Guard', map: 0, addonRow: true, drifted: false,
       original: { type: 'path', wander: 0, pathId: 801 }, current: { type: 'wander', wander: 5, pathId: null } };
     const worldRevert = vi.fn(async () => okv({ spawns: [], routes: [], added: [] }));
-    render(<WorldChanges api={makeMockApi({ worldChanges: vi.fn(async () => okv([movement])), worldRevert })} onLayer={vi.fn()} onClose={vi.fn()} />);
+    render(<ProjectChanges api={makeMockApi({ worldChanges: vi.fn(async () => okv([movement])), worldRevert })} onLayer={vi.fn()} onClose={vi.fn()} />);
     const row = (await screen.findByText(/Stormwind Guard · movement/)).closest('tr')!;
     expect(within(row).getByText('walks path 801')).toBeInTheDocument();
     expect(within(row).getByText('wanders 5 yd')).toBeInTheDocument();
     await userEvent.click(within(row).getByRole('button', { name: 'Revert movement of Stormwind Guard' }));
     expect(worldRevert).toHaveBeenCalledWith({ kind: 'movement', guid: 80330 });
+  });
+
+  it('hands every layer the 3D view takes to the project context', async () => {
+    vi.stubGlobal('fetch', async () => new Response(new Uint8Array([1]), { status: 200 }));
+    const layer = { spawns: [{ ...spawn, type: undefined }], routes: [], added: [] };
+    const api = makeMockApi({ worldLayer: vi.fn(async () => okv(layer)), mapFloors: vi.fn(async () => okv({ reason: 'none' })) });
+    const setLayer = vi.fn();
+    const value = { entities: EMPTY_ENTITIES, setEntities: vi.fn(), quests: [], create: vi.fn(), remove: vi.fn(), layer, setLayer, tracked: [] } as any;
+    render(<NamesProvider api={api}><HistoryProvider store={createAppStore(api)}><ProjectEntitiesProvider value={value}><World3DView map={0} start={{ x: 0, y: 0, z: 0 }} hasClient /></ProjectEntitiesProvider></HistoryProvider></NamesProvider>);
+    await waitFor(() => expect(setLayer).toHaveBeenCalledWith(expect.objectContaining({ spawns: expect.any(Array) })));
+    worlds.length = 0;
+  });
+
+  it('draws the layer of a project opened while the view is showing', async () => {
+    vi.stubGlobal('fetch', async () => new Response(new Uint8Array([1]), { status: 200 }));
+    const empty = { spawns: [], routes: [], added: [] };
+    const opened = { spawns: [], routes: [{ pathId: 802630, walkers: 1, name: 'Stormwind Guard', original: route.original, current: route.current }], added: [] };
+    const api = makeMockApi({ worldLayer: vi.fn(async () => okv(empty)), mapFloors: vi.fn(async () => okv({ reason: 'none' })) });
+    const value = (layer: unknown) => ({ entities: EMPTY_ENTITIES, setEntities: vi.fn(), quests: [], create: vi.fn(), remove: vi.fn(), layer, setLayer: vi.fn(), tracked: [] }) as any;
+    const view = (layer: unknown) => <NamesProvider api={api}><HistoryProvider store={createAppStore(api)}><ProjectEntitiesProvider value={value(layer)}><World3DView map={0} start={{ x: 0, y: 0, z: 0 }} hasClient /></ProjectEntitiesProvider></HistoryProvider></NamesProvider>;
+    const { rerender } = render(view(empty));
+    await waitFor(() => expect(worlds.at(-1)?.setWorldLayer).toHaveBeenCalled());
+    expect(screen.getByRole('button', { name: 'Project changes (0)' })).toBeTruthy();
+    // Project → Open…: the app store reads the new project's layer and hands it down
+    rerender(view(opened));
+    await waitFor(() => expect(worlds.at(-1)!.setWorldLayer).toHaveBeenLastCalledWith(opened));
+    expect(screen.getByRole('button', { name: 'Project changes (1)' })).toBeTruthy();
+    worlds.length = 0;
   });
 });

@@ -1,6 +1,6 @@
 ---
 title: Testing
-description: Unit, integration and end-to-end tests for ACORE Quest Creator, and what each needs.
+description: Unit, integration and end-to-end tests for Azeroth World Editor, and what each needs.
 sidebar:
   order: 3
 ---
@@ -11,6 +11,7 @@ sidebar:
 | `npm test` | Unit tests (Vitest): `tests/core`, `tests/main`, `tests/renderer` and more | the fork's base SQL |
 | `npm run test:int` | Integration tests (`*.int.test.ts`) against a real world database | `ACQC_TEST_MYSQL_URL`, the fork's base SQL |
 | `npm run test:e2e` | End-to-end tests (Playwright) that build and drive the app | `ACQC_TEST_MYSQL_URL`, the server data and game client folders |
+| `npm run test:world3d` | The real 3D code in a browser against a fake game client | a Chromium build |
 
 The unit tests read table layouts from the Conquest of AzerothCore fork's base SQL (`data/sql/base/db_world`). They find it beside the server data folder you set in `.env` (`ACQC_WORLD_DB_DBC_DIR`), or at `ACQC_AC_SQL_DIR`. Tests read `.env` themselves, the way the app does; a variable already set in your shell wins.
 
@@ -33,6 +34,14 @@ They do not skip when it is missing; they fail, so a green run always means they
 :::caution
 Do not `source` your `.env` in a shell to set these: unquoted Windows paths lose their backslashes. Set `ACQC_TEST_MYSQL_URL` directly.
 :::
+
+## The 3D view
+
+`npm run test:world3d` opens the real 3D code in a browser with software WebGL, so no graphics card is needed, against a fake game client (`tests/world3d/fake-client.ts`): a terrain tile, textures, a small building and some deliberately broken files. It checks that terrain and buildings are on screen, that a right-click selects and asks for the menu, that a path can be drawn by clicks, that broken files are reported by name without stopping the rest, and that every model shader compiles.
+
+Set `PW_CHROMIUM` to a Chromium binary if Playwright's own is not installed, and `WORLD3D_SHOT=<file.png>` to keep the picture it takes. Most of the 3D view's logic (selection, editing, the menu, the world layer) is unit-tested in `tests/renderer/world3d-*` with the scene mocked.
+
+Real client data is not covered by any automated test. After a change to drawing, look at the same spot in your own client before and after.
 
 ## Writing tests
 

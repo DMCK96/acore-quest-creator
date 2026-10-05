@@ -70,3 +70,49 @@ export function sceneFromComment(comment: string | null | undefined): QuestScene
     return null;
   }
 }
+
+/**
+ * Rows of the project's new NPCs and objects are tagged by the entity, not by a quest, so they are
+ * found wherever the entity came from. The trailing space stops NPC 1200 from claiming 12000's rows.
+ */
+export function entityTag(kind: 'npc' | 'obj', entry: number): string {
+  return `AQC ${kind}${entry} `;
+}
+
+export function entityLootTag(kind: 'npc' | 'obj', entry: number): string {
+  return `${entityTag(kind, entry)}loot`;
+}
+
+export function entityFightTag(entry: number): string {
+  return `${entityTag('npc', entry)}fight`;
+}
+
+export function entityPatrolTag(entry: number): string {
+  return `${entityTag('npc', entry)}patrol`;
+}
+
+const ENTITY_TAG = /^AQC (npc|obj)(\d+) (.*)$/s;
+
+/** The entity a tagged row belongs to, and what follows its tag; null for any other comment */
+export function entityOf(comment: string | null | undefined): { kind: 'npc' | 'obj'; entry: number; rest: string } | null {
+  if (typeof comment !== 'string') return null;
+  const match = ENTITY_TAG.exec(comment);
+  return match ? { kind: match[1] as 'npc' | 'obj', entry: Number(match[2]), rest: match[3]!.trimEnd() } : null;
+}
+
+/** The spawn tags exports before version 4 wrote for an entity, one per quest, for cleaning up their rows */
+export function legacyEntityTags(kind: 'npc' | 'obj', entry: number, questIds: readonly number[]): string[] {
+  return questIds.map((q) => `${questTagPrefix(q)}${kind}${entry}`);
+}
+
+/**
+ * The NPC a fight (`'fight'`) or patrol (`'patrol'`) row belongs to: by its NPC tag, or by the quest tag
+ * exports before version 4 wrote. Null for any other row.
+ */
+export function npcRowOwner(comment: string | null | undefined, kind: 'fight' | 'patrol'): number | null {
+  if (typeof comment !== 'string') return null;
+  const tagged = entityOf(comment);
+  if (tagged && tagged.kind === 'npc' && new RegExp(`^${kind}(?::|$)`).test(tagged.rest)) return tagged.entry;
+  const legacy = new RegExp(`^AQC q\\d+ ${kind}(\\d+)(?::|$)`).exec(comment);
+  return legacy ? Number(legacy[1]) : null;
+}

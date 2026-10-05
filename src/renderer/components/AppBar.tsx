@@ -2,6 +2,7 @@ import { useRef } from 'react';
 import type { ClientStatus, ServerDataStatus } from '@shared/ipc';
 import type { AppStore } from '../state/app-store';
 import { OrbMark } from './OrbMark';
+import { HistoryButtons } from './HistoryButtons';
 import './AppBar.css';
 
 /** The app's two workspaces: the world in 3D, and the quest graph */
@@ -66,24 +67,28 @@ export function AppBar({
           <span className="app-bar__project-label">Project</span>
         </button>
       </div>
-      <div className="app-bar__tabs" role="tablist" aria-label="Workspace">
-        {WORKSPACES.map(([id, label], index) => (
-          <button
-            key={id}
-            ref={(el) => {
-              tabs.current[index] = el;
-            }}
-            type="button"
-            role="tab"
-            className="app-bar__tab"
-            aria-selected={workspace === id}
-            tabIndex={workspace === id ? 0 : -1}
-            onClick={() => onWorkspace(id)}
-            onKeyDown={(e) => onTabKey(e, index)}
-          >
-            {label}
-          </button>
-        ))}
+      {/* The middle column: the workspace switch, with undo and redo beside it */}
+      <div className="app-bar__center">
+        <div className="app-bar__tabs" role="tablist" aria-label="Workspace">
+          {WORKSPACES.map(([id, label], index) => (
+            <button
+              key={id}
+              ref={(el) => {
+                tabs.current[index] = el;
+              }}
+              type="button"
+              role="tab"
+              className="app-bar__tab"
+              aria-selected={workspace === id}
+              tabIndex={workspace === id ? 0 : -1}
+              onClick={() => onWorkspace(id)}
+              onKeyDown={(e) => onTabKey(e, index)}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
+        <HistoryButtons store={store} />
       </div>
       <div className="app-bar__status">
         <span

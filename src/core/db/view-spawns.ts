@@ -77,6 +77,14 @@ export interface ViewCreature {
   removedBy: ViewEvent[];
   /** The display preset that dresses it, when the database has one for it */
   preset: ViewPreset | null;
+  /** The spawn group (pool) it is in, or null when it is in none */
+  group: number | null;
+  /** The top-level group its database group sits in (itself when not nested), when the query gave it */
+  poolTop?: number | null;
+  /** The event that top-level group follows in the database (game_event_pool), which `events` or `removedBy` holds */
+  poolEvent?: PoolEvent | null;
+  /** Seconds before it respawns once killed (`spawntimesecs`) */
+  respawnSecs: number;
 }
 
 export interface ViewObject {
@@ -91,6 +99,8 @@ export interface ViewObject {
   rotation: [number, number, number, number];
   displayId: number;
   scale: number;
+  /** Its template's `type` (3 is a chest), or -1 when it is not known */
+  objectType: number;
   own: boolean;
   /** One placed in the 3D view, kept in the world layer until it is exported */
   added?: boolean;
@@ -100,6 +110,25 @@ export interface ViewObject {
   events: ViewEvent[];
   /** Every event that takes it away while it runs, by id */
   removedBy: ViewEvent[];
+  /** The spawn group (pool) it is in, or null when it is in none */
+  group: number | null;
+  /** The top-level group its database group sits in (itself when not nested), when the query gave it */
+  poolTop?: number | null;
+  /** The event that top-level group follows in the database (game_event_pool), which `events` or `removedBy` holds */
+  poolEvent?: PoolEvent | null;
+  /** Seconds before it respawns once used up (`spawntimesecs`) */
+  respawnSecs: number;
+}
+
+/** The event a spawn's top-level group follows in the database */
+export interface PoolEvent {
+  /** The top-level group whose game_event_pool row it is */
+  pool: number;
+  id: number;
+  /** Brings the spawns (positive), else takes them away */
+  during: boolean;
+  /** The spawn also has its own event row for this event, which stays when the group's goes */
+  alsoOwn: boolean;
 }
 
 export interface ViewSpawns {
@@ -111,6 +140,9 @@ export interface ViewSpawns {
 
 /** Spawns of each kind given for one area at most */
 export const SPAWN_VIEW_CAP = 2000;
+
+/** The respawn time a spawn without one is given, as the game does */
+const DEFAULT_RESPAWN_SECS = 300;
 
 /** MovementType 1: roams at random within its wander distance */
 const RANDOM_MOVEMENT = '1';
@@ -130,7 +162,8 @@ export const EVENT_ROW = '\u001f';
 
 /**
  * A spawn's events from its `event_list` column (every `game_event_creature` / `_gameobject` row
- * for it): those it appears for, and those that take it away (a negative entry), each by id
+ * for it): those it appears for, and those that take it away (a negative entry), each by id; with the
+ * event its top-level group follows, from its `pool_event_entry` and `pool_event_name` columns
  */
 const eventListOf = (row: Row): { events: ViewEvent[]; removedBy: ViewEvent[] } => {
   const events: ViewEvent[] = [];
@@ -143,8 +176,31 @@ const eventListOf = (row: Row): { events: ViewEvent[]; removedBy: ViewEvent[] } 
     if (entry > 0) events.push({ id: entry, name });
     else if (entry < 0) removedBy.push({ id: -entry, name });
   }
+  // The event its top-level group follows (game_event_pool) counts as one of its own
+  const poolEntry = num(row.pool_event_entry);
+  const poolEvent = { id: Math.abs(poolEntry), name: row.pool_event_name ?? '' };
+  const into = poolEntry > 0 ? events : poolEntry < 0 ? removedBy : null;
+  const alsoOwn = into ? into.some((e) => e.id === poolEvent.id) : false;
+  if (into && !alsoOwn) into.push(poolEvent);
   const byId = (a: ViewEvent, b: ViewEvent) => a.id - b.id;
-  return { events: events.sort(byId), removedBy: removedBy.sort(byId) };
+  return { events: events.sort(byId), removedBy: removedBy.sort(byId), ...poolOf(row, alsoOwn) };
+};
+
+/** Its database top-level group and that group's event, when the query gave them */
+const poolOf = (row: Row, alsoOwn: boolean): { poolTop?: number; poolEvent?: PoolEvent | null } => {
+  // Left out for a spawn in no group (or a query without groups)
+  if (row.pool_top === undefined || row.pool_top === null || row.pool_top === '') return {};
+  const poolTop = num(row.pool_top);
+  const entry = num(row.pool_event_entry);
+  return { poolTop, poolEvent: entry !== 0 ? { pool: poolTop, id: Math.abs(entry), during: entry > 0, alsoOwn } : null };
+};
+
+/** Its first event: its own (`event_entry`), or its top-level group's when that one comes first */
+const firstEventOf = (row: Row): ViewEvent | null => {
+  const own = eventOf(row);
+  const poolEntry = num(row.pool_event_entry);
+  if (poolEntry > 0 && (own === null || poolEntry < own.id)) return { id: poolEntry, name: row.pool_event_name ?? '' };
+  return own;
 };
 
 const num = (value: string | null | undefined, fallback = 0): number => {
@@ -152,6 +208,9 @@ const num = (value: string | null | undefined, fallback = 0): number => {
   const n = Number(value);
   return Number.isFinite(n) ? n : fallback;
 };
+
+/** A spawn's group from its `pool_entry` column; null when it is in none (or the query had no pools) */
+const groupOf = (row: Row): number | null => (row.pool_entry === null || row.pool_entry === undefined || row.pool_entry === '' ? null : num(row.pool_entry));
 
 export function toViewCreature(row: Row, path: ViewPoint[] | null, equipment: [number, number, number], preset: ViewPreset | null = null): ViewCreature {
   return {
@@ -170,9 +229,11 @@ export function toViewCreature(row: Row, path: ViewPoint[] | null, equipment: [n
     pathId: num(row.path_id),
     equipment,
     own: false,
-    event: eventOf(row),
+    event: firstEventOf(row),
     ...eventListOf(row),
     preset,
+    group: groupOf(row),
+    respawnSecs: num(row.spawntimesecs, DEFAULT_RESPAWN_SECS),
   };
 }
 
@@ -188,9 +249,12 @@ export function toViewObject(row: Row): ViewObject {
     rotation: [num(row.rotation0), num(row.rotation1), num(row.rotation2), num(row.rotation3, 1)],
     displayId: num(row.display_id),
     scale: num(row.size, 1),
+    objectType: num(row.type, -1),
     own: false,
-    event: eventOf(row),
+    event: firstEventOf(row),
     ...eventListOf(row),
+    group: groupOf(row),
+    respawnSecs: num(row.spawntimesecs, DEFAULT_RESPAWN_SECS),
   };
 }
 

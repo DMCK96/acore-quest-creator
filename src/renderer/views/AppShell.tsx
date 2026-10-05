@@ -1,11 +1,14 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import { ProjectEntitiesFromStore } from '../state/project-entities';
 import type { AppStore } from '../state/app-store';
 import { AppBar, type Workspace } from '../components/AppBar';
 import { ErrorBanner } from '../components/ErrorBanner';
+import { HistoryNote } from '../components/HistoryNote';
+import { isTextField } from '../components/HistoryButtons';
 import { CanvasHome } from './CanvasHome';
 import { WorldWorkspace } from '../world3d/WorldWorkspace';
 import { projectKey } from '../world3d/welcome-seen';
-import { toggleRole } from '@core/modules/quest-roles';
+import { ShowInWorldProvider, type ShowTarget } from '../world3d/ShowInWorldContext';
 import { ProjectDialog } from './ProjectDialog';
 import { SettingsDialog } from './SettingsDialog';
 import { RecoveryDialog } from './RecoveryDialog';
@@ -20,30 +23,73 @@ export function AppShell({ store }: { store: AppStore }): React.JSX.Element {
   const [workspace, setWorkspace] = useState<Workspace>('world');
   const [showProject, setShowProject] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
-  const screen = store((s) => s.screen);
+  const questsAsked = store((s) => s.questsAsked);
   const filePath = store((s) => s.project.filePath);
   const projectName = store((s) => s.project.name);
   const hasClient = store((s) => Boolean(s.summary?.clientDir));
   const open = store((s) => s.open);
   const nodes = store((s) => s.nodes);
+  const [goTo, setGoTo] = useState<{ map: number; x: number; y: number; z: number; nonce: number } | undefined>();
+  // A quest opened while the World was not shown, for the World to go to when it next is
+  const [follow, setFollow] = useState<{ questId: number; at: number } | undefined>();
+  // Show in World / Go to, handed to the World
+  const [showRequest, setShowRequest] = useState<{ target: ShowTarget; nonce: number } | undefined>();
+  const workspaceRef = useRef(workspace);
+  workspaceRef.current = workspace;
 
-  // A quest opened from anywhere is previewed on the graph, so the quests come forward
+  // When the author last picked a workspace, on the store's clock
+  const chosenAt = useRef(0);
+  const choose = useCallback(
+    (next: Workspace) => {
+      chosenAt.current = store.getState().moment();
+      setWorkspace(next);
+    },
+    [store],
+  );
+
+  // A quest opened from anywhere is previewed on the graph, so the quests come forward; but not for an
+  // open the author has since turned away from, by picking a workspace while it was on its way
   useEffect(() => {
-    if (screen === 'preview' || screen === 'edit') setWorkspace('quests');
-  }, [screen]);
+    // The quest lands with the moment its opening began; the World follows it later only if it is not
+    // what is shown now (a quest opened from the World itself is already in view)
+    const opened = store.getState().open;
+    if (questsAsked > 0 && opened && workspaceRef.current !== 'world') setFollow({ questId: opened.questId, at: questsAsked });
+    if (questsAsked > chosenAt.current) setWorkspace('quests');
+  }, [questsAsked, store]);
+
+  const showInWorld = useCallback(
+    (target: ShowTarget) => {
+      choose('world');
+      setShowRequest((was) => ({ target, nonce: (was?.nonce ?? 0) + 1 }));
+    },
+    [choose],
+  );
 
   // Unsaved work a crash left behind is offered once, as soon as the app is up.
   useEffect(() => {
     void store.getState().loadRecoveries();
   }, [store]);
 
-  // Ctrl+S saves, Ctrl+Shift+S saves as, Ctrl+O opens: the shortcuts every document app has.
+  // Ctrl+S saves, Ctrl+Shift+S saves as, Ctrl+O opens: the shortcuts every document app has. Ctrl+Z
+  // and Ctrl+Y undo and redo the last change anywhere in the project, except in a text field, whose
+  // own undo they are.
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent): void => {
-      // A held-down shortcut repeats; one press is one save.
-      if (!(e.ctrlKey || e.metaKey) || e.repeat) return;
+      if (!(e.ctrlKey || e.metaKey)) return;
       const key = e.key.toLowerCase();
-      const { saveProject, saveProjectAs, openProject } = store.getState();
+      const { saveProject, saveProjectAs, openProject, undo, redo } = store.getState();
+      // By the key's place as well as its letter, so a keyboard whose letters are not Latin still undoes
+      const z = key === 'z' || e.code === 'KeyZ';
+      const y = key === 'y' || e.code === 'KeyY';
+      if ((z || y) && !e.altKey) {
+        if (isTextField(e.target) || e.defaultPrevented) return;
+        e.preventDefault();
+        // Held down, it walks back step by step
+        void (y || e.shiftKey ? redo() : undo());
+        return;
+      }
+      // A held-down shortcut repeats; one press is one save.
+      if (e.repeat) return;
       if (key === 's') {
         e.preventDefault();
         void (e.shiftKey ? saveProjectAs() : saveProject());
@@ -57,15 +103,28 @@ export function AppShell({ store }: { store: AppStore }): React.JSX.Element {
   }, [store]);
 
   return (
+    <ProjectEntitiesFromStore store={store}>
+    <ShowInWorldProvider value={hasClient ? showInWorld : null}>
     <div className="app-shell">
       <AppBar
         store={store}
         workspace={workspace}
-        onWorkspace={setWorkspace}
+        onWorkspace={choose}
         onOpenProject={() => setShowProject(true)}
         onOpenSettings={() => setShowSettings(true)}
       />
       <ErrorBanner store={store} />
+      <HistoryNote
+        store={store}
+        onShowQuest={(questId) => {
+          choose('quests');
+          void store.getState().openQuest(questId);
+        }}
+        onShowPlace={(place) => {
+          choose('world');
+          setGoTo((was) => ({ map: place.map, x: place.x, y: place.y, z: place.z, nonce: (was?.nonce ?? 0) + 1 }));
+        }}
+      />
       <div className="app-shell__workspace" hidden={workspace !== 'world'}>
         <WorldWorkspace
           hasClient={hasClient}
@@ -74,29 +133,21 @@ export function AppShell({ store }: { store: AppStore }): React.JSX.Element {
           // A project not saved yet is welcomed without its placeholder name
           projectName={filePath ? projectName : ''}
           onOpenSettings={() => setShowSettings(true)}
-          onShowQuests={() => setWorkspace('quests')}
+          onShowQuests={() => choose('quests')}
           onStartQuest={() => {
-            setWorkspace('quests');
+            choose('quests');
             void store.getState().newQuest();
           }}
           quest={open ? { open, nodes } : undefined}
+          goTo={goTo}
+          follow={follow}
+          showRequest={showRequest}
+          now={store.getState().moment}
           onQuestField={(fieldId, value) => store.getState().setValue(fieldId, value)}
           onNewQuest={(giver, previous) => {
-            void (async () => {
-              const was = store.getState().open?.questId;
-              await store.getState().newQuest();
-              const made = store.getState().open;
-              // No new quest (it failed, or another open overtook it): the open one is not to be touched
-              if (!made || made.questId === was) return;
-              // The NPC gives the new quest and takes it back; in a chain, it comes after the one that was open
-              const target = { kind: 'creature' as const, id: giver.entry };
-              for (const role of ['giver', 'ender'] as const) {
-                const edits = toggleRole(store.getState().open!.aggregate.values, role, target, true) ?? {};
-                for (const [fieldId, value] of Object.entries(edits)) store.getState().setValue(fieldId, value);
-              }
-              if (previous !== null) store.getState().setValue('quest_template_addon.PrevQuestID', previous);
-              setWorkspace('quests');
-            })();
+            // The NPC gives the new quest and takes it back; in a chain, it comes after the one that was
+            // open. The quest it makes brings the quests forward, so one that cannot be made leaves the world.
+            void store.getState().newQuestFrom(giver, previous);
           }}
         />
       </div>
@@ -107,5 +158,7 @@ export function AppShell({ store }: { store: AppStore }): React.JSX.Element {
       {showSettings && <SettingsDialog store={store} onClose={() => setShowSettings(false)} />}
       <RecoveryDialog store={store} />
     </div>
+    </ShowInWorldProvider>
+    </ProjectEntitiesFromStore>
   );
 }

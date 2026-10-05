@@ -3,7 +3,7 @@ import type { RefKind } from '@core/db/types';
 import type { EntityHit, SearchKind } from '@core/db/world-db';
 import type { NameBook } from '@core/links/component';
 import type { Api, Result } from '@shared/ipc';
-import { readEntities } from '@core/entities/model';
+import type { ProjectEntities } from '@core/entities/model';
 
 export type NameStatus = 'idle' | 'loading' | 'found' | 'missing' | 'unsupported';
 
@@ -24,18 +24,18 @@ const scheduleFrame: (run: () => void) => void =
   typeof requestAnimationFrame === 'function' ? requestAnimationFrame : (run) => setTimeout(run, 0);
 
 /**
- * Names of the open quest's new NPCs and objects. They are not in the world DB, and the main
- * process hears of them only after the edit debounce, so asking it right after "New NPC" would
- * answer "missing" and that answer would stick.
+ * Names of the project's new NPCs and objects. They are not in the world DB, and the main process
+ * hears of them only after the edit debounce, so asking it right after "New NPC" would answer
+ * "missing" and that answer would stick.
  */
 export interface LocalNames {
   creature: ReadonlyMap<number, string>;
   gameobject: ReadonlyMap<number, string>;
 }
 
-/** The `LocalNames` of a quest's values; unnamed ones are called what search calls them. */
-export function localNamesOf(values: Readonly<Record<string, unknown>> | undefined): LocalNames {
-  const { npcs, objects } = values ? readEntities(values) : { npcs: [], objects: [] };
+/** The `LocalNames` of the project's store; unnamed ones are called what search calls them. */
+export function localNamesOf(entities: ProjectEntities | undefined): LocalNames {
+  const { npcs, objects } = entities ?? { npcs: [], objects: [] };
   return {
     creature: new Map(npcs.map((n) => [n.entry, n.name || 'New NPC'])),
     gameobject: new Map(objects.map((o) => [o.entry, o.name || 'New object'])),

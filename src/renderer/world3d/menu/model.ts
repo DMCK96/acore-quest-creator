@@ -1,13 +1,11 @@
 import type { SpawnInfo } from '../scene/spawn/SpawnManager';
 import type { QuestRoles, Role } from '@core/modules/quest-roles';
-import { worldItems } from './world-items';
-import { movementItems } from './movement-items';
-import { questItems } from './quest-items';
+import type { MenuGroupId } from './section';
 
 /**
  * The 3D view's right-click menu as data: what was right-clicked (the target), what the view and the
- * open quest allow (the context), and the groups of items each domain offers for them. Building it is
- * pure; the view runs the action an item carries.
+ * open quest allow (the context), and the items and groups the sections (see `section.ts`) build from
+ * them. Building it is pure; the view runs the action an item carries.
  */
 
 export type At = { x: number; y: number; z: number };
@@ -26,8 +24,6 @@ export interface QuestMenuInfo {
   title: string;
   /** Entries by role in the open quest */
   roles: QuestRoles;
-  /** What "Spawn quest NPC here" lists: own first, then existing, each once */
-  entities: { kind: 'creature' | 'object'; entry: number; name: string; own: boolean }[];
   /** The chain has quests besides this one */
   chained: boolean;
 }
@@ -53,15 +49,28 @@ export type MenuAction =
   | { kind: 'undoPoint' }
   | { kind: 'cancelPath' }
   | { kind: 'placeHere'; what: 'creature' | 'object'; at: At }
+  /** A new project NPC or object standing here, attached to no quest */
+  | { kind: 'newEntity'; what: 'creature' | 'object'; at: At }
+  | { kind: 'editEntity'; spawn: MenuSpawn }
+  | { kind: 'setLootable'; spawn: MenuSpawn; on: boolean }
   | { kind: 'copy' }
   | { kind: 'paste'; at: At }
   | { kind: 'duplicate' }
   | { kind: 'remove'; spawn: MenuSpawn }
   | { kind: 'copyCoordinates'; at: At }
+  /** How long the spawns take to respawn, asked for in a dialog */
+  | { kind: 'respawn'; spawns: MenuSpawn[] }
+  /** A new spawn group of these spawns, made in a dialog */
+  | { kind: 'groupSpawns'; spawns: MenuSpawn[] }
+  /** A spawn group's members and chances, changed in a dialog */
+  | { kind: 'editGroup'; id: number }
+  /** Selects a spawn group's members, so its card shows */
+  | { kind: 'showGroup'; id: number }
+  /** Takes a spawn out of the group it is in */
+  | { kind: 'leaveGroup'; spawn: MenuSpawn }
   | { kind: 'startPath'; spawn: MenuSpawn; at: At }
   | { kind: 'wander'; spawn: MenuSpawn }
   | { kind: 'removePath'; spawn: MenuSpawn }
-  | { kind: 'spawnQuestEntity'; target: QuestMenuInfo['entities'][number]; at: At }
   | { kind: 'toggleRole'; role: Role; spawn: MenuSpawn; on: boolean }
   | { kind: 'newQuest'; spawn: MenuSpawn; after: boolean }
   | { kind: 'showSpawns'; scope: 'quest' | 'chain' }
@@ -79,11 +88,9 @@ export interface MenuItem {
 }
 
 export interface MenuGroup {
-  id: 'state' | 'world' | 'movement' | 'quest';
+  id: MenuGroupId;
   items: MenuItem[];
 }
-
-export type MenuProvider = (target: MenuTarget, context: MenuContext) => MenuGroup | null;
 
 /** A stable id from a label, without counts: "Paste here (3)" is `paste-here` */
 export const itemId = (label: string): string =>
@@ -96,25 +103,3 @@ export const itemId = (label: string): string =>
     .replace(/^-|-$/g, '');
 
 export const item = (label: string, rest: Omit<MenuItem, 'id' | 'label'> = {}): MenuItem => ({ id: itemId(label), label, ...rest });
-
-/** What the view is busy with comes first: stop placing, or finish the path being drawn */
-function stateItems(_target: MenuTarget, context: MenuContext): MenuGroup | null {
-  if (context.drawing) {
-    return {
-      id: 'state',
-      items: [
-        item('Finish path', { action: { kind: 'finishPath' } }),
-        item('Undo last point', { action: { kind: 'undoPoint' } }),
-        item('Cancel path', { action: { kind: 'cancelPath' } }),
-      ],
-    };
-  }
-  if (context.placing) return { id: 'state', items: [item('Stop placing', { action: { kind: 'stopPlacing' } })] };
-  return null;
-}
-
-export function buildMenu(target: MenuTarget, context: MenuContext): MenuGroup[] {
-  // While a path is drawn, clicks add points: nothing else is offered until it is finished
-  const providers: MenuProvider[] = context.drawing ? [stateItems] : [stateItems, worldItems, movementItems, questItems];
-  return providers.map((provide) => provide(target, context)).filter((group): group is MenuGroup => group !== null && group.items.length > 0);
-}

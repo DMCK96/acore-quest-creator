@@ -18,21 +18,36 @@ import userEvent from '@testing-library/user-event';
 import { screen } from '@testing-library/react';
 import { RewardTablesProvider } from '../../src/renderer/state/reward-tables';
 import { forkDb } from '../helpers/fixtures';
+import { ENTITIES_FIELD, readEntities, writeEntities } from '../../src/core/entities/model';
+import { ProjectEntitiesProvider, type ProjectQuestUse } from '../../src/renderer/state/project-entities';
+import type { ProjectEntities } from '../../src/core/entities/model';
+import type { TrackedEntity } from '../../src/core/entities/entity';
 import { makeMockApi, sampleOpen } from './mock-api';
+import { ShowInWorldProvider, type ShowInWorld } from '../../src/renderer/world3d/ShowInWorldContext';
 
 /** Renders one module body over a brand new quest (level 10) with `over` applied on top. */
 export async function mountBody(
   id: ModuleId,
   over: Record<string, FieldValue> = {},
-  opts: { api?: Api; onChange?: Mock; links?: QuestLinks | null; readOnly?: ReadOnlyReason[]; sharedItems?: Record<string, number[]>; openMap?: (request: any) => void; openEditor?: OpenEditor } = {},
+  opts: {
+    api?: Api; onChange?: Mock; links?: QuestLinks | null; readOnly?: ReadOnlyReason[]; sharedItems?: Record<string, number[]>; openMap?: (request: any) => void; openEditor?: OpenEditor;
+    /** The project store; by default read from `over`'s old `entities` field */
+    entities?: ProjectEntities; quests?: ProjectQuestUse[]; setEntities?: Mock; tracked?: TrackedEntity[];
+    /** The host's Show in World, given to the body as the app shell gives it */
+    showInWorld?: ShowInWorld;
+  } = {},
 ): Promise<{ onChange: Mock; api: Api }> {
   const schema = await loadSchema(forkDb(), registry.tables.map((t) => t.table));
   const a = createNewAggregate(schema, registry, 60001);
   const aggregate = { ...a, values: { ...a.values, 'quest_template.QuestLevel': 10, ...over }, readOnly: opts.readOnly ?? [], sharedItems: opts.sharedItems ?? {} };
   const api = opts.api ?? makeMockApi();
   const onChange = opts.onChange ?? vi.fn();
-  const withEditor = (ui: React.ReactNode): React.ReactNode => (opts.openEditor ? <EntityEditorProvider open={opts.openEditor}>{ui}</EntityEditorProvider> : ui);
+  const withShow = (ui: React.ReactNode): React.ReactNode => (opts.showInWorld ? <ShowInWorldProvider value={opts.showInWorld}>{ui}</ShowInWorldProvider> : ui);
+  const withEditor = (ui: React.ReactNode): React.ReactNode => withShow(opts.openEditor ? <EntityEditorProvider open={opts.openEditor}>{ui}</EntityEditorProvider> : ui);
+  const entities = opts.entities ?? readEntities(over);
+  const project = { entities, setEntities: opts.setEntities ?? vi.fn(), quests: opts.quests ?? [], layer: { spawns: [], routes: [], added: [] }, setLayer: vi.fn(), tracked: opts.tracked ?? [], create: vi.fn(async () => ({ error: 'not here' })), remove: vi.fn(async () => null), adopt: vi.fn(async () => ({ error: 'not here' })), ensure: vi.fn(async () => null) };
   render(
+    <ProjectEntitiesProvider value={project}>
     <NamesProvider api={api}>
       <RewardTablesProvider api={api}>
         {withEditor(opts.openMap ? (
@@ -43,7 +58,8 @@ export async function mountBody(
           <ModuleBody id={id} open={sampleOpen({ questId: 60001, aggregate })} links={opts.links ?? null} onChange={onChange} onOpenQuest={vi.fn()} />
         ))}
       </RewardTablesProvider>
-    </NamesProvider>,
+    </NamesProvider>
+    </ProjectEntitiesProvider>,
   );
   return { onChange, api };
 }
@@ -60,20 +76,26 @@ export function renderFlow(store: AppStore, api: Api) {
   );
 }
 
-/** Renders the NPC or object editor over fixed values (like `mountBody`), optionally on one tab. */
+/**
+ * Renders the NPC or object editor (like `mountBody`), optionally on one tab, over the project store
+ * read from `values`' old `entities` field; its edits are reported as `onChange(ENTITIES_FIELD, next)`,
+ * and a delete as `onDelete(kind, entry)`.
+ */
 export async function mountEditor(
   values: Record<string, FieldValue>,
   state: EditorState,
-  opts: { api?: Api; onChange?: Mock; tab?: string } = {},
-): Promise<{ onChange: Mock; onClose: Mock }> {
+  opts: { api?: Api; onChange?: Mock; onDelete?: Mock; tab?: string; quests?: ProjectQuestUse[] } = {},
+): Promise<{ onChange: Mock; onClose: Mock; onDelete: Mock }> {
   const api = opts.api ?? makeMockApi();
   const onChange = opts.onChange ?? vi.fn();
+  const onDelete = opts.onDelete ?? vi.fn();
   const onClose = vi.fn();
   render(
     <NamesProvider api={api}>
-      <EntityEditorHost values={values} onChange={onChange} state={state} onTab={vi.fn()} onClose={onClose} />
+      <EntityEditorHost entities={readEntities(values)} onChange={(next) => onChange(ENTITIES_FIELD, writeEntities(next))} quests={opts.quests ?? []}
+        state={state} onTab={vi.fn()} onClose={onClose} onDelete={onDelete} />
     </NamesProvider>,
   );
   if (opts.tab && screen.queryByRole('tab', { name: opts.tab })) await userEvent.click(screen.getByRole('tab', { name: opts.tab }));
-  return { onChange, onClose };
+  return { onChange, onClose, onDelete };
 }

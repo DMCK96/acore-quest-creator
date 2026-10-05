@@ -29,7 +29,7 @@ describe('new NPCs through the API', () => {
     expect(first.value).toEqual([11000231, 11000232]);
     const opened: any = await api.newQuest();
     const aggregate = opened.value.aggregate;
-    aggregate.values[ENTITIES_FIELD] = writeEntities({ npcs: [{ ...newNpc(11000235), name: 'A', displayId: 1, spawns: [newSpawn(5300700)] }], objects: [], items: [] });
+    await api.putProjectEntities({ npcs: [{ ...newNpc(11000235), name: 'A', displayId: 1, spawns: [newSpawn(5300700)] }], objects: [], items: [] });
     await api.updateQuest(aggregate);
     expect(((await api.allocateIds('creature', 1)) as any).value).toEqual([11000236]);
     expect(((await api.allocateIds('creatureSpawn', 1)) as any).value).toEqual([5300701]);
@@ -52,7 +52,7 @@ describe('new NPCs through the API', () => {
     const opened: any = await api.newQuest();
     const aggregate = opened.value.aggregate;
     aggregate.values['quest_template.LogTitle'] = 'Meet Hela';
-    aggregate.values[ENTITIES_FIELD] = writeEntities({ npcs: [{ ...newNpc(11000240), name: 'Scout Hela', displayId: 1234, spawns: [{ ...newSpawn(5300800), x: 5 }] }], objects: [], items: [] });
+    await api.putProjectEntities({ npcs: [{ ...newNpc(11000240), name: 'Scout Hela', displayId: 1234, spawns: [{ ...newSpawn(5300800), x: 5 }] }], objects: [], items: [] });
     aggregate.values.creature_queststarter = [{ id: 11000240 }];
     aggregate.values.creature_questender = [{ id: 11000240 }];
     await api.updateQuest(aggregate);
@@ -67,9 +67,12 @@ describe('new NPCs through the API', () => {
 
     const out: any = await api.exportQuest(aggregate.questId);
     expect(out.ok).toBe(true);
-    expect(out.value.sql).toMatch(/INSERT INTO `creature_template` \(.*\) VALUES \(11000240,/);
-    expect(out.value.sql).toMatch(/INSERT INTO `creature` .*'AQC q\d+ npc11000240'/);
-    expect(out.value.sql.indexOf('INSERT INTO `creature_template`')).toBeLessThan(out.value.sql.indexOf('INSERT INTO `creature_queststarter`'));
+    // The NPC is the project patch's, which Apply to dev runs before the quest
+    expect(out.value.usesProject).toBe(1);
+    const applied = `${out.value.projectSql}\n${out.value.sql}`;
+    expect(applied).toMatch(/INSERT INTO `creature_template` \(.*\) VALUES \(11000240,/);
+    expect(applied).toMatch(/INSERT INTO `creature` .*'AQC npc11000240 '/);
+    expect(applied.indexOf('INSERT INTO `creature_template`')).toBeLessThan(applied.indexOf('INSERT INTO `creature_queststarter`'));
   });
   it('copies an NPC\'s weapons with its look', async () => {
     const { api, db } = await setup();
@@ -84,7 +87,8 @@ describe('new NPCs through the API', () => {
     db.insert('item_template', { entry: '2589', name: 'Linen Cloth', InventoryType: '0' });
     const opened: any = await api.newQuest();
     const aggregate = opened.value.aggregate;
-    aggregate.values[ENTITIES_FIELD] = writeEntities({ npcs: [{ ...newNpc(11000240), name: 'Holder', displayId: 1, equipment: { mainHand: 2589, offHand: 0, ranged: 0 } }], objects: [], items: [] });
+    await api.putProjectEntities({ npcs: [{ ...newNpc(11000240), name: 'Holder', displayId: 1, equipment: { mainHand: 2589, offHand: 0, ranged: 0 } }], objects: [], items: [] });
+    aggregate.values.creature_queststarter = [{ id: 11000240 }];
     await api.updateQuest(aggregate);
     const issues: any = await api.validate(aggregate.questId);
     expect(issues.value.map((i: any) => i.message)).toContain('NPC "Holder": the main hand item 2589 is not held in a hand, so it would not show.');

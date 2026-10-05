@@ -1,11 +1,9 @@
 import { useEffect, useRef, useState } from 'react';
-import { readEntities, type CustomNpc, type Patrol, type Spawn } from '@core/entities/model';
+import type { CustomNpc, Patrol, ProjectEntities, Spawn } from '@core/entities/model';
 import { chooseZ, floorCandidates } from '@core/map/floors';
 import { addPoint, insertPoint, nearestSegment, newPatrol, patrolOf, setPatrol } from '@core/map/patrol';
-import type { FieldValue } from '@core/registry/types';
 import type { Api } from '@shared/ipc';
 
-type Values = Readonly<Record<string, unknown>>;
 type FloorResult = { floors: number[]; ground: number | null };
 type Floors = (map: number, x: number, y: number) => Promise<{ result: FloorResult | null; reason: string | null }>;
 
@@ -25,14 +23,15 @@ export interface ActivePatrol extends PatrolTarget {
 /**
  * Drawing one new NPC spawn's patrol on the quest map: getting its path id, adding a point per
  * click (on the floor nearest the point before), inserting one on a clicked segment, and leaving the
- * mode when the spawn goes away. Every edit is built from the values as they are when it lands.
+ * mode when the spawn goes away. Every edit is built from the project's NPCs as they are when it lands.
  */
 export function usePatrolMode(input: {
   api: Api | null;
   target: PatrolTarget | null;
-  values: Values;
-  valuesRef: { current: Values };
-  onChange(fieldId: string, value: FieldValue): void;
+  /** The project's NPCs and objects, and a ref to them as they are now */
+  entities: ProjectEntities;
+  entitiesRef: { current: ProjectEntities };
+  onEntities(next: ProjectEntities): void;
   floorsAt: Floors;
   currentMap: number;
   mapName(map: number): string;
@@ -41,13 +40,13 @@ export function usePatrolMode(input: {
   /** The floors found under a point just added, so the map can offer the others or say why there are none. */
   onFloors(markerId: string, at: { x: number; y: number }, candidates: number[], reason: string | null): void;
 }) {
-  const { api, target, values, valuesRef, onChange, floorsAt, currentMap, mapName, onLeave, onEnter, onFloors } = input;
+  const { api, target, entities, entitiesRef, onEntities, floorsAt, currentMap, mapName, onLeave, onEnter, onFloors } = input;
   const [selected, setSelected] = useState<number | null>(null);
   const [picking, setPicking] = useState<'facing' | 'object' | null>(null);
   const asked = useRef<string | null>(null);
   const entered = useRef<string | null>(null);
 
-  const npc = target ? readEntities(values).npcs.find((n) => n.entry === target.entry) : undefined;
+  const npc = target ? entities.npcs.find((n) => n.entry === target.entry) : undefined;
   const spawn = target ? npc?.spawns.find((s) => s.guid === target.guid) : undefined;
   const active: ActivePatrol | null =
     target && npc && spawn ? { ...target, npc, spawn, patrol: spawn.patrol, routeId: `patrol:${target.entry}:${target.guid}` } : null;
@@ -89,21 +88,21 @@ export function usePatrolMode(input: {
         return;
       }
       // A route drawn while the id was on its way is kept, never reset to an empty one.
-      if (patrolOf(valuesRef.current, target.entry, target.guid) !== null) return;
-      const edit = setPatrol(valuesRef.current, target.entry, target.guid, newPatrol(result.value));
-      if (edit) onChange(edit.field, edit.value);
+      if (patrolOf(entitiesRef.current, target.entry, target.guid) !== null) return;
+      const next = setPatrol(entitiesRef.current, target.entry, target.guid, newPatrol(result.value));
+      if (next) onEntities(next);
     });
-  }, [target, needsPath, api, key, valuesRef, onChange, onLeave]);
+  }, [target, needsPath, api, key, entitiesRef, onEntities, onLeave]);
 
-  /** Saves a new version of the patrol over whatever the values hold now. */
+  /** Saves a new version of the patrol over whatever the store holds now. */
   function save(next: Patrol): void {
     if (!target) return;
-    const edit = setPatrol(valuesRef.current, target.entry, target.guid, next);
-    if (edit) onChange(edit.field, edit.value);
+    const changed = setPatrol(entitiesRef.current, target.entry, target.guid, next);
+    if (changed) onEntities(changed);
   }
 
-  /** The patrol as the values hold it now: edits after an await start from here. */
-  const latest = (): Patrol | null => (target ? patrolOf(valuesRef.current, target.entry, target.guid) : null);
+  /** The patrol as the store holds it now: edits after an await start from here. */
+  const latest = (): Patrol | null => (target ? patrolOf(entitiesRef.current, target.entry, target.guid) : null);
 
   /** The floor nearest `near` under a point, with the other floors there or why there are none. */
   async function zAt(at: { x: number; y: number }, near: number): Promise<{ z: number; candidates: number[]; reason: string | null }> {

@@ -8,7 +8,7 @@ import { forkDb } from '../helpers/fixtures';
 
 const pearl = { ...newItem(990020), name: 'Golden Pearl', displayId: 7040, pages: [{ id: 3800, text: 'It glitters.' }], advanced: { holy_res: '3', not_a_column: '1' } };
 const compile = (itemColumns?: ReadonlySet<string> | null) =>
-  compileEntities({ questId: 60001, entities: { npcs: [], objects: [], items: [pearl] }, givers: [], context: EMPTY_ENTITY_CONTEXT, itemColumns });
+  compileEntities({ entities: { npcs: [], objects: [], items: [pearl] }, givers: [], context: EMPTY_ENTITY_CONTEXT, itemColumns });
 
 describe('compileEntities with items', () => {
   it('writes the item row and its pages, and deletes by entry', () => {

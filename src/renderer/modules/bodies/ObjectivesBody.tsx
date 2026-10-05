@@ -1,8 +1,12 @@
 import type { CreatureOrGoValue, FieldValue, ListValue, ScalarValue } from '@core/registry/types';
-import { creatureName, itemName, objectName } from '@core/modules/summaries';
+import { creatureName, giverName, itemName, objectName } from '@core/modules/summaries';
 import { removeEntry } from '@core/modules/entries';
 import { DropsPanel } from '../../groups/DropsPanel';
 import { useNameBook } from '../../state/names';
+import { GoToButton } from '../../world3d/GoToButton';
+import { useShowInWorld } from '../../world3d/ShowInWorldContext';
+import { EMPTY_ENTITIES } from '@core/entities/model';
+import { useProjectEntities } from '../../state/project-entities';
 import type { ModuleBodyProps } from '../body-props';
 import { FieldSetting } from '../FieldSetting';
 import { ListFieldEditor } from '../ListFieldEditor';
@@ -29,6 +33,8 @@ function dropItemIds(values: Record<string, FieldValue>): number[] {
 export function ObjectivesBody({ open, onChange }: ModuleBodyProps): React.JSX.Element {
   const { aggregate } = open;
   const names = useNameBook();
+  const showInWorld = useShowInWorld();
+  const entities = useProjectEntities()?.entities ?? EMPTY_ENTITIES;
   const itemIds = dropItemIds(aggregate.values);
   const triggers = (aggregate.values[TRIGGERS] as Entry[] | undefined) ?? null;
 
@@ -39,6 +45,12 @@ export function ObjectivesBody({ open, onChange }: ModuleBodyProps): React.JSX.E
       ? `Kill ${e.count} × ${creatureName(t.id, names)}`
       : `Use ${e.count} × ${objectName(t.id, names)}`;
   };
+  // Go to beside a kill or use target that names an NPC or object: the camera goes to its nearest spawn
+  const goTo = (e: Entry): React.ReactNode => {
+    const t = e.target as CreatureOrGoValue | null;
+    if (!showInWorld || !t || t.id <= 0) return null;
+    return <GoToButton questId={open.questId} kind={t.target} entry={t.id} name={giverName({ kind: t.target, id: t.id }, names, entities)} showInWorld={showInWorld} />;
+  };
   const collectTitle = (e: Entry): string =>
     e.item ? `Collect ${e.count} × ${itemName(Number(e.item), names)}` : 'Choose an item';
 
@@ -46,7 +58,7 @@ export function ObjectivesBody({ open, onChange }: ModuleBodyProps): React.JSX.E
     <div>
       <h3 className="module-section__title">Kill or use</h3>
       <ListFieldEditor fieldId="quest_template.RequiredNpcOrGo" aggregate={aggregate} onChange={onChange}
-        noun="kill or use target" addLabel="Add kill or use" title={killTitle} />
+        noun="kill or use target" addLabel="Add kill or use" title={killTitle} actions={goTo} />
 
       <h3 className="module-section__title">Collect</h3>
       <ListFieldEditor fieldId={REQUIRED_ITEMS} aggregate={aggregate} onChange={onChange}

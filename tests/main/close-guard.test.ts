@@ -13,8 +13,8 @@ const controller = (settle: boolean) => {
 
 describe('windowTitle', () => {
   it('shows the name and a dot while there are unsaved changes', () => {
-    expect(windowTitle('Northshire', false)).toBe('Northshire — ACORE Quest Creator');
-    expect(windowTitle('Northshire', true)).toBe('Northshire • — ACORE Quest Creator');
+    expect(windowTitle('Northshire', false)).toBe('Northshire — Azeroth World Editor');
+    expect(windowTitle('Northshire', true)).toBe('Northshire • — Azeroth World Editor');
   });
 });
 

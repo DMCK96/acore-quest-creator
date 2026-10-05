@@ -4,6 +4,7 @@ import { render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import type { LeafletMapProps } from '../../src/renderer/map/LeafletMap';
 import { createAppStore } from '../../src/renderer/state/app-store';
+import { ProjectEntitiesFromStore } from '../../src/renderer/state/project-entities';
 import { QuestFlowView } from '../../src/renderer/views/QuestFlowView';
 import { NamesProvider } from '../../src/renderer/state/names';
 import { RewardTablesProvider } from '../../src/renderer/state/reward-tables';
@@ -25,10 +26,11 @@ async function mountFlow() {
   const a = createNewAggregate(schema, registry, 60123);
   const values = { ...a.values, creature_queststarter: [{ id: 12000005 }], [ENTITIES_FIELD]: writeEntities({ npcs: [{ ...newNpc(12000005), name: 'Hela' }], objects: [], items: [] }) };
   const open = sampleOpen({ questId: 60123, aggregate: { ...a, values } });
-  const api = makeMockApi({ newQuest: vi.fn(async () => okv(open)) });
+  const api = makeMockApi({ newQuest: vi.fn(async () => okv(open)), projectEntities: vi.fn(async () => okv({ npcs: [{ ...newNpc(12000005), name: 'Hela' }], objects: [], items: [] })) });
   const store = createAppStore(api, { saveDelayMs: 0 });
+  await store.getState().loadEntities();
   await store.getState().newQuest();
-  render(<NamesProvider api={api}><RewardTablesProvider api={api}><QuestFlowView store={store} /></RewardTablesProvider></NamesProvider>);
+  render(<NamesProvider api={api}><RewardTablesProvider api={api}><ProjectEntitiesFromStore store={store}><QuestFlowView store={store} /></ProjectEntitiesFromStore></RewardTablesProvider></NamesProvider>);
   return { store };
 }
 

@@ -1,6 +1,7 @@
 import { useEffect, useId, useRef, useState } from 'react';
 import type { EntityHit, SearchKind } from '@core/db/world-db';
 import { useEntitySearch, useName } from '../state/names';
+import { useEntityEditor } from '../entities/EntityEditorContext';
 import './EntityPicker.css';
 
 export interface EntityPickerProps {
@@ -15,6 +16,9 @@ export interface EntityPickerProps {
 
 const SEARCH_DELAY_MS = 150;
 
+/** The kinds that have an editor, as the editor names them */
+const EDITOR_KIND: Partial<Record<SearchKind, 'npc' | 'object' | 'item'>> = { creature: 'npc', gameobject: 'object', item: 'item' };
+
 /** A negative ID is a quest log category, which players and designers know by name only. */
 const idLabel = (id: number): string => (id < 0 ? '' : ` · #${id}`);
 
@@ -24,10 +28,13 @@ const optionLabel = (hit: EntityHit): string =>
 /**
  * Picks an item, NPC, object or quest by typing part of its name (or its ID) and choosing a
  * result. Shows the current choice by name; an ID the database no longer has is kept and flagged,
- * never silently cleared.
+ * never silently cleared. Inside a quest editor or the World, a chosen NPC, object or item can be opened in
+ * its editor (an existing one is brought into the project first).
  */
 export function EntityPicker({ id, label, kind, value, onChange, disabled, readOnlyReason }: EntityPickerProps): React.JSX.Element {
   const search = useEntitySearch();
+  const openEditor = useEntityEditor();
+  const editorKind = EDITOR_KIND[kind];
   const { state, name } = useName(kind, value);
   const listId = useId();
   const [editing, setEditing] = useState(false);
@@ -130,6 +137,12 @@ export function EntityPicker({ id, label, kind, value, onChange, disabled, readO
           <span className={state === 'missing' ? 'entity-picker__id entity-picker__id--missing' : 'entity-picker__id'}>
             {state === 'missing' ? `#${value} not found in your database` : `#${value}`}
           </span>
+        )}
+        {openEditor && editorKind && value > 0 && (
+          <button type="button" className="entity-picker__clear entity-picker__edit" aria-label={`Edit ${label}`}
+            onClick={() => void openEditor({ kind: editorKind, entry: value }).then((why) => setError(why))}>
+            Edit…
+          </button>
         )}
         {value !== 0 && !disabled && (
           <button type="button" className="entity-picker__clear" aria-label={`Clear ${label}`} onClick={() => onChange(0)}>

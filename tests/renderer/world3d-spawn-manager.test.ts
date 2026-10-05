@@ -5,10 +5,10 @@ import type { WorldLayer } from '../../src/core/world/layer';
 import SpawnManager from '../../src/renderer/world3d/scene/spawn/SpawnManager';
 
 const creature = (guid: number, displayId: number, extra: object = {}) => ({
-  guid, entry: 1, name: 'n', map: 0, x: 0, y: 0, z: 0, orientation: 0, displayId, scale: 1, wander: 0, path: null, equipment: [0, 0, 0] as [number, number, number], own: false, event: null, events: [], removedBy: [], pathId: 0, preset: null, ...extra,
+  guid, entry: 1, name: 'n', map: 0, x: 0, y: 0, z: 0, orientation: 0, displayId, scale: 1, wander: 0, path: null, equipment: [0, 0, 0] as [number, number, number], own: false, event: null, events: [], removedBy: [], pathId: 0, preset: null, group: null, respawnSecs: 300, ...extra,
 });
 const object = (guid: number, displayId: number, extra: object = {}) => ({
-  guid, entry: 2, name: 'o', map: 0, x: 0, y: 0, z: 0, rotation: [0, 0, 0, 1] as [number, number, number, number], displayId, scale: 1, own: false, event: null, events: [], removedBy: [], ...extra,
+  guid, entry: 2, name: 'o', map: 0, x: 0, y: 0, z: 0, rotation: [0, 0, 0, 1] as [number, number, number, number], displayId, scale: 1, objectType: 5, own: false, event: null, events: [], removedBy: [], group: null, respawnSecs: 300, ...extra,
 });
 const box = { minX: 0, maxX: 1, minY: 0, maxY: 1 };
 
@@ -81,13 +81,85 @@ describe('the spawn layer', () => {
 
 describe('how far spawns are drawn', () => {
   it('hides spawns beyond the draw distance from the camera, and shows them again within it', async () => {
-    const m = manager({ creatures: [creature(1, 1, { x: 50 }), creature(2, 1, { x: 400 })], objects: [object(3, 2)], capped: { creatures: false, objects: false } });
+    const m = manager({ creatures: [creature(1, 1, { x: 50 }), creature(2, 1, { x: 1200 })], objects: [object(3, 2)], capped: { creatures: false, objects: false } });
     const group = (await m.loadArea(1, 0, box))!;
     const [near, far] = group.getObjectByName('creatures')!.children;
     m.cull(new THREE.Vector3(0, 0, 0));
     expect([near!.visible, far!.visible]).toEqual([true, false]);
-    m.cull(new THREE.Vector3(390, 0, 0));
+    m.cull(new THREE.Vector3(1190, 0, 0));
     expect([near!.visible, far!.visible]).toEqual([false, true]);
+  });
+
+  it('draws an NPC as far off as its area is loaded while its route is worked on, and offers it to a box', async () => {
+    const m = manager({ creatures: [creature(1, 1, { x: 50 }), creature(2, 1, { x: 1200, path: [{ x: 1210, y: 0, z: 0 }] })], objects: [], capped: { creatures: false, objects: false } });
+    const group = (await m.loadArea(1, 0, box))!;
+    const [, far] = group.getObjectByName('creatures')!.children;
+    m.setActiveRoutes([2]);
+    m.cull(new THREE.Vector3(0, 0, 0));
+    expect(far!.visible).toBe(true);
+    expect(m.candidates(new THREE.Vector3(0, 0, 0)).spawns.map((s) => s.guid)).toEqual([1, 2]);
+    m.setActiveRoutes([]);
+    m.cull(new THREE.Vector3(0, 0, 0));
+    expect(far!.visible).toBe(false);
+  });
+
+  it('hides a model the camera does not look at, so it is neither drawn nor animated, but still finds it for edits', async () => {
+    // A model with the world bounding sphere the real ones keep
+    const sphered = async () => {
+      const model: any = new THREE.Object3D();
+      model.boundingSphereWorld = new THREE.Sphere(new THREE.Vector3(), 1);
+      model.updateMatrixWorld = function (force?: boolean) { THREE.Object3D.prototype.updateMatrixWorld.call(this, force); this.boundingSphereWorld.center.copy(this.position); };
+      return model;
+    };
+    const m = manager({ creatures: [creature(1, 1, { x: 50 }), creature(2, 1, { x: -50 })], objects: [], capped: { creatures: false, objects: false } }, { createModel: sphered });
+    const group = (await m.loadArea(1, 0, box))!;
+    group.updateMatrixWorld(true);
+    // Looking along +X from the origin: the NPC at x 50 is ahead, the one at x -50 behind
+    const camera = new THREE.PerspectiveCamera(60, 1, 0.5, 1000);
+    camera.up.set(0, 0, 1);
+    camera.lookAt(1, 0, 0);
+    camera.updateMatrixWorld();
+    const frustum = new THREE.Frustum().setFromProjectionMatrix(new THREE.Matrix4().multiplyMatrices(camera.projectionMatrix, camera.matrixWorldInverse));
+    m.cull(new THREE.Vector3(0, 0, 0), frustum);
+    const [ahead, behind] = group.getObjectByName('creatures')!.children;
+    expect([ahead!.visible, behind!.visible]).toEqual([true, false]);
+    expect(m.find('creature', 2)).toBe(behind);
+  });
+
+  it('leaves off what an NPC wears or holds when it is far off or out of view, which also stops it animating', async () => {
+    const worn: any[] = [];
+    const dressed = async () => {
+      const model: any = new THREE.Object3D();
+      const point = new THREE.Object3D();
+      point.name = 'attachment:11';
+      const helmet: any = new THREE.Object3D();
+      helmet.hide = vi.fn(() => { helmet.visible = false; });
+      helmet.show = vi.fn(() => { helmet.visible = true; });
+      point.add(helmet);
+      model.add(point);
+      worn.push(helmet);
+      return model;
+    };
+    const m = manager({ creatures: [creature(1, 1, { x: 50 })], objects: [], capped: { creatures: false, objects: false } }, { createModel: dressed });
+    await m.loadArea(1, 0, box);
+    const [helmet] = worn;
+    m.cull(new THREE.Vector3(0, 0, 0));
+    expect(helmet.visible).toBe(true);
+    m.cull(new THREE.Vector3(-300, 0, 0));
+    expect(helmet.visible).toBe(false);
+    expect(helmet.hide).toHaveBeenCalled();
+    m.cull(new THREE.Vector3(0, 0, 0));
+    expect(helmet.visible).toBe(true);
+    // Beyond draw distance the NPC is hidden, and so is what it wears
+    m.cull(new THREE.Vector3(-1000, 0, 0));
+    expect(helmet.visible).toBe(false);
+  });
+
+  it('draws spawns further than the game does, for an editor zoomed out over a route', async () => {
+    const m = manager({ creatures: [creature(1, 1, { x: 480 })], objects: [], capped: { creatures: false, objects: false } });
+    const group = (await m.loadArea(1, 0, box))!;
+    m.cull(new THREE.Vector3(0, 0, 0));
+    expect(group.getObjectByName('creatures')!.children[0]!.visible).toBe(true);
   });
 });
 
@@ -152,7 +224,7 @@ describe('standing NPCs on the drawn ground', () => {
 
   it('does not lift objects, markers, or NPCs out of range', async () => {
     const asked = vi.fn(() => 12);
-    const m = manager(spawns([creature(1, 0, { z: 10 }), creature(2, 1, { z: 10, x: 400 })], [object(3, 2, { z: 10 })]), { groundBelow: asked });
+    const m = manager(spawns([creature(1, 0, { z: 10 }), creature(2, 1, { z: 10, x: 1200 })], [object(3, 2, { z: 10 })]), { groundBelow: asked });
     const group = (await m.loadArea(1, 0, box))!;
     m.cull(eye);
     expect(asked).not.toHaveBeenCalled();
@@ -205,7 +277,7 @@ describe('which routes are drawn', () => {
 
   it('offers a box the points of drawn routes and the shown spawns within draw distance', async () => {
     const m = manager({
-      creatures: [creature(2, 0, { path: [{ x: 10, y: 0, z: 0 }, { x: 20, y: 0, z: 0 }] }), creature(5, 0, { x: 500 })],
+      creatures: [creature(2, 0, { path: [{ x: 10, y: 0, z: 0 }, { x: 20, y: 0, z: 0 }] }), creature(5, 0, { x: 1200 })],
       objects: [object(3, 0, { x: 4 })], capped: { creatures: false, objects: false },
     });
     await m.loadArea(1, 0, box);
@@ -523,9 +595,173 @@ describe('the world layer in the view', () => {
   it('describes a drawn spawn for the menu', async () => {
     const m = manager({ creatures: [creature(1, 1, { x: 0.5, y: 0.5, orientation: 2, wander: 4 })], objects: [], capped: { creatures: false, objects: false } });
     await m.loadArea(1, 0, box);
-    expect(m.info('creature', 1)).toEqual({ kind: 'creature', guid: 1, entry: 1, name: 'n', own: false, added: false, pathId: 0, wander: 4, map: 0,
+    expect(m.info('creature', 1)).toEqual({ kind: 'creature', guid: 1, entry: 1, name: 'n', own: false, added: false, pathId: 0, wander: 4, map: 0, group: null, respawnSecs: 300,
       placement: { x: 0.5, y: 0.5, z: 0, orientation: 2, rotation: null } });
     expect(m.info('creature', 99)).toBeNull();
+  });
+
+  it('says which spawn group a drawn spawn is in, as the world layer has the groups', async () => {
+    const m = manager({ creatures: [creature(1, 1, { x: 0.5, y: 0.5, group: 7 }), creature(2, 1, { x: 0.5, y: 0.5, group: 8 }), creature(3, 1, { x: 0.5, y: 0.5, group: null })], objects: [object(4, 2, { x: 0.5, y: 0.5, group: 7 })], capped: { creatures: false, objects: false } });
+    await m.loadArea(1, 0, box);
+    expect([m.info('creature', 1)!.group, m.info('creature', 2)!.group, m.info('creature', 3)!.group, m.info('object', 4)!.group]).toEqual([7, 8, null, 7]);
+    const existing = { kind: 'existing' as const, original: { template: {}, members: [], event: null } };
+    await m.setWorldLayer({ spawns: [], routes: [], added: [], groups: [
+      // Group 7 kept the object but let NPC 1 go; NPC 3 joined new group 9; group 8 was deleted
+      { id: 7, name: 'a', map: 0, maxActive: 1, event: null, origin: existing, members: [{ type: 'spawn', kind: 'object', guid: 4, entry: 2, chance: 0 }] },
+      { id: 9, name: 'b', map: 0, maxActive: 1, event: null, origin: { kind: 'new' }, members: [{ type: 'spawn', kind: 'npc', guid: 3, entry: 1, chance: 0 }] },
+      { id: 8, name: 'c', map: 0, maxActive: 1, event: null, origin: existing, removed: true, members: [{ type: 'spawn', kind: 'npc', guid: 2, entry: 1, chance: 0 }] },
+    ] });
+    expect([m.info('creature', 1)!.group, m.info('creature', 2)!.group, m.info('creature', 3)!.group, m.info('object', 4)!.group]).toEqual([null, null, 9, 7]);
+  });
+
+  it("a layer group's event overrides the database's for its spawns", async () => {
+    const m = manager({ creatures: [creature(1, 1, { x: 0.5, y: 0.5 })], objects: [], capped: { creatures: false, objects: false } });
+    await m.loadArea(1, 0, box);
+    await m.setWorldLayer({ spawns: [], routes: [], added: [], groups: [
+      { id: 9, name: 'b', map: 0, maxActive: 1, event: { id: 4, during: true }, origin: { kind: 'new' }, members: [{ type: 'spawn', kind: 'npc', guid: 1, entry: 1, chance: 0 }] },
+    ] });
+    expect(m.info('creature', 1)).toBeNull();
+    await m.setVisibility({ creatures: true, objects: true, paths: true, events: 4 });
+    expect(m.info('creature', 1)).not.toBeNull();
+  });
+
+  describe("a layer group's event in the Event filter", () => {
+    const fair = { id: 5, name: 'Fair' };
+    const darkmoon = { id: 12, name: 'Darkmoon' };
+    const empty = { creatures: [], objects: [], capped: { creatures: false, objects: false } };
+    const at = { x: 0.5, y: 0.5 };
+    const drawn = async (m: SpawnManager, events: 'none' | 'all' | number, guids: number[]) => {
+      await m.setVisibility({ creatures: true, objects: true, paths: true, events });
+      return guids.filter((g) => m.info('creature', g) !== null);
+    };
+    const group = (id: number, members: any[], event: { id: number; during: boolean } | null = null, origin: any = { kind: 'new' }) => ({ id, name: 'g', map: 0, maxActive: 1, event, origin, members });
+    const spawnMember = (guid: number) => ({ type: 'spawn', kind: 'npc', guid, entry: 1, chance: 0 });
+    const groupMember = (id: number) => ({ type: 'group', id, chance: 0 });
+
+    it("reaches the spawns of the groups inside an event-tied group: the layer's copy, else the database's", async () => {
+      // NPC 1 is in database group 20; NPC 2 in layer group 10; both sit inside new group 9, tied to event 4
+      const m = manager({ ...empty, creatures: [creature(1, 1, { ...at, group: 20, poolTop: 20 }), creature(2, 1, { ...at }), creature(3, 1, { ...at })] });
+      await m.loadArea(1, 0, box);
+      await m.setWorldLayer({ spawns: [], routes: [], added: [], groups: [
+        group(9, [groupMember(20), groupMember(10)], { id: 4, during: true }),
+        group(10, [spawnMember(2)]),
+      ] } as any);
+      expect(await drawn(m, 'none', [1, 2, 3])).toEqual([3]);
+      expect(await drawn(m, 4, [1, 2, 3])).toEqual([1, 2, 3]);
+    });
+
+    it("walks through database groups the loaded spawns do not name, by the group's full membership", async () => {
+      // NPC 1 is in database group 21, inside database group 20, inside database group 19 (its row's top);
+      // the layer has group 19 let go of 20, which new group 9 (tied to event 4) holds
+      const m = manager({ ...empty, creatures: [creature(1, 1, { ...at, group: 21, poolTop: 19 }), creature(2, 1, { ...at, group: 19, poolTop: 19 })] });
+      await m.loadArea(1, 0, box);
+      await m.setWorldLayer({ spawns: [], routes: [], added: [], groups: [
+        group(9, [groupMember(20)], { id: 4, during: true }),
+        group(19, [spawnMember(2)], null, { kind: 'existing', original: { template: {}, members: [], event: null } }),
+      ] } as any);
+      await m.setGroupSpawns(new globalThis.Map([[9, [{ kind: 'npc' as const, guid: 1 }]]]));
+      expect(await drawn(m, 'none', [1, 2])).toEqual([2]);
+      expect(await drawn(m, 4, [1, 2])).toEqual([1, 2]);
+    });
+
+    it("a top-level group whose event was cleared takes it off every spawn under it, and a deleted one off its own", async () => {
+      // NPC 1 sits in database group 21, inside 20, which the layer moved from 30 (still tied to event 12
+      // in the layer) into 19, whose event the layer cleared; NPC 2 is under deleted group 31 by a database
+      // group its row does not name as its top
+      const poolEvent = (pool: number) => ({ pool, id: 12, during: true, alsoOwn: false });
+      const existing = { kind: 'existing', original: { template: {}, members: [], event: { eventEntry: '12' } } };
+      const m = manager({ ...empty, creatures: [
+        creature(1, 1, { ...at, group: 21, poolTop: 30, event: darkmoon, events: [darkmoon], poolEvent: poolEvent(30) }),
+        creature(2, 1, { ...at, group: 33, poolTop: 32, event: darkmoon, events: [darkmoon], poolEvent: poolEvent(32) }),
+      ] });
+      await m.loadArea(1, 0, box);
+      await m.setWorldLayer({ spawns: [], routes: [], added: [], groups: [
+        group(19, [groupMember(20)], null, existing),
+        group(30, [], { id: 12, during: true }, existing),
+        { ...group(31, [], null, existing), removed: true },
+        group(32, [], { id: 12, during: true }, existing),
+      ] } as any);
+      await m.setGroupSpawns(new globalThis.Map([[19, [{ kind: 'npc' as const, guid: 1 }]], [31, [{ kind: 'npc' as const, guid: 2 }]]]));
+      expect(await drawn(m, 'none', [1, 2])).toEqual([1, 2]);
+    });
+
+    it("merges the group's event with the spawn's own events instead of replacing them", async () => {
+      const m = manager({ ...empty, creatures: [creature(1, 1, { ...at, event: fair, events: [fair] })] });
+      await m.loadArea(1, 0, box);
+      await m.setWorldLayer({ spawns: [], routes: [], added: [], groups: [group(9, [spawnMember(1)], { id: 4, during: true })] } as any);
+      expect(await drawn(m, 5, [1])).toEqual([1]);
+      expect(await drawn(m, 4, [1])).toEqual([1]);
+      expect(await drawn(m, 'none', [1])).toEqual([]);
+    });
+
+    it("a cleared event takes away only the group's own database event, not the spawn's", async () => {
+      const original = { template: {}, members: [], event: { eventEntry: '12', pool_entry: '7' } };
+      const m = manager({ ...empty, creatures: [
+        creature(1, 1, { ...at, group: 7, poolTop: 7, event: fair, events: [fair, darkmoon], poolEvent: { pool: 7, id: 12, during: true, alsoOwn: false } }),
+        creature(2, 1, { ...at, group: 7, poolTop: 7, event: darkmoon, events: [darkmoon], poolEvent: { pool: 7, id: 12, during: true, alsoOwn: false } }),
+      ] });
+      await m.loadArea(1, 0, box);
+      expect(await drawn(m, 'none', [1, 2])).toEqual([]);
+      await m.setWorldLayer({ spawns: [], routes: [], added: [], groups: [group(7, [spawnMember(1), spawnMember(2)], null, { kind: 'existing', original })] } as any);
+      expect(await drawn(m, 'none', [1, 2])).toEqual([2]);
+      expect(await drawn(m, 5, [1, 2])).toEqual([1, 2]);
+      expect(await drawn(m, 12, [1, 2])).toEqual([2]);
+    });
+
+    it("a spawn the layer took out of a database event group loses that group's event", async () => {
+      const original = { template: {}, members: [], event: { eventEntry: '12', pool_entry: '7' } };
+      const m = manager({ ...empty, creatures: [
+        creature(1, 1, { ...at, group: 7, poolTop: 7, event: darkmoon, events: [darkmoon], poolEvent: { pool: 7, id: 12, during: true, alsoOwn: false } }),
+        creature(2, 1, { ...at, group: 7, poolTop: 7, event: darkmoon, events: [darkmoon], poolEvent: { pool: 7, id: 12, during: true, alsoOwn: false } }),
+      ] });
+      await m.loadArea(1, 0, box);
+      await m.setWorldLayer({ spawns: [], routes: [], added: [], groups: [group(7, [spawnMember(2)], { id: 12, during: true }, { kind: 'existing', original })] } as any);
+      expect(await drawn(m, 'none', [1, 2])).toEqual([1]);
+    });
+
+    it("hides the project's own and placed spawns in an Only during group under the everyday world", async () => {
+      const m = manager(empty);
+      await m.loadArea(1, 0, box);
+      await m.setOwnSpawns({ ...empty, creatures: [creature(6, 1, { ...at, own: true })] });
+      const look = { displayId: 1, scale: 1, equipment: [0, 0, 0] as [number, number, number], preset: null };
+      await m.setWorldLayer({ spawns: [], routes: [], added: [{ kind: 'creature', guid: 7, entry: 1, name: 'n', map: 0, placement: { x: 0.5, y: 0.5, z: 0, orientation: 0, rotation: null }, look }],
+        groups: [group(9, [spawnMember(6), spawnMember(7)], { id: 4, during: true })] } as any);
+      expect(await drawn(m, 'none', [6, 7])).toEqual([]);
+      expect(await drawn(m, 4, [6, 7])).toEqual([6, 7]);
+      expect(await drawn(m, 5, [6, 7])).toEqual([]);
+    });
+  });
+
+  it("describes a spawn's respawn time: the layer's edit over the database's, and a placed spawn's own or 300", async () => {
+    const m = manager({ creatures: [creature(1, 1, { x: 0.5, y: 0.5, respawnSecs: 120 })], objects: [object(5, 2, { x: 0.5, y: 0.5, respawnSecs: 60 })], capped: { creatures: false, objects: false } });
+    await m.loadArea(1, 0, box);
+    expect(m.info('creature', 1)!.respawnSecs).toBe(120);
+    const look = { displayId: 1, scale: 1, equipment: [0, 0, 0] as [number, number, number], preset: null };
+    const placement = { x: 0.5, y: 0.5, z: 0, orientation: 0, rotation: null };
+    await m.setWorldLayer({ spawns: [], routes: [],
+      added: [{ kind: 'creature', guid: 7, entry: 1, name: 'n', map: 0, placement, look }, { kind: 'creature', guid: 8, entry: 1, name: 'n', map: 0, placement, look, respawnSecs: 45 }],
+      respawns: [
+        { kind: 'creature', guid: 1, entry: 1, name: 'n', map: 0, original: 120, current: 900 },
+        { kind: 'gameobject', guid: 5, entry: 2, name: 'o', map: 0, original: 60, current: 10 },
+      ] });
+    expect(m.info('creature', 1)!.respawnSecs).toBe(900);
+    expect(m.info('object', 5)!.respawnSecs).toBe(10);
+    expect(m.info('creature', 7)!.respawnSecs).toBe(300);
+    expect(m.info('creature', 8)!.respawnSecs).toBe(45);
+  });
+
+  it("describes an object's template type: the database's, a placed spawn's look, or none when that look predates it", async () => {
+    const m = manager({ creatures: [], objects: [object(5, 2, { x: 0.5, y: 0.5, objectType: 3 })], capped: { creatures: false, objects: false } });
+    await m.loadArea(1, 0, box);
+    expect(m.info('object', 5)!.objectType).toBe(3);
+    const look = { displayId: 2, scale: 1, equipment: [0, 0, 0] as [number, number, number], preset: null };
+    const placement = { x: 0.5, y: 0.5, z: 0, orientation: 0, rotation: null };
+    await m.setWorldLayer({ spawns: [], routes: [], added: [
+      { kind: 'gameobject', guid: 6, entry: 2, name: 'o', map: 0, placement, look: { ...look, objectType: 10 } },
+      { kind: 'gameobject', guid: 7, entry: 2, name: 'o', map: 0, placement, look },
+    ] });
+    expect(m.info('object', 6)!.objectType).toBe(10);
+    expect(m.info('object', 7)!.objectType).toBeUndefined();
   });
 
   it('picks a route point of the selected NPC by its ball', async () => {

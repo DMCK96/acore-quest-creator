@@ -1,4 +1,4 @@
-import { Component, useEffect, useRef, useState, type ReactNode } from 'react';
+import { Component, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { assetUrl } from '@core/client/asset-url';
 import { worldMapDirectory } from '@core/map/world-maps';
 import { createWorld3D, type Scenery, type SelectionSummary, type World3D } from './world3d';
@@ -6,21 +6,27 @@ import type { Tool } from './controls';
 import { FALLOFF_DEFAULT, FALLOFF_MAX, FALLOFF_MIN } from './scene/edit/falloff';
 import { summaryText } from './summary';
 import { useApi } from '../state/names';
+import { useHistorySteps } from '../state/history-context';
 import type { EventFilter, PickedSpawn, SpawnStatus, SpawnVisibility } from './scene/spawn/SpawnManager';
 import type { ViewSpawns } from '@core/db/view-spawns';
 import { chooseZ, floorCandidates } from '@core/map/floors';
-import { EMPTY_WORLD, movementsOf, type WorldLayer } from '@core/world/layer';
+import { EMPTY_WORLD, groupsOf, movementsOf, respawnsOf, type Placement, type WorldLayer } from '@core/world/layer';
 import type { SpawnEdit, SpawnRef } from './edits';
-import { WorldChanges } from './WorldChanges';
+import { ProjectChanges } from './ProjectChanges';
+import { useProjectEntities } from '../state/project-entities';
+import { EMPTY_ENTITIES } from '@core/entities/model';
 import { PlaceDialog, type Chosen } from './PlaceDialog';
 import { OrbMark } from '../components/OrbMark';
 import type { PlaceRequest } from './placing';
 import { useWorldMenu } from './useWorldMenu';
 import type { QuestMenuInfo } from './menu/model';
 import type { Role, RoleTarget } from '@core/modules/quest-roles';
-import type { QuestSpawnGroup } from '@shared/ipc';
+import type { GroupView, QuestSpawnGroup } from '@shared/ipc';
+import { GroupCard, groupDrawingOf } from './GroupCard';
+import { looksOf } from '@core/entities/view-spawns';
 import '../views/ProjectDialog.css';
 import './world3d.css';
+import { goToTarget } from './go-to-spawn';
 
 /** The camera's controls, as the help in the corner lists them. */
 const CONTROLS: [string, string][] = [
@@ -110,11 +116,11 @@ interface ViewProps {
   map: number;
   start: { x: number; y: number; z: number };
   hasClient: boolean;
-  /** The open quest's own NPCs and objects, drawn with the world's. */
+  /** The project's own NPCs and objects, drawn with the world's. */
   own?: ViewSpawns;
   /** Told which NPC or object was clicked in the view, or null when the selection was cleared. */
   onSelect?(spawn: PickedSpawn | null): void;
-  /** Takes edits to the open quest's own spawns, false when it could not; without it, every edit goes to the world layer. */
+  /** Takes edits to the project's own spawns, false when it could not; without it, every edit goes to the world layer. */
   onOwnEdit?(edit: SpawnEdit): boolean | void;
   /** A spawn to bring into view: the camera goes close to it and it is selected. Its map is `map`. */
   focus?: FocusTarget;
@@ -132,8 +138,16 @@ interface ViewProps {
   chainIds?: number[];
   /** Gives an NPC or object a part in the open quest, or takes it away; says why when it could not. */
   onQuestRole?(role: Role, target: RoleTarget, on: boolean): string | null;
+  /** The right-click menu's New … here: one project NPC or object with a spawn at `at`, as one step */
+  onCreateEntity?(what: 'creature' | 'object', at: Placement): Promise<void>;
+  /** The right-click menu's Edit NPC… / Edit object…, and Edit in Project changes (which lists items too) */
+  onEditEntity?(kind: 'creature' | 'object' | 'item', entry: number): void;
+  /** Project changes' Go to: brings a spawn of the project's into view, on whichever map it is */
+  onGoToSpawn?(target: Omit<FocusTarget, 'nonce'> & { map: number }): void;
+  /** The right-click menu's Make lootable… / Stop being lootable */
+  onSetLootable?(entry: number, on: boolean): Promise<void>;
   /** Starts a new quest given and taken back by an NPC; `after` puts it after the open quest in its chain. */
-  onNewQuest?(giver: { entry: number }, after: boolean): void;
+  onNewQuest?(giver: { entry: number; name: string }, after: boolean): void;
   /** Told the spawns of the open quest or its chain, when they are shown, to list them. */
   onShowSpawns?(groups: QuestSpawnGroup[], scope: 'quest' | 'chain'): void;
 }
@@ -197,6 +211,7 @@ class Contained extends Component<{ children: ReactNode }, { failure: string | n
 
 function WorldStage({
   map, start, hasClient, own, onSelect, onOwnEdit, focus, active = true, showArea = true, onArea, onPlaceChange, quest, chainIds, onQuestRole, onNewQuest, onShowSpawns,
+  onCreateEntity, onEditEntity, onSetLootable, onGoToSpawn,
 }: ViewProps): React.JSX.Element {
   const container = useRef<HTMLDivElement>(null);
   const world = useRef<World3D | null>(null);
@@ -231,16 +246,47 @@ function WorldStage({
   const [note, setNote] = useState<string | null>(null);
   const [shared, setShared] = useState<SharedRoute | null>(null);
   const [changesOpen, setChangesOpen] = useState(false);
-  const changes = layer.spawns.length + layer.routes.length + layer.added.length + movementsOf(layer).length;
+  const project = useProjectEntities();
+  const projectEntities = project?.entities;
+  const setProjectLayer = useRef(project?.setLayer);
+  setProjectLayer.current = project?.setLayer;
+  const changes = layer.spawns.length + layer.routes.length + layer.added.length + movementsOf(layer).length + respawnsOf(layer).length + groupsOf(layer).length
+    + (projectEntities ? projectEntities.npcs.length + projectEntities.objects.length + projectEntities.items.length : 0);
   // Choosing an existing NPC or object to place, and the one being placed (each click on the ground puts one down)
   const [choosing, setChoosing] = useState(false);
   const [placing, setPlacing] = useState<Chosen | null>(null);
-  /** A layer from the World changes list (after a revert): kept and drawn */
+  /** A layer from the Project changes list (after a revert): kept and drawn */
   const takeLayer = (next: WorldLayer): void => {
     layerRef.current = next;
     setLayer(next);
+    setProjectLayer.current?.(next);
     world.current?.setWorldLayer(next);
   };
+  // An undo or redo changed the world layer: a drag under way is dropped first, then the layer is drawn
+  const { worldLayer: undone, runStep, hold } = useHistorySteps();
+  const runStepRef = useRef(runStep);
+  runStepRef.current = runStep;
+  const holdRef = useRef(hold);
+  holdRef.current = hold;
+  const seenSeq = useRef(undone?.seq ?? 0);
+  useEffect(() => {
+    if (!undone || undone.seq === seenSeq.current) return;
+    seenSeq.current = undone.seq;
+    world.current?.cancelDrag();
+    takeLayer(undone.layer);
+    // takeLayer only writes refs and state
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [undone]);
+  // A project opened while the view is up (or the store read the layer again): draw what it holds.
+  // A layer this view handed up comes back down as the same object, or the same content, and is not drawn again.
+  const storeLayer = project?.layer;
+  useEffect(() => {
+    if (!storeLayer || storeLayer === layerRef.current || JSON.stringify(storeLayer) === JSON.stringify(layerRef.current)) return;
+    world.current?.cancelDrag();
+    layerRef.current = storeLayer;
+    setLayer(storeLayer);
+    world.current?.setWorldLayer(storeLayer);
+  }, [storeLayer]);
   /** Takes the camera close to the pending focus and selects it, with the layers that would hide it on */
   const bringIntoView = (): void => {
     const target = pendingFocus.current;
@@ -311,6 +357,10 @@ function WorldStage({
     onQuestRole,
     onNewQuest,
     onShowSpawns,
+    onCreateEntity,
+    onEditEntity,
+    onSetLootable,
+    entities: projectEntities ?? EMPTY_ENTITIES,
   });
   const menuRef = useRef(menu);
   menuRef.current = menu;
@@ -340,6 +390,7 @@ function WorldStage({
     const applyLayer = (next: WorldLayer): void => {
       layerRef.current = next;
       setLayer(next);
+      setProjectLayer.current?.(next);
       created?.setWorldLayer(next);
     };
     // The card follows the selected spawn to where an edit put it
@@ -364,6 +415,7 @@ function WorldStage({
       const result =
         change.kind === 'place' ? await current.worldMoveSpawn(kind, change.spawn.guid, change.to)
         : change.kind === 'movement' ? await current.worldSetMovement(change.spawn.guid, change.to)
+        : change.kind === 'respawn' ? await current.worldSetRespawn(kind, change.spawn.guid, change.secs)
         // A spawn put back by a redo keeps its guid; one taken away by an undo leaves the layer
         : change.kind === 'presence'
           ? change.present
@@ -399,9 +451,6 @@ function WorldStage({
       const { guid } = result.value;
       const added = result.value.layer.added.find((a) => a.kind === kind && a.guid === guid);
       created?.select({ kind: target.kind, guid });
-      // One undo step, as a placement from the menu is
-      const spawn = { kind: target.kind, guid, entry: target.entry, own: false };
-      created?.record([{ kind: 'presence', spawn, present: false, at, map }], [{ kind: 'presence', spawn, present: true, at, map }]);
       setSelected({
         kind: target.kind, guid, entry: target.entry, name: added?.name ?? '', own: false, added: true, pathId: 0, event: null,
         position: { x: at.x, y: at.y, z: at.z },
@@ -474,7 +523,11 @@ function WorldStage({
               setNote(null);
               onSelectRef.current?.(spawn);
             },
-            onEdit: (change) => void send(change),
+            // One gesture is one step of the project's history, its own and world edits alike
+            onGesture: (changes) =>
+              void runStepRef.current(async () => {
+                for (const change of changes) await send(change);
+              }),
             onContextMenu: (target, client) => live && menuRef.current.open(target, client),
             onDrawing: (drawing) => live && menuRef.current.onDrawing(drawing),
             onShortcut: (code) => live && menuRef.current.shortcut(code),
@@ -484,7 +537,9 @@ function WorldStage({
             floorZ,
             beforeRouteEdit,
             onNotice: (message) => live && setNote(message),
-            onPlace: (request) => void place(request),
+            onPlace: (request) => void runStepRef.current(() => place(request)),
+            // A gesture waiting for the floor holds undo, so Ctrl+Z takes it back rather than the step before
+            onGestureStart: () => holdRef.current(),
             onPlaceEnd: () => live && setPlacing(null),
             spawns: async (spawnMap, box) => {
               const current = apiRef.current;
@@ -498,7 +553,9 @@ function WorldStage({
           created.setTool(layersRef.current.tool);
           created.setFalloff({ on: layersRef.current.falloff, radius: layersRef.current.falloffRadius });
           if (!activeRef.current) created.setActive(false);
+          if (looksRef.current.size > 0) created.setLooks(looksRef.current);
           if (ownRef.current) created.setOwnSpawns(ownRef.current);
+          if (groupSpawnsRef.current.size > 0) created.setGroupSpawns(groupSpawnsRef.current);
           world.current = created;
           bringIntoViewRef.current();
           void apiRef.current?.worldLayer().then((result) => live && result.ok && applyLayer(result.value));
@@ -516,6 +573,46 @@ function WorldStage({
       world.current = null;
     };
   }, [directory, map, hasClient]);
+
+  // Edited existing NPCs and objects, drawn with their new look
+  const looks = useMemo(() => looksOf(projectEntities ?? EMPTY_ENTITIES), [projectEntities]);
+  const looksKey = JSON.stringify([...looks]);
+  const looksSet = useRef(false);
+  const looksRef = useRef(looks);
+  looksRef.current = looks;
+  useEffect(() => {
+    if (looksRef.current.size === 0 && !looksSet.current) return;
+    looksSet.current = looksRef.current.size > 0;
+    world.current?.setLooks(looksRef.current);
+  }, [looksKey]);
+
+  // Every spawn under each top-level layer group with an event, or whose database event was cleared, and
+  // under each deleted group that had one, through all its levels: the database groups between are known
+  // to the main process only, so the event walk would otherwise stop at them
+  const groupsKey = JSON.stringify(groupsOf(layer));
+  const groupSpawnsRef = useRef<ReadonlyMap<number, readonly { kind: 'npc' | 'object'; guid: number }[]>>(new Map());
+  useEffect(() => {
+    const all = groupsOf(layerRef.current);
+    const groups = all.filter((g) => !g.removed);
+    const held = new Set(groups.flatMap((g) => g.members.flatMap((m) => (m.type === 'group' ? [m.id] : []))));
+    const hadEvent = (g: (typeof all)[number]): boolean => g.origin.kind === 'existing' && Number(g.origin.original.event?.eventEntry ?? 0) !== 0;
+    const tops = [
+      ...groups.filter((g) => (g.event || hadEvent(g)) && !held.has(g.id)),
+      ...all.filter((g) => g.removed && hadEvent(g)),
+    ];
+    const current = apiRef.current;
+    if (!current || (tops.length === 0 && groupSpawnsRef.current.size === 0)) return;
+    let live = true;
+    void Promise.all(tops.map(async (g) => [g.id, await current.worldGroupSpawns(g.id)] as const)).then((answers) => {
+      if (!live) return;
+      const byGroup = new Map(answers.flatMap(([id, r]) => (r.ok ? [[id, r.value] as const] : [])));
+      groupSpawnsRef.current = byGroup;
+      world.current?.setGroupSpawns(byGroup);
+    });
+    return () => {
+      live = false;
+    };
+  }, [groupsKey]);
 
   // The open quest's own spawns, redrawn as they change.
   useEffect(() => {
@@ -609,6 +706,48 @@ function WorldStage({
   // More than one spawn, or any route points: the card sums them up instead of showing one spawn
   const several = summary !== null && summary.creatures + summary.objects + summary.points > 0 && !(summary.creatures + summary.objects === 1 && summary.points === 0);
 
+  // The spawn group of a single selected pooled spawn: asked for again as the selection or the layer changes,
+  // and left closed for that spawn once its card is closed, until something else is selected
+  const [group, setGroup] = useState<GroupView | null>(null);
+  const groupClosed = useRef<string | null>(null);
+  const groupFor = useRef<string | null>(null);
+  useEffect(() => {
+    const one = selected && !several ? world.current?.selectedSpawns?.() : undefined;
+    const info = one?.length === 1 ? one[0]! : null;
+    const key = info ? `${info.kind}:${info.guid}` : null;
+    if (key !== groupFor.current) {
+      groupFor.current = key;
+      groupClosed.current = null;
+    }
+    const id = info?.group ?? null;
+    if (id === null || !api || groupClosed.current === key) {
+      setGroup(null);
+      return;
+    }
+    let live = true;
+    void api.worldGroupView(id).then((r) => live && setGroup(r.ok ? r.value : null));
+    return () => {
+      live = false;
+    };
+  }, [selected, several, api, layer]);
+  // Its members ringed and joined to its centre in the view while the card is up
+  const groupDrawn = useRef(false);
+  useEffect(() => {
+    const current = world.current;
+    if (!current) return;
+    if (group) {
+      current.setGroupView(groupDrawingOf(group));
+      groupDrawn.current = true;
+    } else if (groupDrawn.current) {
+      current.setGroupView(null);
+      groupDrawn.current = false;
+    }
+  }, [group]);
+  const closeGroup = (): void => {
+    groupClosed.current = groupFor.current;
+    setGroup(null);
+  };
+
   const unavailable = !hasClient
     ? 'Choose the game client folder in the connection settings to see the world in 3D.'
     : !directory
@@ -663,7 +802,7 @@ function WorldStage({
               Place…
             </button>
             <button type="button" className="btn" disabled={changes === 0} onClick={() => setChangesOpen(true)}>
-              World changes ({changes})
+              Project changes ({changes})
             </button>
           </div>
         </fieldset>
@@ -709,6 +848,7 @@ function WorldStage({
           onClose={() => setChoosing(false)}
         />
       )}
+      {!unavailable && group && <GroupCard view={group} onEdit={api ? () => menu.editGroup(group.id) : undefined} onClose={closeGroup} />}
       {!unavailable && selected && !several && <SelectedSpawn spawn={selected} note={note} onClose={clearSelection} onRemove={selected.added ? () => void removePlaced(selected) : undefined} />}
       {!unavailable && several && summary && (
         <section className="world3d__selected" aria-label="Selection">
@@ -718,7 +858,7 @@ function WorldStage({
           {note && <p className="world3d__selected-note">{note}</p>}
           <p className="world3d__selected-actions">
             <button type="button" className="btn" onClick={clearSelection}>
-              Clear
+              Deselect
             </button>
           </p>
         </section>
@@ -728,7 +868,28 @@ function WorldStage({
           {note}
         </p>
       )}
-      {changesOpen && api && <WorldChanges api={api} onLayer={takeLayer} onClose={() => setChangesOpen(false)} />}
+      {changesOpen && api && (
+        <ProjectChanges
+          api={api}
+          onLayer={takeLayer}
+          onClose={() => setChangesOpen(false)}
+          layerSeq={undone?.seq ?? 0}
+          onEdit={onEditEntity ? (kind, entry) => onEditEntity(kind === 'npc' ? 'creature' : kind, entry) : undefined}
+          onGoTo={
+            onGoToSpawn
+              ? (spawn) => {
+                  setChangesOpen(false);
+                  const entity = project?.tracked.find((t) => t.goTo === spawn);
+                  // A spawn changed without being moved is read for where it stands first
+                  void goToTarget(api, spawn, entity).then((target) => {
+                    if ('error' in target) setNote(target.error);
+                    else onGoToSpawn(target);
+                  });
+                }
+              : undefined
+          }
+        />
+      )}
       {!unavailable && menu.elements}
       {shared && (
         <SharedRouteDialog
@@ -818,15 +979,18 @@ function SelectedSpawn({ spawn, note, onClose, onRemove }: { spawn: PickedSpawn;
       </p>
       {spawn.event && <p>Only during event {spawn.event.id}{spawn.event.name ? `: ${spawn.event.name}` : ''}</p>}
       {spawn.pathId > 0 && <p>Route {spawn.pathId}</p>}
-      {spawn.added && <p>Placed here; it is not in the database until the world patch is applied.</p>}
+      {spawn.added && <p>Placed here; it is not in the database until the project patch is applied.</p>}
       {note && <p className="world3d__selected-note">{note}</p>}
-      {onRemove && (
-        <p className="world3d__selected-actions">
+      <p className="world3d__selected-actions">
+        <button type="button" className="btn" onClick={onClose}>
+          Deselect
+        </button>
+        {onRemove && (
           <button type="button" className="btn" onClick={onRemove}>
             Remove
           </button>
-        </p>
-      )}
+        )}
+      </p>
     </section>
   );
 }

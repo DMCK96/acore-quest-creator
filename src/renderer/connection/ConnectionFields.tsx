@@ -79,7 +79,7 @@ export function ConnectionFields({
             </div>
           )}
         </Field>
-        <Field id="conn-export-dir" label="Export folder (optional)" errors={errors} help="Where Export patch writes its SQL files. Left empty, they go to Documents/ACORE Quest Creator/sql.">
+        <Field id="conn-export-dir" label="Export folder (optional)" errors={errors} help="Where Export patch writes its SQL files. Left empty, they go to Documents/Azeroth World Editor/sql.">
           {(props) => (
             <div className="conn-field__row">
               <input {...props} value={world.exportDir} placeholder="e.g. /home/acore/server/data/sql/custom/db_world" onChange={(e) => setWorld({ exportDir: e.target.value })} />

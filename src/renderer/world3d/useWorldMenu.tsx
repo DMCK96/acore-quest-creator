@@ -1,17 +1,22 @@
 import { useEffect, useRef, useState } from 'react';
-import type { Api, QuestSpawnGroup } from '@shared/ipc';
+import type { Api, GroupMove, QuestSpawnGroup, SpawnGroup } from '@shared/ipc';
 import type { Placement, WorldLayer } from '@core/world/layer';
 import { IDLE, type Movement } from '@core/world/movement';
 import type { Role, RoleTarget } from '@core/modules/quest-roles';
 import type { World3D } from './world3d';
 import type { SpawnEdit, SpawnRef } from './edits';
-import { buildMenu, type At, type MenuAction, type MenuGroup, type MenuSpawn, type MenuTarget, type QuestMenuInfo } from './menu/model';
-import { NEEDS_GROUND } from './menu/world-items';
+import type { ProjectEntities } from '@core/entities/model';
+import type { At, MenuAction, MenuGroup, MenuSpawn, MenuTarget, QuestMenuInfo } from './menu/model';
+import { buildMenu, NEEDS_GROUND } from './menu/section';
+import { subjectOf } from './menu/subject';
 import { clipEntries, copySpawns, duplicateOffset, entriesOf, layoutAt, pasteable, type ClipEntry } from './clipboard';
 import { placementAt } from './placing';
 import { WorldContextMenu } from './WorldContextMenu';
 import { WanderDialog } from './WanderDialog';
+import { RespawnDialog } from './RespawnDialog';
+import { GroupDialog } from './GroupDialog';
 import { PlaceDialog, type Chosen } from './PlaceDialog';
+import { useHistorySteps } from '../state/history-context';
 
 export const NO_LONGER_HERE = 'That spawn is no longer here';
 export const COPIED_COORDINATES = 'Copied .go xyz to the clipboard';
@@ -45,15 +50,31 @@ export interface WorldMenuDeps {
   onOwnEdit?(edit: SpawnEdit): boolean | void;
   /** Gives a spawn's NPC or object a part in the open quest, or takes it away; says why when it could not */
   onQuestRole?(role: Role, target: RoleTarget, on: boolean): string | null;
-  onNewQuest?(giver: { entry: number }, after: boolean): void;
+  onNewQuest?(giver: { entry: number; name: string }, after: boolean): void;
   onShowSpawns?(groups: QuestSpawnGroup[], scope: 'quest' | 'chain'): void;
+  /** Makes a new project NPC or object with one spawn at `at`, as one step */
+  onCreateEntity?(what: 'creature' | 'object', at: Placement): Promise<void>;
+  /** Opens the editor on one of the project's NPCs or objects */
+  onEditEntity?(kind: 'creature' | 'object', entry: number): void;
+  /** Makes a project object lootable, or no longer */
+  onSetLootable?(entry: number, on: boolean): Promise<void>;
+  /** The project's NPCs, objects and items: whether a right-clicked spawn's NPC or object is the project's own */
+  entities: ProjectEntities;
 }
 
-type Put = { kind: 'creature' | 'object'; entry: number; own: boolean; at: Placement };
+type Put = { kind: 'creature' | 'object'; entry: number; own: boolean; at: Placement; respawnSecs?: number; wander?: number };
 
 const refOf = (s: { kind: 'creature' | 'object'; guid: number; entry: number; own: boolean }): SpawnRef => ({ kind: s.kind, guid: s.guid, entry: s.entry, own: s.own });
-const absent = (edit: SpawnEdit): SpawnEdit => (edit.kind === 'presence' ? { ...edit, present: !edit.present } : edit);
 const plural = (n: number, one: string): string => `${n} ${one}${n === 1 ? '' : 's'}`;
+/** A spawn's kind as spawn groups name it */
+const poolKind = (kind: 'creature' | 'object'): 'npc' | 'object' => (kind === 'object' ? 'object' : 'npc');
+
+/** Spawns whose respawn time the dialog changes: what each is, its name, and its time when known */
+type RespawnTarget = { ref: SpawnRef; name: string; respawnSecs: number | null };
+const respawnTargetOf = (s: MenuSpawn): RespawnTarget => ({ ref: refOf(s), name: s.name, respawnSecs: s.respawnSecs });
+
+/** A spawn group open in the dialog: the members by name, and the other groups on its map */
+type GroupEdit = { group: SpawnGroup; names: Map<string, string>; groupsOnMap: { id: number; name: string }[]; events: { id: number; name: string }[]; nested: boolean };
 
 /**
  * The 3D view's right-click menu: what it offers for a right-clicked target, and what each item does.
@@ -64,13 +85,21 @@ export function useWorldMenu(deps: WorldMenuDeps): {
   open(target: MenuTarget, client: { x: number; y: number }): void;
   shortcut(code: 'KeyC' | 'KeyV' | 'KeyD'): boolean;
   onDrawing(drawing: { guid: number; points: number } | null): void;
+  /** Opens the spawn group dialog on a group */
+  editGroup(id: number): void;
   elements: React.JSX.Element;
 } {
   const d = useRef(deps);
   d.current = deps;
+  // Each action is one step of the project's history, however many changes it makes
+  const { runStep } = useHistorySteps();
+  const step = useRef(runStep);
+  step.current = runStep;
   const [menu, setMenu] = useState<{ groups: MenuGroup[]; at: { x: number; y: number } } | null>(null);
   const [place, setPlace] = useState<{ what: 'creature' | 'object'; at: At } | null>(null);
-  const [wander, setWander] = useState<{ spawn: MenuSpawn; before: Movement } | null>(null);
+  const [wander, setWander] = useState<{ spawn: MenuSpawn } | null>(null);
+  const [respawn, setRespawn] = useState<{ targets: RespawnTarget[] } | null>(null);
+  const [groupEdit, setGroupEdit] = useState<GroupEdit | null>(null);
   const [drawing, setDrawing] = useState<{ guid: number; points: number } | null>(null);
   const drawingRef = useRef(drawing);
   drawingRef.current = drawing;
@@ -91,17 +120,13 @@ export function useWorldMenu(deps: WorldMenuDeps): {
     setMarked(false);
   }, [questId]);
 
-  const titleOf = (id: number): string => (id === d.current.quest?.id ? d.current.quest.title : `quest ${id}`);
-  const openQuest = (): { id: number; title: string } | null => (d.current.quest ? { id: d.current.quest.id, title: d.current.quest.title } : null);
-
   const open = (target: MenuTarget, client: { x: number; y: number }): void => {
     const { api, map, placing, quest, onNewQuest } = d.current;
     const entries = clipEntries();
-    const ok = pasteable(entries, openQuest(), titleOf);
-    const groups = buildMenu(target, {
+    const groups = buildMenu(subjectOf(target, d.current.entities), {
       map,
       connected: api !== null,
-      clipboard: { count: entries.length, blocked: ok.entries.length === 0 ? ok.blocked : null },
+      clipboard: { count: entries.length, blocked: null },
       placing,
       drawing,
       quest: quest ?? null,
@@ -138,37 +163,36 @@ export function useWorldMenu(deps: WorldMenuDeps): {
   };
 
   /** Puts spawns down one after another, selects them, and makes them one undo step; how many went down */
-  const putAll = async (puts: Put[]): Promise<number> => {
+  const putAll = async (puts: Put[], label?: string): Promise<number> => {
     const done: SpawnEdit[] = [];
-    for (const put of puts) {
-      const edit = await putOne(put);
-      if (edit) done.push(edit);
-    }
+    await step.current(async () => {
+      for (const put of puts) {
+        const edit = await putOne(put);
+        if (!edit) continue;
+        done.push(edit);
+        if (put.respawnSecs !== undefined && put.respawnSecs !== 300) await d.current.send({ kind: 'respawn', spawn: edit.spawn, secs: put.respawnSecs });
+        if (put.kind === 'creature' && put.wander !== undefined && put.wander > 0) await d.current.send({ kind: 'movement', spawn: edit.spawn, to: { type: 'wander', wander: put.wander, pathId: null } });
+      }
+    }, label);
     const world = d.current.world.current;
     if (done.length > 0 && world) {
       world.selectSpawns(done.map((e) => ({ kind: e.spawn.kind, guid: e.spawn.guid })));
-      world.record(done.map(absent), done);
     }
     return done.length;
   };
 
-  const paste = async (entries: readonly ClipEntry[], at: At): Promise<void> => {
-    const { setNote, map } = d.current;
-    const ok = pasteable(entries, openQuest(), titleOf);
-    if (ok.entries.length === 0) {
-      setNote(ok.blocked);
-      return;
-    }
-    const laid = await Promise.all(layoutAt(ok.entries, at, map).map(async (l) => ({ kind: l.entry.kind, entry: l.entry.entry, own: l.entry.own, at: await floored(l.at) })));
-    await putAll(laid);
-    const left = entries.length - ok.entries.length;
-    if (left > 0) setNote(`${left} of them could not be pasted: ${ok.blocked}`);
+  const paste = async (entries: readonly ClipEntry[], at: At, verb = 'Paste'): Promise<void> => {
+    const { map } = d.current;
+    const ok = pasteable(entries);
+    if (ok.entries.length === 0) return;
+    const laid = await Promise.all(layoutAt(ok.entries, at, map).map(async (l) => ({ kind: l.entry.kind, entry: l.entry.entry, own: l.entry.own, at: await floored(l.at), respawnSecs: l.entry.respawnSecs, wander: l.entry.wander })));
+    await putAll(laid, laid.length === 1 ? `${verb} a spawn` : `${verb} ${laid.length} spawns`);
   };
 
   const copy = (): void => {
     const spawns = d.current.world.current?.selectedSpawns() ?? [];
     if (spawns.length === 0) return;
-    copySpawns(spawns, d.current.quest?.id ?? null);
+    copySpawns(spawns);
     d.current.setNote(`Copied ${plural(spawns.length, 'spawn')}`);
   };
 
@@ -178,7 +202,7 @@ export function useWorldMenu(deps: WorldMenuDeps): {
     if (!world || spawns.length === 0) return;
     const mean = (pick: (p: Placement) => number): number => spawns.reduce((sum, s) => sum + pick(s.placement), 0) / spawns.length;
     const off = duplicateOffset(world.camera().direction);
-    await paste(entriesOf(spawns, d.current.quest?.id ?? null), { x: mean((p) => p.x) + off.x, y: mean((p) => p.y) + off.y, z: mean((p) => p.z) });
+    await paste(entriesOf(spawns), { x: mean((p) => p.x) + off.x, y: mean((p) => p.y) + off.y, z: mean((p) => p.z) }, 'Duplicate');
   };
 
   /** Whether a spawn is still there to act on; says so when it is not */
@@ -188,11 +212,76 @@ export function useWorldMenu(deps: WorldMenuDeps): {
     return false;
   };
 
-  /** Sends edits the menu made and remembers them as one undo step, unless one was refused */
-  const commit = async (before: SpawnEdit[], after: SpawnEdit[]): Promise<void> => {
-    let kept = true;
-    for (const edit of after) kept = (await d.current.send(edit)) && kept;
-    if (kept) d.current.world.current?.record(before, after);
+  /** Sends edits the menu made, one after another, as one step */
+  const commit = async (edits: SpawnEdit[], label?: string): Promise<void> => {
+    await step.current(async () => {
+      for (const edit of edits) await d.current.send(edit);
+    }, label);
+  };
+
+  /** The other spawn groups on the map being viewed, by name; none when they cannot be had */
+  const groupsHere = async (except: number): Promise<{ id: number; name: string }[]> => {
+    const found = await d.current.api?.worldGroupsOnMap(d.current.map);
+    return found?.ok ? found.value.filter((g) => g.id !== except).map((g) => ({ id: g.id, name: g.name })) : [];
+  };
+
+  /** The game events a group can follow, and whether the group is a member of another on the map */
+  const eventChoices = async (id: number): Promise<{ events: { id: number; name: string }[]; nested: boolean }> => {
+    const { api, map } = d.current;
+    const [events, onMap] = await Promise.all([api?.gameEvents(), api?.worldGroupsOnMap(map)]);
+    return {
+      events: events?.ok ? events.value : [],
+      nested: onMap?.ok ? onMap.value.some((g) => g.groups.includes(id)) : false,
+    };
+  };
+
+  /** Opens the dialog on a spawn group, its members named as the view describes them */
+  const openGroup = async (id: number): Promise<void> => {
+    const { api, setNote } = d.current;
+    if (!api) return;
+    const [found, view] = await Promise.all([api.worldGroup(id), api.worldGroupView(id)]);
+    if (!found.ok || !found.value) {
+      setNote(found.ok ? 'That spawn group is no longer there.' : found.error.message);
+      return;
+    }
+    const names = new Map(view.ok && view.value ? view.value.members.map((m) => [m.key, m.name] as const) : []);
+    setGroupEdit({ group: found.value, names, groupsOnMap: await groupsHere(id), ...(await eventChoices(id)) });
+  };
+
+  /** Saves a group as one step; a refusal says why, keeps the dialog open and leaves no change */
+  const saveGroup = async (group: SpawnGroup, moves: GroupMove[]): Promise<void> => {
+    const { api, setNote } = d.current;
+    if (!api) return;
+    let saved = false;
+    await step.current(async () => {
+      const result = await api.worldSetGroup(group, moves);
+      if (!result.ok) {
+        setNote(result.error.message);
+        return;
+      }
+      saved = true;
+      d.current.takeLayer(result.value);
+    }, `Saved spawn group ${group.name || group.id}`);
+    if (saved) {
+      setGroupEdit(null);
+      d.current.focusView();
+    }
+  };
+
+  /** The respawn dialog for a group's own spawns: a project spawn's time is the project's */
+  const respawnGroup = (group: SpawnGroup, names: ReadonlyMap<string, string>): void => {
+    const { entities } = d.current;
+    const targets = group.members.flatMap((m): RespawnTarget[] => {
+      if (m.type !== 'spawn') return [];
+      const kind = m.kind === 'object' ? 'object' : 'creature';
+      const stored = (kind === 'object' ? entities.objects : entities.npcs).flatMap((e) => e.spawns).find((s) => s.guid === m.guid);
+      return [{ ref: { kind, guid: m.guid, entry: m.entry, own: stored !== undefined }, name: names.get(`${m.kind}:${m.guid}`) ?? `Spawn ${m.guid}`, respawnSecs: stored?.respawnSecs ?? null }];
+    });
+    if (targets.length === 0) {
+      d.current.setNote('This group has no spawns of its own.');
+      return;
+    }
+    setRespawn({ targets });
   };
 
   const run = async (action: MenuAction): Promise<void> => {
@@ -215,6 +304,15 @@ export function useWorldMenu(deps: WorldMenuDeps): {
       case 'placeHere':
         setPlace({ what: action.what, at: action.at });
         return;
+      case 'newEntity':
+        await d.current.onCreateEntity?.(action.what, await floored(facingCamera(action.at, action.what)));
+        return;
+      case 'editEntity':
+        d.current.onEditEntity?.(action.spawn.kind, action.spawn.entry);
+        return;
+      case 'setLootable':
+        await d.current.onSetLootable?.(action.spawn.entry, action.on);
+        return;
       case 'copy':
         copy();
         return;
@@ -225,9 +323,17 @@ export function useWorldMenu(deps: WorldMenuDeps): {
         await duplicate();
         return;
       case 'remove': {
-        if (!still(action.spawn)) return;
-        const gone: SpawnEdit = { kind: 'presence', spawn: refOf(action.spawn), present: false, at: action.spawn.placement, map: action.spawn.map };
-        await commit([absent(gone)], [gone]);
+        const { spawn } = action;
+        if (!still(spawn)) return;
+        const gone: SpawnEdit = { kind: 'presence', spawn: refOf(spawn), present: false, at: spawn.placement, map: spawn.map };
+        await step.current(async () => {
+          const kept = await d.current.send(gone);
+          // A removed spawn is no member of any group: taken out of its group in the same step
+          if (!kept || spawn.group === null || spawn.group === undefined || !api) return;
+          const dropped = await api.worldDropMember(poolKind(spawn.kind), spawn.guid);
+          if (dropped.ok) d.current.takeLayer(dropped.value);
+          else setNote(dropped.error.message);
+        });
         d.current.clearSelection();
         return;
       }
@@ -255,39 +361,94 @@ export function useWorldMenu(deps: WorldMenuDeps): {
       }
       case 'wander':
         if (!still(action.spawn)) return;
-        setWander({ spawn: action.spawn, before: world.spawnMovement(action.spawn.guid) ?? IDLE });
+        setWander({ spawn: action.spawn });
         return;
+      case 'respawn':
+        if (!action.spawns.every(still)) return;
+        setRespawn({ targets: action.spawns.map(respawnTargetOf) });
+        return;
+      case 'groupSpawns': {
+        if (!api) return;
+        const id = await api.worldNewGroupId();
+        if (!id.ok) {
+          setNote(id.error.message);
+          return;
+        }
+        const { spawns } = action;
+        const group: SpawnGroup = {
+          id: id.value,
+          name: '',
+          map: d.current.map,
+          maxActive: 1,
+          members: spawns.map((s) => ({ type: 'spawn', kind: poolKind(s.kind), guid: s.guid, entry: s.entry, chance: 0 })),
+          event: null,
+          origin: { kind: 'new' },
+        };
+        const names = new Map(spawns.map((s) => [`${poolKind(s.kind)}:${s.guid}`, s.name]));
+        setGroupEdit({ group, names, groupsOnMap: await groupsHere(id.value), ...(await eventChoices(id.value)) });
+        return;
+      }
+      case 'editGroup':
+        await openGroup(action.id);
+        return;
+      case 'showGroup': {
+        if (!api) return;
+        const found = await api.worldGroup(action.id);
+        if (!found.ok) {
+          setNote(found.error.message);
+          return;
+        }
+        const first = found.value?.members.find((m) => m.type === 'spawn');
+        if (!first || first.type !== 'spawn') {
+          setNote('This group has no spawns of its own to show.');
+          return;
+        }
+        world.selectSpawns([{ kind: first.kind === 'object' ? 'object' : 'creature', guid: first.guid }]);
+        return;
+      }
+      case 'leaveGroup': {
+        const { spawn } = action;
+        if (!api || spawn.group === null || spawn.group === undefined) return;
+        const found = await api.worldGroup(spawn.group);
+        if (!found.ok || !found.value) {
+          setNote(found.ok ? 'That spawn group is no longer there.' : found.error.message);
+          return;
+        }
+        const group = found.value;
+        const kind = poolKind(spawn.kind);
+        const members = group.members.filter((m) => !(m.type === 'spawn' && m.kind === kind && m.guid === spawn.guid));
+        await step.current(async () => {
+          // A group left with no members is deleted; otherwise no more of it can be up than it has members
+          const result =
+            members.length === 0
+              ? await api.worldDeleteGroup(group.id)
+              : await api.worldSetGroup({ ...group, members, maxActive: Math.max(1, Math.min(group.maxActive, members.length)) }, []);
+          if (result.ok) d.current.takeLayer(result.value);
+          else setNote(result.error.message);
+        }, `Took ${spawn.name} out of spawn group ${group.name || group.id}`);
+        return;
+      }
       case 'removePath': {
         const { spawn } = action;
         if (!still(spawn)) return;
         const ref = refOf(spawn);
-        const before: SpawnEdit[] = [{ kind: 'movement', spawn: ref, to: world.spawnMovement(spawn.guid) ?? { type: 'path', wander: 0, pathId: spawn.pathId } }];
         const after: SpawnEdit[] = [{ kind: 'movement', spawn: ref, to: IDLE }];
-        // A quest's own patrol goes with its movement, so the undo brings its points back too
-        if (spawn.own) {
-          const points = world.routeOf(spawn.guid)?.points ?? [];
-          before.unshift({ kind: 'route', spawn: ref, pathId: spawn.pathId, points });
-        }
         // A path made in this view is taken back with it; a database path is left for whoever else walks it
-        else if (d.current.isNewPath(spawn.pathId)) {
-          const points = world.routeOf(spawn.guid)?.points ?? [];
-          before.unshift({ kind: 'route', spawn: ref, pathId: spawn.pathId, points });
-          after.push({ kind: 'route', spawn: ref, pathId: spawn.pathId, points: [] });
-        }
-        await commit(before, after);
+        if (!spawn.own && d.current.isNewPath(spawn.pathId)) after.push({ kind: 'route', spawn: ref, pathId: spawn.pathId, points: [] });
+        await commit(after, `Removed the path of ${spawn.name}`);
         return;
       }
-      case 'spawnQuestEntity':
-        await putAll([{ kind: action.target.kind, entry: action.target.entry, own: action.target.own, at: await floored(facingCamera(action.at, action.target.kind)) }]);
-        return;
       case 'toggleRole': {
         const target: RoleTarget = { kind: action.spawn.kind === 'object' ? 'gameobject' : 'creature', id: action.spawn.entry };
-        const why = d.current.onQuestRole?.(action.role, target, action.on) ?? null;
+        let why: string | null = null;
+        await step.current(async () => {
+          why = d.current.onQuestRole?.(action.role, target, action.on) ?? null;
+        });
         if (why) setNote(why);
         return;
       }
       case 'newQuest':
-        d.current.onNewQuest?.({ entry: action.spawn.entry }, action.after);
+        d.current.onNewQuest?.({ entry: action.spawn.entry, name: action.spawn.name }, action.after);
         return;
       case 'showSpawns': {
         const { quest, chainIds, map } = d.current;
@@ -370,11 +531,11 @@ export function useWorldMenu(deps: WorldMenuDeps): {
           initial={wander.spawn.wander}
           onPreview={(yards) => d.current.world.current?.setPendingMovement(wander.spawn.guid, moving(yards))}
           onApply={(yards) => {
-            const { spawn, before } = wander;
+            const { spawn } = wander;
             setWander(null);
             d.current.focusView();
             const ref = refOf(spawn);
-            void commit([{ kind: 'movement', spawn: ref, to: before }], [{ kind: 'movement', spawn: ref, to: moving(yards) }]);
+            void commit([{ kind: 'movement', spawn: ref, to: moving(yards) }]);
           }}
           onClose={() => {
             d.current.world.current?.setPendingMovement(wander.spawn.guid, null);
@@ -383,8 +544,53 @@ export function useWorldMenu(deps: WorldMenuDeps): {
           }}
         />
       )}
+      {groupEdit && (
+        <GroupDialog
+          // Another group in the dialog starts it afresh
+          key={groupEdit.group.id}
+          group={groupEdit.group}
+          names={groupEdit.names}
+          groupsOnMap={groupEdit.groupsOnMap}
+          events={groupEdit.events}
+          nested={groupEdit.nested}
+          check={async (group, moves) => {
+            const result = await d.current.api?.worldCheckGroup(group, moves);
+            return !result ? { reasons: ['Needs the world database'], notes: [] } : result.ok ? result.value : { reasons: [result.error.message], notes: [] };
+          }}
+          onSave={(group, moves) => {
+            saveGroup(group, moves).catch((error: unknown) => d.current.setNote(error instanceof Error ? error.message : String(error)));
+          }}
+          onRespawnAll={() => respawnGroup(groupEdit.group, groupEdit.names)}
+          onClose={() => {
+            setGroupEdit(null);
+            d.current.focusView();
+          }}
+        />
+      )}
+      {respawn && (
+        <RespawnDialog
+          names={respawn.targets.map((t) => t.name)}
+          // Spawns with different (or unknown) times start blank
+          initial={respawn.targets.every((t) => t.respawnSecs === respawn.targets[0]!.respawnSecs) ? respawn.targets[0]!.respawnSecs : null}
+          onApply={(secs) => {
+            const { targets } = respawn;
+            setRespawn(null);
+            d.current.focusView();
+            const label = targets.length === 1 ? `Respawn time of ${targets[0]!.name}` : `Respawn time of ${targets.length} spawns`;
+            void commit(targets.map((t) => ({ kind: 'respawn', spawn: t.ref, secs })), label);
+          }}
+          onClose={() => {
+            setRespawn(null);
+            d.current.focusView();
+          }}
+        />
+      )}
     </>
   );
 
-  return { open, shortcut, onDrawing: setDrawing, elements };
+  const editGroup = (id: number): void => {
+    openGroup(id).catch((error: unknown) => d.current.setNote(error instanceof Error ? error.message : String(error)));
+  };
+
+  return { open, shortcut, onDrawing: setDrawing, editGroup, elements };
 }

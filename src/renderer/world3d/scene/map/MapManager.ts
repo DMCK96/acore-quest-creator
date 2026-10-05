@@ -22,6 +22,7 @@ import { areaBox, nearbyAreas } from '../spawn/placement.js';
 import type { Movement } from '../../../../core/world/movement.js';
 import { DISPLAY_RECORDS } from '../db/records.js';
 import { ViewSpawns } from '../../../../core/db/view-spawns.js';
+import type { EntityLooks } from '../../../../core/entities/view-spawns.js';
 import { WorldLayer } from '../../../../core/world/layer.js';
 import { AssetHost } from '../asset.js';
 import MapLoader from './loader/MapLoader.js';
@@ -33,6 +34,16 @@ import { describeError, reportProblem } from '../diagnostics.js';
 
 const DEFAULT_VIEW_DISTANCE = 1277.0;
 const DETAIL_DISTANCE_EXTENSION = MAP_CHUNK_HEIGHT;
+
+/**
+ * Works out where everything in a group that never moves is, once, and leaves it out of every later
+ * frame's update: tens of thousands of terrain chunks and doodads cost more than drawing them did
+ */
+function freeze(group: THREE.Object3D) {
+  group.matrixAutoUpdate = false;
+  group.updateMatrixWorld(true);
+  group.matrixWorldAutoUpdate = false;
+}
 
 type MapManagerOptions = {
   host: AssetHost;
@@ -166,9 +177,11 @@ class MapManager extends EventTarget {
       groundBelow: options.groundBelow,
     });
 
+    // Never moved, so never worked out again; what is under it is still visited (spawns move). The
+    // scene must not force it either (see world3d.ts), or every frame works out every object's matrix.
     this.#root = new THREE.Group();
     this.#root.matrixAutoUpdate = false;
-    this.#root.matrixWorldAutoUpdate = false;
+    this.#root.add(this.#doodadManager.batches);
   }
 
   get clearColor() {
@@ -186,6 +199,11 @@ class MapManager extends EventTarget {
   /** Where the NPCs and objects come from; null draws none */
   setSpawnSource(source: SpawnSource | null) {
     this.#spawnManager.setSource(source);
+  }
+
+  /** The looks of edited existing NPCs and objects, drawn on their database spawns */
+  setLooks(looks: EntityLooks) {
+    this.#spawnManager.setLooks(looks).catch((error) => console.warn(`3D view: edited looks could not be drawn: ${describeError(error)}`));
   }
 
   /** The open quest's own NPCs and objects, drawn with the world's */
@@ -210,6 +228,11 @@ class MapManager extends EventTarget {
   /** Draws the world layer's edits over the database's spawns and routes */
   setWorldLayer(layer: WorldLayer) {
     this.#spawnManager.setWorldLayer(layer).catch((error) => console.warn(`3D view: the world changes could not be drawn: ${describeError(error)}`));
+  }
+
+  /** Every spawn under each top-level layer group with an event, through all its levels, by group id */
+  setGroupSpawns(byGroup: ReadonlyMap<number, readonly { kind: 'npc' | 'object'; guid: number }[]>) {
+    this.#spawnManager.setGroupSpawns(byGroup).catch((error) => console.warn(`3D view: the spawn groups' events could not be drawn: ${describeError(error)}`));
   }
 
   /** Which of an NPC's route points a ray passes close to, or null */
@@ -357,19 +380,22 @@ class MapManager extends EventTarget {
     // Cull entire groups to save on frustum intersection cost
     this.#cullGroups();
 
+    this.#doodadManager.batches.visible = this.#scenery.doodads;
     if (this.#scenery.doodads) {
       this.#doodadManager.cull(this.#cullingFrustum, camera.position);
-      this.#doodadManager.update(deltaTime, camera);
     } else {
-      // Hidden doodads are left as they were: neither culled nor animated
+      // Hidden doodads: not culled, and not animated (a hidden model is skipped by the update below)
+      this.#doodadManager.hideAll();
       for (const doodadGroup of this.#doodadGroups.values()) doodadGroup.visible = false;
     }
+    // Always: the doodads' model manager animates and poses the spawns too, which stay shown
+    this.#doodadManager.update(deltaTime, camera);
     for (const wmoGroup of this.#wmoGroups.values()) wmoGroup.visible = this.#scenery.buildings;
 
     this.#liquidManager.update(deltaTime);
 
     this.#syncSpawns();
-    this.#spawnManager.cull(camera.position);
+    this.#spawnManager.cull(camera.position, this.#cullingFrustum);
   }
 
   /**
@@ -594,6 +620,9 @@ class MapManager extends EventTarget {
         .setFromObject(terrainGroup)
         .getBoundingSphere(new THREE.Sphere());
       terrainGroup.userData.boundingSphere = terrainBoundingSphere;
+
+      // Terrain, doodads, buildings and liquid never move once placed (doodads animate by their bones)
+      for (const group of [terrainGroup, doodadGroup, wmoGroup, liquidGroup]) freeze(group);
 
       this.#terrainGroups.set(areaId, terrainGroup);
       this.#root.add(terrainGroup);

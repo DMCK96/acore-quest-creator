@@ -32,6 +32,16 @@ const DURABILITY_AND_MISC = lower([
   'duration', 'DisenchantID', 'FoodType', 'minMoneyLoot', 'maxMoneyLoot', 'SoundOverrideSubclass', 'LanguageID', 'PageMaterial', 'ItemLimitCategory',
 ]);
 
+/**
+ * Modelled columns written together: the editor packs stats, damage and spells into the first slots,
+ * so a slot's columns only mean something beside the rest of their block
+ */
+export const ITEM_SLOT_BLOCKS: readonly (readonly string[])[] = [
+  ['StatsCount', ...range(STAT_SLOTS).flatMap((n) => [`stat_type${n}`, `stat_value${n}`])],
+  range(DAMAGE_SLOTS).flatMap((n) => [`dmg_min${n}`, `dmg_max${n}`, `dmg_type${n}`]),
+  range(SPELL_SLOTS).flatMap((n) => [`spellid_${n}`, `spelltrigger_${n}`, `spellcharges_${n}`, `spellcooldown_${n}`, `spellcategory_${n}`, `spellcategorycooldown_${n}`]),
+];
+
 /** The groups the advanced tab shows, in order; "Other" catches the rest. */
 export const ADVANCED_GROUP_ORDER = ['Requirements', 'Resistances', 'Sockets and gems', 'Set and randomness', 'Flags', 'Durability and misc', 'Other'] as const;
 

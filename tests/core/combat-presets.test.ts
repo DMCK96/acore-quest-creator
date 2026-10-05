@@ -33,7 +33,7 @@ describe('presets', () => {
       { id: 'r2', when: { kind: 'healthBelow', pct: 20 }, phases: [], steps: [
         { kind: 'say', text: 'I yield! I yield!', style: 'say', waitMs: 0 },
         { kind: 'surrender', waitMs: 0 },
-        { kind: 'credit', objective: 1, group: false, waitMs: 0 },
+        { kind: 'credit', objective: 1, group: false, quest: 0, waitMs: 0 },
       ] },
     ]);
   });

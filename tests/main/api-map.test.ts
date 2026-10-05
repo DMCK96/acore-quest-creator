@@ -59,6 +59,13 @@ describe('map API', () => {
     expect(out.value.spawns.map((d: any) => [d.guid, d.map, d.x])).toEqual([[79970, 0, -8902.59], [79971, 1, 1]]);
     expect(((await (await setup()).findSpawns('creature', 999)) as any).value).toEqual({ spawns: [], capped: false });
   });
+  it('says where one spawn stands, as the layer moved it first, else as the database has it, for Go to', async () => {
+    const api = await setup();
+    expect(((await api.spawnPlacement('npc', 79971)) as any).value).toEqual({ x: 1, y: 1, z: 1 });
+    await api.worldMoveSpawn('creature', 79970, { x: 5, y: 6, z: 7, orientation: 0, rotation: null });
+    expect(((await api.spawnPlacement('npc', 79970)) as any).value).toEqual({ x: 5, y: 6, z: 7 });
+    expect(((await api.spawnPlacement('object', 79970)) as any).value).toBeNull();
+  });
   it('gives the spawns of the quest giver as read-only references', async () => {
     const api = await setup();
     const opened: any = await api.newQuest();

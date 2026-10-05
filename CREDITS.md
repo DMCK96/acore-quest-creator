@@ -1,6 +1,6 @@
 # Credits
 
-ACORE Quest Creator builds on other people's work. This page lists every outside project whose code is
+Azeroth World Editor builds on other people's work. This page lists every outside project whose code is
 in this repository, under what licence, and where its notice is kept, followed by the projects and
 references we learned from without copying code. When code is ported or adapted from another project,
 add it here in the same change.

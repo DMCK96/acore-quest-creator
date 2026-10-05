@@ -39,6 +39,18 @@ describe('project UI', () => {
     expect(within(dialog).getByText('C:\\w\\north.aqc')).toBeInTheDocument();
   });
 
+  it('sends a rename once, not again when the field then loses focus', async () => {
+    // The rename lands slowly, so the store still has the old name when the field is left
+    const { api } = await home({ renameProject: vi.fn(() => new Promise(() => {})) });
+    const dialog = await openModal();
+    const name = within(dialog).getByLabelText('Project name');
+    await userEvent.clear(name);
+    await userEvent.type(name, 'Wolves{Enter}');
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Close' }));
+    await new Promise((r) => setTimeout(r, 20));
+    expect(api.renameProject).toHaveBeenCalledTimes(1);
+  });
+
   it('creates a new project under the name typed', async () => {
     const { api } = await home();
     const dialog = await openModal();

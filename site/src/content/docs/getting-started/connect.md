@@ -1,6 +1,6 @@
 ---
 title: Connect to your server
-description: Point ACORE Quest Creator at your world database, and optionally your server data, game client and a dev database.
+description: Point Azeroth World Editor at your world database, and optionally your server data, game client and a dev database.
 sidebar:
   order: 3
 ---
@@ -22,8 +22,8 @@ The password is stored encrypted on your computer. Once one is saved, the field 
 ## Folders (optional)
 
 - **Server data folder**: the worldserver's data folder, the one holding `dbc/`. It lets the app show XP values for reward tiers, search spells and creature or object models by name, and snap spawns to the ground on the map. Everything works without it; those parts fall back to typing IDs.
-- **Game client folder**: the folder with `Wow.exe`. [The World](/acore-quest-creator/guides/the-world/) is drawn from it in 3D, and the quest map uses its zone art and minimap.
-- **Export folder**: where **Export patch** writes SQL files, such as your server's `data/sql/custom/db_world`. Left empty, they go to `Documents/ACORE Quest Creator/sql`.
+- **Game client folder**: the folder with `Wow.exe`. [The World](/azeroth-world-editor/guides/the-world/) is drawn from it in 3D, and the quest map uses its zone art and minimap.
+- **Export folder**: where **Export patch** writes SQL files, such as your server's `data/sql/custom/db_world`. Left empty, they go to `Documents/Azeroth World Editor/sql`.
 
 Use **Browse…** to pick a folder instead of typing it.
 
@@ -39,4 +39,4 @@ Choose **Connect**. The app opens on the **World**: the game world in 3D, drawn 
 
 To change any of this later, choose **Settings** (the cog) at the right of the top bar. Saving there reconnects with the new details and closes the open quest; your project stays open.
 
-Next: [your first quest](/acore-quest-creator/getting-started/first-quest/).
+Next: [your first quest](/azeroth-world-editor/getting-started/first-quest/).

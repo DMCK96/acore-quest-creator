@@ -28,16 +28,18 @@ describe('patrols through the API', () => {
     const aggregate = opened.value.aggregate;
     aggregate.values['quest_template.LogTitle'] = 'Walk the walls';
     const patrol = addPoint(addPoint(newPatrol(53007010), { x: 1, y: 2, z: 3 }), { x: 4, y: 5, z: 6 });
-    aggregate.values[ENTITIES_FIELD] = writeEntities({ npcs: [{ ...newNpc(11000240), name: 'Walker', displayId: 1, spawns: [{ ...newSpawn(5300701), patrol }] }], objects: [], items: [] });
+    await api.putProjectEntities({ npcs: [{ ...newNpc(11000240), name: 'Walker', displayId: 1, spawns: [{ ...newSpawn(5300701), patrol }] }], objects: [], items: [] });
+    aggregate.values.creature_queststarter = [{ id: 11000240 }];
     await api.updateQuest(aggregate);
     const out: any = await api.exportQuest(aggregate.questId);
+    const applied: string = `${out.value.projectSql}\n${out.value.sql}`;
     expect(out.ok).toBe(true);
-    expect(out.value.sql).toMatch(/INSERT INTO `creature_addon` .*VALUES \(5300701, 53007010/);
-    expect(out.value.sql).toMatch(/INSERT INTO `waypoint_data`/);
-    expect(out.value.sql.indexOf('INSERT INTO `creature`')).toBeLessThan(out.value.sql.indexOf('INSERT INTO `creature_addon`'));
+    expect(applied).toMatch(/INSERT INTO `creature_addon` .*VALUES \(5300701, 53007010/);
+    expect(applied).toMatch(/INSERT INTO `waypoint_data`/);
+    expect(applied.indexOf('INSERT INTO `creature`')).toBeLessThan(applied.indexOf('INSERT INTO `creature_addon`'));
+    // The route is the project's: a quest's Changes list shows only the quest's own rows
     const preview: any = await api.previewChanges(aggregate.questId);
-    expect(preview.value.some((d: any) => d.table === 'waypoint_data')).toBe(true);
-    expect(preview.value.some((d: any) => d.table === 'creature_addon')).toBe(true);
+    expect(preview.value.some((d: any) => d.table === 'waypoint_data')).toBe(false);
   });
 });
 describe('patrol path ids', () => {
@@ -52,7 +54,7 @@ describe('patrol path ids', () => {
     expect(((await api.patrolPathId(5300701)) as any).value).toBe(60000001);
     const opened: any = await api.newQuest();
     const aggregate = opened.value.aggregate;
-    aggregate.values[ENTITIES_FIELD] = writeEntities({ npcs: [{ ...newNpc(11000240), spawns: [{ ...newSpawn(5300702), patrol: newPatrol(53007020) }, { ...newSpawn(5300703), patrol: newPatrol(70000000) }] }], objects: [], items: [] });
+    await api.putProjectEntities({ npcs: [{ ...newNpc(11000240), spawns: [{ ...newSpawn(5300702), patrol: newPatrol(53007020) }, { ...newSpawn(5300703), patrol: newPatrol(70000000) }] }], objects: [], items: [] });
     await api.updateQuest(aggregate);
     expect(((await api.patrolPathId(5300702)) as any).value).toBe(53007020);   // its own pinned id comes back
     expect(((await api.patrolPathId(7000000)) as any).value).toBe(70000001);   // guid*10 = 70000000 is a project path
@@ -67,12 +69,14 @@ describe('patrol point actions through the API', () => {
     aggregate.values['quest_template.LogTitle'] = 'Walk the walls';
     const patrol = addAction(addPoint(addPoint(newPatrol(53007010), { x: 1, y: 2, z: 3 }), { x: 4, y: 5, z: 6 }), 1,
       { id: 'a1', afterSecs: 0, kind: 'say', chance: 100, lines: [{ text: 'All quiet.', style: 'say' }] });
-    aggregate.values[ENTITIES_FIELD] = writeEntities({ npcs: [{ ...newNpc(11000240), name: 'Walker', displayId: 1, spawns: [{ ...newSpawn(5300701), patrol }] }], objects: [], items: [] });
+    await api.putProjectEntities({ npcs: [{ ...newNpc(11000240), name: 'Walker', displayId: 1, spawns: [{ ...newSpawn(5300701), patrol }] }], objects: [], items: [] });
+    aggregate.values.creature_queststarter = [{ id: 11000240 }];
     await api.updateQuest(aggregate);
     const out: any = await api.exportQuest(aggregate.questId);
+    const applied: string = `${out.value.projectSql}\n${out.value.sql}`;
     expect(out.ok).toBe(true);
-    expect(out.value.sql).toContain('All quiet.');
-    expect(out.value.sql).toMatch(/INSERT INTO `smart_scripts` .*VALUES \(11000240, 0, 0, 0, 34,/);
-    expect(out.value.sql).toMatch(/'SmartAI'/);
+    expect(applied).toContain('All quiet.');
+    expect(applied).toMatch(/INSERT INTO `smart_scripts` .*VALUES \(11000240, 0, 0, 0, 34,/);
+    expect(applied).toMatch(/'SmartAI'/);
   });
 });

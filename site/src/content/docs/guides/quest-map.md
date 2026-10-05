@@ -19,7 +19,7 @@ Open it with **Map** in the quest's header, or with **Place on map** on a giver'
 
 Existing spawns show as dots once you zoom in close enough. **Only quest-relevant** hides everything that is not part of your quest.
 
-**3D view** shows the same place in 3D, with your quest's NPCs and objects in it to move, turn and give paths, and the [World](/acore-quest-creator/guides/the-world/)'s right-click menu.
+**3D view** shows the same place in 3D, with your quest's NPCs and objects in it to move, turn and give paths, and the [World](/azeroth-world-editor/guides/the-world/)'s right-click menu.
 
 ## Place a spawn
 
@@ -32,6 +32,6 @@ The panel on the right shows the spawn's position. Where there are several floor
 - The **server data folder** gives the relief shading, heights and floors.
 - The **game client folder** gives the zone art and minimap.
 
-Both are set when you [connect](/acore-quest-creator/getting-started/connect/). Without them the map still places spawns, but heights have to be checked in game.
+Both are set when you [connect](/azeroth-world-editor/getting-started/connect/). Without them the map still places spawns, but heights have to be checked in game.
 
-Next: draw the NPC's [patrol](/acore-quest-creator/guides/patrols/).
+Next: draw the NPC's [patrol](/azeroth-world-editor/guides/patrols/).

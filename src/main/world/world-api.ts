@@ -2,7 +2,7 @@ import type { RawRow, SchemaInfo } from '../../core/db/types';
 import type { WorldDb } from '../../core/db/world-db';
 import { spawnEntryColumn } from '../../core/db/spawns';
 import { pickPreset } from '../../core/db/view-spawns';
-import type { Placement, RoutePoint, WorldAddedSpawn, WorldLook, WorldMovementEdit, WorldRouteEdit, WorldSpawnEdit, WorldSpawnKind } from '../../core/world/layer';
+import type { Placement, RoutePoint, WorldAddedSpawn, WorldLook, WorldMovementEdit, WorldRespawnEdit, WorldRouteEdit, WorldSpawnEdit, WorldSpawnKind } from '../../core/world/layer';
 import { movementOfRow, sameMovement, type Movement } from '../../core/world/movement';
 
 /**
@@ -57,7 +57,7 @@ export async function readTemplateLook(db: WorldDb, kind: WorldSpawnKind, entry:
   const key = { entry: String(entry) };
   if (kind === 'gameobject') {
     const [row] = await db.selectRows('gameobject_template', key);
-    return row ? { name: row.name ?? '', look: { displayId: num(row.displayId), scale: num(row.size, 1) || 1, equipment: [0, 0, 0], preset: null } } : null;
+    return row ? { name: row.name ?? '', look: { displayId: num(row.displayId), scale: num(row.size, 1) || 1, equipment: [0, 0, 0], preset: null, objectType: num(row.type, -1) } } : null;
   }
   const [row] = await db.selectRows('creature_template', key);
   if (!row) return null;
@@ -104,6 +104,47 @@ export async function countWalkers(db: WorldDb, pathId: number): Promise<number>
   return own + (await db.selectRows('creature', { [entryColumn]: entries })).length;
 }
 
+/** The distinct NPC entries that walk a route (a spawn's addon or a template's names it), with template names, ascending */
+export async function readWalkerEntries(db: WorldDb, pathId: number): Promise<{ entry: number; name: string }[]> {
+  const entries = new Set<number>();
+  if (await hasTable(db, 'creature_addon')) {
+    for (const own of await db.selectRows('creature_addon', { path_id: String(pathId) })) {
+      const spawn = own.guid ? await readPlacement(db, 'creature', Number(own.guid)) : null;
+      if (spawn) entries.add(spawn.entry);
+    }
+  }
+  if (await hasTable(db, 'creature_template_addon')) {
+    for (const row of await db.selectRows('creature_template_addon', { path_id: String(pathId) })) {
+      if (row.entry) entries.add(Number(row.entry));
+    }
+  }
+  const out: { entry: number; name: string }[] = [];
+  for (const entry of [...entries].sort((a, b) => a - b)) {
+    const [named] = await db.selectRows('creature_template', { entry: String(entry) });
+    out.push({ entry, name: named?.name ?? '' });
+  }
+  return out;
+}
+
+/** The name of an NPC that walks a route (its own spawn's, else its template's), or undefined */
+export async function routeWalkerName(db: WorldDb, pathId: number): Promise<string | undefined> {
+  if (await hasTable(db, 'creature_addon')) {
+    const [own] = await db.selectRows('creature_addon', { path_id: String(pathId) });
+    if (own?.guid) {
+      const spawn = await readPlacement(db, 'creature', Number(own.guid));
+      if (spawn?.name) return spawn.name;
+    }
+  }
+  if (await hasTable(db, 'creature_template_addon')) {
+    const [template] = await db.selectRows('creature_template_addon', { path_id: String(pathId) });
+    if (template?.entry) {
+      const [named] = await db.selectRows('creature_template', { entry: template.entry });
+      if (named?.name) return named.name;
+    }
+  }
+  return undefined;
+}
+
 /** Whether the database no longer holds a spawn's original placement */
 export async function spawnDrifted(db: WorldDb, edit: WorldSpawnEdit): Promise<boolean> {
   const now = await readPlacement(db, edit.kind, edit.guid);
@@ -123,7 +164,7 @@ export async function routeDrifted(db: WorldDb, edit: WorldRouteEdit): Promise<b
 /** The tables a world patch writes, as the export renders them */
 export async function worldSchema(db: WorldDb, hash: string): Promise<SchemaInfo> {
   const tables: SchemaInfo['tables'] = {};
-  for (const table of ['creature', 'gameobject', 'waypoint_data', 'creature_addon']) tables[table] = await db.columns(table);
+  for (const table of ['creature', 'gameobject', 'waypoint_data', 'creature_addon', 'pool_template', 'pool_creature', 'pool_gameobject', 'pool_pool']) tables[table] = await db.columns(table);
   return { tables, forbidden: [], hash };
 }
 
@@ -165,4 +206,20 @@ export async function movementDrifted(db: WorldDb, edit: WorldMovementEdit, plac
   if (placed) return false;
   const now = await readMovement(db, edit.guid);
   return !now || !sameMovement(now.movement, edit.original);
+}
+
+/** A spawn's respawn time as the database has it, with its entry, name and map; null when it is gone */
+export async function readRespawn(db: WorldDb, kind: WorldSpawnKind, guid: number): Promise<{ entry: number; name: string; map: number; secs: number } | null> {
+  const [row] = await db.selectRows(kind, { guid: String(guid) });
+  if (!row) return null;
+  const entry = num(row[spawnEntryColumn(kind, (await db.columns(kind)).map((c) => c.name))]);
+  const template = kind === 'creature' ? 'creature_template' : 'gameobject_template';
+  const [named] = await db.selectRows(template, { entry: String(entry) });
+  return { entry, name: named?.name ?? '', map: num(row.map), secs: num(row.spawntimesecs) };
+}
+
+/** Whether the database no longer holds a spawn's original respawn time */
+export async function respawnDrifted(db: WorldDb, edit: WorldRespawnEdit): Promise<boolean> {
+  const now = await readRespawn(db, edit.kind, edit.guid);
+  return !now || now.secs !== edit.original;
 }

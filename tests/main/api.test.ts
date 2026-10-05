@@ -1,5 +1,6 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { EMPTY_WORLD } from '../../src/core/world/layer';
+import { EMPTY_ENTITIES } from '../../src/core/entities/model';
 import { join } from 'node:path';
 import { createApi, type ApiDeps, type DevDb } from '../../src/main/api';
 import { openStore, type SecretBox } from '../../src/main/store/store';
@@ -673,11 +674,11 @@ describe('project files over the API', () => {
     pfs.files.set('C:\\w\\bad.aqc', 'nope');
     const r = await api.openProject('C:\\w\\bad.aqc');
     expect(r).toMatchObject({ ok: false, error: { code: 'PROJECT_FILE' } });
-    expect((r as any).error.message).toMatch(/not an ACORE Quest Creator project/);
+    expect((r as any).error.message).toMatch(/not an Azeroth World Editor project/);
   });
   it('reports a failed save as SAVE_FAILED', async () => {
     const { api, pfs } = makeApi();
-    pfs.files.set('C:\\w\\p.aqc', serializeProject({ ...defaultProjectMeta('P', 'C:\\out'), quests: [], world: EMPTY_WORLD }));
+    pfs.files.set('C:\\w\\p.aqc', serializeProject({ ...defaultProjectMeta('P', 'C:\\out'), quests: [], world: EMPTY_WORLD, entities: EMPTY_ENTITIES }));
     ok(await api.openProject('C:\\w\\p.aqc'));
     ok(await api.renameProject('Q'));
     pfs.failNext.write = new Error('ENOSPC: no space left on device');

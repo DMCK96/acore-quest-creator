@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { createAppStore } from '../../src/renderer/state/app-store';
@@ -72,6 +72,15 @@ describe('Export', () => {
     expect(await screen.findByText('C:\\out\\a.sql')).toBeInTheDocument();
     expect(screen.getByText('Also used by quest 60002')).toBeInTheDocument();
     expect(api.exportQuest).toHaveBeenCalledWith(60001);
+  });
+  it('says when the quest needs the project patch, and exports it from there', async () => {
+    const exportProject = vi.fn(async () => okv({ applyPath: 'C:\\out\\a_project.sql', revertPath: 'C:\\out\\a_project_revert.sql', sql: '' }));
+    await workspace({ exportQuest: async () => okv({ path: 'C:\\out\\a.sql', sql: 'x', warnings: [], issues: [], usesProject: 2, projectSql: '' }), exportProject });
+    await userEvent.click(screen.getByRole('button', { name: 'Export patch' }));
+    expect(await screen.findByText('This quest uses 2 new NPCs, objects or items from the project patch.')).toBeInTheDocument();
+    await userEvent.click(screen.getByRole('button', { name: 'Export project patch' }));
+    expect(exportProject).toHaveBeenCalled();
+    expect(await screen.findByText('C:\\out\\a_project.sql')).toBeInTheDocument();
   });
   it('explains validation, fidelity and id-collision refusals', async () => {
     const issue = { severity: 'error', code: 'NO_TITLE', message: 'The quest needs a title.' };

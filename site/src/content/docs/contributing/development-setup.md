@@ -1,6 +1,6 @@
 ---
 title: Development setup
-description: Get ACORE Quest Creator running from source.
+description: Get Azeroth World Editor running from source.
 sidebar:
   order: 1
 ---
@@ -15,14 +15,14 @@ sidebar:
 ## Get it running
 
 ```sh
-git clone https://github.com/DMCK96/acore-quest-creator.git
-cd acore-quest-creator
+git clone https://github.com/DMCK96/azeroth-world-editor.git
+cd azeroth-world-editor
 npm ci
 cp .env.example .env   # then fill in your world database
 npm run dev
 ```
 
-`npm run dev` starts the app with hot reload. With a filled-in `.env`, the login screen is ready and you only choose **Connect**. See [Environment variables](/acore-quest-creator/reference/environment-variables/).
+`npm run dev` starts the app with hot reload. With a filled-in `.env`, the login screen is ready and you only choose **Connect**. See [Environment variables](/azeroth-world-editor/reference/environment-variables/).
 
 ## Native module rebuilds
 

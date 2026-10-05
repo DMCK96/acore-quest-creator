@@ -14,7 +14,7 @@ const three = (): Patrol => {
 const npcWith = (patrol: Patrol | null, wander = 5) =>
   ({ ...newNpc(12000001), name: 'Hela', displayId: 1, spawns: [{ ...newSpawn(900), wander, patrol }] });
 const compile = (patrol: Patrol | null, context = EMPTY_ENTITY_CONTEXT) =>
-  compileEntities({ questId: Q, entities: { npcs: [npcWith(patrol)], objects: [], items: [] }, givers: [], context });
+  compileEntities({ entities: { npcs: [npcWith(patrol)], objects: [], items: [] }, givers: [], context });
 
 describe('patrol export', () => {
   it('makes the spawn walk its route', () => {
@@ -68,7 +68,7 @@ describe('patrol export', () => {
   });
   it('walks back to where it stands after the last point, as the map draws it', () => {
     const npc = { ...npcWith(three()), spawns: [{ ...newSpawn(900), x: 10, y: 20, z: 30, patrol: three() }] };
-    const rows = compileEntities({ questId: Q, entities: { npcs: [npc], objects: [], items: [] }, givers: [], context: EMPTY_ENTITY_CONTEXT }).inserts.waypoint_data!;
+    const rows = compileEntities({ entities: { npcs: [npc], objects: [], items: [] }, givers: [], context: EMPTY_ENTITY_CONTEXT }).inserts.waypoint_data!;
     expect(rows).toHaveLength(4);
     // The server loops the path's own points only, so the spawn is the route's last point.
     expect(rows[3]).toEqual({ id: '9000', point: '4', position_x: '10', position_y: '20', position_z: '30', delay: '0', move_type: '1',

@@ -7,7 +7,8 @@
  * leaves the world drawn without them.
  */
 import * as THREE from 'three';
-import { ViewCreature, ViewEvent, ViewObject, ViewPoint, ViewSpawns } from '../../../../core/db/view-spawns.js';
+import { withLooks, type EntityLooks } from '../../../../core/entities/view-spawns.js';
+import { PoolEvent, ViewCreature, ViewEvent, ViewObject, ViewPoint, ViewSpawns } from '../../../../core/db/view-spawns.js';
 import { WorldLayer } from '../../../../core/world/layer.js';
 import type { Movement } from '../../../../core/world/movement.js';
 import type { Placement } from '../../../../core/world/layer.js';
@@ -44,6 +45,12 @@ export type SpawnInfo = {
   wander: number;
   map: number;
   placement: Placement;
+  /** The spawn group it is in (as the world layer has the groups), or null */
+  group: number | null;
+  /** Seconds before it respawns */
+  respawnSecs: number;
+  /** An object's template type (3 is a chest); absent for an NPC or when it is not known */
+  objectType?: number;
 };
 
 /** An object's facing: its turn about Z, from 0 to a whole turn */
@@ -152,8 +159,11 @@ const markerMaterials = {
   object: new THREE.MeshBasicMaterial({ color: OBJECT_MARKER_COLOUR }),
 };
 
-/** Spawns further than this from the camera are not drawn, as in the game (about 100 yards) */
-const SPAWN_DRAW_DISTANCE = 100;
+/**
+ * Spawns further than this from the camera are not drawn. Five times the game's (about 100 yards), so
+ * they stay while zoomed out over a route; an NPC whose route is worked on is drawn whatever the distance.
+ */
+const SPAWN_DRAW_DISTANCE = 500;
 
 /** M2 attachment points: a shield on the arm, weapons in the right (1) and left (2) hands */
 const SHIELD_POINT = 0;
@@ -174,6 +184,41 @@ const GROUND_TRIES = 4;
 const GROUNDS_PER_FRAME = 16;
 
 /**
+ * A model's bounding sphere is of its resting pose; widened by this much (and these yards), it holds
+ * the model as it moves and what it wears or holds, for telling whether the camera looks at it
+ */
+const VIEW_SPHERE_SCALE = 1.5;
+const VIEW_SPHERE_PAD = 2;
+const viewSphere = new THREE.Sphere();
+
+/** What an NPC wears or holds (helmets, shoulders, weapons) is left off further than this: a few pixels, a draw call each */
+const WORN_DETAIL_DISTANCE = 150;
+
+/** The models an NPC wears or holds, at its attachment points; worked out once a drawn NPC */
+function wornOf(spawn: THREE.Object3D): THREE.Object3D[] {
+  let worn: THREE.Object3D[] | undefined = spawn.userData.worn;
+  if (!worn) {
+    worn = spawn.children.filter((child) => child.name.startsWith('attachment:')).flatMap((point) => point.children);
+    spawn.userData.worn = worn;
+  }
+  return worn;
+}
+
+/** Shows or hides what an NPC wears; a hidden model stops animating */
+function showWorn(spawn: THREE.Object3D, shown: boolean) {
+  if (spawn.userData.wornShown === shown) return;
+  spawn.userData.wornShown = shown;
+  for (const model of wornOf(spawn)) {
+    if (typeof (model as any).show === 'function') {
+      if (shown) (model as any).show();
+      else (model as any).hide();
+    } else {
+      model.visible = shown;
+    }
+  }
+}
+
+/**
  * Each geometry's bounds from its own vertices, kept once worked out. A model's stored bounds take in
  * the reach of every animation it has, which for a guard is a box thirty yards wide.
  */
@@ -189,6 +234,23 @@ const boundsOf = (geometry: THREE.BufferGeometry): THREE.Box3 => {
 };
 
 /** A drawn spawn's bounds in the world, as it stands (with what it holds), into `target` */
+/**
+ * An area's creatures, objects or paths: a direct child, looked up as one. `getObjectByName` searches
+ * depth first, through every NPC model and what it wears, and ran several times an area every frame.
+ */
+function holderOf(group: THREE.Object3D, name: 'creatures' | 'objects' | 'paths'): THREE.Object3D | undefined {
+  return group.children.find((child) => child.name === name);
+}
+
+/** Whether the camera looks at a spawn: a model by its widened bounding sphere; anything else is taken as seen */
+function inView(spawn: THREE.Object3D, frustum: THREE.Frustum): boolean {
+  const sphere: THREE.Sphere | undefined = (spawn as any).boundingSphereWorld;
+  if (!sphere) return true;
+  viewSphere.center.copy(sphere.center);
+  viewSphere.radius = sphere.radius * VIEW_SPHERE_SCALE + VIEW_SPHERE_PAD;
+  return frustum.intersectsSphere(viewSphere);
+}
+
 function spawnBounds(spawn: THREE.Object3D, target: THREE.Box3): THREE.Box3 {
   const part = new THREE.Box3();
   target.makeEmpty();
@@ -216,6 +278,8 @@ class SpawnManager {
   #wanted = new globalThis.Map<number, number>();
   #requests = 0;
   #visibility: SpawnVisibility = { ...DEFAULT_VISIBILITY };
+  /** Looks of edited existing entities, drawn on their database spawns */
+  #looks: EntityLooks = new globalThis.Map();
   #own: ViewSpawns = { creatures: [], objects: [], capped: { creatures: false, objects: false } };
   #warned = new Set<string>();
   #now: () => number;
@@ -225,6 +289,12 @@ class SpawnManager {
 
   /** Edits to database spawns and routes, drawn over what the database has */
   #layer: WorldLayer = { spawns: [], routes: [], added: [] };
+
+  /**
+   * Every spawn under each top-level layer group with an event, through all its levels (database groups
+   * the loaded spawns do not name among them), by group id
+   */
+  #groupSpawns: ReadonlyMap<number, readonly { kind: 'npc' | 'object'; guid: number }[]> = new globalThis.Map();
 
   /** Routes edited in the view and not yet stored by its host, drawn in place of what it has */
   #pendingRoutes = new globalThis.Map<number, ViewPoint[]>();
@@ -327,6 +397,12 @@ class SpawnManager {
     this.status = { ...this.status, events: eventsIn(this.#responses.values()) };
   }
 
+  /** The looks of edited existing entities, drawn on their database spawns; loaded areas are redrawn */
+  async setLooks(looks: EntityLooks) {
+    this.#looks = looks;
+    await this.#redraw();
+  }
+
   /**
    * The open quest's own spawns, drawn in whichever loaded area holds them, in place of a database
    * spawn with the same guid. Loaded areas are redrawn from their last answer, without asking again.
@@ -343,14 +419,107 @@ class SpawnManager {
    * open quest has its own of, plus its own in the box on its map; without event spawns unless they
    * are asked for
    */
-  #overlay(spawns: ViewSpawns, box: Box, map: number): ViewSpawns {
+  #overlay(rawSpawns: ViewSpawns, box: Box, map: number): ViewSpawns {
+    const spawns = withLooks(rawSpawns, this.#looks);
     const inBox = (s: { map: number; x: number; y: number }) => s.map === map && s.x >= box.minX && s.x <= box.maxX && s.y >= box.minY && s.y <= box.maxY;
     const shown = (s: Parameters<typeof inEvent>[0]) => inEvent(s, this.#visibility.events);
+    const eventNames = new globalThis.Map(this.status.events.map((e) => [e.id, e.name]));
     const ownCreatures = new Set(this.#own.creatures.map((c) => c.guid));
     const ownObjects = new Set(this.#own.objects.map((o) => o.guid));
     const placed = (kind: 'creature' | 'gameobject', guid: number) => this.#layer.spawns.find((s) => s.kind === kind && s.guid === guid)?.current;
     const routes = new globalThis.Map(this.#layer.routes.map((r) => [r.pathId, r.current]));
     const movements = new globalThis.Map((this.#layer.movements ?? []).map((m) => [m.guid, m.current]));
+    // The layer's groups win over the database's: a spawn in one shows it, and one a layer group let go
+    // of (or one in a group deleted there) is in none
+    const layerGroups = this.#layer.groups ?? [];
+    const inLayerGroup = new globalThis.Map<string, number>();
+    const liveGroups = new globalThis.Map<number, (typeof layerGroups)[number]>();
+    const motherInLayer = new globalThis.Map<number, number>();
+    for (const g of layerGroups) {
+      if (g.removed) continue;
+      liveGroups.set(g.id, g);
+      for (const m of g.members) {
+        if (m.type === 'spawn') inLayerGroup.set(`${m.kind}:${m.guid}`, g.id);
+        else if (m.type === 'group') motherInLayer.set(m.id, g.id);
+      }
+    }
+    const layerGroupIds = new Set(layerGroups.map((g) => g.id));
+    const groupOf = (kind: 'npc' | 'object', s: { guid: number; group?: number | null }): number | null => {
+      const held = inLayerGroup.get(`${kind}:${s.guid}`);
+      const was = s.group ?? null;
+      return held ?? (was !== null && layerGroupIds.has(was) ? null : was);
+    };
+    const grouped = <T extends { guid: number; group?: number | null }>(kind: 'npc' | 'object', s: T): T => {
+      const group = groupOf(kind, s);
+      return group === (s.group ?? null) && 'group' in s ? s : { ...s, group };
+    };
+    // The top-level group each database group sits in, as the database's spawns tell it
+    const dbTopOf = new globalThis.Map<number, number>();
+    for (const { spawns: answer } of [...this.#responses.values(), { spawns: rawSpawns }]) {
+      for (const s of [...answer.creatures, ...answer.objects]) if (s.group != null && s.poolTop != null) dbTopOf.set(s.group, s.poolTop);
+    }
+    // The top-level group a group is in: up through the layer's groups, else the database's; `layer`
+    // when the layer decides that group's event, null when it was deleted here
+    const topOf = (id: number): { id: number; layer: boolean } | null => {
+      const seen = new Set<number>();
+      let g = id;
+      while (!seen.has(g)) {
+        seen.add(g);
+        const up = motherInLayer.get(g);
+        if (up !== undefined) {
+          g = up;
+          continue;
+        }
+        const db = dbTopOf.get(g);
+        if (liveGroups.has(g)) return db !== undefined && db !== g && !layerGroupIds.has(db) ? { id: db, layer: false } : { id: g, layer: true };
+        if (layerGroupIds.has(g)) return null;
+        if (db === undefined || db === g) return { id: g, layer: false };
+        if (liveGroups.has(db)) {
+          g = db;
+          continue;
+        }
+        return layerGroupIds.has(db) ? null : { id: db, layer: false };
+      }
+      return { id: g, layer: true };
+    };
+    // The top-level layer group each spawn is under by that group's full membership, which reaches
+    // through database groups the loaded spawns do not name
+    // (null under a group deleted here: those spawns are in no group, so lose its database event)
+    const underTop = new globalThis.Map<string, number | null>();
+    for (const [id, spawns] of this.#groupSpawns) {
+      if (layerGroupIds.has(id) && !liveGroups.has(id)) for (const s of spawns) underTop.set(`${s.kind}:${s.guid}`, null);
+    }
+    for (const [id, spawns] of this.#groupSpawns) {
+      if (!liveGroups.has(id) || motherInLayer.has(id)) continue;
+      for (const s of spawns) underTop.set(`${s.kind}:${s.guid}`, id);
+    }
+    // A spawn's events as the layer has its groups: its own event rows, with the event of the top-level
+    // group it is in (the layer's, else the database's) in place of the one its database group brought
+    const evented = <T extends { guid: number; group?: number | null; event?: ViewEvent | null; events?: ViewEvent[]; removedBy?: ViewEvent[]; poolEvent?: PoolEvent | null }>(kind: 'npc' | 'object', s: T): T => {
+      const group = groupOf(kind, s);
+      const key = `${kind}:${s.guid}`;
+      const walked = inLayerGroup.has(key) ? undefined : underTop.get(key);
+      const top = walked === null ? null : walked !== undefined ? { id: walked, layer: true } : group === null ? null : topOf(group);
+      const db = s.poolEvent ?? null;
+      const dropDb = db !== null && !db.alsoOwn && !(top !== null && !top.layer && top.id === db.pool);
+      const set = top?.layer ? liveGroups.get(top.id)!.event : null;
+      if (!dropDb && !set) return s;
+      const without = (list: ViewEvent[]) => (dropDb ? list.filter((e) => e.id !== db!.id) : list);
+      let events = without(s.events ?? (s.event ? [s.event] : []));
+      let removedBy = without(s.removedBy ?? []);
+      if (set) {
+        const e = { id: set.id, name: eventNames.get(set.id) ?? `Event ${set.id}` };
+        if (set.during && !events.some((x) => x.id === e.id)) events = [...events, e].sort((a, b) => a.id - b.id);
+        if (!set.during && !removedBy.some((x) => x.id === e.id)) removedBy = [...removedBy, e].sort((a, b) => a.id - b.id);
+      }
+      return { ...s, event: events[0] ?? null, events, removedBy };
+    };
+    const respawns = new globalThis.Map((this.#layer.respawns ?? []).map((r) => [`${r.kind}:${r.guid}`, r.current]));
+    // The layer's respawn time over the database's
+    const timed = <T extends ViewCreature | ViewObject>(kind: 'creature' | 'gameobject', s: T): T => {
+      const secs = respawns.get(`${kind}:${s.guid}`);
+      return secs === undefined ? s : { ...s, respawnSecs: secs };
+    };
     // The layer's movement first, so a new path is found by its id among the layer's routes
     const routed = (c: ViewCreature): ViewCreature => {
       const movement = movements.get(c.guid);
@@ -360,7 +529,7 @@ class SpawnManager {
     };
     const creature = (c: ViewCreature): ViewCreature => {
       const at = placed('creature', c.guid);
-      return routed(at ? { ...c, x: at.x, y: at.y, z: at.z, orientation: at.orientation } : c);
+      return grouped('npc', routed(timed('creature', at ? { ...c, x: at.x, y: at.y, z: at.z, orientation: at.orientation } : c)));
     };
     const pending = (c: ViewCreature): ViewCreature => {
       const movement = this.#pendingMovements.get(c.guid);
@@ -370,13 +539,14 @@ class SpawnManager {
     };
     const object = (o: ViewObject): ViewObject => {
       const at = placed('gameobject', o.guid);
-      return at ? { ...o, x: at.x, y: at.y, z: at.z, ...(at.rotation ? { rotation: at.rotation } : {}) } : o;
+      return grouped('object', timed('gameobject', at ? { ...o, x: at.x, y: at.y, z: at.z, ...(at.rotation ? { rotation: at.rotation } : {}) } : o));
     };
     // Spawns placed in the view, drawn as their template looked when they were placed
     const placedCreatures = this.#layer.added.filter((a) => a.kind === 'creature').map(
       (a): ViewCreature => ({
         guid: a.guid, entry: a.entry, name: a.name, map: a.map, x: a.placement.x, y: a.placement.y, z: a.placement.z, orientation: a.placement.orientation,
-        displayId: a.look.displayId, scale: a.look.scale, wander: 0, path: null, pathId: 0, equipment: a.look.equipment, own: false, added: true, event: null, events: [], removedBy: [], preset: a.look.preset,
+        displayId: a.look.displayId, scale: a.look.scale, wander: 0, path: null, pathId: 0, equipment: a.look.equipment, own: false, added: true, event: null, events: [], removedBy: [], preset: a.look.preset, group: null,
+        respawnSecs: a.respawnSecs ?? 300,
       }),
     );
     const placedObjects = this.#layer.added.filter((a) => a.kind === 'gameobject').map(
@@ -384,12 +554,21 @@ class SpawnManager {
         guid: a.guid, entry: a.entry, name: a.name, map: a.map, x: a.placement.x, y: a.placement.y, z: a.placement.z,
         // Turned about Z by its facing unless it was tilted
         rotation: a.placement.rotation ?? [0, 0, Math.sin(a.placement.orientation / 2), Math.cos(a.placement.orientation / 2)],
-        displayId: a.look.displayId, scale: a.look.scale, own: false, added: true, event: null, events: [], removedBy: [],
+        displayId: a.look.displayId, scale: a.look.scale, objectType: a.look.objectType ?? -1, own: false, added: true, event: null, events: [], removedBy: [], group: null,
+        respawnSecs: a.respawnSecs ?? 300,
       }),
     );
     return {
-      creatures: [...spawns.creatures.filter((c) => !ownCreatures.has(c.guid) && shown(c)).map(creature), ...this.#own.creatures.filter(inBox), ...placedCreatures.filter(inBox).map(routed)].map(pending),
-      objects: [...spawns.objects.filter((o) => !ownObjects.has(o.guid) && shown(o)).map(object), ...this.#own.objects.filter(inBox), ...placedObjects.filter(inBox)],
+      creatures: [
+        ...spawns.creatures.filter((c) => !ownCreatures.has(c.guid)).map((c) => evented('npc', c)).filter(shown).map(creature),
+        ...this.#own.creatures.filter(inBox).map((c) => evented('npc', grouped('npc', c))).filter(shown),
+        ...placedCreatures.filter(inBox).map((c) => evented('npc', grouped('npc', routed(c)))).filter(shown),
+      ].map(pending),
+      objects: [
+        ...spawns.objects.filter((o) => !ownObjects.has(o.guid)).map((o) => evented('object', o)).filter(shown).map(object),
+        ...this.#own.objects.filter(inBox).map((o) => evented('object', grouped('object', o))).filter(shown),
+        ...placedObjects.filter(inBox).map((o) => evented('object', grouped('object', o))).filter(shown),
+      ],
       capped: spawns.capped,
     };
   }
@@ -399,6 +578,16 @@ class SpawnManager {
     this.#layer = layer;
     this.#pendingRoutes.clear();
     this.#pendingMovements.clear();
+    await this.#redraw();
+  }
+
+  /**
+   * Every spawn under each top-level layer group with an event (or a cleared one), and each deleted group
+   * that had one, through all its levels, by group id: the event walk reaches them through database
+   * groups the loaded spawns do not name
+   */
+  async setGroupSpawns(byGroup: ReadonlyMap<number, readonly { kind: 'npc' | 'object'; guid: number }[]>) {
+    this.#groupSpawns = byGroup;
     await this.#redraw();
   }
 
@@ -432,13 +621,14 @@ class SpawnManager {
     for (const group of this.#areas.values()) {
       const data: ViewCreature | ViewObject | undefined = (kind === 'creature' ? group.userData.creatures : group.userData.objects)?.get(guid);
       if (!data) continue;
-      const base = { kind, guid, entry: data.entry, name: data.name, own: data.own, added: data.added ?? false, map: data.map };
+      const base = { kind, guid, entry: data.entry, name: data.name, own: data.own, added: data.added ?? false, map: data.map, group: data.group ?? null, respawnSecs: data.respawnSecs ?? 300 };
       if (kind === 'creature') {
         const c = data as ViewCreature;
         return { ...base, pathId: c.pathId ?? 0, wander: c.wander, placement: { x: c.x, y: c.y, z: c.z, orientation: c.orientation, rotation: null } };
       }
       const o = data as ViewObject;
-      return { ...base, pathId: 0, wander: 0, placement: { x: o.x, y: o.y, z: o.z, orientation: facingOf(o.rotation), rotation: o.rotation } };
+      const objectType = o.objectType ?? -1;
+      return { ...base, pathId: 0, wander: 0, placement: { x: o.x, y: o.y, z: o.z, orientation: facingOf(o.rotation), rotation: o.rotation }, ...(objectType >= 0 ? { objectType } : {}) };
     }
     return null;
   }
@@ -470,7 +660,7 @@ class SpawnManager {
   pickRoutePoint(ray: THREE.Ray, guid: number): number | null {
     let best: { point: number; distance: number } | null = null;
     for (const group of this.#areas.values()) {
-      for (const shown of group.getObjectByName('paths')?.children ?? []) {
+      for (const shown of holderOf(group, 'paths')?.children ?? []) {
         if (shown.userData.guid !== guid) continue;
         for (const ball of shown.children) {
           if (typeof ball.userData.point !== 'number' || ray.distanceSqToPoint(ball.position) > 1) continue;
@@ -514,7 +704,7 @@ class SpawnManager {
     const hits: { spawn: THREE.Object3D; distance: number; bounds: THREE.Box3 }[] = [];
     for (const group of this.#areas.values()) {
       for (const name of ['creatures', 'objects']) {
-        const kind = group.getObjectByName(name);
+        const kind = holderOf(group, name);
         if (!kind?.visible) continue;
         for (const spawn of kind.children) {
           if (!spawn.visible || !spawn.userData.spawn) continue;
@@ -561,7 +751,7 @@ class SpawnManager {
     const points: Candidates['points'] = [];
     const spawns: Candidates['spawns'] = [];
     for (const group of this.#areas.values()) {
-      const paths = group.getObjectByName('paths');
+      const paths = holderOf(group, 'paths');
       for (const shown of paths?.visible ? paths.children : []) {
         if (!shown.visible) continue;
         for (const ball of shown.children) {
@@ -569,10 +759,10 @@ class SpawnManager {
         }
       }
       for (const name of ['creatures', 'objects']) {
-        const kind = group.getObjectByName(name);
+        const kind = holderOf(group, name);
         if (!kind?.visible) continue;
         for (const spawn of kind.children) {
-          if (!spawn.visible || !spawn.userData.spawn || spawn.position.distanceTo(cameraPosition) > SPAWN_DRAW_DISTANCE) continue;
+          if (!spawn.visible || !spawn.userData.spawn || !this.#drawn(spawn, name, cameraPosition)) continue;
           const bounds = spawnBounds(spawn, new THREE.Box3());
           const at = bounds.isEmpty() ? spawn.position.clone() : bounds.getCenter(new THREE.Vector3());
           spawns.push({ kind: spawn.userData.spawn.kind, guid: spawn.userData.spawn.guid, at });
@@ -587,7 +777,7 @@ class SpawnManager {
     for (const group of this.#areas.values()) {
       const creature: ViewCreature | undefined = group.userData.creatures?.get(guid);
       if (!creature) continue;
-      for (const shown of group.getObjectByName('paths')?.children ?? []) {
+      for (const shown of holderOf(group, 'paths')?.children ?? []) {
         if (shown.userData.guid === guid && shown.name === 'route') {
           shown.userData.previewed = true;
           moveRouteDrawing(shown, { x: creature.x, y: creature.y, z: creature.z }, points);
@@ -601,7 +791,7 @@ class SpawnManager {
     for (const group of this.#areas.values()) {
       const creature: ViewCreature | undefined = group.userData.creatures?.get(guid);
       if (!creature) continue;
-      for (const shown of group.getObjectByName('paths')?.children ?? []) {
+      for (const shown of holderOf(group, 'paths')?.children ?? []) {
         if (shown.userData.guid !== guid) continue;
         // Drawn from the next redraw's data again, whatever it says
         shown.userData.previewed = true;
@@ -626,32 +816,36 @@ class SpawnManager {
   /** The drawn object of a spawn, or null when it is not drawn (its area unloaded, or it is hidden) */
   find(kind: 'creature' | 'object', guid: number): THREE.Object3D | null {
     for (const group of this.#areas.values()) {
-      const shown = group.getObjectByName(kind === 'creature' ? 'creatures' : 'objects');
+      const shown = holderOf(group, kind === 'creature' ? 'creatures' : 'objects');
       if (!shown?.visible) continue;
       const spawn = shown.children.find((child) => child.userData.spawn?.guid === guid);
-      if (spawn) return spawn.visible ? spawn : null;
+      if (spawn) return (spawn.userData.drawn ?? spawn.visible) ? spawn : null;
     }
     return null;
   }
 
   /** Draws only the spawns within the draw distance of the camera; a hidden model stops animating */
-  cull(cameraPosition: THREE.Vector3) {
+  cull(cameraPosition: THREE.Vector3, frustum?: THREE.Frustum) {
     let grounding = GROUNDS_PER_FRAME;
     for (const group of this.#areas.values()) {
       for (const name of ['creatures', 'objects']) {
-        for (const spawn of group.getObjectByName(name)?.children ?? []) {
-          const near = spawn.position.distanceTo(cameraPosition) <= SPAWN_DRAW_DISTANCE;
+        for (const spawn of holderOf(group, name)?.children ?? []) {
+          const near = this.#drawn(spawn, name, cameraPosition);
+          // Drawn, as edits and outlines see it; shown only while the camera also looks at it
+          spawn.userData.drawn = near;
           if (near && name === 'creatures' && grounding > 0 && this.#ground(spawn)) grounding -= 1;
+          const seen = near && (!frustum || inView(spawn, frustum));
           if (typeof spawn.show === 'function') {
-            if (near) spawn.show();
+            if (seen) spawn.show();
             else spawn.hide();
           } else {
-            spawn.visible = near;
+            spawn.visible = seen;
           }
+          if (name === 'creatures') showWorn(spawn, seen && spawn.position.distanceTo(cameraPosition) <= WORN_DETAIL_DISTANCE);
         }
       }
       // Only the active routes and wander circles, however far they have been left behind; picked points marked
-      for (const shown of group.getObjectByName('paths')?.children ?? []) {
+      for (const shown of holderOf(group, 'paths')?.children ?? []) {
         shown.visible = this.#activeRoutes.has(shown.userData.guid);
         if (!shown.visible || shown.name !== 'route') continue;
         for (const ball of shown.children) {
@@ -664,6 +858,12 @@ class SpawnManager {
         }
       }
     }
+  }
+
+  /** Whether a spawn is drawn: within draw distance of the camera, or an NPC whose route is worked on */
+  #drawn(spawn: THREE.Object3D, name: string, cameraPosition: THREE.Vector3): boolean {
+    if (name === 'creatures' && this.#activeRoutes.has(spawn.userData.spawn?.guid)) return true;
+    return spawn.position.distanceTo(cameraPosition) <= SPAWN_DRAW_DISTANCE;
   }
 
   /**
@@ -719,6 +919,8 @@ class SpawnManager {
     const paths = new THREE.Group();
     paths.name = 'paths';
     const made = [creatures, objects, paths];
+    // Never moved themselves: only what is in them is worked out each frame
+    for (const holder of made) holder.matrixAutoUpdate = false;
 
     const drawnCreatures = await Promise.all(
       spawns.creatures.map((creature) =>
@@ -760,8 +962,8 @@ class SpawnManager {
    * again. An area not yet filled is filled whole.
    */
   async #patch(group: THREE.Group, spawns: ViewSpawns) {
-    const containers = { creature: group.getObjectByName('creatures'), object: group.getObjectByName('objects') };
-    const paths = group.getObjectByName('paths');
+    const containers = { creature: holderOf(group, 'creatures'), object: holderOf(group, 'objects') };
+    const paths = holderOf(group, 'paths');
     if (!containers.creature || !containers.object || !paths) {
       await this.#fill(group, spawns);
       return;
@@ -946,7 +1148,7 @@ class SpawnManager {
 
   #applyVisibility(group: THREE.Group) {
     for (const name of ['creatures', 'objects', 'paths'] as const) {
-      const child = group.getObjectByName(name);
+      const child = holderOf(group, name);
       if (child) child.visible = this.#visibility[name];
     }
   }

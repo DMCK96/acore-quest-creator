@@ -69,6 +69,8 @@ export interface CompileInput {
   /** `quest_template.RequiredNpcOrGo` as four signed entries; index 0 is objective 1. */
   objectives: readonly number[];
   context: ScriptContext;
+  /** Rows the project patch writes (its NPCs' fights and patrols): as good as taken. */
+  taken?: CompiledScripts;
 }
 
 const SMART_KEY = ['entryorguid', 'source_type', 'id', 'link'] as const;
@@ -170,8 +172,8 @@ export function compileScenes(input: CompileInput): CompiledScripts {
 
   // --- What other rows already hold ---------------------------------------------------------------
   const alloc = createAllocator({
-    smartScripts: context.smartScripts.filter((r) => !ours(r.comment)),
-    creatureText: context.creatureText.filter((r) => !ours(r.comment)),
+    smartScripts: [...context.smartScripts.filter((r) => !ours(r.comment)), ...(input.taken?.inserts.smart_scripts ?? [])],
+    creatureText: [...context.creatureText.filter((r) => !ours(r.comment)), ...(input.taken?.inserts.creature_text ?? [])],
   });
   const usedOptions = new Map<number, Set<number>>();
   for (const row of context.gossipOptions) {

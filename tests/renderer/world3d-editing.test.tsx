@@ -11,7 +11,7 @@ const worlds = vi.hoisted(() => [] as any[]);
 vi.mock('../../src/renderer/world3d/world3d', () => ({
   createWorld3D: (options: any) => {
     const world = { options, dispose: vi.fn(), cancelPath: vi.fn(), lookAt: vi.fn(), setSpawnVisibility: vi.fn(), setOwnSpawns: vi.fn(), select: vi.fn(),
-      setWorldLayer: vi.fn(), setMode: vi.fn(), undo: vi.fn(), redo: vi.fn(),
+      setWorldLayer: vi.fn(), setMode: vi.fn(), cancelDrag: vi.fn(),
       setActive: vi.fn(), setScenery: vi.fn(), setTool: vi.fn(), setFalloff: vi.fn(), target: () => ({ x: 0, y: 0, z: 0 }), spawnStatus: () => ({ capped: { creatures: false, objects: false }, error: null }) };
     worlds.push(world);
     return world;
@@ -19,7 +19,9 @@ vi.mock('../../src/renderer/world3d/world3d', () => ({
 }));
 vi.mock('../../src/renderer/map/LeafletMap', () => ({ LeafletMap: () => <div /> }));
 
-import { QuestMapView } from '../../src/renderer/map/QuestMapView';
+import { MapWithStore } from './map-with-store';
+import { HistoryProvider } from '../../src/renderer/state/history-context';
+import { createAppStore } from '../../src/renderer/state/app-store';
 import { WorldWorkspace } from '../../src/renderer/world3d/WorldWorkspace';
 
 afterEach(() => { worlds.length = 0; vi.unstubAllGlobals(); });
@@ -32,19 +34,22 @@ const patrol = addPoint(addPoint(newPatrol(9000), { x: 1, y: 1, z: 1 }), { x: 2,
 const hela = { ...newNpc(12000001), name: 'Hela', spawns: [{ ...newSpawn(900), map: 0, x: -8900, y: -160, z: 82, patrol: { ...patrol, points: patrol.points.map((p, i) => (i === 0 ? { ...p, waitSecs: 7 } : p)) } }] };
 const open = () => { const base = sampleOpen(); return { ...base, aggregate: { ...base.aggregate, values: { ...base.aggregate.values, [ENTITIES_FIELD]: writeEntities({ npcs: [hela], objects: [], items: [] }) } } }; };
 
-async function questMap(api = makeMockApi({ worldLayer: vi.fn(async () => okv(EMPTY)) })) {
+async function questMap(api = makeMockApi({ worldLayer: vi.fn(async () => okv(EMPTY)) }), steps = false) {
   clientHasEverything();
   const onChange = vi.fn();
-  render(<NamesProvider api={api}><QuestMapView open={open()} onChange={onChange} focusId={null} onClose={vi.fn()} hasClient /></NamesProvider>);
+  const view = <MapWithStore open={open()} onChange={onChange} focusId={null} onClose={vi.fn()} hasClient />;
+  // With steps, the view runs under the app's history, as in the app
+  const store = createAppStore(api);
+  render(<NamesProvider api={api}>{steps ? <HistoryProvider store={store}>{view}</HistoryProvider> : view}</NamesProvider>);
   await userEvent.click(await screen.findByRole('button', { name: '3D view' }));
   await waitFor(() => expect(worlds).toHaveLength(1));
-  return { api, onChange, world: worlds[0] };
+  return { api, onChange, world: worlds[0], store };
 }
 
 describe('editing in the quest map\'s 3D view', () => {
   it('turns an own NPC\'s placement into a quest edit', async () => {
     const { onChange, world } = await questMap();
-    world.options.onEdit(place(true, 900, 12000001));
+    world.options.onGesture([place(true, 900, 12000001)]);
     const [field, value] = onChange.mock.calls.at(-1)!;
     expect(field).toBe(ENTITIES_FIELD);
     expect(readEntities({ [ENTITIES_FIELD]: value }).npcs[0]!.spawns[0]).toMatchObject({ x: 1, y: 2, z: 3, o: 1.5 });
@@ -53,8 +58,8 @@ describe('editing in the quest map\'s 3D view', () => {
   it('turns an own route edit into the patrol, keeping each point\'s wait and giving a new point none', async () => {
     const { onChange, world } = await questMap();
     const points = readEntities(open().aggregate.values).npcs[0]!.spawns[0]!.patrol!.points;
-    world.options.onEdit({ kind: 'route', spawn: { kind: 'creature', guid: 900, entry: 12000001, own: true }, pathId: 9000,
-      points: [{ x: 1, y: 1, z: 1, carry: points[0] }, { x: 5, y: 5, z: 5 }, { x: 2, y: 2, z: 2, carry: points[1] }] });
+    world.options.onGesture([{ kind: 'route', spawn: { kind: 'creature', guid: 900, entry: 12000001, own: true }, pathId: 9000,
+      points: [{ x: 1, y: 1, z: 1, carry: points[0] }, { x: 5, y: 5, z: 5 }, { x: 2, y: 2, z: 2, carry: points[1] }] }]);
     const [, value] = onChange.mock.calls.at(-1)!;
     const saved = readEntities({ [ENTITIES_FIELD]: value }).npcs[0]!.spawns[0]!.patrol!;
     expect(saved.pathId).toBe(9000);
@@ -64,34 +69,35 @@ describe('editing in the quest map\'s 3D view', () => {
   it('sends an existing spawn\'s placement to the world layer and draws the layer it gets back', async () => {
     const worldMoveSpawn = vi.fn(async () => okv(moved));
     const { onChange, world } = await questMap(makeMockApi({ worldLayer: vi.fn(async () => okv(EMPTY)), worldMoveSpawn }));
-    world.options.onEdit(place(false, 80330, 1423));
+    world.options.onGesture([place(false, 80330, 1423)]);
     await waitFor(() => expect(world.setWorldLayer).toHaveBeenLastCalledWith(moved));
     expect(worldMoveSpawn).toHaveBeenCalledWith('creature', 80330, { x: 1, y: 2, z: 3, orientation: 1.5, rotation: null });
     expect(onChange).not.toHaveBeenCalled();
-    expect(screen.getByRole('button', { name: 'World changes (1)' })).toBeTruthy();
+    // The quest's own NPC counts too: it is in the project patch
+    expect(screen.getByRole('button', { name: 'Project changes (2)' })).toBeTruthy();
   });
 
-  it('opens the World changes list from its button, and draws the layer a revert leaves', async () => {
+  it('opens the Project changes list from its button, and draws the layer a revert leaves', async () => {
     const worldChanges = vi.fn(async () => okv([{ ...moved.spawns[0], type: 'spawn', drifted: false }]));
     const worldRevert = vi.fn(async () => okv(EMPTY));
     const { world } = await questMap(makeMockApi({ worldLayer: vi.fn(async () => okv(moved)), worldChanges, worldRevert }));
-    await userEvent.click(await screen.findByRole('button', { name: 'World changes (1)' }));
+    await userEvent.click(await screen.findByRole('button', { name: 'Project changes (2)' }));
     await userEvent.click(await screen.findByRole('button', { name: 'Revert Guard' }));
     await waitFor(() => expect(world.setWorldLayer).toHaveBeenLastCalledWith(EMPTY));
-    expect(screen.getByRole('button', { name: 'World changes (0)' })).toBeDisabled();
+    expect(screen.getByRole('button', { name: 'Project changes (1)' })).toBeEnabled();
   });
 
   it('shows where the selected spawn now stands after it is moved', async () => {
     const { world } = await questMap(makeMockApi({ worldLayer: vi.fn(async () => okv(EMPTY)), worldMoveSpawn: vi.fn(async () => okv(moved)) }));
     world.options.onSelect({ kind: 'creature', guid: 80330, entry: 1423, name: 'Guard', own: false, event: null, position: { x: 0, y: 0, z: 0 }, pathId: 0 });
-    world.options.onEdit(place(false, 80330, 1423));
+    world.options.onGesture([place(false, 80330, 1423)]);
     expect(await screen.findByText('X 1.00 · Y 2.00 · Z 3.00')).toBeTruthy();
   });
 
   it('puts the spawn back and says why when the world edit fails', async () => {
     const { world } = await questMap(makeMockApi({ worldLayer: vi.fn(async () => okv(EMPTY)), worldMoveSpawn: vi.fn(async () => errv('NOT_CONNECTED', 'Connect to a world database first.')) }));
     world.options.onSelect({ kind: 'creature', guid: 80330, entry: 1423, name: 'Guard', own: false, event: null, position: { x: 0, y: 0, z: 0 }, pathId: 0 });
-    world.options.onEdit(place(false, 80330, 1423));
+    world.options.onGesture([place(false, 80330, 1423)]);
     expect(await screen.findByText('Connect to a world database first.')).toBeTruthy();
     expect(world.setWorldLayer).toHaveBeenLastCalledWith(EMPTY);
   });
@@ -117,13 +123,39 @@ describe('editing in the quest map\'s 3D view', () => {
     await expect(world.options.beforeRouteEdit(guard, 803)).resolves.toBe(false);
   });
 
-  it('undo after a revert sends the earlier placement as a fresh world edit', async () => {
-    const worldMoveSpawn = vi.fn(async () => okv(moved));
-    const { world } = await questMap(makeMockApi({ worldLayer: vi.fn(async () => okv(EMPTY)), worldMoveSpawn }));
-    // The world's history emits whole earlier states through onEdit; the view passes them on unchanged
-    const earlier = { ...place(false, 80330, 1423), to: { x: 0, y: 0, z: 0, orientation: 0, rotation: null } };
-    world.options.onEdit(earlier);
-    await waitFor(() => expect(worldMoveSpawn).toHaveBeenLastCalledWith('creature', 80330, earlier.to));
+  it('runs each gesture as one step of the project history, own and world edits together', async () => {
+    const api = makeMockApi({ worldLayer: vi.fn(async () => okv(EMPTY)), worldMoveSpawn: vi.fn(async () => okv(moved)) });
+    const { onChange, world } = await questMap(api, true);
+    world.options.onGesture([place(true, 900, 12000001), place(false, 80330, 1423)]);
+    await waitFor(() => expect(api.historyEnd).toHaveBeenCalled());
+    const begin = vi.mocked(api.historyBegin).mock.invocationCallOrder[0]!;
+    const move = vi.mocked(api.worldMoveSpawn).mock.invocationCallOrder[0]!;
+    const end = vi.mocked(api.historyEnd).mock.invocationCallOrder[0]!;
+    expect(begin).toBeLessThan(move);
+    expect(move).toBeLessThan(end);
+    expect(onChange).toHaveBeenCalled();
+  });
+
+  it('a gesture on its way holds an undo until it is sent', async () => {
+    const api = makeMockApi({ worldLayer: vi.fn(async () => okv(EMPTY)) });
+    const { world, store } = await questMap(api, true);
+    const release = world.options.onGestureStart();
+    const undo = store.getState().undo();
+    await new Promise((r) => setTimeout(r, 20));
+    expect(api.historyUndo).not.toHaveBeenCalled();
+    release();
+    await undo;
+    expect(api.historyUndo).toHaveBeenCalled();
+  });
+
+  it('a click while placing is one step', async () => {
+    const api = makeMockApi({ worldLayer: vi.fn(async () => okv(EMPTY)), worldAddSpawn: vi.fn(async () => okv({ layer: EMPTY, guid: 5 })) });
+    const { world } = await questMap(api, true);
+    await act(async () => {
+      world.options.onPlace({ target: { kind: 'creature', entry: 1423 }, at: { x: 1, y: 2, z: 3, orientation: 0, rotation: null } });
+    });
+    await waitFor(() => expect(api.historyEnd).toHaveBeenCalled());
+    expect(vi.mocked(api.historyBegin).mock.invocationCallOrder[0]!).toBeLessThan(vi.mocked(api.worldAddSpawn).mock.invocationCallOrder[0]!);
   });
 
   it('asks the server for the floor nearest the dragged height', async () => {
@@ -139,7 +171,7 @@ describe('editing in the World workspace', () => {
     const worldMoveSpawn = vi.fn(async () => okv(moved));
     render(<NamesProvider api={makeMockApi({ worldLayer: vi.fn(async () => okv(EMPTY)), worldMoveSpawn })}><WorldWorkspace hasClient projectKey="seen" projectName="" onOpenSettings={vi.fn()} onShowQuests={vi.fn()} onStartQuest={vi.fn()} /></NamesProvider>);
     await waitFor(() => expect(worlds).toHaveLength(1));
-    worlds[0].options.onEdit({ ...place(false, 5, 143981), spawn: { kind: 'object', guid: 5, entry: 143981, own: false } });
+    worlds[0].options.onGesture([{ ...place(false, 5, 143981), spawn: { kind: 'object', guid: 5, entry: 143981, own: false } }]);
     await waitFor(() => expect(worldMoveSpawn).toHaveBeenCalledWith('gameobject', 5, expect.anything()));
   });
 });
@@ -171,11 +203,19 @@ describe('Select mode and the selection in the 3D view', () => {
     expect(screen.getByRole('button', { name: /^Falloff/ }).textContent).toBe('Falloff 12 yd');
   });
 
-  it('summarises a selection of more than one thing, and Clear clears it', async () => {
+  it("the selected spawn's card has a Deselect button", async () => {
+    const { world } = await questMap();
+    act(() => world.options.onSelect({ kind: 'creature', guid: 80330, entry: 1423, name: 'Guard', own: false, event: null, position: { x: 0, y: 0, z: 0 }, pathId: 0 }));
+    await userEvent.click(screen.getByRole('button', { name: 'Deselect' }));
+    expect(world.select).toHaveBeenLastCalledWith(null);
+    expect(screen.queryByText('Guard')).toBeNull();
+  });
+
+  it('summarises a selection of more than one thing, and Deselect clears it', async () => {
     const { world } = await questMap();
     act(() => world.options.onSelection({ creatures: 3, objects: 1, points: 12, routes: 2 }));
     expect(screen.getByText('3 NPCs, 1 object, 12 route points on 2 routes')).toBeTruthy();
-    await userEvent.click(screen.getByRole('button', { name: 'Clear' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Deselect' }));
     expect(world.select).toHaveBeenLastCalledWith(null);
     expect(screen.queryByText('3 NPCs, 1 object, 12 route points on 2 routes')).toBeNull();
   });
@@ -188,8 +228,8 @@ describe('Select mode and the selection in the 3D view', () => {
       .mockImplementationOnce(() => new Promise((resolve) => (first = resolve)))
       .mockImplementationOnce(async () => okv(layerB));
     const { world } = await questMap(makeMockApi({ worldLayer: vi.fn(async () => okv(EMPTY)), worldMoveSpawn }));
-    world.options.onEdit(place(false, 1, 1423));
-    world.options.onEdit(place(false, 2, 1423));
+    world.options.onGesture([place(false, 1, 1423)]);
+    world.options.onGesture([place(false, 2, 1423)]);
     await waitFor(() => expect(worldMoveSpawn).toHaveBeenCalledTimes(1));
     await new Promise((resolve) => setTimeout(resolve, 20));
     expect(worldMoveSpawn).toHaveBeenCalledTimes(1);
@@ -207,8 +247,8 @@ describe('findings from the review, in the view', () => {
       .mockImplementationOnce(async () => { throw new Error('the main process went away'); })
       .mockImplementationOnce(async () => okv(moved));
     const { world } = await questMap(makeMockApi({ worldLayer: vi.fn(async () => okv(EMPTY)), worldMoveSpawn }));
-    world.options.onEdit(place(false, 1, 1423));
-    world.options.onEdit(place(false, 80330, 1423));
+    world.options.onGesture([place(false, 1, 1423)]);
+    world.options.onGesture([place(false, 80330, 1423)]);
     await waitFor(() => expect(world.setWorldLayer).toHaveBeenLastCalledWith(moved));
     expect(worldMoveSpawn).toHaveBeenCalledTimes(2);
   });
@@ -228,8 +268,8 @@ describe('one gesture, one layer drawn', () => {
     const layerB = { ...EMPTY, spawns: [{ ...moved.spawns[0], guid: 1 }, { ...moved.spawns[0], guid: 2 }] };
     const worldMoveSpawn = vi.fn().mockImplementationOnce(async () => okv(layerA)).mockImplementationOnce(async () => okv(layerB));
     const { world } = await questMap(makeMockApi({ worldLayer: vi.fn(async () => okv(EMPTY)), worldMoveSpawn }));
-    world.options.onEdit(place(false, 1, 1423));
-    world.options.onEdit(place(false, 2, 1423));
+    world.options.onGesture([place(false, 1, 1423)]);
+    world.options.onGesture([place(false, 2, 1423)]);
     await waitFor(() => expect(world.setWorldLayer).toHaveBeenLastCalledWith(layerB));
     expect(world.setWorldLayer.mock.calls.map(([layer]: [unknown]) => layer)).not.toContainEqual(layerA);
   });
@@ -238,8 +278,8 @@ describe('one gesture, one layer drawn', () => {
     const layerA = { ...EMPTY, spawns: [{ ...moved.spawns[0], guid: 1 }] };
     const worldMoveSpawn = vi.fn().mockImplementationOnce(async () => okv(layerA)).mockImplementationOnce(async () => errv('NOT_CONNECTED', 'the database said no'));
     const { world } = await questMap(makeMockApi({ worldLayer: vi.fn(async () => okv(EMPTY)), worldMoveSpawn }));
-    world.options.onEdit(place(false, 1, 1423));
-    world.options.onEdit(place(false, 2, 1423));
+    world.options.onGesture([place(false, 1, 1423)]);
+    world.options.onGesture([place(false, 2, 1423)]);
     await waitFor(() => expect(world.setWorldLayer).toHaveBeenLastCalledWith(layerA));
     expect(await screen.findByText(/the database said no/)).toBeTruthy();
   });

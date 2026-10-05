@@ -1,8 +1,9 @@
 import { test, expect, _electron as electron, type ElectronApplication } from '@playwright/test';
-import { mkdtempSync, readdirSync, readFileSync } from 'node:fs';
+import { mkdtempSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { mysqlUrl, serverDataDir } from '../helpers/env';
+import { exportProjectPatch } from './project-patch';
 
 // The server data and game client folders come from the same .env settings the app uses.
 const DATA_DIR = serverDataDir();
@@ -86,7 +87,8 @@ test('a new quest giver is made in the NPC modal with a guard\'s look and weapon
 
   await page.getByRole('button', { name: 'Export patch' }).click();
   await expect(page.getByText(/\.sql$/)).toBeVisible();
-  const sql = readFileSync(join(outDir, readdirSync(outDir)[0]!), 'utf8');
+  // The NPC is the project's: its rows are in the project patch
+  const sql = await exportProjectPatch(page);
   expect(sql).toContain('Captain Vessa');
   expect(sql).toContain('Watch Captain');
   expect(sql).toMatch(/INSERT INTO `creature_template_model` .*VALUES \(\d+, 0, [1-9]\d*,/);
@@ -110,7 +112,7 @@ test('a new chest is made in the object modal with a look and loot, and exported
 
   const chest = page.getByRole('dialog', { name: 'New object' });
   await chest.getByLabel('Name', { exact: true }).fill('Old Sea Chest');
-  await chest.getByLabel('Type').selectOption('Chest (can be looted)');
+  await chest.getByLabel('Type').selectOption('Lootable');
   await chest.getByRole('tab', { name: 'Look' }).click();
   await chest.getByRole('button', { name: 'Other ways' }).click();
   await chest.getByRole('combobox', { name: 'Browse models' }).fill('chest');
@@ -125,12 +127,12 @@ test('a new chest is made in the object modal with a look and loot, and exported
   await chest.getByLabel('Paste .gps output').fill('Map: 0 X: -8913.2 Y: -136.5 Z: 80.5 Orientation: 1');
   await page.screenshot({ path: 'test-results/object-editor.png' });
   await chest.getByRole('button', { name: 'Done' }).click();
-  await expect(panel.getByRole('listitem', { name: 'Old Sea Chest' }).getByText('Chest (can be looted) · placed')).toBeVisible();
+  await expect(panel.getByRole('listitem', { name: 'Old Sea Chest' }).getByText('Lootable · placed')).toBeVisible();
   await page.keyboard.press('Escape');
 
   await page.getByRole('button', { name: 'Export patch' }).click();
   await expect(page.getByText(/\.sql$/)).toBeVisible();
-  const sql = readFileSync(join(outDir, readdirSync(outDir)[0]!), 'utf8');
+  const sql = await exportProjectPatch(page);
   const template = rowOf(sql, 'gameobject_template');
   expect(template).toMatchObject({ name: 'Old Sea Chest', type: '3' });
   expect(Number(template.displayId)).toBeGreaterThan(0);

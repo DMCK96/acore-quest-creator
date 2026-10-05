@@ -22,7 +22,7 @@ Every quest has four core modules:
 
 | Module | What it covers |
 | --- | --- |
-| Quest Giver | Who offers the quest and who takes it back. See [Quest givers and enders](/acore-quest-creator/guides/givers-and-enders/). |
+| Quest Giver | Who offers the quest and who takes it back. See [Quest givers and enders](/azeroth-world-editor/guides/givers-and-enders/). |
 | Objectives | What the player must kill, use, collect or explore. |
 | Dialogue | What the quest giver says when offering, checking and completing the quest. |
 | Rewards | The experience, money, items and reputation the quest gives. |
@@ -33,8 +33,8 @@ Every quest has four core modules:
 | --- | --- |
 | Requirements | Who can take the quest: level cap, races, classes, skills and reputation. |
 | Chain | The quests that come before and after this one. |
-| Scripts | What NPCs, objects and areas do around this quest. See [Quest scripting](/acore-quest-creator/guides/quest-scripting/). |
-| NPCs, objects & items | New NPCs, objects and items this quest needs. See [NPCs and objects](/acore-quest-creator/guides/npcs-and-objects/) and [Items](/acore-quest-creator/guides/items/). |
+| Scripts | What NPCs, objects and areas do around this quest. See [Quest scripting](/azeroth-world-editor/guides/quest-scripting/). |
+| NPCs, objects & items | The project's NPCs, objects and items, with the ones this quest uses first under **Used by this quest**. See [NPCs and objects](/azeroth-world-editor/guides/npcs-and-objects/) and [Items](/azeroth-world-editor/guides/items/). |
 | Timer | A time limit the quest fails after. |
 | Behaviour | Sharing, daily or weekly repeats, auto-complete and other quest flags. |
 | Map marker | Where the quest points on the world map. |
@@ -50,10 +50,10 @@ A module with a problem shows a coloured dot, and a badge above the modules name
 
 - **Kill or use**: choose **Add kill or use**, pick NPC or object, then type its name. Set **How many**.
 - **Collect**: choose **Add collect**, type the item, and set how many.
-- **Drop sources**: for each item to collect, where it comes from: which creature or object drops it, and the drop chance and counts. Items a quest asks for drop through here, not through [loot](/acore-quest-creator/guides/loot/).
+- **Drop sources**: for each item to collect, where it comes from: which creature or object drops it, and the drop chance and counts. Items a quest asks for drop through here, not through [loot](/azeroth-world-editor/guides/loot/).
 - **Explore**: an area the player must reach, by area trigger ID.
 - **Custom objective text**: replaces the objective lines the game builds, in objective order.
 
 ## Dialogue and rewards
 
-**Dialogue** holds the text the giver says when offering the quest, while it is in progress and when it is handed in. **Rewards** holds the experience, money, items and reputation. With the [server data folder](/acore-quest-creator/getting-started/connect/#folders-optional) connected, the app shows how much XP each reward tier gives.
+**Dialogue** holds the text the giver says when offering the quest, while it is in progress and when it is handed in. **Rewards** holds the experience, money, items and reputation. With the [server data folder](/azeroth-world-editor/getting-started/connect/#folders-optional) connected, the app shows how much XP each reward tier gives.

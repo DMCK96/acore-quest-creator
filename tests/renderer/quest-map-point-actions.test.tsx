@@ -5,6 +5,7 @@ import { act, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import type { LeafletMapProps } from '../../src/renderer/map/LeafletMap';
 import { QuestMapView } from '../../src/renderer/map/QuestMapView';
+import { MapWithStore } from './map-with-store';
 import type { MapMode } from '../../src/renderer/map/MapOpener';
 import { NamesProvider } from '../../src/renderer/state/names';
 import { makeMockApi, okv, sampleOpen } from './mock-api';
@@ -27,7 +28,7 @@ function Live({ api }: { api: Api }) {
   current = vals;
   const base = sampleOpen();
   const mode: MapMode = { kind: 'patrol', entry: 12000001, guid: 900 };
-  return <NamesProvider api={api}><QuestMapView open={{ ...base, aggregate: { ...base.aggregate, values: vals as Record<string, FieldValue> } }}
+  return <NamesProvider api={api}><MapWithStore open={{ ...base, aggregate: { ...base.aggregate, values: vals as Record<string, FieldValue> } }}
     focusId={null} onClose={vi.fn()} mode={mode} onChange={(f, v) => setVals((o) => { const n = { ...o, [f]: v }; current = n; return n; })} /></NamesProvider>;
 }
 const point = (i: number) => readEntities(current).npcs[0]!.spawns[0]!.patrol!.points[i]!;

@@ -6,12 +6,12 @@ import { entityIssues } from '../../src/core/entities/validate';
 
 const Q = 60001;
 const compile = (objects: ReturnType<typeof newObject>[]) =>
-  compileEntities({ questId: Q, entities: { npcs: [], objects, items: [] }, givers: [], context: EMPTY_ENTITY_CONTEXT });
+  compileEntities({ entities: { npcs: [], objects, items: [] }, givers: [], context: EMPTY_ENTITY_CONTEXT });
 
 describe('pages and quest-only objects', () => {
   it('reads an object saved before pages existed', () => {
     const old = { entry: 5, name: 'Note', type: 'text', displayId: 1, size: 1, spawns: [] };
-    expect(readEntities({ [ENTITIES_FIELD]: { npcs: [], objects: [old] } as never }).objects[0]).toMatchObject({ pages: [], onlyDuringQuest: false });
+    expect(readEntities({ [ENTITIES_FIELD]: { npcs: [], objects: [old] } as never }).objects[0]).toMatchObject({ pages: [], onlyDuringQuest: null });
   });
   it('writes pages as a chain and points a readable object at the first', () => {
     const note = { ...newObject(9100001), type: 'text' as const, name: 'Note', displayId: 1, pages: [{ id: 5001, text: 'First.' }, { id: 5002, text: 'Second.' }] };
@@ -21,15 +21,15 @@ describe('pages and quest-only objects', () => {
     expect(out.inserts.gameobject_template![0]).toMatchObject({ type: '9', Data0: '5001' });
   });
   it('limits a usable object to the quest and shows its page', () => {
-    const lever = { ...newObject(9100002), name: 'Lever', displayId: 1, pages: [{ id: 6001, text: 'Pull me.' }], onlyDuringQuest: true };
+    const lever = { ...newObject(9100002), name: 'Lever', displayId: 1, pages: [{ id: 6001, text: 'Pull me.' }], onlyDuringQuest: 60001 };
     expect(compile([lever]).inserts.gameobject_template![0]).toMatchObject({ type: '10', Data1: '60001', Data7: '6001' });
-    const free = { ...lever, onlyDuringQuest: false, pages: [] };
+    const free = { ...lever, onlyDuringQuest: null, pages: [] };
     const row = compile([free]).inserts.gameobject_template![0]!;
     expect(row.Data1 ?? '0').toBe('0');
     expect(row.Data7 ?? '0').toBe('0');
   });
   it('limits a chest to the quest and keeps its loot id', () => {
-    const chest = { ...newObject(9100003), type: 'chest' as const, name: 'Chest', displayId: 1, onlyDuringQuest: true };
+    const chest = { ...newObject(9100003), type: 'chest' as const, name: 'Chest', displayId: 1, onlyDuringQuest: 60001 };
     expect(compile([chest]).inserts.gameobject_template![0]).toMatchObject({ Data1: '9100003', Data8: '60001' });
   });
   it('needs pages on a readable object and warns about empty ones', () => {

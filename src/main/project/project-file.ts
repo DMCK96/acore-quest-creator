@@ -2,7 +2,11 @@ import { z } from 'zod';
 import type { QuestAggregate, Snapshot } from '../../core/model/aggregate';
 import type { FidelityReport } from '../../core/roundtrip/verify';
 import { TOOL_VERSION } from '../../core/version';
-import { EMPTY_WORLD, type Placement, type RoutePoint, type WorldLayer } from '../../core/world/layer';
+import { migrateQuestEntities } from '../../core/entities/migrate';
+import { EMPTY_ENTITIES, readProjectEntities, type ProjectEntities } from '../../core/entities/model';
+import { EMPTY_WORLD, groupsOf, movementsOf, respawnsOf, type Placement, type RoutePoint, type WorldLayer } from '../../core/world/layer';
+import type { GroupMember, SpawnGroup } from '../../core/world/groups';
+import type { Movement } from '../../core/world/movement';
 import type { Viewport } from '../../shared/ipc';
 
 /**
@@ -11,9 +15,16 @@ import type { Viewport } from '../../shared/ipc';
  */
 
 export const PROJECT_FORMAT = 'acore-quest-creator/project';
-/** 2 added the world layer (a version 1 file opens with an empty one); 3 added the spawns placed in it. */
-export const PROJECT_VERSION = 3;
-export const PROJECT_EXTENSION = 'aqc';
+/**
+ * 2 added the world layer (a version 1 file opens with an empty one); 3 added the spawns placed in it;
+ * 4 moved new NPCs, objects and items from quests into the project (older files move them on open);
+ * 5 added respawn times, spawn groups and route walkers to the world layer (an older tool would drop
+ * them on a save, so it refuses the file instead).
+ */
+export const PROJECT_VERSION = 6;
+export const PROJECT_EXTENSION = 'awe';
+/** Every extension a project opens from: `.aqc` is what the app saved before it was renamed. */
+export const PROJECT_EXTENSIONS = [PROJECT_EXTENSION, 'aqc'] as const;
 export const DEFAULT_PROJECT_NAME = 'Untitled Project';
 export const DEFAULT_ID_RANGE = { start: 60000, end: 99999 } as const;
 
@@ -41,6 +52,10 @@ export interface ProjectDocument extends ProjectMeta {
   quests: ProjectQuest[];
   /** Edits to spawns and routes that are not part of any quest. */
   world: WorldLayer;
+  /** The project's new NPCs, objects and items. */
+  entities: ProjectEntities;
+  /** What moving an older project's quest entities into the store had to say; set only by `parseProject` */
+  migrationWarnings?: string[];
 }
 
 /** The file system as the project code needs it, injected so tests run without a disk. */
@@ -93,7 +108,22 @@ export function defaultProjectMeta(name: string, outputDir: string): ProjectMeta
 }
 
 const placement = (p: Placement) => ({ x: p.x, y: p.y, z: p.z, orientation: p.orientation, rotation: p.rotation });
+const movement = (m: Movement) => ({ type: m.type, wander: m.wander, pathId: m.pathId });
 const point = (p: RoutePoint) => ({ x: p.x, y: p.y, z: p.z, rest: p.rest });
+const member = (m: GroupMember) =>
+  m.type === 'group'
+    ? { type: m.type, id: m.id, chance: m.chance }
+    : m.type === 'quest'
+      ? { type: m.type, questId: m.questId }
+      : { type: m.type, kind: m.kind, guid: m.guid, entry: m.entry, chance: m.chance };
+const group = (g: SpawnGroup) => ({
+  id: g.id, name: g.name, map: g.map, maxActive: g.maxActive, members: g.members.map(member),
+  ...(g.event ? { event: { id: g.event.id, during: g.event.during } } : {}),
+  origin: g.origin.kind === 'new'
+    ? { kind: g.origin.kind }
+    : { kind: g.origin.kind, original: { template: g.origin.original.template, members: g.origin.original.members.map((m) => ({ table: m.table, row: m.row })), event: g.origin.original.event } },
+  ...(g.removed ? { removed: true } : {}),
+});
 
 /**
  * Keys are written in a fixed order and quests by id, so saving the same project twice gives the
@@ -125,12 +155,38 @@ export function serializeProject(doc: ProjectDocument): string {
       spawns: doc.world.spawns.map((s) => ({
         kind: s.kind, guid: s.guid, entry: s.entry, name: s.name, map: s.map, original: placement(s.original), current: placement(s.current),
       })),
-      routes: doc.world.routes.map((r) => ({ pathId: r.pathId, walkers: r.walkers, original: r.original.map(point), current: r.current.map(point) })),
+      routes: doc.world.routes.map((r) => ({
+        pathId: r.pathId, walkers: r.walkers, ...(r.name ? { name: r.name } : {}),
+        ...(r.walkerEntries ? { walkerEntries: r.walkerEntries.map((w) => ({ entry: w.entry, name: w.name })) } : {}),
+        original: r.original.map(point), current: r.current.map(point),
+      })),
       added: doc.world.added.map((a) => ({
         kind: a.kind, guid: a.guid, entry: a.entry, name: a.name, map: a.map, placement: placement(a.placement),
-        look: { displayId: a.look.displayId, scale: a.look.scale, equipment: a.look.equipment, preset: a.look.preset },
+        look: { displayId: a.look.displayId, scale: a.look.scale, equipment: a.look.equipment, preset: a.look.preset, ...(a.look.objectType !== undefined ? { objectType: a.look.objectType } : {}) },
+        ...(a.respawnSecs !== undefined ? { respawnSecs: a.respawnSecs } : {}),
       })),
+      // Left out while there are none, so a project with no movement edits saves as it did before
+      ...(movementsOf(doc.world).length > 0
+        ? {
+            movements: movementsOf(doc.world).map((m) => ({
+              guid: m.guid, entry: m.entry, name: m.name, map: m.map, addonRow: m.addonRow,
+              ...(m.addonSeed ? { addonSeed: m.addonSeed } : {}),
+              ...(m.originalRaw ? { originalRaw: { wander: m.originalRaw.wander, type: m.originalRaw.type } } : {}),
+              original: movement(m.original), current: movement(m.current),
+            })),
+          }
+        : {}),
+      // Left out while there are none, like movements
+      ...(respawnsOf(doc.world).length > 0
+        ? {
+            respawns: respawnsOf(doc.world).map((r) => ({
+              kind: r.kind, guid: r.guid, entry: r.entry, name: r.name, map: r.map, original: r.original, current: r.current,
+            })),
+          }
+        : {}),
+      ...(groupsOf(doc.world).length > 0 ? { groups: groupsOf(doc.world).map(group) } : {}),
     },
+    entities: doc.entities,
   };
   return `${JSON.stringify(file, null, 2)}\n`;
 }
@@ -174,6 +230,33 @@ const presetSchema = z.object({
   }),
 });
 const movementSchema = z.object({ type: z.enum(['idle', 'wander', 'path']), wander: z.number(), pathId: z.number().int().nullable() });
+const rowSchema = z.record(z.string(), z.string().nullable());
+const groupMemberSchema = z.discriminatedUnion('type', [
+  z.object({ type: z.literal('spawn'), kind: z.enum(['npc', 'object']), guid: z.number().int(), entry: z.number().int(), chance: z.number() }),
+  z.object({ type: z.literal('group'), id: z.number().int(), chance: z.number() }),
+  z.object({ type: z.literal('quest'), questId: z.number().int() }),
+]);
+const groupSchema = z.object({
+  id: z.number().int(),
+  name: z.string(),
+  map: z.number().int(),
+  maxActive: z.number().int(),
+  members: z.array(groupMemberSchema),
+  // Absent from a project saved before groups could follow an event
+  event: z.object({ id: z.number().int(), during: z.boolean() }).nullable().default(null),
+  origin: z.discriminatedUnion('kind', [
+    z.object({ kind: z.literal('new') }),
+    z.object({
+      kind: z.literal('existing'),
+      original: z.object({
+        template: rowSchema,
+        members: z.array(z.object({ table: z.enum(['pool_creature', 'pool_gameobject', 'pool_pool', 'pool_quest']), row: rowSchema })),
+        event: rowSchema.nullable(),
+      }),
+    }),
+  ]),
+  removed: z.boolean().optional(),
+});
 const worldSchema = z.object({
   spawns: z.array(
     z.object({
@@ -186,7 +269,17 @@ const worldSchema = z.object({
       current: placementSchema,
     }),
   ),
-  routes: z.array(z.object({ pathId: z.number().int(), walkers: z.number().int(), original: z.array(pointSchema), current: z.array(pointSchema) })),
+  routes: z.array(
+    z.object({
+      pathId: z.number().int(),
+      walkers: z.number().int(),
+      name: z.string().optional(),
+      // Absent from a project saved before the walkers' NPCs were kept
+      walkerEntries: z.array(z.object({ entry: z.number().int(), name: z.string() })).optional(),
+      original: z.array(pointSchema),
+      current: z.array(pointSchema),
+    }),
+  ),
   // Absent from a project saved before spawns could be placed
   added: z
     .array(
@@ -202,7 +295,11 @@ const worldSchema = z.object({
           scale: z.number(),
           equipment: z.tuple([z.number(), z.number(), z.number()]),
           preset: presetSchema.nullable(),
+          // Absent for an NPC, and from a project saved before an object's type was kept
+          objectType: z.number().int().optional(),
         }),
+        // Absent from a project saved before a placed spawn's respawn time could be set
+        respawnSecs: z.number().int().optional(),
       }),
     )
     .default([]),
@@ -222,6 +319,22 @@ const worldSchema = z.object({
       }),
     )
     .optional(),
+  // Absent from a project saved before respawn times could be changed
+  respawns: z
+    .array(
+      z.object({
+        kind: z.enum(['creature', 'gameobject']),
+        guid: z.number().int(),
+        entry: z.number().int(),
+        name: z.string(),
+        map: z.number().int(),
+        original: z.number().int(),
+        current: z.number().int(),
+      }),
+    )
+    .optional(),
+  // Absent from a project saved before spawns could be grouped
+  groups: z.array(groupSchema).optional(),
 });
 
 const fileSchema = z.object({
@@ -245,9 +358,11 @@ const fileSchema = z.object({
     }),
   ),
   world: worldSchema.optional(),
+  // Absent before version 4, whose quests carry their own; checked entry by entry when read
+  entities: z.unknown().optional(),
 });
 
-const NOT_A_PROJECT = 'This file is not an ACORE Quest Creator project.';
+const NOT_A_PROJECT = 'This file is not an Azeroth World Editor project.';
 
 export function parseProject(text: string): ProjectDocument {
   let raw: unknown;
@@ -273,23 +388,27 @@ export function parseProject(text: string): ProjectDocument {
     throw new ProjectFileError('corrupt', `The project file is damaged at ${path}: ${issue?.message ?? 'invalid'}`);
   }
   const f = parsed.data;
+  const quests = f.quests.map((q) => ({
+    questId: q.questId,
+    isNew: q.isNew,
+    aggregate: q.aggregate as unknown as QuestAggregate,
+    snapshot: q.snapshot as unknown as Snapshot | null,
+    fidelity: q.fidelity as unknown as FidelityReport | null,
+    x: q.x,
+    y: q.y,
+    lastExportPath: q.lastExportPath,
+  }));
+  const moved = f.version < 4 ? migrateQuestEntities(quests) : null;
   return {
     name: f.name,
     idRangeStart: f.idRange.start,
     idRangeEnd: f.idRange.end,
     outputDir: f.outputDir,
     viewport: f.viewport,
-    quests: f.quests.map((q) => ({
-      questId: q.questId,
-      isNew: q.isNew,
-      aggregate: q.aggregate as unknown as QuestAggregate,
-      snapshot: q.snapshot as unknown as Snapshot | null,
-      fidelity: q.fidelity as unknown as FidelityReport | null,
-      x: q.x,
-      y: q.y,
-      lastExportPath: q.lastExportPath,
-    })),
+    quests: moved ? moved.quests : quests,
     world: f.world ?? structuredClone(EMPTY_WORLD),
+    entities: moved ? moved.entities : f.entities === undefined ? structuredClone(EMPTY_ENTITIES) : readProjectEntities(f.entities),
+    ...(moved ? { migrationWarnings: moved.warnings } : {}),
   };
 }
 

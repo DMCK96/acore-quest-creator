@@ -17,6 +17,7 @@ class Model extends THREE.Mesh {
   #skinned: boolean;
 
   #boundingSphereWorld = new THREE.Sphere();
+  #posed = false;
 
   #size = 0.0;
   #sizeCategory = 0;
@@ -150,7 +151,24 @@ class Model extends THREE.Mesh {
     }
   }
 
+  /** Whether the bones have been worked out at least once: until then the model has no shape to carry */
+  get posed() {
+    return this.#posed;
+  }
+
+  /**
+   * Keeps the last pose for a frame the bones are not worked out, carried to where the camera is
+   * now (see `ModelSkeleton#correct`); what it wears stays where the last pose put it. The correction
+   * reaches the shader with the rest of the uniforms: each model has its own materials, so three.js
+   * sends them every draw.
+   */
+  carrySkeleton(camera: THREE.Camera) {
+    this.modelViewMatrix.multiplyMatrices(camera.matrixWorldInverse, this.matrixWorld);
+    this.animation.skeleton.correct(this.modelViewMatrix);
+  }
+
   updateSkeleton(camera: THREE.Camera) {
+    this.#posed = true;
     // Calculate current model view matrix. This calculation is also performed by the Three.js
     // renderer, but since model skeleton calculations need a current model view matrix and run
     // before the render call, we can't rely on the model view matrix update in the renderer.

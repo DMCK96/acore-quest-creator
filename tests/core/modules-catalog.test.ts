@@ -89,7 +89,8 @@ describe('module catalog', () => {
   it('offers the NPCs, objects & items module on any quest', () => {
     expect(offeredModules({}, [])).toContain('entities');
     expect(ownerOf('entities')).toBe('entities');
-    expect(resetModule('entities', { entities: { npcs: [{}], objects: [] } as never }, [])).toEqual({ entities: { npcs: [], objects: [] } });
+    // The NPCs, objects and items are the project's: resetting the quest's module leaves them be
+    expect(resetModule('entities', { entities: { npcs: [{}], objects: [] } as never }, [])).toEqual({});
   });
 
   it('resets every owned field that is not read-only', () => {

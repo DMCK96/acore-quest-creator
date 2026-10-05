@@ -31,7 +31,7 @@ describe('describe', () => {
     const p: Fight = { ...f, phases: ['Ground', 'Air'] };
     const d = (s: Parameters<typeof describeFightStep>[0]) => describeFightStep(s, p, names);
     expect(d({ kind: 'say', text: 'Die!', style: 'yell', waitMs: 0 })).toBe('yell "Die!"');
-    expect(d({ kind: 'credit', objective: 1, group: false, waitMs: 0 })).toBe('give the player credit for objective 1');
+    expect(d({ kind: 'credit', objective: 1, group: false, quest: 0, waitMs: 0 })).toBe('give the player credit for objective 1');
     expect(d({ kind: 'cast', spellId: 116, target: 'hurtFriend', waitMs: 0 })).toBe('cast Frostbolt on the hurt friend');
     expect(d({ kind: 'summonAdds', entry: 7, count: 2, at: 'aroundMe', attack: true, waitMs: 0 })).toBe('summon 2 × NPC 7 at its current target to attack');
     expect(d({ kind: 'summonAdds', entry: 7, count: 1, at: { x: 1, y: 2, z: 3, o: 0 }, attack: false, waitMs: 0 })).toBe('summon 1 × NPC 7 at a point');
