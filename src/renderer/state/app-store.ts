@@ -129,6 +129,11 @@ export interface AppState {
    * it), and sends it at once so it is its own undo step before an editor opens on it
    */
   createEntity(kind: 'npc' | 'object' | 'item', preset: Partial<CustomNpc> | Partial<CustomObject> | Partial<CustomItem>): Promise<{ entry: number } | { error: string }>;
+  /**
+   * Brings an NPC, object or item the database already has into the store, read as the database has it,
+   * and sends it at once as its own undo step; one the store has already is left as it is
+   */
+  adoptEntity(kind: 'npc' | 'object' | 'item', entry: number): Promise<{ entry: number } | { error: string }>;
   /** Switches the previewed quest into the module editor. */
   editQuest(): void;
   /** Leaves the editor for the chain canvas, sending any pending edit first; the quest stays previewed. */
@@ -578,6 +583,32 @@ export function createAppStore(api: Api, opts: { saveDelayMs?: number } = {}): A
       if (!sent.ok) {
         await get().loadEntities();
       await get().loadLayer();
+        return { error: sent.error.message };
+      }
+      await get().loadProjectState();
+      return { entry };
+    },
+
+    async adoptEntity(kind, entry) {
+      await get().flushEntities();
+      const listOf = (e: ProjectEntities) => (kind === 'npc' ? e.npcs : kind === 'object' ? e.objects : e.items);
+      if (listOf(get().entities).some((x) => x.entry === entry)) return { entry };
+      const read = await api.readExistingEntity(kind, entry);
+      if (!read.ok) return { error: read.error.message };
+      const now = get().entities;
+      // Read while it was waiting: another adopt may have brought it in meanwhile
+      if (listOf(now).some((x) => x.entry === entry)) return { entry };
+      const next: ProjectEntities =
+        kind === 'npc'
+          ? { ...now, npcs: [...now.npcs, read.value as CustomNpc] }
+          : kind === 'object'
+            ? { ...now, objects: [...now.objects, read.value as CustomObject] }
+            : { ...now, items: [...now.items, read.value as CustomItem] };
+      set({ entities: next });
+      const sent = await api.putProjectEntities(next);
+      if (!sent.ok) {
+        await get().loadEntities();
+        await get().loadLayer();
         return { error: sent.error.message };
       }
       await get().loadProjectState();

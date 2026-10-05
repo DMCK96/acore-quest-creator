@@ -6,7 +6,7 @@ import type { AllocKind } from '@shared/ipc';
 import { PanelFrame } from '../modules/ModulePanel';
 import { useApi } from '../state/names';
 import { ItemEditor } from './item/ItemEditor';
-import { NpcEditor } from './npc/NpcEditor';
+import { NpcEditor, type ExistingFacts } from './npc/NpcEditor';
 import { ObjectEditor } from './object/ObjectEditor';
 import { stillNeeds } from './still-needs';
 
@@ -29,8 +29,10 @@ function quoted(titles: readonly string[]): string {
  * The NPC, object or item editor as a modal: its title, its tabs and a footer with Done and Discard (a
  * new one) or Delete. Edits are written to the project's store as they are made. Delete asks first,
  * naming the quests that use it, then hands the delete to `onDelete` (which also empties those
- * quests' giver cards, as one step); without one it only takes the entity out of the store. When the
- * entity goes away (an undo) the editor closes itself.
+ * quests' giver cards, as one step); without one it only takes the entity out of the store. An existing
+ * entity (one the database already has) is titled so, and puts it back as the database has it instead of
+ * deleting it: it only leaves the store, as the quests naming it still name it. When the entity goes away
+ * (an undo) the editor closes itself.
  */
 export function EntityEditorHost({
   entities,
@@ -60,6 +62,13 @@ export function EntityEditorHost({
   const object = state.kind === 'object' ? entities.objects.find((o) => o.entry === state.entry) : undefined;
   const item = state.kind === 'item' ? entities.items.find((i) => i.entry === state.entry) : undefined;
   const entity = npc ?? object ?? item;
+  // The tab shown follows a click at once, whether or not the caller passes it back, and follows the caller when it moves
+  const [tab, setTab] = useState(state.tab);
+  useEffect(() => setTab(state.tab), [state.tab]);
+  const chooseTab = (id: string): void => {
+    setTab(id);
+    onTab(id);
+  };
   // The advanced item fields list the database's own columns, read once per editor.
   const [itemColumns, setItemColumns] = useState<ColumnInfo[]>([]);
   const isItem = state.kind === 'item';
@@ -81,7 +90,11 @@ export function EntityEditorHost({
 
   const word = { npc: 'NPC', object: 'object', item: 'item' }[state.kind];
   const Word = { npc: 'NPC', object: 'Object', item: 'Item' }[state.kind];
-  const title = state.isNew ? `New ${word}` : `${Word}: ${entity.name.trim() || entity.entry}`;
+  const existing: ExistingFacts | undefined =
+    entity.origin.kind === 'existing'
+      ? { sharedLoot: entity.origin.sharedLoot, spawnCount: entity.origin.spawnCount, locked: entity.origin.locked }
+      : undefined;
+  const title = state.isNew ? `New ${word}` : `${Word}: ${entity.name.trim() || entity.entry}${existing ? ' (existing)' : ''}`;
   const useKey = state.kind === 'npc' ? 'npcs' : state.kind === 'object' ? 'objects' : 'items';
   const users = quests.filter((q) => q.uses[useKey].includes(state.entry));
   // The quests that use it first, then the rest, for the quest an object is limited to
@@ -100,6 +113,17 @@ export function EntityEditorHost({
     return result?.ok && result.value ? (result.value as Partial<CustomItem>) : null;
   }
 
+  const withoutIt = (): ProjectEntities =>
+    ({ ...entities, [useKey]: (entities[useKey] as { entry: number }[]).filter((e) => e.entry !== state.entry) }) as ProjectEntities;
+
+  function putBack(): void {
+    const name = entity!.name.trim() || `this ${word}`;
+    if (!window.confirm(`Put back ${name} as the database has it? The changes made to it here are dropped.`)) return;
+    // Never onDelete: the quests naming it still name it, as the database has it
+    onChange(withoutIt());
+    onClose();
+  }
+
   async function remove(): Promise<void> {
     const verb = state.isNew ? 'Discard' : 'Delete';
     const name = entity!.name.trim() || `this ${word}`;
@@ -112,7 +136,7 @@ export function EntityEditorHost({
           : `${verb} ${name}? Quests ${quoted(titles)} name it; their giver cards will be emptied.`;
     if (!window.confirm(question)) return;
     if (onDelete) await onDelete(state.kind, state.entry);
-    else onChange({ ...entities, [useKey]: (entities[useKey] as { entry: number }[]).filter((e) => e.entry !== state.entry) } as ProjectEntities);
+    else onChange(withoutIt());
     onClose();
   }
 
@@ -121,9 +145,15 @@ export function EntityEditorHost({
     <>
       <span className="scene-hint">{needs && `Still needs ${needs}.`}</span>
       <span className="entry-card__actions">
-        <button type="button" className="btn entry-card__btn--danger" onClick={() => void remove()}>
-          {state.isNew ? 'Discard' : `Delete ${word}`}
-        </button>
+        {existing ? (
+          <button type="button" className="btn entry-card__btn--danger" onClick={putBack}>
+            Put back as the database has it
+          </button>
+        ) : (
+          <button type="button" className="btn entry-card__btn--danger" onClick={() => void remove()}>
+            {state.isNew ? 'Discard' : `Delete ${word}`}
+          </button>
+        )}
         <button type="button" className="btn btn--primary" onClick={onClose}>
           Done
         </button>
@@ -133,16 +163,19 @@ export function EntityEditorHost({
 
   return (
     <PanelFrame title={title} onClose={onClose} footer={footer}>
+      {existing && existing.spawnCount > 1 && (
+        <p className="scene-hint">{entity.name.trim() || `This ${word}`} has {existing.spawnCount} spawns in the world: changes here change all of them.</p>
+      )}
       {npc && (
-        <NpcEditor npc={npc} onChange={saveNpc} allocateSpawn={() => allocate('creatureSpawn')} tab={state.tab} onTab={onTab}
-          others={entities.npcs.filter((n) => n.entry !== npc.entry)} hasServerData={hasServerData} quests={questChoices} />
+        <NpcEditor npc={npc} onChange={saveNpc} allocateSpawn={() => allocate('creatureSpawn')} tab={tab} onTab={chooseTab}
+          others={entities.npcs.filter((n) => n.entry !== npc.entry)} hasServerData={hasServerData} quests={questChoices} existing={existing} />
       )}
       {object && (
         <ObjectEditor object={object} onChange={saveObject} allocateSpawn={() => allocate('gameobjectSpawn')} allocatePage={() => allocate('page')}
-          tab={state.tab} onTab={onTab} hasServerData={hasServerData} quests={questChoices} />
+          tab={tab} onTab={chooseTab} hasServerData={hasServerData} quests={questChoices} existing={existing} />
       )}
       {item && (
-        <ItemEditor item={item} onChange={saveItem} allocatePage={() => allocate('page')} copyLook={copyLook} columns={itemColumns} tab={state.tab} onTab={onTab} />
+        <ItemEditor item={item} onChange={saveItem} allocatePage={() => allocate('page')} copyLook={copyLook} columns={itemColumns} tab={tab} onTab={chooseTab} existing={existing} />
       )}
     </PanelFrame>
   );
