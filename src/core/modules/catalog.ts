@@ -13,7 +13,7 @@ import {
 } from './summaries';
 import { emptyValue, isUnset } from './values';
 import { SCRIPTS_FIELD } from '../scripts/model';
-import { ENTITIES_FIELD, type ProjectEntities } from '../entities/model';
+import { ENTITIES_FIELD } from '../entities/model';
 
 export { formatMoney } from './summaries';
 
@@ -246,10 +246,9 @@ export function isModulePresent(id: ModuleId, values: Values): boolean {
 }
 
 /** The modules shown for a quest: the core four always, then optional ones in use or just added. */
-/** `entities`: the project's NPCs, objects and items the quest uses; the module shows while there are any */
-export function presentModules(values: Values, added: readonly ModuleId[], entities?: ProjectEntities): ModuleId[] {
-  const uses = entities ? entities.npcs.length + entities.objects.length + entities.items.length > 0 : false;
-  return MODULES.filter((m) => m.kind === 'core' || added.includes(m.id) || isModulePresent(m.id, values) || (m.id === 'entities' && uses)).map(
+/** `entities`: the project's NPCs, objects and items; the module shows while the project tracks any */
+export function presentModules(values: Values, added: readonly ModuleId[], tracking = false): ModuleId[] {
+  return MODULES.filter((m) => m.kind === 'core' || added.includes(m.id) || isModulePresent(m.id, values) || (m.id === 'entities' && tracking)).map(
     (m) => m.id,
   );
 }
@@ -258,8 +257,8 @@ export function presentModules(values: Values, added: readonly ModuleId[], entit
  * The optional modules "Add module" offers: not shown yet, and backed by at least one field.
  * Advanced is always offered, because the columns the tool does not model are shown there.
  */
-export function offeredModules(values: Values, added: readonly ModuleId[], entities?: ProjectEntities): ModuleId[] {
-  const shown = new Set(presentModules(values, added, entities));
+export function offeredModules(values: Values, added: readonly ModuleId[], tracking = false): ModuleId[] {
+  const shown = new Set(presentModules(values, added, tracking));
   return MODULES.filter(
     (m) =>
       m.kind === 'optional' &&

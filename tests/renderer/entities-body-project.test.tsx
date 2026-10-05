@@ -3,7 +3,8 @@ import { describe, expect, it, vi } from 'vitest';
 import { screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { mountBody } from './module-harness';
-import { EMPTY_ENTITIES, newItem, newNpc, newObject } from '../../src/core/entities/model';
+import type { TrackedEntity } from '../../src/core/entities/entity';
+import { newItem, newNpc, newObject, EMPTY_ENTITIES } from '../../src/core/entities/model';
 import { MODULES } from '../../src/core/modules/catalog';
 import { entitiesSummary } from '../../src/core/modules/summaries';
 import { presentModules } from '../../src/core/modules/catalog';
@@ -14,12 +15,14 @@ const store = { ...EMPTY_ENTITIES,
 const others = [{ questId: 60002, title: 'Second', uses: { npcs: [12000002], objects: [], items: [] }, refs: { npcs: [12000002], objects: [], items: [] } }];
 
 describe('the quest\'s NPCs, objects & items over the project store', () => {
-  it('lists what the quest names, with the other quests that use each', async () => {
-    await mountBody('entities', { creature_queststarter: [{ id: 12000001 }], creature_questender: [{ id: 12000002 }] }, { entities: store, quests: others });
-    expect(screen.getByRole('listitem', { name: 'Hela' })).toBeTruthy();
-    const borin = screen.getByRole('listitem', { name: 'Borin' });
-    expect(within(borin).getByText('Also used by Second')).toBeTruthy();
-    expect(screen.queryByRole('listitem', { name: 'Vendor' })).toBeNull();
+  it("lists the whole project: this quest's first, then the others", async () => {
+    const tracked = [
+      { kind: 'npc', entry: 12000002, name: 'Borin', origin: 'new', changes: ['new'], usedBy: [60001, 60002], goTo: null },
+      { kind: 'npc', entry: 12000003, name: 'Vendor', origin: 'new', changes: ['new'], usedBy: [], goTo: null },
+    ] as TrackedEntity[];
+    await mountBody('entities', { creature_questender: [{ id: 12000002 }] }, { entities: store, quests: others, tracked });
+    expect(within(screen.getByRole('region', { name: 'Used by this quest' })).getByRole('listitem', { name: 'Borin' })).toBeTruthy();
+    expect(within(screen.getByRole('region', { name: 'Others in the project' })).getByRole('listitem', { name: 'Vendor' })).toBeTruthy();
   });
 
   it('adds a project NPC as the quest\'s giver from Add from project', async () => {
@@ -53,10 +56,13 @@ describe('the quest\'s NPCs, objects & items over the project store', () => {
 });
 
 describe('the module in the quest', () => {
-  it('owns no quest field, is shown when the quest uses something, and sums up what it uses', () => {
+  it('owns no field and shows while the project tracks anything', () => {
     expect(MODULES.find((m) => m.id === 'entities')!.owns).toEqual([]);
-    expect(presentModules({}, [], store)).toContain('entities');
-    expect(presentModules({}, [], EMPTY_ENTITIES)).not.toContain('entities');
+    expect(presentModules({}, [], true)).toContain('entities');
+    expect(presentModules({}, [], false)).not.toContain('entities');
+  });
+
+  it('sums up what the quest uses', () => {
     expect(entitiesSummary({}, { creature: {}, gameobject: {}, item: {} } as never, store)).toEqual(['3 NPCs, 1 object, 1 item', 'Hela', 'Borin']);
   });
 });

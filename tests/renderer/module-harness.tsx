@@ -21,6 +21,7 @@ import { forkDb } from '../helpers/fixtures';
 import { ENTITIES_FIELD, readEntities, writeEntities } from '../../src/core/entities/model';
 import { ProjectEntitiesProvider, type ProjectQuestUse } from '../../src/renderer/state/project-entities';
 import type { ProjectEntities } from '../../src/core/entities/model';
+import type { TrackedEntity } from '../../src/core/entities/entity';
 import { makeMockApi, sampleOpen } from './mock-api';
 
 /** Renders one module body over a brand new quest (level 10) with `over` applied on top. */
@@ -30,7 +31,7 @@ export async function mountBody(
   opts: {
     api?: Api; onChange?: Mock; links?: QuestLinks | null; readOnly?: ReadOnlyReason[]; sharedItems?: Record<string, number[]>; openMap?: (request: any) => void; openEditor?: OpenEditor;
     /** The project store; by default read from `over`'s old `entities` field */
-    entities?: ProjectEntities; quests?: ProjectQuestUse[]; setEntities?: Mock;
+    entities?: ProjectEntities; quests?: ProjectQuestUse[]; setEntities?: Mock; tracked?: TrackedEntity[];
   } = {},
 ): Promise<{ onChange: Mock; api: Api }> {
   const schema = await loadSchema(forkDb(), registry.tables.map((t) => t.table));
@@ -40,7 +41,7 @@ export async function mountBody(
   const onChange = opts.onChange ?? vi.fn();
   const withEditor = (ui: React.ReactNode): React.ReactNode => (opts.openEditor ? <EntityEditorProvider open={opts.openEditor}>{ui}</EntityEditorProvider> : ui);
   const entities = opts.entities ?? readEntities(over);
-  const project = { entities, setEntities: opts.setEntities ?? vi.fn(), quests: opts.quests ?? [], layer: { spawns: [], routes: [], added: [] }, setLayer: vi.fn(), tracked: [], create: vi.fn(async () => ({ error: 'not here' })), remove: vi.fn(async () => null) };
+  const project = { entities, setEntities: opts.setEntities ?? vi.fn(), quests: opts.quests ?? [], layer: { spawns: [], routes: [], added: [] }, setLayer: vi.fn(), tracked: opts.tracked ?? [], create: vi.fn(async () => ({ error: 'not here' })), remove: vi.fn(async () => null) };
   render(
     <ProjectEntitiesProvider value={project}>
     <NamesProvider api={api}>
