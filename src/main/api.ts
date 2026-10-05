@@ -1074,6 +1074,24 @@ export function createApi(deps: ApiDeps): Api {
    * ones over their own rows, then the world layer's edits, with a revert that deletes what the first
    * part writes, puts the existing ones' original rows back and puts the world back.
    */
+  /**
+   * Every pool with its map, read once per connection (a new connection has its own database object)
+   * rather than on each Find or group dialog open: on a large database that is tens of thousands of
+   * rows. Read again after an export, since the patch is about to change the pools.
+   */
+  let poolCache: { db: WorldDb; pools: ReturnType<typeof listPools> } | null = null;
+  const pools = (db: WorldDb): ReturnType<typeof listPools> => {
+    if (poolCache?.db !== db) {
+      const read = listPools(db);
+      poolCache = { db, pools: read };
+      // A failed read is not kept
+      read.catch(() => {
+        if (poolCache?.pools === read) poolCache = null;
+      });
+    }
+    return poolCache.pools;
+  };
+
   async function projectPatch(live: Session): Promise<{ apply: PatchStatement[]; revert: PatchStatement[]; schema: SchemaInfo; warnings: string[]; lootWarnings: string[] }> {
     const store = projectEntities();
     const layer: WorldLayer = deps.session.world.get();
@@ -2137,7 +2155,7 @@ export function createApi(deps: ApiDeps): Api {
         const db = connected().db;
         const layer = groupsOf(deps.session.world.get());
         const byId = new Map<number, { id: number; name: string; maxActive: number; members: number }>();
-        for (const pool of await listPools(db)) {
+        for (const pool of await pools(db)) {
           if (pool.map === map) byId.set(pool.id, { id: pool.id, name: pool.name, maxActive: pool.maxActive, members: pool.members });
         }
         // The layer's copy wins; one removed there, or moved to another map, is left out
@@ -2274,6 +2292,7 @@ export function createApi(deps: ApiDeps): Api {
         const revertPath = join(outputDir, `${date}_${sequence}_project_revert.sql`);
         await deps.fs.writeFile(applyPath, sql);
         await deps.fs.writeFile(revertPath, revertSql);
+        poolCache = null;
         return { applyPath, revertPath, sql, warnings };
       }),
 

@@ -64,6 +64,25 @@ describe('spawn groups through the API', () => {
     expect(((await api.worldNewGroupId()) as any).value).toBe(32494);
   });
 
+  it('reads the pool tables once per connection for the groups on a map, again after an export, with the same list', async () => {
+    const { api, db } = await setup();
+    const select = db.selectRows.bind(db);
+    let wholeReads = 0;
+    db.selectRows = async (table: string, where: any) => {
+      if (table === 'pool_creature' && Object.keys(where).length === 0) wholeReads += 1;
+      return select(table, where);
+    };
+    const first: any = await api.worldGroupsOnMap(571);
+    const again: any = await api.worldGroupsOnMap(571);
+    expect(again.value).toEqual(first.value);
+    expect(((await api.worldGroupsOnMap(0)) as any).value).toEqual([]);
+    expect(wholeReads).toBe(1);
+    await api.worldDeleteGroup(32493);
+    await api.exportProject();
+    expect(((await api.worldGroupsOnMap(571)) as any).value.map((g: any) => g.name)).toEqual(['Path 1', 'Time-Lost Proto Drake / Vyragosa']);
+    expect(wholeReads).toBe(2);
+  });
+
   it('saves a valid new group as one step, and refuses one the server would not load, with why', async () => {
     const { api } = await setup();
     const group = { id: 32494, name: 'Two drakes', map: 571, maxActive: 1, origin: { kind: 'new' },
