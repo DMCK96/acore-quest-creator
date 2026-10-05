@@ -7,6 +7,9 @@ import { EntityPicker } from '../../controls/EntityPicker';
 import { QuestStartsList } from '../../views/QuestStartsList';
 import { useMapOpener } from '../../map/MapOpener';
 import { useEntityEditor } from '../../entities/EntityEditorContext';
+import { useShowInWorld } from '../../world3d/ShowInWorldContext';
+import { useNameBook } from '../../state/names';
+import { giverName } from '@core/modules/summaries';
 import type { ModuleBodyProps } from '../body-props';
 import { FieldSetting } from '../FieldSetting';
 import '../modules.css';
@@ -21,6 +24,8 @@ export function GiverBody({ open, links, onChange, onOpenQuest }: ModuleBodyProp
   const { aggregate } = open;
   const openMap = useMapOpener();
   const openEditor = useEntityEditor();
+  const showInWorld = useShowInWorld();
+  const names = useNameBook();
   // The project's NPCs and objects: a card naming one shows its spawn and offers Place on map
   const entities = useProjectEntities()?.entities ?? EMPTY_ENTITIES;
   // Edits made after waiting for the server start from the values as they are then.
@@ -84,6 +89,13 @@ export function GiverBody({ open, links, onChange, onOpenQuest }: ModuleBodyProp
                     <EntityPicker id={id} label={`${list} ${n}`} kind={t.kind} value={t.id}
                       onChange={(picked) => set(i, { kind: t.kind, id: picked })} />
                     <div className="entry-card__actions entry-card__actions--end">
+                      {showInWorld && t.id > 0 && (
+                        <button type="button" className="entry-card__btn" title="Show in World"
+                          aria-label={`Go to ${giverName(t, names, entities)}`}
+                          onClick={() => showInWorld({ questId: open.questId, kind: t.kind, entry: t.id })}>
+                          Go to
+                        </button>
+                      )}
                       {openEditor && (
                         <button type="button" className="entry-card__btn" disabled={making}
                           aria-label={`${t.kind === 'creature' ? 'New NPC' : 'New object'} for ${list.toLowerCase()} ${n}`}

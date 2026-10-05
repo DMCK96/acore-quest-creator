@@ -5,6 +5,7 @@ import { useName, useNameBook } from '../state/names';
 import { EMPTY_ENTITIES } from '@core/entities/model';
 import { narrowTo, questUses } from '@core/entities/links';
 import { useProjectEntities } from '../state/project-entities';
+import { useShowInWorld } from '../world3d/ShowInWorldContext';
 import './QuestPreview.css';
 
 const plural = (n: number, word: string): string => `${n} ${word}${n === 1 ? '' : 's'}`;
@@ -21,6 +22,7 @@ export function QuestPreview({ store }: { store: AppStore }): React.JSX.Element 
   const closeEditor = store((s) => s.closeEditor);
   const removeNode = store((s) => s.removeNode);
   const names = useNameBook();
+  const showInWorld = useShowInWorld();
   // The quest log heading by name: a zone (positive) or a category (negative).
   const sortId = Number(open?.aggregate.values['quest_template.QuestSortID'] ?? 0);
   const sortLookup = useName('questSort', sortId);
@@ -90,6 +92,11 @@ export function QuestPreview({ store }: { store: AppStore }): React.JSX.Element 
         <button type="button" className="btn quest-preview__edit" onClick={editQuest}>
           Edit quest
         </button>
+        {showInWorld && (
+          <button type="button" className="btn" onClick={() => showInWorld({ questId: open.questId })}>
+            Show in World
+          </button>
+        )}
         <button type="button" className="btn" onClick={() => void remove()}>
           Remove from canvas
         </button>
