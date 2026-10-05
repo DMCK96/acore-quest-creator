@@ -2061,13 +2061,24 @@ export function createApi(deps: ApiDeps): Api {
       run(async () => {
         const layer = deps.session.world.get();
         const stale = layer.routes.filter((r) => r.original.length > 0 && !r.walkerEntries);
-        if (stale.length === 0 || !session) return layer;
+        // Objects placed before their type was recorded
+        const untyped = [...new Set(layer.added.filter((a) => a.kind === 'gameobject' && a.look.objectType === undefined).map((a) => a.entry))];
+        if ((stale.length === 0 && untyped.length === 0) || !session) return layer;
         const db = connected().db;
         const filled = new Map<number, { entry: number; name: string }[]>();
         for (const r of stale) filled.set(r.pathId, await readWalkerEntries(db, r.pathId));
+        const types = new Map<number, number>();
+        for (const entry of untyped) {
+          const type = (await readTemplateLook(db, 'gameobject', entry))?.look.objectType;
+          if (type !== undefined) types.set(entry, type);
+        }
         // Re-read the layer: an edit made while the database was read is kept
         const current = deps.session.world.get();
-        const next = { ...current, routes: current.routes.map((r) => (!r.walkerEntries && filled.has(r.pathId) ? { ...r, walkerEntries: filled.get(r.pathId)! } : r)) };
+        const next = {
+          ...current,
+          routes: current.routes.map((r) => (!r.walkerEntries && filled.has(r.pathId) ? { ...r, walkerEntries: filled.get(r.pathId)! } : r)),
+          added: current.added.map((a) => (a.kind === 'gameobject' && a.look.objectType === undefined && types.has(a.entry) ? { ...a, look: { ...a.look, objectType: types.get(a.entry)! } } : a)),
+        };
         deps.session.world.fill(next);
         return next;
       }),

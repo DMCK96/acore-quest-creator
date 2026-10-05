@@ -81,6 +81,20 @@ describe('the world layer through the API', () => {
     expect(session.dirty()).toBe(false);
   });
 
+  it('fills in the type of an object placed before types were recorded, without an undo step or a save', async () => {
+    const { api, session } = await setup(world);
+    const look = { displayId: 1949, scale: 1, equipment: [0, 0, 0] as [number, number, number], preset: null };
+    const at = { x: 1, y: 2, z: 3, orientation: 0, rotation: null };
+    session.world.put({ spawns: [], routes: [], added: [{ kind: 'gameobject', guid: 9, entry: 143981, name: 'Mailbox', map: 0, placement: at, look }] });
+    const steps = ((await api.historyList()) as any).value.steps.length;
+    session.markSaved('C:\p.json');
+    const out: any = await api.worldLayer();
+    expect(out.value.added[0].look.objectType).toBe(19);
+    expect(session.world.get().added[0]!.look.objectType).toBe(19);
+    expect(((await api.historyList()) as any).value.steps.length).toBe(steps);
+    expect(session.dirty()).toBe(false);
+  });
+
   it('keeps the name of an NPC that walks a route, for naming the change', async () => {
     const { api } = await setup(world);
     const out: any = await api.worldSetRoute(801, [{ x: 1, y: 2, z: 3, rest: {} }, { x: 4, y: 5, z: 6, rest: {} }]);
