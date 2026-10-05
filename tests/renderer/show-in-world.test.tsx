@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { describe, it, expect, vi } from 'vitest';
-import { render, screen } from '@testing-library/react';
+import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { createAppStore } from '../../src/renderer/state/app-store';
 import { QuestHeader } from '../../src/renderer/views/QuestHeader';
@@ -60,16 +60,17 @@ describe('Show in World', () => {
 });
 
 describe('Go to', () => {
+  const placed = vi.fn(async (_k: string, entry: number) => okv([{ guid: 1, entry, x: 0, y: 0, map: 0 } as any]));
   it('Go to beside a giver asks for that NPC', async () => {
     const show = vi.fn();
-    await mountBody('giver', { creature_queststarter: [{ id: 1423 }] }, { api: makeMockApi({ lookupNames }), showInWorld: show });
+    await mountBody('giver', { creature_queststarter: [{ id: 1423 }] }, { api: makeMockApi({ lookupNames, entitySpawns: placed as any }), showInWorld: show });
     await userEvent.click(await screen.findByRole('button', { name: 'Go to Stormwind Guard' }));
     expect(show).toHaveBeenCalledWith({ questId: 60001, kind: 'creature', entry: 1423 });
   });
 
   it('Go to beside an object ender asks for that object', async () => {
     const show = vi.fn();
-    await mountBody('giver', { gameobject_questender: [{ id: 1561 }] }, { api: makeMockApi({ lookupNames }), showInWorld: show });
+    await mountBody('giver', { gameobject_questender: [{ id: 1561 }] }, { api: makeMockApi({ lookupNames, entitySpawns: placed as any }), showInWorld: show });
     await userEvent.click(await screen.findByRole('button', { name: 'Go to Wanted Poster' }));
     expect(show).toHaveBeenCalledWith({ questId: 60001, kind: 'gameobject', entry: 1561 });
   });
@@ -78,10 +79,28 @@ describe('Go to', () => {
     const show = vi.fn();
     await mountBody('objectives', {
       'quest_template.RequiredNpcOrGo': [{ target: { target: 'creature', id: 299 }, count: 10 }, { target: { target: 'creature', id: 0 }, count: 1 }],
-    }, { api: makeMockApi({ lookupNames }), showInWorld: show });
+    }, { api: makeMockApi({ lookupNames, entitySpawns: placed as any }), showInWorld: show });
     await userEvent.click(await screen.findByRole('button', { name: 'Go to Diseased Young Wolf' }));
     expect(show).toHaveBeenCalledWith({ questId: 60001, kind: 'creature', entry: 299 });
     expect(screen.getAllByRole('button', { name: /^Go to / })).toHaveLength(1);
+  });
+
+  it('disables Go to for an NPC with no spawn, enabled while unknown or placed', async () => {
+    const entitySpawns = vi.fn(async (_k: string, entry: number) => okv(entry === 1423 ? [] : [{ guid: 1, entry, x: 0, y: 0, map: 0 } as any]));
+    await mountBody('giver', { creature_queststarter: [{ id: 1423 }] }, { api: makeMockApi({ lookupNames, entitySpawns: entitySpawns as any }), showInWorld: vi.fn() });
+    const button = await screen.findByRole('button', { name: 'Go to Stormwind Guard' });
+    await waitFor(() => expect(button).toHaveProperty('disabled', true));
+    expect(button.getAttribute('title')).toBe('No spawn in the world yet');
+    expect(button.getAttribute('aria-description')).toBe('No spawn in the world yet');
+    expect(entitySpawns).toHaveBeenCalledWith('creature', 1423);
+  });
+
+  it('keeps Go to enabled for an NPC that has spawns', async () => {
+    const entitySpawns = vi.fn(async (_k: string, entry: number) => okv([{ guid: 1, entry, x: 0, y: 0, map: 0 } as any]));
+    await mountBody('giver', { creature_queststarter: [{ id: 1423 }] }, { api: makeMockApi({ lookupNames, entitySpawns: entitySpawns as any }), showInWorld: vi.fn() });
+    const button = await screen.findByRole('button', { name: 'Go to Stormwind Guard' });
+    await waitFor(() => expect(entitySpawns).toHaveBeenCalled());
+    expect(button).toHaveProperty('disabled', false);
   });
 
   it('offers no Go to without a World', async () => {

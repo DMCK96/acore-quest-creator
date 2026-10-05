@@ -7,6 +7,7 @@ import { EntityPicker } from '../../controls/EntityPicker';
 import { QuestStartsList } from '../../views/QuestStartsList';
 import { useMapOpener } from '../../map/MapOpener';
 import { useEntityEditor } from '../../entities/EntityEditorContext';
+import { GoToButton } from '../../world3d/GoToButton';
 import { useShowInWorld } from '../../world3d/ShowInWorldContext';
 import { useNameBook } from '../../state/names';
 import { giverName } from '@core/modules/summaries';
@@ -90,11 +91,7 @@ export function GiverBody({ open, links, onChange, onOpenQuest }: ModuleBodyProp
                       onChange={(picked) => set(i, { kind: t.kind, id: picked })} />
                     <div className="entry-card__actions entry-card__actions--end">
                       {showInWorld && t.id > 0 && (
-                        <button type="button" className="entry-card__btn" title="Show in World"
-                          aria-label={`Go to ${giverName(t, names, entities)}`}
-                          onClick={() => showInWorld({ questId: open.questId, kind: t.kind, entry: t.id })}>
-                          Go to
-                        </button>
+                        <GoToButton questId={open.questId} kind={t.kind} entry={t.id} name={giverName(t, names, entities)} showInWorld={showInWorld} />
                       )}
                       {openEditor && (
                         <button type="button" className="entry-card__btn" disabled={making}
