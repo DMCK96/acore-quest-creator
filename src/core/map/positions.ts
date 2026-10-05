@@ -264,6 +264,21 @@ export function removeSpawn(entities: ProjectEntities, target: { kind: 'npc' | '
   return objects ? { ...entities, objects } : null;
 }
 
+/** How long one of the project's own spawns takes to respawn; null when it has no such spawn */
+export function setSpawnRespawn(entities: ProjectEntities, kind: 'npc' | 'object', entry: number, guid: number, secs: number): EntitiesEdit {
+  const timed = <T extends { entry: number; spawns: { guid: number; respawnSecs: number }[] }>(list: T[]): T[] | null => {
+    const owner = list.find((e) => e.entry === entry);
+    if (!owner || !owner.spawns.some((s) => s.guid === guid)) return null;
+    return list.map((e) => (e === owner ? { ...e, spawns: e.spawns.map((s) => (s.guid === guid ? { ...s, respawnSecs: secs } : s)) } : e));
+  };
+  if (kind === 'npc') {
+    const npcs = timed(entities.npcs);
+    return npcs ? { ...entities, npcs } : null;
+  }
+  const objects = timed(entities.objects);
+  return objects ? { ...entities, objects } : null;
+}
+
 /**
  * How one of the project's own NPC spawns moves: a path keeps the patrol it has (a new one when its id
  * differs), wander and standing still drop the patrol. Null when there is no such spawn.

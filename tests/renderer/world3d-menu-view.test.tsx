@@ -30,7 +30,7 @@ import { createAppStore } from '../../src/renderer/state/app-store';
 
 const EMPTY = { spawns: [], routes: [], added: [] };
 const look = { displayId: 1, scale: 1, equipment: [0, 0, 0] as [number, number, number], preset: null };
-const guard = { kind: 'creature' as const, guid: 80330, entry: 1423, name: 'Guard', own: false, added: false, pathId: 0, wander: 0, map: 0, placement: { x: 10, y: 0, z: 5, orientation: 1, rotation: null } };
+const guard = { kind: 'creature' as const, guid: 80330, entry: 1423, name: 'Guard', own: false, added: false, pathId: 0, wander: 0, map: 0, respawnSecs: 300, placement: { x: 10, y: 0, z: 5, orientation: 1, rotation: null } };
 const at = { x: 1, y: 2, z: 3 };
 
 beforeEach(() => clearClipboard());
@@ -140,6 +140,21 @@ describe('the right-click menu in the 3D view', () => {
     await userEvent.click(screen.getByRole('button', { name: 'Apply' }));
     await waitFor(() => expect(api.worldSetMovement).toHaveBeenCalledWith(80330, { type: 'wander', wander: 8, pathId: null }));
     await waitFor(() => expect(api.historyEnd).toHaveBeenCalledTimes(1));
+  });
+
+  it('Respawn time sets a database spawn\'s time through the world layer, as one step', async () => {
+    const { api, world } = await view({ worldSetRespawn: vi.fn(async () => okv(EMPTY)) });
+    const timed = { ...guard, respawnSecs: 300 };
+    rightClick(world, { ground: at, hit: { type: 'spawn', spawn: timed }, selection: [timed] });
+    await userEvent.click(screen.getByRole('menuitem', { name: 'Respawn time…' }));
+    await userEvent.clear(screen.getByLabelText('Minutes'));
+    await userEvent.type(screen.getByLabelText('Minutes'), '1');
+    await userEvent.clear(screen.getByLabelText('Seconds'));
+    await userEvent.type(screen.getByLabelText('Seconds'), '0');
+    await userEvent.click(screen.getByRole('button', { name: 'Apply' }));
+    await waitFor(() => expect(api.worldSetRespawn).toHaveBeenCalledWith('creature', 80330, 60));
+    await waitFor(() => expect(api.historyEnd).toHaveBeenCalledTimes(1));
+    expect(api.historyBegin).toHaveBeenCalledWith('Respawn time of Guard', undefined);
   });
 
   it('says so and does nothing when the right-clicked spawn has gone', async () => {

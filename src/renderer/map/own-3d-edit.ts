@@ -1,6 +1,6 @@
 import type { PatrolPoint } from '@core/entities/model';
 import { newPatrol, newPatrolPoint, patrolOf, setPatrol } from '@core/map/patrol';
-import { addSpawn, placeSpawn, removeSpawn, setSpawnMovement } from '@core/map/positions';
+import { addSpawn, placeSpawn, removeSpawn, setSpawnMovement, setSpawnRespawn } from '@core/map/positions';
 import type { ProjectEntities } from '@core/entities/model';
 import type { EditPoint, SpawnEdit } from '../world3d/edits';
 
@@ -26,6 +26,7 @@ export function ownEdit(entities: ProjectEntities, edit: SpawnEdit): ProjectEnti
     return added && kind === 'object' ? (placeSpawn(added, id, edit.at) ?? added) : added;
   }
   if (edit.kind === 'movement') return kind === 'creature' ? setSpawnMovement(entities, entry, guid, edit.to) : null;
+  if (edit.kind === 'respawn') return setSpawnRespawn(entities, owner, entry, guid, edit.secs);
   const patrol = patrolOf(entities, entry, guid);
   if (patrol) return setPatrol(entities, entry, guid, { ...patrol, points: toPatrolPoints(edit.points) });
   // A route for an NPC with no patrol yet: a path drawn in 3D starts one

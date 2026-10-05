@@ -44,6 +44,8 @@ export type SpawnInfo = {
   wander: number;
   map: number;
   placement: Placement;
+  /** Seconds before it respawns */
+  respawnSecs: number;
 };
 
 /** An object's facing: its turn about Z, from 0 to a whole turn */
@@ -351,6 +353,12 @@ class SpawnManager {
     const placed = (kind: 'creature' | 'gameobject', guid: number) => this.#layer.spawns.find((s) => s.kind === kind && s.guid === guid)?.current;
     const routes = new globalThis.Map(this.#layer.routes.map((r) => [r.pathId, r.current]));
     const movements = new globalThis.Map((this.#layer.movements ?? []).map((m) => [m.guid, m.current]));
+    const respawns = new globalThis.Map((this.#layer.respawns ?? []).map((r) => [`${r.kind}:${r.guid}`, r.current]));
+    // The layer's respawn time over the database's
+    const timed = <T extends ViewCreature | ViewObject>(kind: 'creature' | 'gameobject', s: T): T => {
+      const secs = respawns.get(`${kind}:${s.guid}`);
+      return secs === undefined ? s : { ...s, respawnSecs: secs };
+    };
     // The layer's movement first, so a new path is found by its id among the layer's routes
     const routed = (c: ViewCreature): ViewCreature => {
       const movement = movements.get(c.guid);
@@ -360,7 +368,7 @@ class SpawnManager {
     };
     const creature = (c: ViewCreature): ViewCreature => {
       const at = placed('creature', c.guid);
-      return routed(at ? { ...c, x: at.x, y: at.y, z: at.z, orientation: at.orientation } : c);
+      return routed(timed('creature', at ? { ...c, x: at.x, y: at.y, z: at.z, orientation: at.orientation } : c));
     };
     const pending = (c: ViewCreature): ViewCreature => {
       const movement = this.#pendingMovements.get(c.guid);
@@ -370,13 +378,14 @@ class SpawnManager {
     };
     const object = (o: ViewObject): ViewObject => {
       const at = placed('gameobject', o.guid);
-      return at ? { ...o, x: at.x, y: at.y, z: at.z, ...(at.rotation ? { rotation: at.rotation } : {}) } : o;
+      return timed('gameobject', at ? { ...o, x: at.x, y: at.y, z: at.z, ...(at.rotation ? { rotation: at.rotation } : {}) } : o);
     };
     // Spawns placed in the view, drawn as their template looked when they were placed
     const placedCreatures = this.#layer.added.filter((a) => a.kind === 'creature').map(
       (a): ViewCreature => ({
         guid: a.guid, entry: a.entry, name: a.name, map: a.map, x: a.placement.x, y: a.placement.y, z: a.placement.z, orientation: a.placement.orientation,
         displayId: a.look.displayId, scale: a.look.scale, wander: 0, path: null, pathId: 0, equipment: a.look.equipment, own: false, added: true, event: null, events: [], removedBy: [], preset: a.look.preset,
+        respawnSecs: a.respawnSecs ?? 300,
       }),
     );
     const placedObjects = this.#layer.added.filter((a) => a.kind === 'gameobject').map(
@@ -385,6 +394,7 @@ class SpawnManager {
         // Turned about Z by its facing unless it was tilted
         rotation: a.placement.rotation ?? [0, 0, Math.sin(a.placement.orientation / 2), Math.cos(a.placement.orientation / 2)],
         displayId: a.look.displayId, scale: a.look.scale, own: false, added: true, event: null, events: [], removedBy: [],
+        respawnSecs: a.respawnSecs ?? 300,
       }),
     );
     return {
@@ -432,7 +442,7 @@ class SpawnManager {
     for (const group of this.#areas.values()) {
       const data: ViewCreature | ViewObject | undefined = (kind === 'creature' ? group.userData.creatures : group.userData.objects)?.get(guid);
       if (!data) continue;
-      const base = { kind, guid, entry: data.entry, name: data.name, own: data.own, added: data.added ?? false, map: data.map };
+      const base = { kind, guid, entry: data.entry, name: data.name, own: data.own, added: data.added ?? false, map: data.map, respawnSecs: data.respawnSecs ?? 300 };
       if (kind === 'creature') {
         const c = data as ViewCreature;
         return { ...base, pathId: c.pathId ?? 0, wander: c.wander, placement: { x: c.x, y: c.y, z: c.z, orientation: c.orientation, rotation: null } };

@@ -342,7 +342,7 @@ class MysqlWorldDb implements WorldDb {
       ' LEFT JOIN creature_addon ad ON ad.guid = s.guid' + (templateRoutes ? ` LEFT JOIN creature_template_addon ta ON ta.entry = s.${entry}` : '');
     const creatureRows = await query(
       'reading creature',
-      `SELECT s.guid, s.${entry} AS entry, s.map, s.position_x, s.position_y, s.position_z, s.orientation, s.wander_distance, s.MovementType, s.equipment_id, ` +
+      `SELECT s.guid, s.${entry} AS entry, s.map, s.position_x, s.position_y, s.position_z, s.orientation, s.wander_distance, s.MovementType, s.equipment_id, s.spawntimesecs, ` +
         `t.name, m.CreatureDisplayID AS display_id, m.DisplayScale AS display_scale, ${pathColumn} AS path_id${creatureEvents.columns} ` +
         `FROM creature s LEFT JOIN creature_template t ON t.entry = s.${entry}${routeJoins} ` +
         `LEFT JOIN (SELECT CreatureID, MIN(Idx) AS Idx FROM creature_template_model GROUP BY CreatureID) f ON f.CreatureID = s.${entry} ` +
@@ -394,7 +394,7 @@ class MysqlWorldDb implements WorldDb {
     const objectEvents = await eventOf('game_event_gameobject');
     const objectRows = await query(
       'reading gameobject',
-      `SELECT s.guid, s.id AS entry, s.map, s.position_x, s.position_y, s.position_z, s.rotation0, s.rotation1, s.rotation2, s.rotation3, ` +
+      `SELECT s.guid, s.id AS entry, s.map, s.position_x, s.position_y, s.position_z, s.rotation0, s.rotation1, s.rotation2, s.rotation3, s.spawntimesecs, ` +
         `t.name, t.displayId AS display_id, t.size${objectEvents.columns} FROM gameobject s LEFT JOIN gameobject_template t ON t.entry = s.id${objectEvents.joins} ` +
         `WHERE ${boxed} ORDER BY s.guid LIMIT ?`,
       [...boxParams, take],
