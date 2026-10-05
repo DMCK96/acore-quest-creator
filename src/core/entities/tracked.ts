@@ -1,4 +1,4 @@
-import { movementsOf, type WorldLayer } from '../world/layer';
+import { groupsOf, movementsOf, respawnsOf, type WorldLayer } from '../world/layer';
 import { spawnKindOf, type EntityChange, type EntityKind, type SpawnLocation, type TrackedEntity } from './entity';
 import type { QuestUse } from './links';
 import type { ProjectEntities, StoredOrigin } from './model';
@@ -17,7 +17,7 @@ const LIST_OF = { npc: 'npcs', object: 'objects', item: 'items' } as const;
 /**
  * Every new NPC, object and item, every existing one edited in the project (its details), and every
  * existing NPC or object the project changed through the world layer (spawn moves, placed spawns,
- * movement, paths), with what changed and the quests using it.
+ * movement, paths, respawn times, spawn groups), with what changed and the quests using it.
  */
 export function trackedEntities(input: { store: ProjectEntities; layer: WorldLayer; quests: readonly TrackedQuest[] }): TrackedEntity[] {
   const { store, layer, quests } = input;
@@ -55,6 +55,7 @@ export function trackedEntities(input: { store: ProjectEntities; layer: WorldLay
 
   for (const s of layer.spawns) touch(spawnKindOf(s.kind), s.entry, s.name, 'spawns', locate(s.kind, s.guid, s.map, s.current));
   for (const a of layer.added) touch(spawnKindOf(a.kind), a.entry, a.name, 'spawns', locate(a.kind, a.guid, a.map, a.placement));
+  for (const r of respawnsOf(layer)) touch(spawnKindOf(r.kind), r.entry, r.name, 'spawns');
   const movements = movementsOf(layer);
   for (const m of movements) touch('npc', m.entry, m.name, 'movement');
   for (const r of layer.routes) {
@@ -62,6 +63,10 @@ export function trackedEntities(input: { store: ProjectEntities; layer: WorldLay
       ? movements.filter((m) => m.current.pathId === r.pathId).map((m) => ({ entry: m.entry, name: m.name }))
       : (r.walkerEntries ?? []);
     for (const w of walkers) touch('npc', w.entry, w.name, 'path');
+  }
+  // Every entity with a spawn in a group the project made or changed; members only carry an entry, not a name
+  for (const g of groupsOf(layer)) {
+    for (const m of g.members) if (m.type === 'spawn') touch(m.kind, m.entry, '', 'group');
   }
   for (const t of touched.values()) {
     const changes = CHANGE_ORDER.filter((c) => t.changes.has(c));
