@@ -6,7 +6,6 @@ import { defaultProjectMeta } from '../../src/main/project/project-file';
 import type { ProjectController } from '../../src/main/project/controller';
 import { forkDb } from '../helpers/fixtures';
 import { newNpc, newSpawn, writeEntities } from '../../src/core/entities/model';
-import { questPlace } from '../../src/renderer/world3d/quest-place';
 
 const box = { encrypt: (s: string) => Uint8Array.from(Buffer.from(s)), decrypt: (b: Uint8Array) => Buffer.from(b).toString() };
 
@@ -15,12 +14,14 @@ async function setup(seed: (db: ReturnType<typeof forkDb>) => void = () => {}) {
   seed(db);
   const written = new Map<string, string>();
   const session = createProjectSession(defaultProjectMeta('P', 'C:\\out'));
-  const api = createApi({ store: openStore(':memory:', box), openWorldDb: async () => db, openDevDb: async () => { throw new Error('x'); },
+  // A second window onto the same project, never connected
+  const make = () => createApi({ store: openStore(':memory:', box), openWorldDb: async () => db, openDevDb: async () => { throw new Error('x'); },
     fs: { writeFile: async (p: string, t: string) => { written.set(p, t); }, ensureDir: async () => {}, listDir: async () => [...written.keys()].map((p) => p.split('\\').at(-1)!) },
     now: () => new Date('2026-10-03T12:00:00Z'), session, projects: {} as ProjectController });
+  const api = make();
   const rec: any = await api.saveProfile({ name: 'w', role: 'world', host: 'h', port: 1, user: 'u', database: 'd', password: 'p' });
   await api.connect(rec.value.id);
-  return { api, db, session, written };
+  return { api, db, session, written, offline: make };
 }
 
 const world = (db: ReturnType<typeof forkDb>) => {
@@ -382,7 +383,6 @@ describe('the spawns a quest uses', () => {
     const spawns = out.value[0].spawns;
     expect(spawns.find((s: any) => s.guid === 900).role).toBe('giver');
     expect(spawns.filter((s: any) => s.role === 'objective').map((s: any) => s.guid).sort()).toEqual([80330, 80331, 80332]);
-    expect(questPlace(out.value, { map: 0, x: -9480, y: 70, z: 56 })).toMatchObject({ guid: 900 });
   });
 
   it('reads a template-only addon as the seed of the spawn row a new path writes, and keeps the raw wander for the revert', async () => {
@@ -407,6 +407,22 @@ describe('the spawns a quest uses', () => {
     const spawns = out.value[0].spawns;
     expect(spawns.find((s: any) => s.guid === 80330)).toMatchObject({ role: 'giver', x: -9000, y: 74.42, z: 56.55 });
     expect(spawns.find((s: any) => s.guid === added.value.guid)).toMatchObject({ role: 'giver', kind: 'creature', entry: 1423, map: 0, x: 5, y: 6, z: 7 });
+  });
+
+  it('without the world database, lists the project’s own spawns and the spawns placed in the World, and says the database was not read', async () => {
+    const { api, session, offline } = await setup(world);
+    const created: any = await api.newQuest();
+    const values = { ...created.value.aggregate.values, creature_queststarter: [{ id: 12000001 }], creature_questender: [{ id: 1423 }] };
+    await api.updateQuest({ ...created.value.aggregate, values });
+    await api.putProjectEntities({ npcs: [{ ...newNpc(12000001), name: 'Hela', spawns: [{ ...newSpawn(900), map: 0, x: 1, y: 2, z: 3 }] }], objects: [], items: [] });
+    const look = { displayId: 1, scale: 1, equipment: [0, 0, 0] as [number, number, number], preset: null };
+    const moved = { kind: 'creature' as const, guid: 80330, entry: 1423, name: 'Stormwind Guard', map: 0, original: to(1), current: to(-9000) };
+    session.world.put({ spawns: [moved], routes: [], added: [{ kind: 'creature', guid: 77, entry: 1423, name: 'Stormwind Guard', map: 0, placement: { x: 5, y: 6, z: 7, orientation: 0, rotation: null }, look }] });
+    const out: any = await offline().questSpawnList([created.value.questId]);
+    expect(out.ok).toBe(true);
+    expect(out.value[0].offline).toBe(true);
+    expect(out.value[0].spawns.map((s: any) => `${s.role}:${s.guid}`).sort()).toEqual(['ender:77', 'ender:80330', 'giver:900']);
+    expect(out.value[0].spawns.find((s: any) => s.guid === 80330)).toMatchObject({ x: -9000, map: 0 });
   });
 
   it('says how many NPCs or objects had more spawns than were listed', async () => {

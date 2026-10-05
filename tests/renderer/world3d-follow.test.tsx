@@ -34,11 +34,11 @@ type Props = { active?: boolean; follow?: { questId: number; at: number }; now?:
 const giver = { kind: 'creature', guid: 6000001, entry: 12000001, name: 'Hela', map: 1, x: 500, y: 0, z: 0, role: 'giver' };
 let api: ReturnType<typeof makeMockApi>;
 
-function mount(first: Props) {
+function mount(first: Props, questSpawnList?: any) {
   vi.stubGlobal('fetch', async () => new Response(new Uint8Array([1]), { status: 200 }));
   api = makeMockApi({ worldLayer: vi.fn(async () => okv({ spawns: [], routes: [], added: [] })),
     mapFloors: vi.fn(async () => okv({ floors: [31], ground: 31 })),
-    questSpawnList: vi.fn(async () => okv([{ questId: 60001, title: 'Q', spawns: [giver], capped: false, cut: 0 }])) as any });
+    questSpawnList: questSpawnList ?? (vi.fn(async () => okv([{ questId: 60001, title: 'Q', spawns: [giver], capped: false, cut: 0 }])) as any) });
   const value = { entities: EMPTY_ENTITIES, setEntities: vi.fn(), quests: [], layer: { spawns: [], routes: [], added: [] }, setLayer: vi.fn(), tracked: [],
     create: vi.fn(async () => ({ error: 'no' })), remove: vi.fn(async () => null), adopt: vi.fn(async () => ({ error: 'no' })), ensure: vi.fn(async () => null) };
   // The clock stays where the test puts it: by default before any quest was opened
@@ -123,5 +123,23 @@ describe('Show in World and Go to', () => {
     view.rerender({ active: true, showRequest: { target: { questId: 60001, kind: 'creature', entry: 99 }, nonce: 1 } });
     expect(await screen.findByText('Nothing of this quest is placed in the world yet.')).toBeTruthy();
     expect(screen.getByRole('button', { name: 'Back' })).toHaveProperty('disabled', true);
+  });
+
+  it('says the world database is needed when the quest’s spawns cannot be read', async () => {
+    const view = mount({ active: true }, vi.fn(async () => ({ ok: false, error: { code: 'NOT_CONNECTED', message: 'Connect to a world database first.' } })));
+    await waitFor(() => expect(worlds).toHaveLength(1));
+    view.rerender({ active: true, showRequest: { target: { questId: 60001 }, nonce: 1 } });
+    expect(await screen.findByText('Needs the world database')).toBeTruthy();
+    expect(screen.queryByText('Connect to a world database first.')).toBeNull();
+  });
+
+  it('offline, goes to a spawn of the project or the layer, and says the database is needed for any other', async () => {
+    const offline = vi.fn(async () => okv([{ questId: 60001, title: 'Q', spawns: [giver], capped: false, cut: 0, offline: true }]));
+    const view = mount({ active: true }, offline);
+    await waitFor(() => expect(worlds).toHaveLength(1));
+    view.rerender({ active: true, showRequest: { target: { questId: 60001, kind: 'creature', entry: 99 }, nonce: 1 } });
+    expect(await screen.findByText('Needs the world database')).toBeTruthy();
+    view.rerender({ active: true, showRequest: { target: { questId: 60001, kind: 'creature', entry: 12000001 }, nonce: 2 } });
+    await waitFor(() => expect(worlds.at(-1).options.map).toBe(1));
   });
 });

@@ -279,7 +279,7 @@ export function WorldWorkspace({
   /**
    * Where a quest is, or the nearest spawn of one of its NPCs or objects: a spawn to go to, null when
    * nothing of it is placed, or why it could not be told. Without the world database only the project's
-   * own NPCs and objects can be found.
+   * own NPCs and objects, and the spawns the World's layer moved or placed, can be found.
    */
   const placeOf = async (target: ShowTarget): Promise<{ spawn: FoundSpawn | null } | { error: string }> => {
     const from = { map: mapRef.current, ...placeRef.current };
@@ -287,7 +287,7 @@ export function WorldWorkspace({
     let groups: QuestSpawnGroup[];
     if (api) {
       const read = await api.questSpawnList([target.questId]);
-      if (!read.ok) return { error: read.error.message };
+      if (!read.ok) return { error: NEEDS_DATABASE };
       groups = read.value;
     } else {
       const owner = !only ? undefined : only.kind === 'creature'
@@ -298,6 +298,8 @@ export function WorldWorkspace({
       groups = [{ questId: target.questId, title: '', spawns, capped: false, cut: 0 }];
     }
     const s = questPlace(groups, from, only);
+    // Nothing the project or the layer has: the database may still have it
+    if (!s && groups.some((g) => g.offline)) return { error: NEEDS_DATABASE };
     if (!s || !worldMapById(s.map)) return { spawn: null };
     return { spawn: { kind: s.kind === 'gameobject' ? 'object' : 'creature', guid: s.guid, entry: s.entry, name: s.name, map: s.map, x: s.x, y: s.y, z: s.z, event: s.event ?? null, note: null } };
   };
