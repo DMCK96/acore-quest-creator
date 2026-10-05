@@ -1,5 +1,6 @@
 import { useEffect } from 'react';
 import { moduleById, presentModules } from '@core/modules/catalog';
+import { rotationLine } from '@core/modules/summaries';
 import type { AppStore } from '../state/app-store';
 import { useName, useNameBook } from '../state/names';
 import { EMPTY_ENTITIES } from '@core/entities/model';
@@ -21,6 +22,7 @@ export function QuestPreview({ store }: { store: AppStore }): React.JSX.Element 
   const editQuest = store((s) => s.editQuest);
   const closeEditor = store((s) => s.closeEditor);
   const removeNode = store((s) => s.removeNode);
+  const questPools = store((s) => s.questPools);
   const names = useNameBook();
   const showInWorld = useShowInWorld();
   // The quest log heading by name: a zone (positive) or a category (negative).
@@ -71,7 +73,8 @@ export function QuestPreview({ store }: { store: AppStore }): React.JSX.Element 
       <div className="quest-preview__body">
         {presentModules(values, [], (project?.tracked.length ?? 0) > 0).map((id) => {
           const def = moduleById(id);
-          const lines = def.summary(values, names, mine);
+          const inRotation = id === 'behaviour' ? rotationLine(open.questId, questPools) : null;
+          const lines = [...def.summary(values, names, mine), ...(inRotation ? [inRotation] : [])];
           return (
             <section key={id} className="quest-preview__module">
               <h3 className="quest-preview__module-title">{def.label}</h3>

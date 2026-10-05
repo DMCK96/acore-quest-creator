@@ -11,12 +11,14 @@ export interface ModuleBoxProps {
   entities?: ProjectEntities;
   severity: 'error' | 'warning' | null;
   selected: boolean;
+  /** Lines the module's own summary cannot know, after it (the rotation the quest is in) */
+  extra?: readonly string[];
   onOpen(): void;
 }
 
 /** One module in the flow: its name and a line per thing set up in it, dashed while still empty. */
-export function ModuleBox({ def, values, names, entities, severity, selected, onOpen }: ModuleBoxProps): React.JSX.Element {
-  const lines = def.summary(values, names, entities);
+export function ModuleBox({ def, values, names, entities, severity, selected, extra = [], onOpen }: ModuleBoxProps): React.JSX.Element {
+  const lines = [...def.summary(values, names, entities), ...extra];
   const empty = def.id === 'entities' ? lines.length === 0 : !isModulePresent(def.id, values);
   const classes = ['module-box', empty && 'module-box--empty', selected && 'module-box--selected', severity && `module-box--${severity}`]
     .filter(Boolean)

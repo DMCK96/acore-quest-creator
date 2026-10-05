@@ -36,7 +36,8 @@ export interface GroupView {
 }
 
 /** Spawns a group save moves out of the group they were in */
-export type GroupMove = { kind: 'npc' | 'object'; guid: number };
+/** A member to take out of the group it is in when a group is saved: a spawn, or a quest leaving its rotation */
+export type GroupMove = { kind: 'npc' | 'object'; guid: number } | { kind: 'quest'; questId: number };
 
 /** A spawn group check: the reasons it cannot be saved, and notes that do not block it */
 /** A quest pool (rotation) in the database: its quests, how many are offered each reset, and whether they are daily (else weekly). */
@@ -342,6 +343,10 @@ export interface CanvasNode {
   uses: QuestUse;
   /** Everything the quest references, whether or not the project has it */
   refs: QuestUse;
+  /** Offered again each day (quest_template.Flags 0x1000) */
+  daily?: boolean;
+  /** Offered again each week (quest_template.Flags 0x8000) */
+  weekly?: boolean;
 }
 
 /** How a quest is offered, reduced to the few kinds a canvas node has room to show. */
@@ -638,7 +643,14 @@ const spawnGroupArg = z.object({
   ]),
   removed: z.boolean().optional(),
 });
-const groupMovesArg = z.array(z.object({ kind: z.enum(['npc', 'object']), guid: z.number().int().min(1) })).max(1000);
+const groupMovesArg = z
+  .array(
+    z.union([
+      z.object({ kind: z.enum(['npc', 'object']), guid: z.number().int().min(1) }),
+      z.object({ kind: z.literal('quest'), questId: z.number().int().min(1) }),
+    ]),
+  )
+  .max(1000);
 const routePointArg = z.object({ x: finite, y: finite, z: finite, rest: z.record(z.string(), z.string().nullable()) });
 
 const profileFields = {

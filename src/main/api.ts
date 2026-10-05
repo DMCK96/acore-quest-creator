@@ -34,8 +34,8 @@ import { diffSchema, hasBlockingDrift } from '../core/schema/diff';
 import { loadSchema } from '../core/schema/load';
 import { refCheckerFor, validateQuest, type Issue, type RefChecker } from '../core/validate/validate';
 import { TOOL_VERSION } from '../core/version';
-import { addSpawn, deleteGroup, dropGroupMember, dropMember, groupsOf, hasWorldChanges, isAdded, moveSpawn, movementsOf, putGroup, respawnsOf, revertGroup, revertMovement, revertRespawn, revertRoute, revertSpawn, setMovement, setRespawn, setRoute, worldStatements, type RoutePoint, type SpawnDefaults, type WorldLayer } from '../core/world/layer';
-import { isQuestPool, memberKey, validateGroup, type SpawnGroup } from '../core/world/groups';
+import { addSpawn, deleteGroup, dropGroupMember, dropMember, dropQuestMember, groupsOf, hasWorldChanges, isAdded, moveSpawn, movementsOf, putGroup, respawnsOf, revertGroup, revertMovement, revertRespawn, revertRoute, revertSpawn, setMovement, setRespawn, setRoute, worldStatements, type RoutePoint, type SpawnDefaults, type WorldLayer } from '../core/world/layer';
+import { isQuestPool, memberKey, validateGroup, type GroupMember, type SpawnGroup } from '../core/world/groups';
 import { databaseQuestFacts, groupContext, groupDrifted, listPools, projectQuestFacts, readGroup } from './world/groups-api';
 import { IDLE } from '../core/world/movement';
 import { describeStep } from './project/step-labels';
@@ -1197,7 +1197,10 @@ export function createApi(deps: ApiDeps): Api {
     return issues;
   }
 
-  type GroupMoveArg = { kind: 'npc' | 'object'; guid: number };
+  type GroupMoveArg = { kind: 'npc' | 'object'; guid: number } | { kind: 'quest'; questId: number };
+  /** Whether a member is one `moves` takes out of the group it is in */
+  const isMoved = (m: GroupMember, moves: readonly GroupMoveArg[]): boolean =>
+    moves.some((mv) => (mv.kind === 'quest' ? m.type === 'quest' && m.questId === mv.questId : m.type === 'spawn' && m.kind === mv.kind && m.guid === mv.guid));
   type LeftGroup = { after: SpawnGroup; read: SpawnGroup | null; mother: SpawnGroup | null };
 
   /** A spawn group as the layer has it, else as the database's pool; null when there is neither */
@@ -1248,19 +1251,22 @@ export function createApi(deps: ApiDeps): Api {
   }
 
   /**
-   * The groups `moves` take spawns out of, but those in `skip`: each as it would be after (without them, and
+   * The groups `moves` take spawns or quests out of, but those in `skip`: each as it would be after (without them, and
    * no more of it up than it has members), with the database copy to read into the layer when the layer has
    * none, and for one left empty the database group holding it that must let go of it
    */
   async function leftGroups(db: WorldDb, layer: WorldLayer, skip: ReadonlySet<number>, moves: readonly GroupMoveArg[]): Promise<LeftGroup[]> {
     const found = new Map<number, { group: SpawnGroup; read: SpawnGroup | null }>();
     for (const move of moves) {
-      const held = groupsOf(layer).find((g) => !g.removed && g.members.some((m) => m.type === 'spawn' && m.kind === move.kind && m.guid === move.guid));
+      const held = groupsOf(layer).find((g) => !g.removed && g.members.some((m) => isMoved(m, [move])));
       if (held) {
         if (!skip.has(held.id)) found.set(held.id, { group: held, read: null });
         continue;
       }
-      const [row] = await rowsOrNone(db, move.kind === 'npc' ? 'pool_creature' : 'pool_gameobject', { guid: [String(move.guid)] });
+      const [row] =
+        move.kind === 'quest'
+          ? await rowsOrNone(db, 'pool_quest', { entry: [String(move.questId)] })
+          : await rowsOrNone(db, move.kind === 'npc' ? 'pool_creature' : 'pool_gameobject', { guid: [String(move.guid)] });
       const pool = row ? Number(row.pool_entry) : null;
       // A database group the layer has changed is known by the layer's copy, which does not hold it
       if (pool === null || skip.has(pool) || found.has(pool) || groupsOf(layer).some((g) => g.id === pool)) continue;
@@ -1269,7 +1275,7 @@ export function createApi(deps: ApiDeps): Api {
     }
     const out: LeftGroup[] = [];
     for (const { group, read } of found.values()) {
-      const members = group.members.filter((m) => !(m.type === 'spawn' && moves.some((mv) => mv.kind === m.kind && mv.guid === m.guid)));
+      const members = group.members.filter((m) => !isMoved(m, moves));
       const after = { ...group, members, maxActive: members.length === 0 ? group.maxActive : Math.max(1, Math.min(group.maxActive, members.length)) };
       out.push({ after, read, mother: members.length === 0 ? await motherToRead(db, layer, group.id) : null });
     }
@@ -1695,6 +1701,7 @@ export function createApi(deps: ApiDeps): Api {
           const questId = quest.questId;
           const issues = [...(await validateQuest(quest.aggregate, refs)), ...linkIssues(questId, snapshot)];
           const notConnected = disconnected.has(questId);
+          const facts = projectQuestFacts(quest);
 
           const links = new Map<string, NodeLink>();
           const neighbours = new Set<number>();
@@ -1741,6 +1748,8 @@ export function createApi(deps: ApiDeps): Api {
             notConnected,
             uses: questUses(quest, store),
             refs: questRefs(quest),
+            daily: facts.daily,
+            weekly: facts.weekly,
           });
         }
         return nodes;
@@ -2367,7 +2376,7 @@ export function createApi(deps: ApiDeps): Api {
           if (read && absent(next, read.id)) next = putGroup(next, read);
           if (mother && absent(next, mother.id)) next = putGroup(next, mother);
         }
-        for (const move of moves) next = dropMember(next, move.kind, move.guid);
+        for (const move of moves) next = move.kind === 'quest' ? dropQuestMember(next, move.questId) : dropMember(next, move.kind, move.guid);
         for (const { after } of left) {
           const now = groupsOf(next).find((g) => g.id === after.id);
           if (!now || now.members.length === 0) {

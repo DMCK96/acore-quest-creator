@@ -84,6 +84,33 @@ describe('spawn groups through the API', () => {
     expect(((await api.worldCheckGroup(taken as any, [])) as any).value.reasons).toContain('Wolves is already in rotation Dailies.');
   });
 
+  it('moves a quest out of the rotation it is in, which keeps the rest', async () => {
+    const { api, db, session } = await setup();
+    for (const [id, title] of [['60003', 'Bears'], ['60004', 'Crabs']]) {
+      db.insert('quest_template', { ID: id, LogTitle: title, Flags: '4096' });
+      db.insert('creature_queststarter', { id: '32491', quest: id });
+    }
+    db.insert('pool_quest', { entry: '60003', pool_entry: '900' });
+    const fresh = { id: 901, name: 'Coast', map: 0, maxActive: 1, origin: { kind: 'new' }, event: null, members: [{ type: 'quest', questId: 60001 }, { type: 'quest', questId: 60004 }] };
+    expect(((await api.worldCheckGroup(fresh as any, [])) as any).value.reasons).toEqual(['Wolves is already in rotation Dailies.']);
+    const move = [{ kind: 'quest' as const, questId: 60001 }];
+    expect(((await api.worldCheckGroup(fresh as any, move)) as any).value).toEqual({ reasons: [], notes: [] });
+    const saved: any = await api.worldSetGroup(fresh as any, move);
+    expect(saved.ok).toBe(true);
+    const groups = session.world.get().groups ?? [];
+    expect(groups.find((g: any) => g.id === 900)?.members).toEqual([{ type: 'quest', questId: 60002 }, { type: 'quest', questId: 60003 }]);
+    expect(((await api.questPools()) as any).value.map((p: any) => [p.id, p.questIds])).toEqual([[901, [60001, 60004]], [900, [60002, 60003]]]);
+  });
+
+  it('a move that would leave a rotation one quest says so', async () => {
+    const { api, db } = await setup();
+    db.insert('quest_template', { ID: '60004', LogTitle: 'Crabs', Flags: '4096' });
+    db.insert('creature_queststarter', { id: '32491', quest: '60004' });
+    const fresh = { id: 901, name: 'Coast', map: 0, maxActive: 1, origin: { kind: 'new' }, event: null, members: [{ type: 'quest', questId: 60001 }, { type: 'quest', questId: 60004 }] };
+    const reasons = ((await api.worldCheckGroup(fresh as any, [{ kind: 'quest', questId: 60001 }])) as any).value.reasons;
+    expect(reasons).toEqual(['Dailies would then: A rotation needs at least two quests.']);
+  });
+
   it('refuses an event on a database group inside another, found through pool_pool, and an event the database does not have', async () => {
     const { api } = await setup();
     const path: any = (await api.worldGroup(32492) as any).value;
