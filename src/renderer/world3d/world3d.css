@@ -756,3 +756,22 @@
   margin: 6px 0 0;
   padding-left: 1.1em;
 }
+
+.world3d__group-dialog-events {
+  max-height: 9rem;
+  overflow-y: auto;
+  margin: 0.25rem 0 0;
+  padding: 0;
+  list-style: none;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+}
+
+.world3d__group-dialog-events li {
+  padding: 0.25rem 0.5rem;
+  cursor: pointer;
+}
+
+.world3d__group-dialog-events li[aria-selected='true'] {
+  font-weight: 600;
+}

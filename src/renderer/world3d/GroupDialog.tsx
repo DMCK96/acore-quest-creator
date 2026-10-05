@@ -72,6 +72,7 @@ export function GroupDialog({
   const [adding, setAdding] = useState(false);
   const [eventMode, setEventMode] = useState<'always' | 'during' | 'except'>(group.event ? (group.event.during ? 'during' : 'except') : 'always');
   const [eventId, setEventId] = useState<number | null>(group.event?.id ?? null);
+  const [eventQuery, setEventQuery] = useState<string | null>(null);
 
   const nameOf = (m: GroupMember): string => {
     const known = names.get(memberKey(m));
@@ -84,8 +85,12 @@ export function GroupDialog({
   const members: GroupMember[] = rows.map((r) =>
     r.member.type === 'quest' ? r.member : { ...r.member, chance: r.mode === 'equal' ? 0 : numberOf(r.percent) },
   );
-  // A choice of event with none picked yet follows the first one listed
-  const pickedId = eventId ?? events[0]?.id ?? null;
+  const pickedId = eventId;
+  const choosing = !nested && eventMode !== 'always';
+  const missingEvent = choosing && pickedId === null;
+  const chosenName = events.find((ev) => ev.id === pickedId);
+  const needle = (eventQuery ?? '').trim().toLowerCase();
+  const matching = events.filter((ev) => !needle || (ev.name || `Event ${ev.id}`).toLowerCase().includes(needle) || String(ev.id).includes(needle));
   const event = nested || eventMode === 'always' || pickedId === null ? null : { id: pickedId, during: eventMode === 'during' };
   const edited: SpawnGroup = { ...group, name: name.trim(), maxActive: numberOf(upAtOnce), members, event };
   const share = equalShare(members);
@@ -139,7 +144,7 @@ export function GroupDialog({
 
   // A blank name is allowed (the server keeps an empty description); the reasons are what block a save,
   // and a check still waiting or running for the latest change
-  const blocked = reasons.length > 0 || checkedKey !== key;
+  const blocked = missingEvent || reasons.length > 0 || checkedKey !== key;
 
   return (
     <div className="modal-backdrop" onMouseDown={(e) => e.target === e.currentTarget && onClose()}>
@@ -186,16 +191,46 @@ export function GroupDialog({
             </select>
           </label>
           {!nested && eventMode !== 'always' && (
-            <label className="scene-field">
-              <span>Which event</span>
-              <select aria-label="Which event" data-selection="on" value={pickedId ?? ''} onChange={(e) => setEventId(Number(e.target.value))}>
-                {events.map((ev) => (
-                  <option key={ev.id} value={ev.id}>
-                    {ev.name || `Event ${ev.id}`}
-                  </option>
-                ))}
-              </select>
-            </label>
+            <div className="scene-field">
+              <label>
+                <span>Which event</span>
+                <input
+                  type="text"
+                  role="combobox"
+                  aria-label="Which event"
+                  aria-expanded="true"
+                  aria-controls="group-event-list"
+                  data-selection="on"
+                  autoComplete="off"
+                  placeholder="Search events"
+                  value={eventQuery ?? (chosenName ? chosenName.name || `Event ${chosenName.id}` : pickedId !== null ? `Event ${pickedId}` : '')}
+                  onChange={(e) => setEventQuery(e.target.value)}
+                />
+              </label>
+              {events.length === 0 ? (
+                <p role="alert">No events in the database</p>
+              ) : (
+                <>
+                  {missingEvent && <p role="alert">Choose an event</p>}
+                  <ul id="group-event-list" role="listbox" aria-label="Events" className="world3d__group-dialog-events">
+                    {matching.map((ev) => (
+                      <li
+                        key={ev.id}
+                        role="option"
+                        aria-selected={ev.id === pickedId}
+                        onClick={() => {
+                          setEventId(ev.id);
+                          setEventQuery(null);
+                        }}
+                      >
+                        {ev.name || `Event ${ev.id}`}
+                      </li>
+                    ))}
+                    {matching.length === 0 && <li aria-disabled="true">No event matches</li>}
+                  </ul>
+                </>
+              )}
+            </div>
           )}
           {nested && <p>Only a group that is not inside another can follow an event.</p>}
           <h3 className="world3d__group-dialog-heading">Members</h3>

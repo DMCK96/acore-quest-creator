@@ -92,10 +92,31 @@ describe('the group dialog', () => {
     const events = [{ id: 12, name: 'Darkmoon Faire' }, { id: 4, name: "Hallow's End" }];
     render(<GroupDialog group={{ ...group, name: 'Camp', event: null }} names={names} check={async () => fine} groupsOnMap={[]} events={events} nested={false} onSave={onSave} onClose={vi.fn()} />);
     await userEvent.selectOptions(screen.getByLabelText('Event'), 'Only during');
-    await userEvent.selectOptions(screen.getByLabelText('Which event'), '12');
+    await userEvent.type(screen.getByLabelText('Which event'), 'darkmoon');
+    expect(screen.queryByRole('option', { name: "Hallow's End" })).toBeNull();
+    await userEvent.click(screen.getByRole('option', { name: 'Darkmoon Faire' }));
+    expect((screen.getByLabelText('Which event') as HTMLInputElement).value).toBe('Darkmoon Faire');
     await waitFor(() => expect(screen.getByRole('button', { name: 'Save' })).toHaveProperty('disabled', false));
     await userEvent.click(screen.getByRole('button', { name: 'Save' }));
     expect(onSave.mock.calls[0]![0].event).toEqual({ id: 12, during: true });
+  });
+
+  it('an event choice with no event chosen, or none to choose, cannot be saved as Always', async () => {
+    const events = [{ id: 12, name: 'Darkmoon Faire' }];
+    const { unmount } = render(<GroupDialog group={{ ...group, name: 'Camp', event: null }} names={names} check={async () => fine} groupsOnMap={[]} events={events} nested={false} onSave={vi.fn()} onClose={vi.fn()} />);
+    await userEvent.selectOptions(screen.getByLabelText('Event'), 'Except during');
+    expect(screen.getByText('Choose an event')).toBeTruthy();
+    await new Promise((r) => setTimeout(r, 400));
+    expect(screen.getByRole('button', { name: 'Save' })).toHaveProperty('disabled', true);
+    await userEvent.click(screen.getByRole('option', { name: 'Darkmoon Faire' }));
+    expect(screen.queryByText('Choose an event')).toBeNull();
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Save' })).toHaveProperty('disabled', false));
+    unmount();
+    render(<GroupDialog group={{ ...group, name: 'Camp', event: null }} names={names} check={async () => fine} groupsOnMap={[]} events={[]} nested={false} onSave={vi.fn()} onClose={vi.fn()} />);
+    await userEvent.selectOptions(screen.getByLabelText('Event'), 'Only during');
+    expect(screen.getByText('No events in the database')).toBeTruthy();
+    await new Promise((r) => setTimeout(r, 400));
+    expect(screen.getByRole('button', { name: 'Save' })).toHaveProperty('disabled', true);
   });
 
   it('a group inside another cannot follow an event, and says why', () => {
