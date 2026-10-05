@@ -1,5 +1,6 @@
 import type { PatchStatement } from '../export/build-patch';
 import type { ViewPreset } from '../db/view-spawns';
+import type { SpawnGroup } from './groups';
 import { MOVEMENT_TYPE, sameMovement, type Movement } from './movement';
 
 /**
@@ -88,15 +89,19 @@ export interface WorldLayer {
   added: WorldAddedSpawn[];
   /** NPCs' movement; a project saved before it could be changed has none */
   movements?: WorldMovementEdit[];
+  /** Spawn groups (the server's pools); a project saved before there were any has none */
+  groups?: SpawnGroup[];
 }
 
 export const EMPTY_WORLD: WorldLayer = { spawns: [], routes: [], added: [] };
 
 export const movementsOf = (layer: WorldLayer): WorldMovementEdit[] => layer.movements ?? [];
 
+export const groupsOf = (layer: WorldLayer): SpawnGroup[] => layer.groups ?? [];
+
 /** Whether the layer holds anything to export */
 export const hasWorldChanges = (layer: WorldLayer): boolean =>
-  layer.spawns.length > 0 || layer.routes.length > 0 || layer.added.length > 0 || movementsOf(layer).length > 0;
+  layer.spawns.length > 0 || layer.routes.length > 0 || layer.added.length > 0 || movementsOf(layer).length > 0 || groupsOf(layer).length > 0;
 
 /** What a point added in the 3D view has in the columns the view does not edit */
 export const NEW_POINT_REST: Record<string, string | null> = {
@@ -200,7 +205,35 @@ export function revertSpawn(layer: WorldLayer, kind: WorldSpawnKind, guid: numbe
     added: layer.added.filter((a) => !(a.kind === kind && a.guid === guid)),
     routes: newPath === null ? layer.routes : layer.routes.filter((r) => !(r.pathId === newPath && r.original.length === 0)),
   };
-  return placed && kind === 'creature' ? revertMovement(next, guid) : next;
+  const reverted = placed && kind === 'creature' ? revertMovement(next, guid) : next;
+  return placed ? dropMember(reverted, kind === 'creature' ? 'npc' : 'object', guid) : reverted;
+}
+
+/** Adds a group, or replaces the one with its id */
+export function putGroup(layer: WorldLayer, group: SpawnGroup): WorldLayer {
+  const all = groupsOf(layer);
+  return { ...layer, groups: all.some((g) => g.id === group.id) ? all.map((g) => (g.id === group.id ? group : g)) : [...all, group] };
+}
+
+/** Deletes a group: a new one is forgotten, an existing one is kept as removed */
+export function deleteGroup(layer: WorldLayer, group: SpawnGroup): WorldLayer {
+  if (group.origin.kind === 'new') return revertGroup(layer, group.id);
+  return putGroup(layer, { ...group, removed: true });
+}
+
+/** Takes back a group's changes */
+export function revertGroup(layer: WorldLayer, id: number): WorldLayer {
+  return { ...layer, groups: groupsOf(layer).filter((g) => g.id !== id) };
+}
+
+/** Takes a spawn out of every layer group; a new group left with no members goes */
+export function dropMember(layer: WorldLayer, kind: 'npc' | 'object', guid: number): WorldLayer {
+  const groups = groupsOf(layer).flatMap((g) => {
+    const members = g.members.filter((m) => !(m.type === 'spawn' && m.kind === kind && m.guid === guid));
+    if (members.length === g.members.length) return [g];
+    return members.length === 0 && g.origin.kind === 'new' ? [] : [{ ...g, members }];
+  });
+  return { ...layer, groups };
 }
 
 /** Sets an NPC's movement; its first original is kept, and one put back is dropped */
@@ -345,9 +378,39 @@ function movementStatements(m: WorldMovementEdit, addonDefaults: Record<string, 
   return { apply, revert };
 }
 
+const POOL_KEYS: [PatchStatement['table'], string][] = [
+  ['pool_template', 'entry'],
+  ['pool_creature', 'pool_entry'],
+  ['pool_gameobject', 'pool_entry'],
+  ['pool_pool', 'mother_pool'],
+];
+
+/** A group's rows: the four deletes by its id, then what to write. Never touches game_event_pool. */
+function groupStatements(g: SpawnGroup): { apply: PatchStatement[]; revert: PatchStatement[] } {
+  const id = String(g.id);
+  const deletes: PatchStatement[] = POOL_KEYS.map(([table, column]) => ({ kind: 'delete', table, key: { [column]: id } }));
+  const inserts: PatchStatement[] = [{ kind: 'insert', table: 'pool_template', row: { entry: id, max_limit: String(g.maxActive), description: g.name } }];
+  for (const m of g.members) {
+    if (m.type === 'group') {
+      inserts.push({ kind: 'insert', table: 'pool_pool', row: { pool_id: String(m.id), mother_pool: id, chance: String(m.chance), description: g.name } });
+    } else {
+      const table = m.kind === 'npc' ? 'pool_creature' : 'pool_gameobject';
+      inserts.push({ kind: 'insert', table, row: { guid: String(m.guid), pool_entry: id, chance: String(m.chance), description: g.name } });
+    }
+  }
+  const back: PatchStatement[] =
+    g.origin.kind === 'existing'
+      ? [
+          { kind: 'insert', table: 'pool_template', row: g.origin.original.template },
+          ...g.origin.original.members.map((m): PatchStatement => ({ kind: 'insert', table: m.table, row: m.row })),
+        ]
+      : [];
+  return { apply: g.removed ? deletes : [...deletes, ...inserts], revert: [...deletes, ...back] };
+}
+
 /**
  * The layer as a patch, and the patch that puts the database back as it was: spawns, placed spawns,
- * movements, then routes. `pointDefaults` is every `waypoint_data` column's default in the database
+ * movements, spawn groups, then routes. `pointDefaults` is every `waypoint_data` column's default in the database
  * written to, so a point added in the view fills columns this tool does not know about;
  * `spawnDefaults` does the same for the `creature` and `gameobject` rows of spawns placed in the
  * view, and `addonDefaults` for a `creature_addon` row written to give a spawn its path.
@@ -361,17 +424,20 @@ export function worldStatements(
   const base = pointBase(pointDefaults);
   const added = layer.added.map((a) => addedStatements(a, spawnDefaults[a.kind]));
   const movements = movementsOf(layer).map((m) => movementStatements(m, addonDefaults));
+  const groups = groupsOf(layer).map(groupStatements);
   return {
     apply: [
       ...layer.spawns.map((s) => placementStatement(s, s.current)),
       ...added.flatMap((a) => a.apply),
       ...movements.flatMap((m) => m.apply),
+      ...groups.flatMap((g) => g.apply),
       ...layer.routes.flatMap((r) => routeStatements(r.pathId, r.current, base)),
     ],
     revert: [
       ...layer.spawns.map((s) => placementStatement(s, s.original)),
       ...added.flatMap((a) => a.revert),
       ...movements.flatMap((m) => m.revert),
+      ...groups.flatMap((g) => g.revert),
       ...layer.routes.flatMap((r) => routeStatements(r.pathId, r.original, base)),
     ],
   };
