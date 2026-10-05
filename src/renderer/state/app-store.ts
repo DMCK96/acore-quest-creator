@@ -26,7 +26,7 @@ import type {
   StepPlace,
   Viewport,
 } from '@shared/ipc';
-import { EMPTY_WORLD, type WorldLayer } from '@core/world/layer';
+import { EMPTY_WORLD, groupsOf, type WorldLayer } from '@core/world/layer';
 import type { SpawnGroup } from '@core/world/groups';
 import type { QuestAggregate } from '@core/model/aggregate';
 import { EMPTY_ENTITIES, newItem, newNpc, newObject, type CustomItem, type CustomNpc, type CustomObject, type ProjectEntities } from '@core/entities/model';
@@ -587,7 +587,10 @@ export function createAppStore(api: Api, opts: { saveDelayMs?: number } = {}): A
     },
 
     setLayer(layer) {
+      const groupsChanged = JSON.stringify(groupsOf(get().layer)) !== JSON.stringify(groupsOf(layer));
       set({ layer });
+      // A rotation's tags on the graph follow the layer's groups (a revert in Project changes)
+      if (groupsChanged) void get().loadQuestPools();
     },
 
     async loadEntities() {

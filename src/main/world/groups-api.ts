@@ -55,7 +55,7 @@ export interface QuestFacts {
   hasGiver: boolean;
 }
 
-const flagsFacts = (flags: number) => ({ daily: (flags & QUEST_FLAG_DAILY) !== 0, weekly: (flags & QUEST_FLAG_WEEKLY) !== 0 });
+const flagsFacts = (flags: number) => ({ daily: (flags & QUEST_FLAG_DAILY) !== 0, weekly: (flags & QUEST_FLAG_WEEKLY) !== 0 && (flags & QUEST_FLAG_DAILY) === 0 });
 
 /** A project quest's title, kind and whether an NPC or object offers it */
 export function projectQuestFacts(quest: ProjectQuestLike): QuestFacts {
