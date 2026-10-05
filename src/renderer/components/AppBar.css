@@ -63,6 +63,13 @@
   stroke-linejoin: round;
 }
 
+/* The middle column of the bar's three: the workspace switch and, beside it, undo and redo. */
+.app-bar__center {
+  display: flex;
+  align-items: center;
+  gap: 0.75em;
+}
+
 /* World | Quests: a segmented switch, the chosen one lit gold. */
 .app-bar__tabs {
   display: inline-flex;

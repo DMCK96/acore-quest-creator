@@ -168,3 +168,17 @@ describe('game client pill', () => {
     expect(screen.queryByText(/Game client/)).toBeNull();
   });
 });
+
+describe('the app bar layout', () => {
+  it('keeps one row of three columns: identity, the tabs with undo and redo, then the status pills and Settings', async () => {
+    const store = createAppStore(makeMockApi());
+    render(<AppBar store={store} workspace="world" onWorkspace={() => {}} onOpenProject={() => {}} onOpenSettings={() => {}} />);
+    const bar = screen.getByRole('banner');
+    // The bar is a three-column grid; a fourth child wraps the status onto a second row
+    expect(bar.children).toHaveLength(3);
+    const [, middle, end] = [...bar.children];
+    expect(middle!.querySelector('[role="tablist"]')).not.toBeNull();
+    expect(middle!.querySelector('button[aria-label^="Undo"]')).not.toBeNull();
+    expect(end!.querySelector('button[aria-label="Settings"]')).not.toBeNull();
+  });
+});

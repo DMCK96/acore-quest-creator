@@ -67,26 +67,29 @@ export function AppBar({
           <span className="app-bar__project-label">Project</span>
         </button>
       </div>
-      <div className="app-bar__tabs" role="tablist" aria-label="Workspace">
-        {WORKSPACES.map(([id, label], index) => (
-          <button
-            key={id}
-            ref={(el) => {
-              tabs.current[index] = el;
-            }}
-            type="button"
-            role="tab"
-            className="app-bar__tab"
-            aria-selected={workspace === id}
-            tabIndex={workspace === id ? 0 : -1}
-            onClick={() => onWorkspace(id)}
-            onKeyDown={(e) => onTabKey(e, index)}
-          >
-            {label}
-          </button>
-        ))}
+      {/* The middle column: the workspace switch, with undo and redo beside it */}
+      <div className="app-bar__center">
+        <div className="app-bar__tabs" role="tablist" aria-label="Workspace">
+          {WORKSPACES.map(([id, label], index) => (
+            <button
+              key={id}
+              ref={(el) => {
+                tabs.current[index] = el;
+              }}
+              type="button"
+              role="tab"
+              className="app-bar__tab"
+              aria-selected={workspace === id}
+              tabIndex={workspace === id ? 0 : -1}
+              onClick={() => onWorkspace(id)}
+              onKeyDown={(e) => onTabKey(e, index)}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
+        <HistoryButtons store={store} />
       </div>
-      <HistoryButtons store={store} />
       <div className="app-bar__status">
         <span
           className={`status-pill${connectedDatabase ? ' status-pill--connected' : ''}`}
