@@ -625,6 +625,7 @@ const rowArg = z.record(z.string(), z.string().nullable());
 const groupMemberArg = z.discriminatedUnion('type', [
   z.object({ type: z.literal('spawn'), kind: z.enum(['npc', 'object']), guid: z.number().int().min(1), entry: z.number().int().min(0), chance: z.number().min(0).max(100) }),
   z.object({ type: z.literal('group'), id: z.number().int().min(1), chance: z.number().min(0).max(100) }),
+  z.object({ type: z.literal('quest'), questId: z.number().int().min(1) }),
 ]);
 const spawnGroupArg = z.object({
   id: z.number().int().min(1),
@@ -632,13 +633,14 @@ const spawnGroupArg = z.object({
   map: z.number().int().min(0),
   maxActive: z.number().int().min(0),
   members: z.array(groupMemberArg).max(1000),
+  event: z.object({ id: z.number().int().min(1), during: z.boolean() }).nullable(),
   origin: z.discriminatedUnion('kind', [
     z.object({ kind: z.literal('new') }),
     z.object({
       kind: z.literal('existing'),
       original: z.object({
         template: rowArg,
-        members: z.array(z.object({ table: z.enum(['pool_creature', 'pool_gameobject', 'pool_pool']), row: rowArg })),
+        members: z.array(z.object({ table: z.enum(['pool_creature', 'pool_gameobject', 'pool_pool', 'pool_quest']), row: rowArg })),
         event: rowArg.nullable(),
       }),
     }),

@@ -103,4 +103,18 @@ describe('parseRequest', () => {
     expect(parseRequest('searchQuests', ['x'.repeat(201)]).ok).toBe(false);
     expect(parseRequest('lookupNames', ['item', Array.from({ length: 5001 }, (_, i) => i)]).ok).toBe(false);
   });
+  it('lets a rotation, a group event and a quest move through the window-to-main checks', () => {
+    const rotation = {
+      id: 900002, name: 'Dailies', map: 0, maxActive: 1, event: { id: 12, during: true },
+      members: [{ type: 'quest', questId: 60001 }, { type: 'quest', questId: 60002 }],
+      origin: { kind: 'existing', original: { template: { entry: '900002' }, members: [{ table: 'pool_quest', row: { entry: '60001', pool_entry: '900002' } }], event: { eventEntry: '12', pool_entry: '900002' } } },
+    };
+    for (const method of ['worldCheckGroup', 'worldSetGroup'] as const) {
+      const r = parseRequest(method, [rotation, [{ kind: 'quest', questId: 60001 }]]);
+      expect(r.ok).toBe(true);
+      if (r.ok) expect((r.args[0] as any).event).toEqual({ id: 12, during: true });
+    }
+    expect(parseRequest('worldCheckGroup', [{ ...rotation, event: { id: 12 } }, []]).ok).toBe(false);
+    expect(parseRequest('worldCheckGroup', [{ ...rotation, event: null }, []]).ok).toBe(true);
+  });
 });
