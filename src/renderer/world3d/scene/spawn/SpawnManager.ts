@@ -8,7 +8,7 @@
  */
 import * as THREE from 'three';
 import { withLooks, type EntityLooks } from '../../../../core/entities/view-spawns.js';
-import { ViewCreature, ViewEvent, ViewObject, ViewPoint, ViewSpawns } from '../../../../core/db/view-spawns.js';
+import { PoolEvent, ViewCreature, ViewEvent, ViewObject, ViewPoint, ViewSpawns } from '../../../../core/db/view-spawns.js';
 import { WorldLayer } from '../../../../core/world/layer.js';
 import type { Movement } from '../../../../core/world/movement.js';
 import type { Placement } from '../../../../core/world/layer.js';
@@ -372,30 +372,73 @@ class SpawnManager {
     // of (or one in a group deleted there) is in none
     const layerGroups = this.#layer.groups ?? [];
     const inLayerGroup = new globalThis.Map<string, number>();
+    const liveGroups = new globalThis.Map<number, (typeof layerGroups)[number]>();
+    const motherInLayer = new globalThis.Map<number, number>();
     for (const g of layerGroups) {
       if (g.removed) continue;
-      for (const m of g.members) if (m.type === 'spawn') inLayerGroup.set(`${m.kind}:${m.guid}`, g.id);
+      liveGroups.set(g.id, g);
+      for (const m of g.members) {
+        if (m.type === 'spawn') inLayerGroup.set(`${m.kind}:${m.guid}`, g.id);
+        else if (m.type === 'group') motherInLayer.set(m.id, g.id);
+      }
     }
     const layerGroupIds = new Set(layerGroups.map((g) => g.id));
-    // A layer group's event overrides the database's for its spawns (also one cleared there)
-    const eventOfSpawn = new globalThis.Map<string, { events: ViewEvent[]; removedBy: ViewEvent[] }>();
-    for (const g of layerGroups) {
-      if (g.removed) continue;
-      const cleared = g.origin.kind === 'existing' && g.origin.original.event !== null;
-      if (!g.event && !cleared) continue;
-      const e = g.event ? { id: g.event.id, name: eventNames.get(g.event.id) ?? `Event ${g.event.id}` } : null;
-      const over = { events: e && g.event!.during ? [e] : [], removedBy: e && !g.event!.during ? [e] : [] };
-      for (const m of g.members) if (m.type === 'spawn') eventOfSpawn.set(`${m.kind}:${m.guid}`, over);
-    }
-    const evented = <T extends { guid: number }>(kind: 'npc' | 'object', s: T): T => {
-      const over = eventOfSpawn.get(`${kind}:${s.guid}`);
-      return over ? { ...s, event: over.events[0] ?? null, ...over } : s;
-    };
-    const grouped = <T extends { guid: number; group?: number | null }>(kind: 'npc' | 'object', s: T): T => {
+    const groupOf = (kind: 'npc' | 'object', s: { guid: number; group?: number | null }): number | null => {
       const held = inLayerGroup.get(`${kind}:${s.guid}`);
       const was = s.group ?? null;
-      const group = held ?? (was !== null && layerGroupIds.has(was) ? null : was);
-      return group === was && 'group' in s ? s : { ...s, group };
+      return held ?? (was !== null && layerGroupIds.has(was) ? null : was);
+    };
+    const grouped = <T extends { guid: number; group?: number | null }>(kind: 'npc' | 'object', s: T): T => {
+      const group = groupOf(kind, s);
+      return group === (s.group ?? null) && 'group' in s ? s : { ...s, group };
+    };
+    // The top-level group each database group sits in, as the database's spawns tell it
+    const dbTopOf = new globalThis.Map<number, number>();
+    for (const { spawns: answer } of [...this.#responses.values(), { spawns: rawSpawns }]) {
+      for (const s of [...answer.creatures, ...answer.objects]) if (s.group != null && s.poolTop != null) dbTopOf.set(s.group, s.poolTop);
+    }
+    // The top-level group a group is in: up through the layer's groups, else the database's; `layer`
+    // when the layer decides that group's event, null when it was deleted here
+    const topOf = (id: number): { id: number; layer: boolean } | null => {
+      const seen = new Set<number>();
+      let g = id;
+      while (!seen.has(g)) {
+        seen.add(g);
+        const up = motherInLayer.get(g);
+        if (up !== undefined) {
+          g = up;
+          continue;
+        }
+        const db = dbTopOf.get(g);
+        if (liveGroups.has(g)) return db !== undefined && db !== g && !layerGroupIds.has(db) ? { id: db, layer: false } : { id: g, layer: true };
+        if (layerGroupIds.has(g)) return null;
+        if (db === undefined || db === g) return { id: g, layer: false };
+        if (liveGroups.has(db)) {
+          g = db;
+          continue;
+        }
+        return layerGroupIds.has(db) ? null : { id: db, layer: false };
+      }
+      return { id: g, layer: true };
+    };
+    // A spawn's events as the layer has its groups: its own event rows, with the event of the top-level
+    // group it is in (the layer's, else the database's) in place of the one its database group brought
+    const evented = <T extends { guid: number; group?: number | null; event?: ViewEvent | null; events?: ViewEvent[]; removedBy?: ViewEvent[]; poolEvent?: PoolEvent | null }>(kind: 'npc' | 'object', s: T): T => {
+      const group = groupOf(kind, s);
+      const top = group === null ? null : topOf(group);
+      const db = s.poolEvent ?? null;
+      const dropDb = db !== null && !db.alsoOwn && !(top !== null && !top.layer && top.id === db.pool);
+      const set = top?.layer ? liveGroups.get(top.id)!.event : null;
+      if (!dropDb && !set) return s;
+      const without = (list: ViewEvent[]) => (dropDb ? list.filter((e) => e.id !== db!.id) : list);
+      let events = without(s.events ?? (s.event ? [s.event] : []));
+      let removedBy = without(s.removedBy ?? []);
+      if (set) {
+        const e = { id: set.id, name: eventNames.get(set.id) ?? `Event ${set.id}` };
+        if (set.during && !events.some((x) => x.id === e.id)) events = [...events, e].sort((a, b) => a.id - b.id);
+        if (!set.during && !removedBy.some((x) => x.id === e.id)) removedBy = [...removedBy, e].sort((a, b) => a.id - b.id);
+      }
+      return { ...s, event: events[0] ?? null, events, removedBy };
     };
     const respawns = new globalThis.Map((this.#layer.respawns ?? []).map((r) => [`${r.kind}:${r.guid}`, r.current]));
     // The layer's respawn time over the database's
@@ -444,13 +487,13 @@ class SpawnManager {
     return {
       creatures: [
         ...spawns.creatures.filter((c) => !ownCreatures.has(c.guid)).map((c) => evented('npc', c)).filter(shown).map(creature),
-        ...this.#own.creatures.filter(inBox).map((c) => grouped('npc', c)),
-        ...placedCreatures.filter(inBox).map((c) => grouped('npc', routed(c))),
+        ...this.#own.creatures.filter(inBox).map((c) => evented('npc', grouped('npc', c))).filter(shown),
+        ...placedCreatures.filter(inBox).map((c) => evented('npc', grouped('npc', routed(c)))).filter(shown),
       ].map(pending),
       objects: [
         ...spawns.objects.filter((o) => !ownObjects.has(o.guid)).map((o) => evented('object', o)).filter(shown).map(object),
-        ...this.#own.objects.filter(inBox).map((o) => grouped('object', o)),
-        ...placedObjects.filter(inBox).map((o) => grouped('object', o)),
+        ...this.#own.objects.filter(inBox).map((o) => evented('object', grouped('object', o))).filter(shown),
+        ...placedObjects.filter(inBox).map((o) => evented('object', grouped('object', o))).filter(shown),
       ],
       capped: spawns.capped,
     };

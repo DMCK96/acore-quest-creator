@@ -553,6 +553,78 @@ describe('the world layer in the view', () => {
     expect(m.info('creature', 1)).not.toBeNull();
   });
 
+  describe("a layer group's event in the Event filter", () => {
+    const fair = { id: 5, name: 'Fair' };
+    const darkmoon = { id: 12, name: 'Darkmoon' };
+    const empty = { creatures: [], objects: [], capped: { creatures: false, objects: false } };
+    const at = { x: 0.5, y: 0.5 };
+    const drawn = async (m: SpawnManager, events: 'none' | 'all' | number, guids: number[]) => {
+      await m.setVisibility({ creatures: true, objects: true, paths: true, events });
+      return guids.filter((g) => m.info('creature', g) !== null);
+    };
+    const group = (id: number, members: any[], event: { id: number; during: boolean } | null = null, origin: any = { kind: 'new' }) => ({ id, name: 'g', map: 0, maxActive: 1, event, origin, members });
+    const spawnMember = (guid: number) => ({ type: 'spawn', kind: 'npc', guid, entry: 1, chance: 0 });
+    const groupMember = (id: number) => ({ type: 'group', id, chance: 0 });
+
+    it("reaches the spawns of the groups inside an event-tied group: the layer's copy, else the database's", async () => {
+      // NPC 1 is in database group 20; NPC 2 in layer group 10; both sit inside new group 9, tied to event 4
+      const m = manager({ ...empty, creatures: [creature(1, 1, { ...at, group: 20, poolTop: 20 }), creature(2, 1, { ...at }), creature(3, 1, { ...at })] });
+      await m.loadArea(1, 0, box);
+      await m.setWorldLayer({ spawns: [], routes: [], added: [], groups: [
+        group(9, [groupMember(20), groupMember(10)], { id: 4, during: true }),
+        group(10, [spawnMember(2)]),
+      ] } as any);
+      expect(await drawn(m, 'none', [1, 2, 3])).toEqual([3]);
+      expect(await drawn(m, 4, [1, 2, 3])).toEqual([1, 2, 3]);
+    });
+
+    it("merges the group's event with the spawn's own events instead of replacing them", async () => {
+      const m = manager({ ...empty, creatures: [creature(1, 1, { ...at, event: fair, events: [fair] })] });
+      await m.loadArea(1, 0, box);
+      await m.setWorldLayer({ spawns: [], routes: [], added: [], groups: [group(9, [spawnMember(1)], { id: 4, during: true })] } as any);
+      expect(await drawn(m, 5, [1])).toEqual([1]);
+      expect(await drawn(m, 4, [1])).toEqual([1]);
+      expect(await drawn(m, 'none', [1])).toEqual([]);
+    });
+
+    it("a cleared event takes away only the group's own database event, not the spawn's", async () => {
+      const original = { template: {}, members: [], event: { eventEntry: '12', pool_entry: '7' } };
+      const m = manager({ ...empty, creatures: [
+        creature(1, 1, { ...at, group: 7, poolTop: 7, event: fair, events: [fair, darkmoon], poolEvent: { pool: 7, id: 12, during: true, alsoOwn: false } }),
+        creature(2, 1, { ...at, group: 7, poolTop: 7, event: darkmoon, events: [darkmoon], poolEvent: { pool: 7, id: 12, during: true, alsoOwn: false } }),
+      ] });
+      await m.loadArea(1, 0, box);
+      expect(await drawn(m, 'none', [1, 2])).toEqual([]);
+      await m.setWorldLayer({ spawns: [], routes: [], added: [], groups: [group(7, [spawnMember(1), spawnMember(2)], null, { kind: 'existing', original })] } as any);
+      expect(await drawn(m, 'none', [1, 2])).toEqual([2]);
+      expect(await drawn(m, 5, [1, 2])).toEqual([1, 2]);
+      expect(await drawn(m, 12, [1, 2])).toEqual([2]);
+    });
+
+    it("a spawn the layer took out of a database event group loses that group's event", async () => {
+      const original = { template: {}, members: [], event: { eventEntry: '12', pool_entry: '7' } };
+      const m = manager({ ...empty, creatures: [
+        creature(1, 1, { ...at, group: 7, poolTop: 7, event: darkmoon, events: [darkmoon], poolEvent: { pool: 7, id: 12, during: true, alsoOwn: false } }),
+        creature(2, 1, { ...at, group: 7, poolTop: 7, event: darkmoon, events: [darkmoon], poolEvent: { pool: 7, id: 12, during: true, alsoOwn: false } }),
+      ] });
+      await m.loadArea(1, 0, box);
+      await m.setWorldLayer({ spawns: [], routes: [], added: [], groups: [group(7, [spawnMember(2)], { id: 12, during: true }, { kind: 'existing', original })] } as any);
+      expect(await drawn(m, 'none', [1, 2])).toEqual([1]);
+    });
+
+    it("hides the project's own and placed spawns in an Only during group under the everyday world", async () => {
+      const m = manager(empty);
+      await m.loadArea(1, 0, box);
+      await m.setOwnSpawns({ ...empty, creatures: [creature(6, 1, { ...at, own: true })] });
+      const look = { displayId: 1, scale: 1, equipment: [0, 0, 0] as [number, number, number], preset: null };
+      await m.setWorldLayer({ spawns: [], routes: [], added: [{ kind: 'creature', guid: 7, entry: 1, name: 'n', map: 0, placement: { x: 0.5, y: 0.5, z: 0, orientation: 0, rotation: null }, look }],
+        groups: [group(9, [spawnMember(6), spawnMember(7)], { id: 4, during: true })] } as any);
+      expect(await drawn(m, 'none', [6, 7])).toEqual([]);
+      expect(await drawn(m, 4, [6, 7])).toEqual([6, 7]);
+      expect(await drawn(m, 5, [6, 7])).toEqual([]);
+    });
+  });
+
   it("describes a spawn's respawn time: the layer's edit over the database's, and a placed spawn's own or 300", async () => {
     const m = manager({ creatures: [creature(1, 1, { x: 0.5, y: 0.5, respawnSecs: 120 })], objects: [object(5, 2, { x: 0.5, y: 0.5, respawnSecs: 60 })], capped: { creatures: false, objects: false } });
     await m.loadArea(1, 0, box);

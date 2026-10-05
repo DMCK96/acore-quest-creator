@@ -446,7 +446,7 @@ class MysqlWorldDb implements WorldDb {
     const chainJoins = chain.map((alias, i) => ` LEFT JOIN pool_pool ${alias} ON ${alias}.pool_id = ${i === 0 ? 'pc.pool_entry' : `${chain[i - 1]}.mother_pool`}`).join('');
     const top = `COALESCE(${[...chain.map((alias) => `${alias}.mother_pool`).reverse(), 'pc.pool_entry'].join(', ')})`;
     return {
-      columns: `${pool.columns}, gp.eventEntry AS pool_event_entry, gpe.description AS pool_event_name`,
+      columns: `${pool.columns}, ${top} AS pool_top, gp.eventEntry AS pool_event_entry, gpe.description AS pool_event_name`,
       joins: `${pool.joins}${chainJoins} LEFT JOIN game_event_pool gp ON gp.pool_entry = ${top} LEFT JOIN game_event gpe ON gpe.eventEntry = ABS(gp.eventEntry)`,
     };
   }

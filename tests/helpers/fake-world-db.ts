@@ -195,11 +195,11 @@ export class FakeWorldDb implements WorldDb {
     const mothers = this.tables.has('pool_pool') ? new Map((await this.selectRows('pool_pool', {})).map((p) => [p.pool_id, p.mother_pool])) : new Map<string | null, string | null>();
     const poolEvents = this.tables.has('game_event_pool') ? new Map((await this.selectRows('game_event_pool', {})).map((p) => [p.pool_entry, p.eventEntry])) : new Map<string | null, string | null>();
     const eventNames = this.tables.has('game_event') ? new Map((await this.selectRows('game_event', {})).map((e) => [e.eventEntry, e.description])) : new Map<string | null, string | null>();
-    const poolEvent = (pool: string | null | undefined): { pool_event_entry: string | null; pool_event_name: string | null } => {
+    const poolEvent = (pool: string | null | undefined): { pool_top?: string | null; pool_event_entry: string | null; pool_event_name: string | null } => {
       let top = pool ?? null;
       for (let depth = 0; top !== null && mothers.has(top) && depth < 16; depth++) top = mothers.get(top) ?? null;
       const entry = top === null ? null : (poolEvents.get(top) ?? null);
-      return { pool_event_entry: entry, pool_event_name: entry === null ? null : (eventNames.get(String(Math.abs(Number(entry)))) ?? null) };
+      return { ...(this.tables.has('game_event_pool') ? { pool_top: top } : {}), pool_event_entry: entry, pool_event_name: entry === null ? null : (eventNames.get(String(Math.abs(Number(entry)))) ?? null) };
     };
     const creatures = (await this.selectRows('creature', {})).filter(inBox).sort(byGuid).slice(0, limit).map((r) => {
       const entry = r[entryColumn] ?? null;
