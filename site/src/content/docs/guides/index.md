@@ -14,6 +14,7 @@ One guide per part of the app: what it is for and how to use it.
 - [Quest givers and enders](/acore-quest-creator/guides/givers-and-enders/): who offers the quest and who takes it back.
 - [Quest scripting](/acore-quest-creator/guides/quest-scripting/): what NPCs, objects and areas do around a quest.
 - [Spawn groups](/acore-quest-creator/guides/spawn-groups/): only some of a set of spawns up at a time, with chances, as the Time-Lost Proto-Drake uses.
+- [Quest rotations](/acore-quest-creator/guides/quest-rotations/): daily and weekly quests that take turns, a few offered at each reset.
 - [NPCs and objects](/acore-quest-creator/guides/npcs-and-objects/): make new ones, change existing ones and choose how they look.
 - [Readable objects](/acore-quest-creator/guides/readable-objects/): books, notes and plaques with pages of text.
 - [Items](/acore-quest-creator/guides/items/): quest items and rewards.

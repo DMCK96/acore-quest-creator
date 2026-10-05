@@ -39,6 +39,20 @@ The Time-Lost Proto-Drake flies one of four flight paths, and on each path it ma
 
 One path is up at a time, and on it, the drake 10% of the time and Vyragosa the rest. When the one that is up dies and its respawn time has passed, the server rolls again and can pick any path.
 
+## Make a group follow a game event
+
+A group can run only while a game event does (a festival, a seasonal event), or everywhere except while it does. In the group dialog, **Event** has three choices:
+
+- **Always**: the default. The group has nothing to do with events.
+- **Only during**: the group is up only while the event runs.
+- **Except during**: the group is up the rest of the time.
+
+Choosing either of the last two shows **Which event**, a list of the game's events by name.
+
+A group that follows an event shows **Only during _event_** or **Except during _event_** on its card. In the layers card, the **Event** choice treats the spawns of such a group like any other event spawn.
+
+An event can only be set on a group that is not inside another group. To make a whole choice follow an event, set it on the outer group. Rotating daily and weekly quests are a different kind of group and do not follow events; see [Quest rotations](/acore-quest-creator/guides/quest-rotations/).
+
 ## What the server refuses
 
 The group dialog lists the reasons a group cannot be saved, as you work, and **Save** stays off until there are none. These are the server's own rules:
@@ -48,6 +62,7 @@ The group dialog lists the reasons a group cannot be saved, as you work, and **S
 - **One group per spawn.** A spawn can be in only one group.
 - **Objects that can be pooled.** Only chests (herbs and mining veins are chests), usable objects and fishing schools. A door, a book or a decoration cannot be pooled.
 - **No loops.** A group cannot hold itself, directly or through the groups inside it.
+- **Events.** Only a group that is not inside another can follow an event, and the event has to exist in the database.
 - **Members.** A group needs at least one. A member the database no longer has is shown as missing, and has to be removed first.
 
 The server will not spawn a group that breaks these, so the app will not write one.
@@ -60,5 +75,5 @@ The server will not spawn a group that breaks these, so the app will not write o
 - A group the database already has can be edited too. The project patch rewrites its rows and the revert patch writes the originals back.
 
 :::note
-Groups tied to a game event, and rotating daily or weekly quests, are not made here yet. Editing an existing group keeps any event link it has.
+Rotating daily or weekly quests are made on the Quests graph, not in the World. See [Quest rotations](/acore-quest-creator/guides/quest-rotations/).
 :::

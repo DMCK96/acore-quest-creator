@@ -16,6 +16,16 @@ The World needs the **game client folder**, set when you [connect](/acore-quest-
 - The first time a project opens here, a **Welcome** offers well-known places to start, **Find an NPC or object**, **Start a quest** and **Just look around**.
 - The card in the top left names the area under the camera. **Teleport** lists named places, with a box to find a place or zone. **Find…** searches NPCs and objects by name or ID and lists every spawn of the one you pick, nearest first; **Go** takes the camera there and selects it. **Coordinates** takes a map and an X, Y and Z.
 - The World opens where you left it.
+- **Back**, the arrow on the place card, returns the camera to where it was before the last jump: a Teleport, a Find, a **Go to**, a Coordinates **Go**, or the move to a quest you opened. Press it again to go further back, up to 20 jumps, as in a browser. **Alt+Left** does the same while the World is shown. Its tooltip names the place it will return to (**Back to** the place), and it is off when there is nowhere to go back to.
+
+### Following a quest
+
+Open a quest from the **Quests** tab and then switch to the World, and the camera is already there: it flies to the quest's giver, or its ender if it has no giver, or an objective if it has neither. If the quest has several, it picks the one nearest the camera on the current map. A quest with no spawns leaves the camera where it was. If you move the camera yourself before switching, it stays where you put it. **Back** takes you to where you were.
+
+Two buttons do the same on demand:
+
+- **Show in World**, in the quest editor and in the graph preview, switches to the World and takes the camera to the quest.
+- **Go to _name_**, beside each giver, ender and objective that names an NPC or object with a spawn, takes the camera to that one's nearest spawn. Without the world database, it only finds spawns that are in your project.
 
 To move the camera:
 

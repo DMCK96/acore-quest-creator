@@ -123,6 +123,15 @@ Looked at and **not** used: `wowserhq/client` (it is the game's UI layer), `vjeu
   - **Respawn time.** *Respawn time…* on any spawn or several, and copy, duplicate and paste carry respawn time and wander (not a path).
   - **Spawn groups.** `pool_template`, `pool_creature`, `pool_gameobject` and `pool_pool` as one kind of group (`src/core/world/groups.ts`, `validateGroup`): *Group these spawns…*, *Spawn group ▸*, rings and a card for a selected pooled spawn, a **Spawn group** option in Find, export and revert. User guide: `site/src/content/docs/guides/spawn-groups.md`.
 
+- **The World follows the quest; Go to and Back** (2026-10-05; spec `internal_docs/superpowers/specs/2026-10-05-camera-and-pools-design.md`):
+  - Opening a quest from the Quests tab records a pending follow; when the World is next shown, the camera jumps to the quest's giver, else ender, else objective spawn (nearest the camera on the current map). Moving the camera first drops the follow; a quest with no spawns leaves the camera.
+  - **Show in World** (quest editor, graph preview) and **Go to _name_** (beside each giver, ender and objective with a spawn) jump on demand.
+  - **Back** on the place card (and **Alt+Left**) returns to where the camera was before the last jump, up to 20 jumps, with a tooltip naming the place (`camera-history.ts`).
+
+- **Quest pools and event pools** (2026-10-05; same spec; `src/core/world/groups.ts`):
+  - A spawn group gains an `event` (always, only during, or except during a game event, written to `game_event_pool`), allowed only on a group not inside another. The group dialog has **Event** and **Which event**; the card says "Only during" or "Except during"; the layers card's event filter counts such a group's spawns as event spawns.
+  - Quest pools (rotating daily or weekly quests, `pool_template` with `pool_quest`) are groups whose members are quests, made on the Quests graph: select quests, **Rotate these quests…** in the Quest tools opens the **Quest rotation** dialog. Rules: all daily or all weekly, each quest has a giver, a quest is in one rotation only, at least two quests, no nesting, no events. Marking quests daily or weekly edits their flags in the same undo step. The graph tags members "Daily rotation: _name_" or "Weekly rotation: _name_". Exported with the project patch and reverted like other groups.
+
 - **Undo for every project change** (2026-10-04; spec `internal_docs/superpowers/specs/2026-10-04-undo-history-design.md`; `src/main/project/history.ts`, `step-labels.ts`, `session.ts`, `HistoryButtons.tsx`, `HistoryNote.tsx`, `history-context.tsx`):
   - One history per open project, kept by the main process: the session records every change it takes (a quest, the graph's positions, the world layer, the project name) as a step with each part whole before and after. It lasts until the project closes (saving keeps it), up to 300 steps. Undoing back to the saved step makes the project clean again.
   - **Ctrl+Z** undoes the last change anywhere and **Ctrl+Y** / **Ctrl+Shift+Z** redoes, in every tab and modal, except inside a text field (whose own undo they are). Undo and Redo in the app bar name the step; the arrow beside them opens **History**, where a click goes back or forward to any step. A note says what was undone, with **Show** to go to it.
@@ -167,14 +176,12 @@ The maintainer's eight asked-for features are split into sub-projects A to E, an
 
 Every action the steps below add is a step of the project's undo history (the user, 2026-10-04: an action that cannot be undone is a bad experience).
 
-1. **Opening a quest moves the World's camera** to the quest's own spawns. Next.
-2. **Quest pools and event pools.** Rotating daily and weekly quests (`pool_quest`) and spawn groups that only run during a game event (`game_event_pool`). Spawn groups are built to take both. Needs a short design conversation first.
-3. **Reshape the quest grid** into a chain builder beside the 3D view. Needs a design conversation first: what "managing a chain" should mean day to day.
-4. **Fill the gaps** above as they get in the way: props inside buildings first, then the remaining building shaders.
+1. **Reshape the quest grid** into a chain builder beside the 3D view. Needs a design conversation first: what "managing a chain" should mean day to day.
+2. **Fill the gaps** above as they get in the way: props inside buildings first, then the remaining building shaders.
 
 Decided with the user (2026-10-04):
 
-- **Launched from a quest, the 3D view opens on the quest's own spawns**, not the last place looked. The quest map's 3D view already does (the focused spawn, else the first on the map). The World workspace does not yet: opening a quest leaves its camera where it was.
+- **Launched from a quest, the 3D view opens on the quest's own spawns**, not the last place looked. The quest map's 3D view already does (the focused spawn, else the first on the map). The World workspace does too (see "The World follows the quest" under Status).
 - **Scale edits change the template.** When the template has more than one spawn, the editor warns before the change, naming how many spawns it will affect.
 - **Kalimdor is the continent that matters most after Eastern Kingdoms**, so test data and checks lean that way.
 
