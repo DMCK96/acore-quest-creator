@@ -397,6 +397,18 @@ describe('the spawns a quest uses', () => {
     expect(revert).toMatch(/UPDATE `creature` SET `wander_distance` = 5, `MovementType` = 0 WHERE `guid` = 80331/);
   });
 
+  it('lists a giver moved in the World where the layer has it, and a spawn placed there', async () => {
+    const { api } = await setup(world);
+    const created: any = await api.newQuest();
+    await api.updateQuest({ ...created.value.aggregate, values: { ...created.value.aggregate.values, creature_queststarter: [{ id: 1423 }] } });
+    await api.worldMoveSpawn('creature', 80330, to(-9000));
+    const added: any = await api.worldAddSpawn('creature', 1423, 0, { x: 5, y: 6, z: 7, orientation: 0, rotation: null });
+    const out: any = await api.questSpawnList([created.value.questId]);
+    const spawns = out.value[0].spawns;
+    expect(spawns.find((s: any) => s.guid === 80330)).toMatchObject({ role: 'giver', x: -9000, y: 74.42, z: 56.55 });
+    expect(spawns.find((s: any) => s.guid === added.value.guid)).toMatchObject({ role: 'giver', kind: 'creature', entry: 1423, map: 0, x: 5, y: 6, z: 7 });
+  });
+
   it('says how many NPCs or objects had more spawns than were listed', async () => {
     const { api, db } = await setup(world);
     for (let i = 0; i < 201; i++) db.insert('creature', { guid: String(500000 + i), id1: '1423', map: '0', position_x: '0', position_y: '0', position_z: '0', orientation: '0' });
