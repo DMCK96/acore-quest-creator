@@ -105,4 +105,18 @@ describe('Project changes', () => {
     const list = await screen.findByRole('list', { name: 'To fix' });
     expect(within(list).getAllByRole('listitem').map((li) => li.textContent)).toEqual(['Hela has no look.']);
   });
+
+  it('a group row says quest rotation for a quest pool, and names its event', async () => {
+    const group = (over: any) => ({ type: 'group', drifted: false, id: 7, name: 'Dailies', map: 0, maxActive: 1, event: null, removed: false, origin: { kind: 'new' }, members: [{ type: 'quest', questId: 1 }, { type: 'quest', questId: 2 }], ...over });
+    const api = makeMockApi({
+      worldChanges: vi.fn(async () => okv([group({}), group({ id: 8, name: 'Path', members: [{ type: 'spawn', kind: 'npc', guid: 1, entry: 2, chance: 0 }], event: { id: 4, during: true } }), group({ id: 9, name: 'Other', members: [], event: { id: 99, during: false } })])),
+      gameEvents: vi.fn(async () => okv([{ id: 4, name: 'Winter Veil' }])),
+    });
+    mount([], api);
+    expect(await screen.findByText(/Dailies · quest rotation 7/)).toBeTruthy();
+    expect(screen.getByText(/Path · spawn group 8/)).toBeTruthy();
+    expect(screen.getByText('Only during Winter Veil')).toBeTruthy();
+    expect(screen.getByText('Except during event 99')).toBeTruthy();
+    expect(api.gameEvents).toHaveBeenCalledTimes(1);
+  });
 });

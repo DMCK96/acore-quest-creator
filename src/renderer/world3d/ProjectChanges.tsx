@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import type { Api, ApiError, Movement, Placement, RoutePoint, WorldChange, WorldLayer } from '@shared/ipc';
 import type { SpawnLocation } from '@core/entities/entity';
+import { isQuestPool } from '@core/world/groups';
 import { trapTab } from '../components/trap-tab';
 import { useProjectEntities } from '../state/project-entities';
 import { EDIT_NEEDS_DATABASE, EntityList, editableWith } from '../entities/EntityList';
@@ -43,6 +44,14 @@ export function ProjectChanges({
   const [error, setError] = useState<string | null>(null);
   // What must be fixed before the patch can be written, one line each
   const [issues, setIssues] = useState<string[]>([]);
+
+  // Game event names, read once when the dialog opens
+  const [eventNames, setEventNames] = useState<ReadonlyMap<number, string>>(new Map());
+  useEffect(() => {
+    void Promise.resolve(api.gameEvents?.()).then((r) => {
+      if (r?.ok) setEventNames(new Map(r.value.map((e) => [e.id, e.name])));
+    });
+  }, [api]);
 
   const load = async (): Promise<void> => {
     const result = await api.worldChanges();
@@ -130,7 +139,7 @@ export function ProjectChanges({
             </thead>
             <tbody>
               {changes.map((change) => (
-                <ChangeRow key={change.type === 'route' ? `route:${change.pathId}` : change.type === 'movement' ? `movement:${change.guid}` : change.type === 'respawn' ? `respawn:${change.kind}:${change.guid}` : change.type === 'group' ? `group:${change.id}` : `${change.type}:${change.kind}:${change.guid}`} change={change} onRevert={() => void revert(change)} />
+                <ChangeRow key={change.type === 'route' ? `route:${change.pathId}` : change.type === 'movement' ? `movement:${change.guid}` : change.type === 'respawn' ? `respawn:${change.kind}:${change.guid}` : change.type === 'group' ? `group:${change.id}` : `${change.type}:${change.kind}:${change.guid}`} change={change} eventNames={eventNames} onRevert={() => void revert(change)} />
               ))}
             </tbody>
           </table>
@@ -178,7 +187,7 @@ const where = (p: Placement): string => `${p.x.toFixed(2)}, ${p.y.toFixed(2)}, $
 const moves = (m: Movement): string => (m.type === 'path' ? `walks path ${m.pathId ?? 0}` : m.type === 'wander' ? `wanders ${m.wander} yd` : 'stands still');
 const points = (route: readonly RoutePoint[]): string => `${route.length} ${route.length === 1 ? 'point' : 'points'}`;
 
-function ChangeRow({ change, onRevert }: { change: WorldChange; onRevert(): void }): React.JSX.Element {
+function ChangeRow({ change, eventNames, onRevert }: { change: WorldChange; eventNames: ReadonlyMap<number, string>; onRevert(): void }): React.JSX.Element {
   const drift = change.drifted && (
     <span className="world-changes__drift">{change.type === 'added' ? 'The database has a spawn with this id now' : 'Changed in the database since'}</span>
   );
@@ -240,7 +249,13 @@ function ChangeRow({ change, onRevert }: { change: WorldChange; onRevert(): void
     return (
       <tr>
         <td>
-          {name} · spawn group {change.id} {drift}
+          {name} · {isQuestPool(change) ? 'quest rotation' : 'spawn group'} {change.id} {drift}
+          {change.event && !change.removed && (
+            <span className="world-changes__event">
+              {change.event.during ? 'Only during ' : 'Except during '}
+              {eventNames.get(change.event.id) ?? `event ${change.event.id}`}
+            </span>
+          )}
         </td>
         <td>{before}</td>
         <td>{change.removed ? 'deleted' : `${members(change.members.length)}, ${change.maxActive} up at once`}</td>
