@@ -5,6 +5,7 @@ import { CharacterTexture } from './scene/character/CharacterTexture';
 import { getAssetUrl } from './scene/asset';
 import { spawnBounds, type PickedSpawn, type SpawnSource, type SpawnStatus, type SpawnVisibility } from './scene/spawn/SpawnManager';
 import type { ViewSpawns } from '@core/db/view-spawns';
+import type { EntityLooks } from '@core/entities/view-spawns';
 import { clearProblems, onProblems } from './scene/diagnostics';
 import { ASSET_BASE_URL } from '@core/client/asset-url';
 import type { WorldLayer } from '@core/world/layer';
@@ -87,6 +88,8 @@ export interface World3D {
   setSpawnVisibility(visibility: SpawnVisibility): void;
   /** Whether a kind of spawn was capped, or why none could be read. */
   spawnStatus(): SpawnStatus;
+  /** The looks of edited existing NPCs and objects, drawn on their database spawns. */
+  setLooks(looks: EntityLooks): void;
   /** The open quest's own NPCs and objects, drawn with the world's in place of their database rows. */
   setOwnSpawns(spawns: ViewSpawns): void;
   /** Selects one spawn (outlined while it is drawn, its route active), or clears the selection. */
@@ -558,6 +561,7 @@ export function createWorld3D(options: World3DOptions): World3D {
       manager.setScenery(scenery);
     },
     spawnStatus: () => manager.spawnStatus,
+    setLooks: (looks) => followLayer(manager.setLooks(looks)),
     setOwnSpawns: (spawns) => followLayer(manager.setOwnSpawns(spawns)),
     select: (spawn) => setSelection(spawn ? combine(EMPTY_SELECTION, { spawns: [spawn] }, 'replace') : EMPTY_SELECTION, false),
     setTool: (next) => applyTool(next),

@@ -1,5 +1,5 @@
 import type { ViewCreature, ViewObject, ViewSpawns } from '../db/view-spawns';
-import type { CustomNpc, CustomObject } from './model';
+import { originOf, type CustomNpc, type CustomObject, type ProjectEntities } from './model';
 
 /**
  * The open quest's own new NPCs and objects as the 3D view draws them: each spawn with its entity's
@@ -53,4 +53,37 @@ export function ownViewSpawns(entities: { npcs: readonly CustomNpc[]; objects: r
   );
 
   return { creatures, objects, capped: { creatures: false, objects: false } };
+}
+
+/** The look of each edited existing NPC and object, keyed `creature:<entry>` / `object:<entry>` */
+export type EntityLooks = ReadonlyMap<string, { displayId: number; scale: number; equipment?: [number, number, number] }>;
+
+/** The looks of the store's existing entities (new ones are drawn as their own spawns) */
+export function looksOf(store: ProjectEntities): EntityLooks {
+  const looks = new Map<string, { displayId: number; scale: number; equipment?: [number, number, number] }>();
+  for (const npc of store.npcs) {
+    if (originOf(npc) !== 'existing') continue;
+    looks.set(`creature:${npc.entry}`, { displayId: npc.displayId, scale: npc.scale, equipment: [npc.equipment.mainHand, npc.equipment.offHand, npc.equipment.ranged] });
+  }
+  for (const object of store.objects) {
+    if (originOf(object) !== 'existing') continue;
+    looks.set(`object:${object.entry}`, { displayId: object.displayId, scale: object.size });
+  }
+  return looks;
+}
+
+/** Database spawns drawn with the looks of their edited entities; others are left alone */
+export function withLooks(spawns: ViewSpawns, looks: EntityLooks): ViewSpawns {
+  if (looks.size === 0) return spawns;
+  return {
+    ...spawns,
+    creatures: spawns.creatures.map((c) => {
+      const look = looks.get(`creature:${c.entry}`);
+      return look ? { ...c, displayId: look.displayId, scale: look.scale, equipment: look.equipment ?? c.equipment } : c;
+    }),
+    objects: spawns.objects.map((o) => {
+      const look = looks.get(`object:${o.entry}`);
+      return look ? { ...o, displayId: look.displayId, scale: look.scale } : o;
+    }),
+  };
 }

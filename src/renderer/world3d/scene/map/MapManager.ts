@@ -22,6 +22,7 @@ import { areaBox, nearbyAreas } from '../spawn/placement.js';
 import type { Movement } from '../../../../core/world/movement.js';
 import { DISPLAY_RECORDS } from '../db/records.js';
 import { ViewSpawns } from '../../../../core/db/view-spawns.js';
+import type { EntityLooks } from '../../../../core/entities/view-spawns.js';
 import { WorldLayer } from '../../../../core/world/layer.js';
 import { AssetHost } from '../asset.js';
 import MapLoader from './loader/MapLoader.js';
@@ -186,6 +187,11 @@ class MapManager extends EventTarget {
   /** Where the NPCs and objects come from; null draws none */
   setSpawnSource(source: SpawnSource | null) {
     this.#spawnManager.setSource(source);
+  }
+
+  /** The looks of edited existing NPCs and objects, drawn on their database spawns */
+  setLooks(looks: EntityLooks) {
+    this.#spawnManager.setLooks(looks).catch((error) => console.warn(`3D view: edited looks could not be drawn: ${describeError(error)}`));
   }
 
   /** The open quest's own NPCs and objects, drawn with the world's */
