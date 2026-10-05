@@ -848,7 +848,7 @@ function WorldStage({
           {note && <p className="world3d__selected-note">{note}</p>}
           <p className="world3d__selected-actions">
             <button type="button" className="btn" onClick={clearSelection}>
-              Clear
+              Deselect
             </button>
           </p>
         </section>
@@ -971,13 +971,16 @@ function SelectedSpawn({ spawn, note, onClose, onRemove }: { spawn: PickedSpawn;
       {spawn.pathId > 0 && <p>Route {spawn.pathId}</p>}
       {spawn.added && <p>Placed here; it is not in the database until the project patch is applied.</p>}
       {note && <p className="world3d__selected-note">{note}</p>}
-      {onRemove && (
-        <p className="world3d__selected-actions">
+      <p className="world3d__selected-actions">
+        <button type="button" className="btn" onClick={onClose}>
+          Deselect
+        </button>
+        {onRemove && (
           <button type="button" className="btn" onClick={onRemove}>
             Remove
           </button>
-        </p>
-      )}
+        )}
+      </p>
     </section>
   );
 }

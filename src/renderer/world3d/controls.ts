@@ -30,6 +30,9 @@ const MIN_STEP = 2;
 const PAN_SCALE = 0.0015;
 /** A left press that moves less than this many pixels before it is let go is a click, not an orbit */
 const CLICK_SLOP = 4;
+/** A second click within this long and this many pixels of the first is a double-click */
+const DOUBLE_CLICK_MS = 400;
+const DOUBLE_CLICK_SLOP = 6;
 
 type Pick = (ndcX: number, ndcY: number) => THREE.Vector3 | null;
 
@@ -43,6 +46,8 @@ type WorldControlsOptions = {
   pick?: Pick;
   /** A left click, without dragging, at a place on screen (normalised device coordinates) */
   onClick?(ndcX: number, ndcY: number, keys: ClickKeys): void;
+  /** A second left click soon after the first at the same place, told after its own click */
+  onDoubleClick?(ndcX: number, ndcY: number): void;
   /** A selection box drawn in Select mode, from where it started to where it was let go */
   onBox?(rect: Rect, keys: ClickKeys): void;
   /** Offered each wheel turn first; true when it was used (a falloff drag), so the camera does not move */
@@ -68,6 +73,9 @@ class WorldControls {
   readonly #dom: HTMLElement;
   readonly #pick: Pick;
   readonly #onClick: (ndcX: number, ndcY: number, keys: ClickKeys) => void;
+  readonly #onDoubleClick: (ndcX: number, ndcY: number) => void;
+  /** The last click that could start a double-click: when and where on screen */
+  #lastClick: { at: number; x: number; y: number } | null = null;
   readonly #onBox: (rect: Rect, keys: ClickKeys) => void;
   readonly #onWheelClaim: (deltaY: number) => boolean;
   readonly #onModeChange: (tool: Tool) => void;
@@ -84,13 +92,15 @@ class WorldControls {
   #pitch = 0;
   #pivot = new THREE.Vector3();
   #keys = new Set<string>();
-  #drag: { button: number; x: number; y: number; startX: number; startY: number; panScale: number; box: boolean } | null = null;
+  /** The press under way; `held` when the gizmo has it, so it neither orbits nor draws a box */
+  #drag: { button: number; x: number; y: number; startX: number; startY: number; panScale: number; box: boolean; held?: boolean } | null = null;
 
   constructor(camera: THREE.PerspectiveCamera, dom: HTMLElement, options: WorldControlsOptions = {}) {
     this.#camera = camera;
     this.#dom = dom;
     this.#pick = options.pick ?? (() => null);
     this.#onClick = options.onClick ?? (() => {});
+    this.#onDoubleClick = options.onDoubleClick ?? (() => {});
     this.#onBox = options.onBox ?? (() => {});
     this.#onWheelClaim = options.onWheel ?? (() => false);
     this.#onModeChange = options.onModeChange ?? (() => {});
@@ -247,8 +257,10 @@ class WorldControls {
 
   #onPointerDown = (event: PointerEvent): void => {
     this.#dom.focus();
+    // The gizmo's press: kept only to tell, when it is let go where it went down, that it was a click
+    // (a route point or NPC under a handle is picked by it), not a drag
     if (event.button === 0 && this.#blocked()) {
-      this.#drag = null;
+      this.#drag = { button: 0, x: event.clientX, y: event.clientY, startX: event.clientX, startY: event.clientY, panScale: 0, box: false, held: true };
       return;
     }
     const [x, y] = this.#ndc(event);
@@ -269,7 +281,7 @@ class WorldControls {
   #onPointerMove = (event: PointerEvent): void => {
     this.#lastPointer = { x: event.clientX, y: event.clientY };
     const drag = this.#drag;
-    if (!drag) return;
+    if (!drag || drag.held) return;
     const dx = event.clientX - drag.x;
     const dy = event.clientY - drag.y;
     drag.x = event.clientX;
@@ -296,6 +308,12 @@ class WorldControls {
     const [x, y] = this.#ndc(event);
     if (Math.hypot(event.clientX - drag.startX, event.clientY - drag.startY) < CLICK_SLOP) {
       this.#onClick(x, y, keys);
+      const now = performance.now();
+      const last = this.#lastClick;
+      const double = last !== null && now - last.at <= DOUBLE_CLICK_MS && Math.hypot(event.clientX - last.x, event.clientY - last.y) <= DOUBLE_CLICK_SLOP;
+      // A double-click's second click does not start another
+      this.#lastClick = double ? null : { at: now, x: event.clientX, y: event.clientY };
+      if (double) this.#onDoubleClick(x, y);
     } else if (drag.box) {
       const [x0, y0] = this.#ndc({ clientX: drag.startX, clientY: drag.startY });
       this.#onBox({ x0, y0, x1: x, y1: y }, keys);

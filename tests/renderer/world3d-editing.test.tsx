@@ -203,11 +203,19 @@ describe('Select mode and the selection in the 3D view', () => {
     expect(screen.getByRole('button', { name: /^Falloff/ }).textContent).toBe('Falloff 12 yd');
   });
 
-  it('summarises a selection of more than one thing, and Clear clears it', async () => {
+  it("the selected spawn's card has a Deselect button", async () => {
+    const { world } = await questMap();
+    act(() => world.options.onSelect({ kind: 'creature', guid: 80330, entry: 1423, name: 'Guard', own: false, event: null, position: { x: 0, y: 0, z: 0 }, pathId: 0 }));
+    await userEvent.click(screen.getByRole('button', { name: 'Deselect' }));
+    expect(world.select).toHaveBeenLastCalledWith(null);
+    expect(screen.queryByText('Guard')).toBeNull();
+  });
+
+  it('summarises a selection of more than one thing, and Deselect clears it', async () => {
     const { world } = await questMap();
     act(() => world.options.onSelection({ creatures: 3, objects: 1, points: 12, routes: 2 }));
     expect(screen.getByText('3 NPCs, 1 object, 12 route points on 2 routes')).toBeTruthy();
-    await userEvent.click(screen.getByRole('button', { name: 'Clear' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Deselect' }));
     expect(world.select).toHaveBeenLastCalledWith(null);
     expect(screen.queryByText('3 NPCs, 1 object, 12 route points on 2 routes')).toBeNull();
   });

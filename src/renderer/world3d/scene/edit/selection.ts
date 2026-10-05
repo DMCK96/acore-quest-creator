@@ -47,7 +47,9 @@ const withRoutes = (routes: readonly number[], guids: readonly number[]): number
 
 export function combine(current: Selection, hit: Hit, modifier: Modifier): Selection {
   const caught = 'spawns' in hit ? hit.spawns : hit.points;
-  if (caught.length === 0) return modifier === 'replace' ? EMPTY_SELECTION : current;
+  // A pick of nothing changes nothing: a miss while working on a route must not lose it (a
+  // double-click on nothing, Esc or Deselect clears)
+  if (caught.length === 0) return current;
 
   if ('spawns' in hit) {
     const routed = hit.spawns.filter((s) => s.kind === 'creature').map((s) => s.guid);

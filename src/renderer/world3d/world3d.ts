@@ -228,6 +228,8 @@ export function createWorld3D(options: World3DOptions): World3D {
 
   // No Three lights: terrain, models, buildings and liquids all light themselves from the map's light
   const scene = new THREE.Scene();
+  // Never moved: if it were worked out each frame, it would force every object under it to be too
+  scene.matrixAutoUpdate = false;
   const camera = new THREE.PerspectiveCamera(FOV, 1, NEAR, 1000);
   // Z is up in the game's world, and the orbit controls turn about the camera's up axis.
   camera.up.set(0, 0, 1);
@@ -308,7 +310,11 @@ export function createWorld3D(options: World3DOptions): World3D {
     return { spawns: spawn ? [{ kind: spawn.kind, guid: spawn.guid }] : [] };
   };
   const modifierOf = (keys: ClickKeys): Modifier => (keys.ctrl ? 'remove' : keys.shift ? 'add' : 'replace');
+  // Plain clicks in a row that hit nothing: a click on nothing keeps the selection, two (a double-click) clear it
+  let misses = 0;
   const click = (x: number, y: number, keys: ClickKeys): void => {
+    const missed = misses;
+    misses = 0;
     // While a path is drawn, each click on the ground is its next point
     if (editor.appendPoint(x, y)) return;
     if (placing) {
@@ -319,7 +325,13 @@ export function createWorld3D(options: World3DOptions): World3D {
     if ((tool === 'camera' ? keys.shift : keys.alt) && editor.insertPoint(x, y)) return;
     const hit = hitAt(x, y);
     if ('points' in hit) options.onNotice?.(null);
+    const caught = 'spawns' in hit ? hit.spawns : hit.points;
+    if (caught.length === 0 && !keys.shift && !keys.ctrl && !keys.alt) misses = missed + 1;
     setSelection(combine(selection, hit, tool === 'select' ? modifierOf(keys) : 'replace'));
+  };
+  const doubleClick = (): void => {
+    if (misses >= 2 && !isEmpty(selection)) setSelection(EMPTY_SELECTION);
+    misses = 0;
   };
   // A box drawn in Select mode: the route points or spawns inside it, by where they land on screen
   const box = (rect: Rect, keys: ClickKeys): void => {
@@ -353,6 +365,7 @@ export function createWorld3D(options: World3DOptions): World3D {
   const controls = new WorldControls(camera, renderer.domElement, {
     pick,
     onClick: click,
+    onDoubleClick: doubleClick,
     onBox: box,
     onWheel: (deltaY) => editor.wheel(deltaY),
     onModeChange: (next) => {
@@ -523,11 +536,21 @@ export function createWorld3D(options: World3DOptions): World3D {
   const { textures, databases, characterTexture } = sharedManagers();
   // The drawn ground a short way below a point, for standing NPCs on it
   const down = new THREE.Raycaster();
+  /** Whether a loaded area's terrain or buildings reach over a point; its bounds are worked out once */
+  const reaches = (group: THREE.Object3D, x: number, y: number): boolean => {
+    let bounds: THREE.Box3 | undefined = group.userData.floorBounds;
+    if (!bounds) {
+      if (group.children.length === 0) return false;
+      bounds = group.userData.floorBounds = new THREE.Box3().setFromObject(group);
+    }
+    return x >= bounds.min.x && x <= bounds.max.x && y >= bounds.min.y && y <= bounds.max.y;
+  };
   const groundBelow = (x: number, y: number, fromZ: number, distance: number): number | null => {
     down.set(new THREE.Vector3(x, y, fromZ), new THREE.Vector3(0, 0, -1));
     down.far = distance;
-    // Every floor, shown or not: where an NPC stands does not change with what is drawn
-    const floors = manager.root.children.filter((group) => group.name === 'terrain' || group.name === 'buildings');
+    // Every floor, shown or not: where an NPC stands does not change with what is drawn. Only an
+    // area's floors that reach over the point are tried: trying every loaded one took 2 ms a ray.
+    const floors = manager.root.children.filter((group) => (group.name === 'terrain' || group.name === 'buildings') && reaches(group, x, y));
     return down.intersectObjects(floors, true)[0]?.point.z ?? null;
   };
   const manager = new MapManager({ host: HOST, textureManager: textures, dbManager: databases, characterTexture, soundManager: SILENT, groundBelow });

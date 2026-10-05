@@ -33,10 +33,10 @@ describe('combining a hit with the selection', () => {
     expect(combine(added, { points: [pt(1, 0)] }, 'remove')).toEqual({ spawns: [], points: [pt(1, 1)], routes: [1] });
   });
 
-  it('a plain pick of nothing clears everything, routes too; Shift or Ctrl with nothing changes nothing', () => {
+  it('a pick of nothing changes nothing, plain, Shift or Ctrl: a miss while working on a route keeps it (a double-click or Esc clears)', () => {
     const before: Selection = { spawns: [npc(1)], points: [pt(1, 0)], routes: [1] };
-    expect(combine(before, { spawns: [] }, 'replace')).toEqual(EMPTY_SELECTION);
-    expect(combine(before, { points: [] }, 'replace')).toEqual(EMPTY_SELECTION);
+    expect(combine(before, { spawns: [] }, 'replace')).toEqual(before);
+    expect(combine(before, { points: [] }, 'replace')).toEqual(before);
     expect(combine(before, { spawns: [] }, 'add')).toEqual(before);
     expect(combine(before, { points: [] }, 'remove')).toEqual(before);
   });
