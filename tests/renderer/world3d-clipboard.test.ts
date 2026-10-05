@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it } from 'vitest';
 import { clearClipboard, clipEntries, copySpawns, duplicateOffset, entriesOf, layoutAt, pasteable } from '../../src/renderer/world3d/clipboard';
 import type { SpawnInfo } from '../../src/renderer/world3d/scene/spawn/SpawnManager';
 
-const spawn = (guid: number, x: number, y: number, over: Partial<SpawnInfo> = {}): SpawnInfo => ({ kind: 'creature', guid, entry: 1423, name: 'Guard', own: false, added: false, pathId: 0, wander: 0, map: 1, group: null,
+const spawn = (guid: number, x: number, y: number, over: Partial<SpawnInfo> = {}): SpawnInfo => ({ kind: 'creature', guid, entry: 1423, name: 'Guard', own: false, added: false, pathId: 0, wander: 0, map: 1, group: null, respawnSecs: 300,
   placement: { x, y, z: 10, orientation: 0.5, rotation: null }, ...over });
 
 describe('the 3D view’s clipboard', () => {

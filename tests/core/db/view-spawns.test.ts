@@ -4,7 +4,7 @@ import { SPAWN_VIEW_CAP, orderPath, pickPreset, toViewCreature, toViewObject, to
 const creatureRow = {
   guid: '79970', entry: '197', name: 'Marshal McBride', map: '0',
   position_x: '-8902.59', position_y: '-162.606', position_z: '82.0223', orientation: '1.5',
-  display_id: '1953', display_scale: '1.25', wander_distance: '5', MovementType: '1',
+  display_id: '1953', display_scale: '1.25', wander_distance: '5', MovementType: '1', spawntimesecs: '120',
 };
 
 describe('a creature spawn for the 3D view', () => {
@@ -13,7 +13,7 @@ describe('a creature spawn for the 3D view', () => {
     expect(c).toEqual({
       guid: 79970, entry: 197, name: 'Marshal McBride', map: 0,
       x: -8902.59, y: -162.606, z: 82.0223, orientation: 1.5,
-      displayId: 1953, scale: 1.25, wander: 5, path: null, equipment: [0, 0, 0], own: false, event: null, events: [], removedBy: [], pathId: 0, preset: null, group: null,
+      displayId: 1953, scale: 1.25, wander: 5, path: null, equipment: [0, 0, 0], own: false, event: null, events: [], removedBy: [], pathId: 0, preset: null, group: null, respawnSecs: 120,
     });
   });
 
@@ -88,11 +88,11 @@ describe('an object spawn for the 3D view', () => {
       guid: '5', entry: '143981', name: 'Mailbox', map: '0',
       position_x: '-9000', position_y: '-100', position_z: '80',
       rotation0: '0', rotation1: '0', rotation2: '0.5', rotation3: '0.8660254',
-      display_id: '1949', size: '1.5',
+      display_id: '1949', size: '1.5', spawntimesecs: '45',
     });
     expect(o).toEqual({
       guid: 5, entry: 143981, name: 'Mailbox', map: 0, x: -9000, y: -100, z: 80,
-      rotation: [0, 0, 0.5, 0.8660254], displayId: 1949, scale: 1.5, own: false, event: null, events: [], removedBy: [], group: null,
+      rotation: [0, 0, 0.5, 0.8660254], displayId: 1949, scale: 1.5, own: false, event: null, events: [], removedBy: [], group: null, respawnSecs: 45,
     });
   });
 
@@ -100,6 +100,7 @@ describe('an object spawn for the 3D view', () => {
     const o = toViewObject({ guid: '5', entry: '1', name: null, map: '0', position_x: '0', position_y: '0', position_z: '0', rotation0: null, rotation1: null, rotation2: null, rotation3: null, display_id: null, size: null });
     expect(o.rotation).toEqual([0, 0, 0, 1]);
     expect([o.scale, o.name, o.displayId]).toEqual([1, '', 0]);
+    expect(o.respawnSecs).toBe(300);
   });
 });
 

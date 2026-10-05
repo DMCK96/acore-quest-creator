@@ -403,6 +403,7 @@ function WorldStage({
       const result =
         change.kind === 'place' ? await current.worldMoveSpawn(kind, change.spawn.guid, change.to)
         : change.kind === 'movement' ? await current.worldSetMovement(change.spawn.guid, change.to)
+        : change.kind === 'respawn' ? await current.worldSetRespawn(kind, change.spawn.guid, change.secs)
         // A spawn put back by a redo keeps its guid; one taken away by an undo leaves the layer
         : change.kind === 'presence'
           ? change.present

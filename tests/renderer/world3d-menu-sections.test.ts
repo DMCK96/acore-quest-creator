@@ -26,7 +26,7 @@ const labels = (groups: ReturnType<typeof buildMenu>) => groups.map((g) => [g.id
 
 describe('the builder', () => {
   it('registers the sections in the spec order', () => {
-    expect(SECTIONS.map((s) => s.id)).toEqual(['busy', 'create', 'edit', 'loot', 'clipboard', 'coordinates', 'remove', 'movement', 'quest-parts', 'quest-spawns']);
+    expect(SECTIONS.map((s) => s.id)).toEqual(['busy', 'create', 'edit', 'loot', 'clipboard', 'coordinates', 'respawn', 'remove', 'movement', 'quest-parts', 'quest-spawns']);
   });
 
   it('runs only sections that apply, joins those of one group, and drops empty groups', () => {
@@ -90,12 +90,12 @@ describe('the ground', () => {
 describe('a spawn', () => {
   it('a database NPC: copy, duplicate, coordinates; no edit, loot or remove', () => {
     const world = buildMenu(on(npc()), context()).find((g) => g.id === 'world')!;
-    expect(world.items.map((i) => i.label)).toEqual(['Copy', 'Duplicate', 'Copy coordinates']);
+    expect(world.items.map((i) => i.label)).toEqual(['Copy', 'Duplicate', 'Copy coordinates', 'Respawn time…']);
   });
 
   it('a project NPC: edit first, and remove last', () => {
     const world = buildMenu(on(hela), context()).find((g) => g.id === 'world')!;
-    expect(world.items.map((i) => i.label)).toEqual(['Edit NPC…', 'Copy', 'Duplicate', 'Copy coordinates', 'Remove']);
+    expect(world.items.map((i) => i.label)).toEqual(['Edit NPC…', 'Copy', 'Duplicate', 'Copy coordinates', 'Respawn time…', 'Remove']);
     expect(item(buildMenu(on(hela), context()), 'Edit NPC…')!.action).toEqual({ kind: 'editEntity', spawn: hela });
   });
 
@@ -146,6 +146,20 @@ describe('a spawn', () => {
     expect(item(buildMenu(on(npc()), context()), 'Start the next quest in this chain')).toBeUndefined();
     expect(buildMenu(on(crate()), context()).map((g) => g.id)).not.toContain('quest');
     expect(item(buildMenu(on(npc()), context({ project: false })), 'Quests')).toBeUndefined();
+  });
+});
+
+describe('respawn time', () => {
+  it('on a spawn, or a selection, opens the respawn dialog for them', () => {
+    expect(item(buildMenu(on(npc()), context()), 'Respawn time…')!.action).toEqual({ kind: 'respawn', spawns: [npc()] });
+    const both = subjectOf({ ground: at, hit: { type: 'spawn', spawn: npc() }, selection: [npc(), crate()] }, store);
+    expect(item(buildMenu(both, context()), 'Respawn time of 2 spawns…')!.action).toEqual({ kind: 'respawn', spawns: [npc(), crate()] });
+    expect(item(buildMenu(ground([npc()]), context()), 'Respawn time…')!.action).toEqual({ kind: 'respawn', spawns: [npc()] });
+  });
+
+  it('offline, a database spawn needs the database; a project one does not', () => {
+    expect(item(buildMenu(on(npc()), context({ connected: false })), 'Respawn time…')!.disabledReason).toBe('Needs the world database');
+    expect(item(buildMenu(on(hela), context({ connected: false })), 'Respawn time…')!.action).toBeDefined();
   });
 });
 

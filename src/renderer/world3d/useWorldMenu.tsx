@@ -13,6 +13,7 @@ import { clipEntries, copySpawns, duplicateOffset, entriesOf, layoutAt, pasteabl
 import { placementAt } from './placing';
 import { WorldContextMenu } from './WorldContextMenu';
 import { WanderDialog } from './WanderDialog';
+import { RespawnDialog } from './RespawnDialog';
 import { PlaceDialog, type Chosen } from './PlaceDialog';
 import { useHistorySteps } from '../state/history-context';
 
@@ -85,6 +86,7 @@ export function useWorldMenu(deps: WorldMenuDeps): {
   const [menu, setMenu] = useState<{ groups: MenuGroup[]; at: { x: number; y: number } } | null>(null);
   const [place, setPlace] = useState<{ what: 'creature' | 'object'; at: At } | null>(null);
   const [wander, setWander] = useState<{ spawn: MenuSpawn } | null>(null);
+  const [respawn, setRespawn] = useState<{ spawns: MenuSpawn[] } | null>(null);
   const [drawing, setDrawing] = useState<{ guid: number; points: number } | null>(null);
   const drawingRef = useRef(drawing);
   drawingRef.current = drawing;
@@ -272,6 +274,10 @@ export function useWorldMenu(deps: WorldMenuDeps): {
         if (!still(action.spawn)) return;
         setWander({ spawn: action.spawn });
         return;
+      case 'respawn':
+        if (!action.spawns.every(still)) return;
+        setRespawn({ spawns: action.spawns });
+        return;
       case 'removePath': {
         const { spawn } = action;
         if (!still(spawn)) return;
@@ -384,6 +390,24 @@ export function useWorldMenu(deps: WorldMenuDeps): {
           onClose={() => {
             d.current.world.current?.setPendingMovement(wander.spawn.guid, null);
             setWander(null);
+            d.current.focusView();
+          }}
+        />
+      )}
+      {respawn && (
+        <RespawnDialog
+          names={respawn.spawns.map((s) => s.name)}
+          // Spawns with different times start blank
+          initial={respawn.spawns.every((s) => s.respawnSecs === respawn.spawns[0]!.respawnSecs) ? respawn.spawns[0]!.respawnSecs : null}
+          onApply={(secs) => {
+            const { spawns } = respawn;
+            setRespawn(null);
+            d.current.focusView();
+            const label = spawns.length === 1 ? `Respawn time of ${spawns[0]!.name}` : `Respawn time of ${spawns.length} spawns`;
+            void commit(spawns.map((spawn) => ({ kind: 'respawn', spawn: refOf(spawn), secs })), label);
+          }}
+          onClose={() => {
+            setRespawn(null);
             d.current.focusView();
           }}
         />

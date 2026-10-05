@@ -85,7 +85,7 @@ describe('spawns for the 3D view', () => {
       db.insert('gameobject', { guid: '9', id: '143981', map: '1', position_x: '-8920', position_y: '-160', position_z: '82' });
     });
     const out: any = await api.viewSpawns(0, AREA);
-    expect(out.value.objects).toEqual([{ guid: 7, entry: 143981, name: 'Mailbox', map: 0, x: -8920, y: -160, z: 82, rotation: [0, 0, 0.5, 0.8660254], displayId: 1949, scale: 1.5, own: false, event: null, events: [], removedBy: [], group: null }]);
+    expect(out.value.objects).toEqual([{ guid: 7, entry: 143981, name: 'Mailbox', map: 0, x: -8920, y: -160, z: 82, rotation: [0, 0, 0.5, 0.8660254], displayId: 1949, scale: 1.5, own: false, event: null, events: [], removedBy: [], group: null, respawnSecs: 0 }]);
   });
 
   it('says when it capped a kind at 2000', async () => {

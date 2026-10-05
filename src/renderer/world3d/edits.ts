@@ -18,4 +18,6 @@ export type SpawnEdit =
   /** A spawn put in the world (`present`) or taken out of it, at `at` on `map` */
   | { kind: 'presence'; spawn: SpawnRef; present: boolean; at: Placement; map: number }
   /** How an NPC moves: stands, wanders, or walks a path */
-  | { kind: 'movement'; spawn: SpawnRef; to: Movement };
+  | { kind: 'movement'; spawn: SpawnRef; to: Movement }
+  /** Seconds before a spawn respawns */
+  | { kind: 'respawn'; spawn: SpawnRef; secs: number };

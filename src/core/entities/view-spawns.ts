@@ -30,6 +30,7 @@ export function ownViewSpawns(entities: { npcs: readonly CustomNpc[]; objects: r
       removedBy: [],
       preset: null,
       group: null,
+      respawnSecs: spawn.respawnSecs,
     })),
   );
 
@@ -51,6 +52,7 @@ export function ownViewSpawns(entities: { npcs: readonly CustomNpc[]; objects: r
       events: [],
       removedBy: [],
       group: null,
+      respawnSecs: spawn.respawnSecs,
     })),
   );
 

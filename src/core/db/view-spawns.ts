@@ -79,6 +79,8 @@ export interface ViewCreature {
   preset: ViewPreset | null;
   /** The spawn group (pool) it is in, or null when it is in none */
   group: number | null;
+  /** Seconds before it respawns once killed (`spawntimesecs`) */
+  respawnSecs: number;
 }
 
 export interface ViewObject {
@@ -104,6 +106,8 @@ export interface ViewObject {
   removedBy: ViewEvent[];
   /** The spawn group (pool) it is in, or null when it is in none */
   group: number | null;
+  /** Seconds before it respawns once used up (`spawntimesecs`) */
+  respawnSecs: number;
 }
 
 export interface ViewSpawns {
@@ -115,6 +119,9 @@ export interface ViewSpawns {
 
 /** Spawns of each kind given for one area at most */
 export const SPAWN_VIEW_CAP = 2000;
+
+/** The respawn time a spawn without one is given, as the game does */
+const DEFAULT_RESPAWN_SECS = 300;
 
 /** MovementType 1: roams at random within its wander distance */
 const RANDOM_MOVEMENT = '1';
@@ -181,6 +188,7 @@ export function toViewCreature(row: Row, path: ViewPoint[] | null, equipment: [n
     ...eventListOf(row),
     preset,
     group: groupOf(row),
+    respawnSecs: num(row.spawntimesecs, DEFAULT_RESPAWN_SECS),
   };
 }
 
@@ -200,6 +208,7 @@ export function toViewObject(row: Row): ViewObject {
     event: eventOf(row),
     ...eventListOf(row),
     group: groupOf(row),
+    respawnSecs: num(row.spawntimesecs, DEFAULT_RESPAWN_SECS),
   };
 }
 

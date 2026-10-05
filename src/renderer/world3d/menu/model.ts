@@ -58,6 +58,8 @@ export type MenuAction =
   | { kind: 'duplicate' }
   | { kind: 'remove'; spawn: MenuSpawn }
   | { kind: 'copyCoordinates'; at: At }
+  /** How long the spawns take to respawn, asked for in a dialog */
+  | { kind: 'respawn'; spawns: MenuSpawn[] }
   | { kind: 'startPath'; spawn: MenuSpawn; at: At }
   | { kind: 'wander'; spawn: MenuSpawn }
   | { kind: 'removePath'; spawn: MenuSpawn }
