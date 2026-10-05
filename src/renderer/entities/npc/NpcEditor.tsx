@@ -1,4 +1,4 @@
-import type { CustomNpc, EntityLock, Spawn } from '@core/entities/model';
+import type { CustomNpc, Spawn } from '@core/entities/model';
 import { FightEditor } from '../../combat/FightEditor';
 import { CreditQuestsProvider } from '../../combat/credit-quests';
 import { NumberField } from '../../scripts/fields';
@@ -7,29 +7,8 @@ import { LootList } from '../LootList';
 import { SpawnList } from '../SpawnList';
 import { NpcBasics } from './NpcBasics';
 import { NpcLook } from './NpcLook';
+import { type ExistingFacts, ExistingLoot } from '../existing-facts';
 import '../../scripts/scripts.css';
-
-/** What the editors say about an existing entity, counted when it was first edited */
-export interface ExistingFacts {
-  /** Other templates sharing its loot list */
-  sharedLoot: number;
-  spawnCount: number;
-  /** Parts left as the database has them */
-  locked: readonly EntityLock[];
-}
-
-/** The Loot tab's body: a warning when others share the list, or only a line when it is not edited here */
-export function ExistingLoot({ existing, children }: { existing?: ExistingFacts; children: React.ReactNode }): React.JSX.Element {
-  if (existing?.locked.includes('loot')) return <p className="scene-hint">Its loot list uses references or groups, which are not edited here.</p>;
-  return (
-    <>
-      {existing && existing.sharedLoot > 0 && (
-        <p className="scene-hint">{existing.sharedLoot} {existing.sharedLoot === 1 ? 'other shares' : 'others share'} this loot list: changing it changes theirs too.</p>
-      )}
-      {children}
-    </>
-  );
-}
 
 /**
  * Everything about one NPC, in tabs: the only place its fields are edited. An existing one (`existing`)

@@ -6,7 +6,8 @@ import type { AllocKind } from '@shared/ipc';
 import { PanelFrame } from '../modules/ModulePanel';
 import { useApi } from '../state/names';
 import { ItemEditor } from './item/ItemEditor';
-import { NpcEditor, type ExistingFacts } from './npc/NpcEditor';
+import { NpcEditor } from './npc/NpcEditor';
+import type { ExistingFacts } from './existing-facts';
 import { ObjectEditor } from './object/ObjectEditor';
 import { stillNeeds } from './still-needs';
 

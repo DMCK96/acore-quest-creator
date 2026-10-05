@@ -2,7 +2,7 @@ import type { CustomObject, Spawn } from '@core/entities/model';
 import { EditorTabs, type EditorTab } from '../EditorTabs';
 import { LootList } from '../LootList';
 import { SpawnList } from '../SpawnList';
-import { ExistingLoot, type ExistingFacts } from '../npc/NpcEditor';
+import { ExistingLoot, type ExistingFacts } from '../existing-facts';
 import { ObjectBasics } from './ObjectBasics';
 import { ObjectLook } from './ObjectLook';
 import { PageList } from './PageList';
