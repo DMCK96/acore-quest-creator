@@ -66,9 +66,6 @@ test('an existing NPC is edited from the giver card and exported with its revert
   await expect(editor).toHaveCount(0);
   await page.keyboard.press('Escape');
   await page.getByRole('button', { name: '← Back to chain' }).click();
-  // Leaving the editor writes the edit first and then previews the quest: the World is opened only
-  // once that has settled, or the preview pulls the app back to the Quests tab (see the report)
-  await expect(page.getByRole('button', { name: 'Close preview' })).toBeVisible();
 
   await page.getByRole('tab', { name: 'World' }).click();
   const welcome = page.getByRole('dialog', { name: 'Welcome' });

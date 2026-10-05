@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { ProjectEntitiesFromStore } from '../state/project-entities';
 import type { AppStore } from '../state/app-store';
 import { AppBar, type Workspace } from '../components/AppBar';
@@ -22,7 +22,7 @@ export function AppShell({ store }: { store: AppStore }): React.JSX.Element {
   const [workspace, setWorkspace] = useState<Workspace>('world');
   const [showProject, setShowProject] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
-  const screen = store((s) => s.screen);
+  const questsAsked = store((s) => s.questsAsked);
   const filePath = store((s) => s.project.filePath);
   const projectName = store((s) => s.project.name);
   const hasClient = store((s) => Boolean(s.summary?.clientDir));
@@ -30,10 +30,21 @@ export function AppShell({ store }: { store: AppStore }): React.JSX.Element {
   const nodes = store((s) => s.nodes);
   const [goTo, setGoTo] = useState<{ map: number; x: number; y: number; z: number; nonce: number } | undefined>();
 
-  // A quest opened from anywhere is previewed on the graph, so the quests come forward
+  // When the author last picked a workspace, on the store's clock
+  const chosenAt = useRef(0);
+  const choose = useCallback(
+    (next: Workspace) => {
+      chosenAt.current = store.getState().moment();
+      setWorkspace(next);
+    },
+    [store],
+  );
+
+  // A quest opened from anywhere is previewed on the graph, so the quests come forward; but not for an
+  // open the author has since turned away from, by picking a workspace while it was on its way
   useEffect(() => {
-    if (screen === 'preview' || screen === 'edit') setWorkspace('quests');
-  }, [screen]);
+    if (questsAsked > chosenAt.current) setWorkspace('quests');
+  }, [questsAsked]);
 
   // Unsaved work a crash left behind is offered once, as soon as the app is up.
   useEffect(() => {
@@ -78,7 +89,7 @@ export function AppShell({ store }: { store: AppStore }): React.JSX.Element {
       <AppBar
         store={store}
         workspace={workspace}
-        onWorkspace={setWorkspace}
+        onWorkspace={choose}
         onOpenProject={() => setShowProject(true)}
         onOpenSettings={() => setShowSettings(true)}
       />
@@ -86,11 +97,11 @@ export function AppShell({ store }: { store: AppStore }): React.JSX.Element {
       <HistoryNote
         store={store}
         onShowQuest={(questId) => {
-          setWorkspace('quests');
+          choose('quests');
           void store.getState().openQuest(questId);
         }}
         onShowPlace={(place) => {
-          setWorkspace('world');
+          choose('world');
           setGoTo((was) => ({ map: place.map, x: place.x, y: place.y, z: place.z, nonce: (was?.nonce ?? 0) + 1 }));
         }}
       />
@@ -102,17 +113,18 @@ export function AppShell({ store }: { store: AppStore }): React.JSX.Element {
           // A project not saved yet is welcomed without its placeholder name
           projectName={filePath ? projectName : ''}
           onOpenSettings={() => setShowSettings(true)}
-          onShowQuests={() => setWorkspace('quests')}
+          onShowQuests={() => choose('quests')}
           onStartQuest={() => {
-            setWorkspace('quests');
+            choose('quests');
             void store.getState().newQuest();
           }}
           quest={open ? { open, nodes } : undefined}
           goTo={goTo}
           onQuestField={(fieldId, value) => store.getState().setValue(fieldId, value)}
           onNewQuest={(giver, previous) => {
-            // The NPC gives the new quest and takes it back; in a chain, it comes after the one that was open
-            void store.getState().newQuestFrom(giver, previous).then(() => setWorkspace('quests'));
+            // The NPC gives the new quest and takes it back; in a chain, it comes after the one that was
+            // open. The quest it makes brings the quests forward, so one that cannot be made leaves the world.
+            void store.getState().newQuestFrom(giver, previous);
           }}
         />
       </div>
