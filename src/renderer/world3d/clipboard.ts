@@ -18,6 +18,10 @@ export interface ClipEntry {
   dz: number;
   orientation: number;
   rotation: [number, number, number, number] | null;
+  /** Seconds before it respawns */
+  respawnSecs: number;
+  /** Its wander circle in yards; 0 for none, and for an NPC that walks a path */
+  wander: number;
 }
 
 let entries: ClipEntry[] = [];
@@ -42,6 +46,8 @@ export function entriesOf(spawns: readonly SpawnInfo[]): ClipEntry[] {
     dz: s.placement.z - anchor.z,
     orientation: s.placement.orientation,
     rotation: s.placement.rotation,
+    respawnSecs: s.respawnSecs,
+    wander: s.pathId > 0 ? 0 : s.wander,
   }));
 }
 

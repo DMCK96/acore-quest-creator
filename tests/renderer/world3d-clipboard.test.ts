@@ -8,6 +8,12 @@ const spawn = (guid: number, x: number, y: number, over: Partial<SpawnInfo> = {}
 describe('the 3D view’s clipboard', () => {
   beforeEach(() => clearClipboard());
 
+  it('keeps each spawn’s respawn time and wander; a path walker’s wander is 0', () => {
+    const [a, b] = entriesOf([spawn(1, 0, 0, { respawnSecs: 60, wander: 5 }), spawn(2, 0, 0, { respawnSecs: 300, wander: 0, pathId: 801 })]);
+    expect([a!.respawnSecs, a!.wander]).toEqual([60, 5]);
+    expect([b!.respawnSecs, b!.wander]).toEqual([300, 0]);
+  });
+
   it('keeps each spawn’s offset from the group’s centre, and its facing and turn', () => {
     const entries = copySpawns([spawn(1, 0, 0), spawn(2, 10, 0, { kind: 'object', placement: { x: 10, y: 0, z: 10, orientation: 0.5, rotation: [0, 0, 1, 0] } })]);
     expect(entries.map((e) => [e.dx, e.dy, e.orientation, e.rotation])).toEqual([[-5, 0, 0.5, null], [5, 0, 0.5, [0, 0, 1, 0]]]);

@@ -30,7 +30,7 @@ import { createAppStore } from '../../src/renderer/state/app-store';
 
 const EMPTY = { spawns: [], routes: [], added: [] };
 const look = { displayId: 1, scale: 1, equipment: [0, 0, 0] as [number, number, number], preset: null };
-const guard = { kind: 'creature' as const, guid: 80330, entry: 1423, name: 'Guard', own: false, added: false, pathId: 0, wander: 0, map: 0, respawnSecs: 300, placement: { x: 10, y: 0, z: 5, orientation: 1, rotation: null } };
+const guard = { kind: 'creature' as const, guid: 80330, entry: 1423, name: 'Guard', own: false, added: false, pathId: 0, wander: 0, map: 0, respawnSecs: 300, group: null, placement: { x: 10, y: 0, z: 5, orientation: 1, rotation: null } };
 const at = { x: 1, y: 2, z: 3 };
 
 beforeEach(() => clearClipboard());
@@ -261,5 +261,20 @@ describe('the right-click menu in the 3D view', () => {
     await waitFor(() => expect(worlds).toHaveLength(2));
     rightClick(worlds[1], { ground: at, hit: null, selection: [] });
     expect(screen.queryByRole('menuitem', { name: 'Hide quest spawns' })).toBeNull();
+  });
+
+  it('a pasted database NPC gets the copied respawn time and wander in the same step', async () => {
+    const { api, world } = await view({ worldSetRespawn: vi.fn(async () => okv(EMPTY)) });
+    const timed = { ...guard, respawnSecs: 60, wander: 5 };
+    world.selectedSpawns.mockReturnValue([timed]);
+    rightClick(world, { ground: at, hit: { type: 'spawn', spawn: timed }, selection: [timed] });
+    await userEvent.click(screen.getByRole('menuitem', { name: 'Copy' }));
+    rightClick(world, { ground: { x: 100, y: 0, z: 0 }, hit: null, selection: [] });
+    await userEvent.click(screen.getByRole('menuitem', { name: 'Paste here (1)' }));
+    await waitFor(() => expect(api.worldSetMovement).toHaveBeenCalledWith(90001, { type: 'wander', wander: 5, pathId: null }));
+    expect(api.worldSetRespawn).toHaveBeenCalledWith('creature', 90001, 60);
+    await waitFor(() => expect(api.historyEnd).toHaveBeenCalledTimes(1));
+    expect(api.historyBegin).toHaveBeenCalledTimes(1);
+    expect(vi.mocked(api.worldSetMovement).mock.invocationCallOrder[0]!).toBeLessThan(vi.mocked(api.historyEnd).mock.invocationCallOrder[0]!);
   });
 });

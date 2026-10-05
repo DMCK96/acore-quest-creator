@@ -61,7 +61,7 @@ export interface WorldMenuDeps {
   entities: ProjectEntities;
 }
 
-type Put = { kind: 'creature' | 'object'; entry: number; own: boolean; at: Placement };
+type Put = { kind: 'creature' | 'object'; entry: number; own: boolean; at: Placement; respawnSecs?: number; wander?: number };
 
 const refOf = (s: { kind: 'creature' | 'object'; guid: number; entry: number; own: boolean }): SpawnRef => ({ kind: s.kind, guid: s.guid, entry: s.entry, own: s.own });
 const plural = (n: number, one: string): string => `${n} ${one}${n === 1 ? '' : 's'}`;
@@ -155,7 +155,10 @@ export function useWorldMenu(deps: WorldMenuDeps): {
     await step.current(async () => {
       for (const put of puts) {
         const edit = await putOne(put);
-        if (edit) done.push(edit);
+        if (!edit) continue;
+        done.push(edit);
+        if (put.respawnSecs !== undefined && put.respawnSecs !== 300) await d.current.send({ kind: 'respawn', spawn: edit.spawn, secs: put.respawnSecs });
+        if (put.kind === 'creature' && put.wander !== undefined && put.wander > 0) await d.current.send({ kind: 'movement', spawn: edit.spawn, to: { type: 'wander', wander: put.wander, pathId: null } });
       }
     }, label);
     const world = d.current.world.current;
@@ -169,7 +172,7 @@ export function useWorldMenu(deps: WorldMenuDeps): {
     const { map } = d.current;
     const ok = pasteable(entries);
     if (ok.entries.length === 0) return;
-    const laid = await Promise.all(layoutAt(ok.entries, at, map).map(async (l) => ({ kind: l.entry.kind, entry: l.entry.entry, own: l.entry.own, at: await floored(l.at) })));
+    const laid = await Promise.all(layoutAt(ok.entries, at, map).map(async (l) => ({ kind: l.entry.kind, entry: l.entry.entry, own: l.entry.own, at: await floored(l.at), respawnSecs: l.entry.respawnSecs, wander: l.entry.wander })));
     await putAll(laid, laid.length === 1 ? `${verb} a spawn` : `${verb} ${laid.length} spawns`);
   };
 
