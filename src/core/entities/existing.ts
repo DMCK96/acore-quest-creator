@@ -1,6 +1,6 @@
 import { fightIsEmpty } from '../combat/model';
 import type { RawRow, Where } from '../db/types';
-import type { WorldDb } from '../db/world-db';
+import { UnknownColumnError, UnknownTableError, type WorldDb } from '../db/world-db';
 import type { PatchStatement } from '../export/build-patch';
 import { ITEM_SLOT_BLOCKS, itemRow } from './item-columns';
 import { itemFromRows, npcFromRows } from './from-rows';
@@ -217,31 +217,66 @@ export function existingStatements(store: ProjectEntities, givers: readonly numb
   return out;
 }
 
-/** Where an existing entity's original rows live, so they can be read again and compared */
-export function originalQueries(kind: 'npc' | 'object' | 'item', entry: number, original: OriginalRows): { table: string; where: Where; keep?: (row: Row) => boolean }[] {
-  const id = text(entry);
-  const first = (table: string): Row => original[table]?.[0] ?? {};
-  const pages = (original.page_text ?? []).map((r) => text(num(r.ID)));
-  const pageQuery = pages.length > 0 ? [{ table: 'page_text', where: { ID: pages } }] : [];
+type Kind = 'npc' | 'object' | 'item';
+type RowReader = Pick<WorldDb, 'selectRows'>;
+
+/** A table's rows, or none when the table or a column of the query is not in this database */
+async function rowsOrNone(db: RowReader, table: string, where: Where): Promise<Row[]> {
+  try {
+    return await db.selectRows(table, where);
+  } catch (error) {
+    if (error instanceof UnknownTableError || error instanceof UnknownColumnError) return [];
+    throw error;
+  }
+}
+
+/** The rows of a page chain starting at `first`, following `NextPageID` */
+async function pageRows(db: RowReader, first: number): Promise<Row[]> {
+  const rows: Row[] = [];
+  const seen = new Set<number>();
+  for (let id = first; id > 0 && !seen.has(id); ) {
+    seen.add(id);
+    const [row] = await rowsOrNone(db, 'page_text', { ID: text(id) });
+    if (!row) break;
+    rows.push(row);
+    id = num(row.NextPageID);
+  }
+  return rows;
+}
+
+/**
+ * The rows an existing NPC, object or item is made of, as the database has them now; null when it has
+ * none. What is brought into the project is kept as these rows, and drift compares against them again.
+ */
+export async function readOriginalRows(db: RowReader, kind: Kind, entry: number): Promise<OriginalRows | null> {
+  const key = text(entry);
   if (kind === 'npc') {
-    const lootId = num(first('creature_template').lootid);
-    return [
-      { table: 'creature_template', where: { entry: id } },
-      { table: 'creature_template_model', where: { CreatureID: id }, keep: (r) => num(r.Idx) === 0 },
-      { table: 'creature_equip_template', where: { CreatureID: id }, keep: (r) => num(r.ID) === 1 },
-      ...(lootId > 0 ? [{ table: 'creature_loot_template', where: { Entry: text(lootId) } }] : []),
-    ];
+    const template = await rowsOrNone(db, 'creature_template', { entry: key });
+    if (template.length === 0) return null;
+    const lootid = num(template[0]!.lootid);
+    const [models, equip, loot] = await Promise.all([
+      rowsOrNone(db, 'creature_template_model', { CreatureID: key }),
+      rowsOrNone(db, 'creature_equip_template', { CreatureID: key, ID: '1' }),
+      lootid > 0 ? rowsOrNone(db, 'creature_loot_template', { Entry: text(lootid) }) : Promise.resolve([]),
+    ]);
+    return { creature_template: template, creature_template_model: models, creature_equip_template: equip, creature_loot_template: loot };
   }
   if (kind === 'object') {
-    const template = first('gameobject_template');
-    const lootId = num(template.type) === OBJECT_TYPE_VALUE.chest ? num(template.Data1) : 0;
-    return [
-      { table: 'gameobject_template', where: { entry: id } },
-      ...(lootId > 0 ? [{ table: 'gameobject_loot_template', where: { Entry: text(lootId) } }] : []),
-      ...pageQuery,
-    ];
+    const template = await rowsOrNone(db, 'gameobject_template', { entry: key });
+    if (template.length === 0) return null;
+    const row = template[0]!;
+    const type = num(row.type);
+    const lootid = type === OBJECT_TYPE_VALUE.chest ? num(row.Data1) : 0;
+    const first = type === OBJECT_TYPE_VALUE.text ? num(row.Data0) : type === OBJECT_TYPE_VALUE.goober ? num(row.Data7) : 0;
+    const [loot, pages] = await Promise.all([
+      lootid > 0 ? rowsOrNone(db, 'gameobject_loot_template', { Entry: text(lootid) }) : Promise.resolve([]),
+      pageRows(db, first),
+    ]);
+    return { gameobject_template: template, gameobject_loot_template: loot, page_text: pages };
   }
-  return [{ table: 'item_template', where: { entry: id } }, ...pageQuery];
+  const template = await rowsOrNone(db, 'item_template', { entry: key });
+  if (template.length === 0) return null;
+  return { item_template: template, page_text: await pageRows(db, num(template[0]!.PageText)) };
 }
 
 /** Whether two lists hold the same rows, in any order, comparing values as text */
@@ -252,25 +287,25 @@ export function sameRows(a: readonly Row[], b: readonly RawRow[]): boolean {
   return left.length === right.length && left.every((v, i) => v === right[i]);
 }
 
-/** The existing entities whose rows the database no longer has as they were when first edited */
-export async function existingDrift(db: Pick<WorldDb, 'selectRows'>, store: ProjectEntities): Promise<{ kind: 'npc' | 'object' | 'item'; entry: number; name: string }[]> {
+/**
+ * The existing entities whose rows the database no longer has as they were when first brought in: the
+ * rows are read again as `readOriginalRows` read them and compared table by table. The Project changes
+ * badge and the export's warning both come from here, so they always agree.
+ */
+export async function existingDrift(db: RowReader, store: ProjectEntities): Promise<{ kind: Kind; entry: number; name: string }[]> {
   const edited = existingOnly(store);
   const all = [
     ...edited.npcs.map((e) => ({ kind: 'npc' as const, entity: e })),
     ...edited.objects.map((e) => ({ kind: 'object' as const, entity: e })),
     ...edited.items.map((e) => ({ kind: 'item' as const, entity: e })),
   ];
-  const drifted: { kind: 'npc' | 'object' | 'item'; entry: number; name: string }[] = [];
+  const drifted: { kind: Kind; entry: number; name: string }[] = [];
   for (const { kind, entity } of all) {
     if (entity.origin.kind !== 'existing') continue;
-    const original = entity.origin.original;
-    for (const query of originalQueries(kind, entity.entry, original)) {
-      const kept = (rows: readonly Row[]): Row[] => rows.filter((r) => !query.keep || query.keep(r));
-      if (!sameRows(kept(original[query.table] ?? []), kept(await db.selectRows(query.table, query.where)))) {
-        drifted.push({ kind, entry: entity.entry, name: entity.name || String(entity.entry) });
-        break;
-      }
-    }
+    const was = entity.origin.original;
+    const now = await readOriginalRows(db, kind, entity.entry);
+    const changed = !now || [...new Set([...Object.keys(was), ...Object.keys(now)])].some((table) => !sameRows(was[table] ?? [], now[table] ?? []));
+    if (changed) drifted.push({ kind, entry: entity.entry, name: entity.name || String(entity.entry) });
   }
   return drifted;
 }

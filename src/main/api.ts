@@ -85,7 +85,7 @@ import { narrowTo, objectivesOf, questItemsOf, questRefs, questUses, relationOwn
 import { existingDrift, existingStatements, newLootIds } from '../core/entities/existing';
 import { newOnly, projectEntitiesSchema, readProjectEntities, type ProjectEntities, type QuestEntities } from '../core/entities/model';
 import { itemFromRows, npcFromRows, objectFromRows } from '../core/entities/from-rows';
-import { existingDrifted, readExistingRows } from './entities/existing';
+import { readExistingRows } from './entities/existing';
 import { entityIssues } from '../core/entities/validate';
 import { gmCommands } from '../core/testing/gm';
 import { TerrainFormatError, gridFileName, parseMapFile, terrainHeight, type TerrainFile } from '../core/game/terrain';
@@ -1892,13 +1892,9 @@ export function createApi(deps: ApiDeps): Api {
 
     existingDrift: () =>
       run(async () => {
-        const db = connected().db;
-        const store = projectEntities();
-        const out: { kind: 'npc' | 'object' | 'item'; entry: number }[] = [];
-        for (const n of store.npcs) if (n.origin.kind === 'existing' && (await existingDrifted(db, n, 'npc'))) out.push({ kind: 'npc', entry: n.entry });
-        for (const o of store.objects) if (o.origin.kind === 'existing' && (await existingDrifted(db, o, 'object'))) out.push({ kind: 'object', entry: o.entry });
-        for (const i of store.items) if (i.origin.kind === 'existing' && (await existingDrifted(db, i, 'item'))) out.push({ kind: 'item', entry: i.entry });
-        return out;
+        // The same check the export warns from, so the badge and the warning agree
+        const drifted = await existingDrift(connected().db, projectEntities());
+        return drifted.map(({ kind, entry }) => ({ kind, entry }));
       }),
 
     deleteEntity: (kind, entry) =>

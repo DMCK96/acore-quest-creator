@@ -134,6 +134,16 @@ describe('existingDrift', () => {
     const lootGone = { ...rows, creature_loot_template: [] };
     expect(await existingDrift(db(lootGone), store())).toHaveLength(1);
   });
+
+  it('compares the same rows the entity was read with: every model, and the loot of the loot id the database has now', async () => {
+    const second = { ...model, Idx: '1', CreatureDisplayID: '3168' };
+    const read = npcFromRows(1423, { ...rows, creature_template_model: [model, second] }, { sharedLoot: 0, spawnCount: 3 });
+    const both = { ...rows, creature_template_model: [model, second] };
+    expect(await existingDrift(db(both), store(read))).toEqual([]);
+    const secondChanged = { ...both, creature_template_model: [model, { ...second, CreatureDisplayID: '9999' }] };
+    expect(await existingDrift(db(secondChanged), store(read))).toEqual([{ kind: 'npc', entry: 1423, name: 'Stormwind Guard' }]);
+    expect(await existingDrift(db({ ...rows, creature_template: [] }), store())).toHaveLength(1);
+  });
 });
 
 describe('existingStatements keeps what the editor did not change', () => {

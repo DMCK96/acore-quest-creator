@@ -57,4 +57,13 @@ describe('exporting an edited existing NPC', () => {
     expect(out.ok).toBe(true);
     expect(out.value.warnings).toEqual(['"Stormwind Guard" changed in the database since it was edited here; applying the patch overwrites that.']);
   });
+
+  it('the Project changes badge and the export warning agree on drift (a second model added since)', async () => {
+    const { api, db, guard } = await setup();
+    await api.putProjectEntities({ npcs: [{ ...guard, minLevel: 56 }], objects: [], items: [] });
+    db.insert('creature_template_model', { ...model, Idx: '1', CreatureDisplayID: '3168' });
+    expect(((await api.existingDrift()) as any).value).toEqual([{ kind: 'npc', entry: 1423 }]);
+    const out: any = await api.exportProject();
+    expect(out.value.warnings).toEqual(['"Stormwind Guard" changed in the database since it was edited here; applying the patch overwrites that.']);
+  });
 });
