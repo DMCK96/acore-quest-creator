@@ -205,4 +205,32 @@ describe('spawn groups through the API', () => {
     expect(ghost.ok).toBe(true);
     expect(ghost.value.groups.find((g: any) => g.id === 40000).origin).toEqual({ kind: 'new' });
   });
+  it('gives a new group the next free id when the database has taken its id for a pool since', async () => {
+    const { api, db } = await setup();
+    db.insert('pool_template', { entry: '32494', max_limit: '1', description: 'Someone else' });
+    const saved: any = await api.worldSetGroup({ id: 32494, name: 'Solo', map: 0, maxActive: 1, origin: { kind: 'new' },
+      members: [{ type: 'spawn', kind: 'npc', guid: 80330, entry: 32491, chance: 0 }] } as any, []);
+    expect(saved.ok).toBe(true);
+    expect(saved.value.groups.map((g: any) => [g.id, g.name, g.origin.kind])).toEqual([[32495, 'Solo', 'new']]);
+  });
+
+  it('refuses to export a new group whose id the database now has, and saving the group again gives it a new id', async () => {
+    const { api, db } = await setup();
+    const inner = { id: 32494, name: 'Solo', map: 0, maxActive: 1, origin: { kind: 'new' }, members: [{ type: 'spawn', kind: 'npc', guid: 80330, entry: 32491, chance: 0 }] };
+    expect(((await api.worldSetGroup(inner as any, [])) as any).ok).toBe(true);
+    const outer = { id: 32496, name: 'Outer', map: 0, maxActive: 1, origin: { kind: 'new' }, members: [{ type: 'group', id: 32494, chance: 0 }] };
+    expect(((await api.worldSetGroup(outer as any, [])) as any).ok).toBe(true);
+    db.insert('pool_template', { entry: '32494', max_limit: '1', description: 'Someone else' });
+    const out: any = await api.exportProject();
+    expect(out.ok).toBe(false);
+    expect(out.error.issues.map((i: any) => i.message)).toContain(
+      'Spawn group "Solo": the database now has a pool with id 32494; open the group and save it again to give it a new id.');
+    const copy: any = ((await api.worldGroup(32494)) as any).value;
+    const again: any = await api.worldSetGroup(copy, []);
+    expect(again.ok).toBe(true);
+    expect(again.value.groups.map((g: any) => [g.id, g.name])).toEqual([[32496, 'Outer'], [32497, 'Solo']]);
+    // The group holding it follows it to its new id
+    expect(again.value.groups[0].members).toEqual([{ type: 'group', id: 32497, chance: 0 }]);
+    expect(((await api.exportProject()) as any).ok).toBe(true);
+  });
 });

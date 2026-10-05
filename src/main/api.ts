@@ -1188,6 +1188,11 @@ export function createApi(deps: ApiDeps): Api {
     for (const group of groupsOf(layer).filter((g) => !g.removed)) {
       const reasons = validateGroup(group, await groupContext(live.db, layer, store, [], group));
       issues.push(...reasons.map((reason): Issue => ({ severity: 'error', code: 'GROUP', message: `${group.name}: ${reason}` })));
+      // Applying a new group deletes the rows of a pool with its id, so one the database has gained since is refused
+      if (group.origin.kind === 'new' && (await rowsOrNone(live.db, 'pool_template', { entry: [String(group.id)] })).length > 0) {
+        issues.push({ severity: 'error', code: 'GROUP', message:
+          `Spawn group "${group.name || `Group ${group.id}`}": the database now has a pool with id ${group.id}; open the group and save it again to give it a new id.` });
+      }
     }
     return issues;
   }
@@ -1201,14 +1206,46 @@ export function createApi(deps: ApiDeps): Api {
   /**
    * A group sent by the renderer as main saves or checks it: its origin is the layer copy's, else the
    * database pool's (with the rows it was read from), else new; the origin and `removed` it was sent with
-   * are not trusted
+   * are not trusted. A new group (the layer's, or one sent as new) whose id the database has taken for a
+   * pool since gets the next free id.
    */
   async function trustedGroup(db: WorldDb, sent: SpawnGroup): Promise<SpawnGroup> {
-    const { removed: _removed, origin: _origin, ...fields } = sent;
+    const { removed: _removed, origin: claimed, ...fields } = sent;
     const copy = groupsOf(deps.session.world.get()).find((g) => g.id === sent.id);
-    if (copy) return { ...fields, origin: copy.origin };
+    if (copy && copy.origin.kind === 'existing') return { ...fields, origin: copy.origin };
     const pool = await readGroup(db, sent.id);
+    if (copy || claimed.kind === 'new') return { ...fields, id: pool ? await freeGroupId(db) : sent.id, origin: { kind: 'new' } };
     return { ...fields, origin: pool ? pool.origin : { kind: 'new' } };
+  }
+
+  /** A sent group as main would save it, and why the server would refuse it */
+  async function checkGroup(db: WorldDb, sent: SpawnGroup, moves: readonly { kind: 'npc' | 'object'; guid: number }[]): Promise<{ group: SpawnGroup; reasons: string[] }> {
+    const layer = deps.session.world.get();
+    const group = await trustedGroup(db, sent);
+    // A layer group given a new id is checked by the id the layer knows it by
+    const asKnown = groupsOf(layer).some((g) => g.id === sent.id) ? { ...group, id: sent.id } : group;
+    return { group, reasons: validateGroup(asKnown, await groupContext(db, layer, projectEntities(), moves, asKnown)) };
+  }
+
+  /** Points every layer group that holds group `from` at group `to` instead */
+  function renumberGroup(layer: WorldLayer, from: number, to: number): WorldLayer {
+    const groups = groupsOf(layer).map((g) =>
+      g.members.some((m) => m.type === 'group' && m.id === from)
+        ? { ...g, members: g.members.map((m) => (m.type === 'group' && m.id === from ? { ...m, id: to } : m)) }
+        : g,
+    );
+    return { ...layer, groups };
+  }
+
+  /** An id no spawn group uses yet: past the database's pools and the layer's groups */
+  async function freeGroupId(db: WorldDb): Promise<number> {
+    let dbMax = 0;
+    try {
+      dbMax = (await db.selectMax?.('pool_template', 'entry')) ?? 0;
+    } catch {
+      dbMax = 0;
+    }
+    return Math.max(dbMax, ...groupsOf(deps.session.world.get()).map((g) => g.id), 0) + 1;
   }
 
   /** Where a spawn stands: as moved or placed in the layer, as the project has it, else as the database has it */
@@ -2195,30 +2232,15 @@ export function createApi(deps: ApiDeps): Api {
         return [...byId.values()].sort((a, b) => a.name.localeCompare(b.name) || a.id - b.id);
       }),
 
-    worldNewGroupId: () =>
-      run(async () => {
-        const db = connected().db;
-        let dbMax = 0;
-        try {
-          dbMax = (await db.selectMax?.('pool_template', 'entry')) ?? 0;
-        } catch {
-          dbMax = 0;
-        }
-        return Math.max(dbMax, ...groupsOf(deps.session.world.get()).map((g) => g.id), 0) + 1;
-      }),
+    worldNewGroupId: () => run(async () => freeGroupId(connected().db)),
 
     worldCheckGroup: (sent, moves) =>
-      run(async () => {
-        const db = connected().db;
-        const group = await trustedGroup(db, sent);
-        return validateGroup(group, await groupContext(db, deps.session.world.get(), projectEntities(), moves, group));
-      }),
+      run(async () => (await checkGroup(connected().db, sent, moves)).reasons),
 
     worldSetGroup: (sent, moves) =>
       run(() => asOneStep(async () => {
         const db = connected().db;
-        const group = await trustedGroup(db, sent);
-        const reasons = validateGroup(group, await groupContext(db, deps.session.world.get(), projectEntities(), moves, group));
+        const { group, reasons } = await checkGroup(db, sent, moves);
         if (reasons.length > 0) {
           throw fail('VALIDATION', 'This spawn group cannot be saved.', { issues: reasons.map((message): Issue => ({ severity: 'error', code: 'GROUP', message })) });
         }
@@ -2238,6 +2260,8 @@ export function createApi(deps: ApiDeps): Api {
         let next = deps.session.world.get();
         for (const found of read) if (!groupsOf(next).some((g) => g.id === found.id)) next = putGroup(next, found);
         for (const move of moves) next = dropMember(next, move.kind, move.guid);
+        // A new group given a new id leaves its old one, and a group holding it follows it there
+        if (group.id !== sent.id) next = renumberGroup(revertGroup(next, sent.id), sent.id, group.id);
         next = putGroup(next, group);
         deps.session.world.put(next);
         return next;
