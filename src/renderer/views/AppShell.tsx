@@ -8,6 +8,7 @@ import { isTextField } from '../components/HistoryButtons';
 import { CanvasHome } from './CanvasHome';
 import { WorldWorkspace } from '../world3d/WorldWorkspace';
 import { projectKey } from '../world3d/welcome-seen';
+import { ShowInWorldProvider, type ShowTarget } from '../world3d/ShowInWorldContext';
 import { ProjectDialog } from './ProjectDialog';
 import { SettingsDialog } from './SettingsDialog';
 import { RecoveryDialog } from './RecoveryDialog';
@@ -29,6 +30,12 @@ export function AppShell({ store }: { store: AppStore }): React.JSX.Element {
   const open = store((s) => s.open);
   const nodes = store((s) => s.nodes);
   const [goTo, setGoTo] = useState<{ map: number; x: number; y: number; z: number; nonce: number } | undefined>();
+  // A quest opened while the World was not shown, for the World to go to when it next is
+  const [follow, setFollow] = useState<{ questId: number; at: number } | undefined>();
+  // Show in World / Go to, handed to the World
+  const [showRequest, setShowRequest] = useState<{ target: ShowTarget; nonce: number } | undefined>();
+  const workspaceRef = useRef(workspace);
+  workspaceRef.current = workspace;
 
   // When the author last picked a workspace, on the store's clock
   const chosenAt = useRef(0);
@@ -43,8 +50,20 @@ export function AppShell({ store }: { store: AppStore }): React.JSX.Element {
   // A quest opened from anywhere is previewed on the graph, so the quests come forward; but not for an
   // open the author has since turned away from, by picking a workspace while it was on its way
   useEffect(() => {
+    // The quest lands with the moment its opening began; the World follows it later only if it is not
+    // what is shown now (a quest opened from the World itself is already in view)
+    const opened = store.getState().open;
+    if (questsAsked > 0 && opened && workspaceRef.current !== 'world') setFollow({ questId: opened.questId, at: questsAsked });
     if (questsAsked > chosenAt.current) setWorkspace('quests');
-  }, [questsAsked]);
+  }, [questsAsked, store]);
+
+  const showInWorld = useCallback(
+    (target: ShowTarget) => {
+      choose('world');
+      setShowRequest((was) => ({ target, nonce: (was?.nonce ?? 0) + 1 }));
+    },
+    [choose],
+  );
 
   // Unsaved work a crash left behind is offered once, as soon as the app is up.
   useEffect(() => {
@@ -85,6 +104,7 @@ export function AppShell({ store }: { store: AppStore }): React.JSX.Element {
 
   return (
     <ProjectEntitiesFromStore store={store}>
+    <ShowInWorldProvider value={hasClient ? showInWorld : null}>
     <div className="app-shell">
       <AppBar
         store={store}
@@ -120,6 +140,9 @@ export function AppShell({ store }: { store: AppStore }): React.JSX.Element {
           }}
           quest={open ? { open, nodes } : undefined}
           goTo={goTo}
+          follow={follow}
+          showRequest={showRequest}
+          now={store.getState().moment}
           onQuestField={(fieldId, value) => store.getState().setValue(fieldId, value)}
           onNewQuest={(giver, previous) => {
             // The NPC gives the new quest and takes it back; in a chain, it comes after the one that was
@@ -135,6 +158,7 @@ export function AppShell({ store }: { store: AppStore }): React.JSX.Element {
       {showSettings && <SettingsDialog store={store} onClose={() => setShowSettings(false)} />}
       <RecoveryDialog store={store} />
     </div>
+    </ShowInWorldProvider>
     </ProjectEntitiesFromStore>
   );
 }

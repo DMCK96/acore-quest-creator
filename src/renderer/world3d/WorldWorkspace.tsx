@@ -19,6 +19,9 @@ import { World3DView, type FocusTarget } from './World3DView';
 import { FindDialog, type FindPreset, type FoundSpawn } from './FindDialog';
 import { TeleportDialog } from './TeleportDialog';
 import { QuestOrb } from '../components/QuestOrb';
+import { questPlace } from './quest-place';
+import type { ShowTarget } from './ShowInWorldContext';
+import { NEEDS_DATABASE } from './menu/section';
 import { readLastPlace, writeLastPlace } from './last-place';
 import { markWelcomeSeen, welcomeSeen } from './welcome-seen';
 import { Welcome } from './Welcome';
@@ -43,6 +46,15 @@ export interface WorldWorkspaceProps {
   onNewQuest?(giver: { entry: number; name: string }, previous: number | null): void;
   /** A place to take the camera to (Show on the undo note); each request is its own, even to the same place */
   goTo?: { map: number; x: number; y: number; z: number; nonce: number };
+  /**
+   * A quest opened while the World was hidden, and when its opening began (on `now`'s clock): when the
+   * World is next shown, the camera goes to where the quest is, unless it was moved after that moment
+   */
+  follow?: { questId: number; at: number };
+  /** Show in World / Go to: a quest or one of its NPCs or objects to take the camera to; each request is its own */
+  showRequest?: { target: ShowTarget; nonce: number };
+  /** Now, on the clock `follow.at` is read against (the store's `moment`) */
+  now?: () => number;
 }
 
 const ROLE_LABELS: Record<QuestSpawnGroup['spawns'][number]['role'], string> = { giver: 'givers', ender: 'enders', objective: 'objectives', own: 'own' };
@@ -77,6 +89,7 @@ const WELCOME_FADE_MS = 500;
  */
 export function WorldWorkspace({
   hasClient, active = true, projectKey, projectName, onOpenSettings, onShowQuests, onStartQuest, quest, onQuestField, onNewQuest, goTo: goToRequest,
+  follow, showRequest, now = Date.now,
 }: WorldWorkspaceProps): React.JSX.Element {
   // The open quest's values as last changed here, so edits made one after another build on each other
   const values = useRef(quest?.open.aggregate.values);
@@ -223,10 +236,15 @@ export function WorldWorkspace({
   const placeRef = useRef<Point>({ x: first.x, y: first.y, z: first.z });
   const areaRef = useRef(area);
   areaRef.current = area;
+  // When the camera last moved (a flight, a drag or a jump), on `now`'s clock: a quest opened before then is not followed
+  const lastCameraMove = useRef(0);
+  const nowRef = useRef(now);
+  nowRef.current = now;
   /** Every jump of the app's: remembers the place the camera leaves, then goes to the point */
   const jump = (point: Point, map = mapRef.current, label?: string): void => {
     const here = { map: mapRef.current, ...placeRef.current, label: label ?? areaRef.current ?? worldMapById(mapRef.current)?.name ?? '' };
     setBack((stack) => pushPlace(stack, here));
+    lastCameraMove.current = nowRef.current();
     goTo(point, map);
   };
   const goBack = (): void => {
@@ -257,6 +275,68 @@ export function WorldWorkspace({
     // Only a new request moves the camera
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [goToRequest?.nonce]);
+
+  /**
+   * Where a quest is, or the nearest spawn of one of its NPCs or objects: a spawn to go to, null when
+   * nothing of it is placed, or why it could not be told. Without the world database only the project's
+   * own NPCs and objects can be found.
+   */
+  const placeOf = async (target: ShowTarget): Promise<{ spawn: FoundSpawn | null } | { error: string }> => {
+    const from = { map: mapRef.current, ...placeRef.current };
+    const only = 'kind' in target ? { kind: target.kind, entry: target.entry } : undefined;
+    let groups: QuestSpawnGroup[];
+    if (api) {
+      const read = await api.questSpawnList([target.questId]);
+      if (!read.ok) return { error: read.error.message };
+      groups = read.value;
+    } else {
+      const owner = !only ? undefined : only.kind === 'creature'
+        ? storeRef.current.npcs.find((n) => n.entry === only.entry)
+        : storeRef.current.objects.find((o) => o.entry === only.entry);
+      if (!owner) return { error: NEEDS_DATABASE };
+      const spawns = owner.spawns.map((s) => ({ kind: only!.kind, guid: s.guid, entry: owner.entry, name: owner.name, map: s.map, x: s.x, y: s.y, z: s.z, role: 'own' as const }));
+      groups = [{ questId: target.questId, title: '', spawns, capped: false, cut: 0 }];
+    }
+    const s = questPlace(groups, from, only);
+    if (!s || !worldMapById(s.map)) return { spawn: null };
+    return { spawn: { kind: s.kind === 'gameobject' ? 'object' : 'creature', guid: s.guid, entry: s.entry, name: s.name, map: s.map, x: s.x, y: s.y, z: s.z, event: s.event ?? null, note: null } };
+  };
+  const placeOfRef = useRef(placeOf);
+  placeOfRef.current = placeOf;
+  const findRef = useRef<(spawn: FoundSpawn) => void>(() => {});
+  // The follow last dealt with (taken, dropped, or seen while the World was shown), by when it began
+  const followSeen = useRef(0);
+  // Show in World / Go to: the camera goes there, or a note says why it cannot
+  useEffect(() => {
+    if (!showRequest) return;
+    // Asked for just now: a quest followed on the way here would only be gone from at once
+    if (follow) followSeen.current = Math.max(followSeen.current, follow.at);
+    void (async () => {
+      const place = await placeOfRef.current(showRequest.target);
+      if ('error' in place) setNote(place.error);
+      else if (!place.spawn) setNote('Nothing of this quest is placed in the world yet.');
+      else findRef.current(place.spawn);
+    })();
+    // Only a new request moves the camera
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [showRequest?.nonce]);
+  // A quest opened while the World was hidden: followed when the World is next shown, unless the camera moved since
+  const wasActive = useRef(active);
+  useEffect(() => {
+    const shown = active && !wasActive.current;
+    wasActive.current = active;
+    if (!active || !follow || follow.at <= followSeen.current) return;
+    followSeen.current = follow.at;
+    if (!shown || follow.at <= lastCameraMove.current) return;
+    const moved = lastCameraMove.current;
+    void (async () => {
+      const place = await placeOfRef.current({ questId: follow.questId });
+      // Nothing placed, or nothing could be read: the camera stays, with nothing said; nor does it go once the author has moved it
+      if ('error' in place || !place.spawn || lastCameraMove.current !== moved) return;
+      findRef.current(place.spawn);
+    })();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [active, follow?.at]);
   const teleport = (spot: TeleportSpot): void => {
     setTeleporting(false);
     jump({ x: spot.x, y: spot.y, z: spot.z }, spot.map);
@@ -269,6 +349,7 @@ export function WorldWorkspace({
       event: spawn.event, added: spawn.note === 'placed', nonce: (previous?.nonce ?? 0) + 1,
     }));
   };
+  findRef.current = find;
   // A spawn group: the camera goes to the middle of its members, and its first spawn is focused
   const findGroup = (view: GroupView): void => {
     setFinding(false);
@@ -364,6 +445,9 @@ export function WorldWorkspace({
         showArea={false}
         onArea={setArea}
         onPlaceChange={(place) => {
+          // The place the camera was last sent to is reported back once it rests there; anything else is the author moving it
+          const was = placeRef.current;
+          if (Math.hypot(place.x - was.x, place.y - was.y, place.z - was.z) > 1) lastCameraMove.current = nowRef.current();
           placeRef.current = place;
           writeLastPlace({ map: mapRef.current, ...place });
         }}

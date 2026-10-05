@@ -3,6 +3,7 @@ import { moduleById } from '@core/modules/catalog';
 import type { AppStore } from '../state/app-store';
 import { FieldSetting } from '../modules/FieldSetting';
 import { ExportBar, ExportStatus } from './ExportBar';
+import { useShowInWorld } from '../world3d/ShowInWorldContext';
 
 export interface ReadinessChip {
   id: ModuleId;
@@ -14,6 +15,7 @@ export function QuestHeader({ store, chips }: { store: AppStore; chips: readonly
   const open = store((s) => s.open);
   const setValue = store((s) => s.setValue);
   const setOpenPanel = store((s) => s.setOpenPanel);
+  const showInWorld = useShowInWorld();
   if (!open) return null;
 
   const { aggregate } = open;
@@ -64,6 +66,11 @@ export function QuestHeader({ store, chips }: { store: AppStore; chips: readonly
           <button type="button" className="btn" onClick={() => setOpenPanel('map')}>
             Map
           </button>
+          {showInWorld && (
+            <button type="button" className="btn" onClick={() => showInWorld({ questId: open.questId })}>
+              Show in World
+            </button>
+          )}
           <ExportBar store={store} />
         </div>
       </div>

@@ -41,7 +41,8 @@ function ownName(entities: ProjectEntities, kind: GiverTarget['kind'], id: numbe
   return own.name.trim() || `${kind === 'creature' ? 'New NPC' : 'New object'} ${id}`;
 }
 
-const giverName = (t: GiverTarget, names: NameBook, entities: ProjectEntities): string =>
+/** A quest giver's or ender's name: the project's own one's, else the name book's */
+export const giverName = (t: GiverTarget, names: NameBook, entities: ProjectEntities): string =>
   ownName(entities, t.kind, t.id) ?? (t.kind === 'creature' ? creatureName(t.id, names) : objectName(t.id, names));
 
 /** Copper as `1g 50s 25c`, leaving out the zero parts; zero itself is `0c`. */

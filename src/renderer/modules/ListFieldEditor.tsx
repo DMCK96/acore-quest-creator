@@ -22,6 +22,8 @@ export interface ListFieldEditorProps {
   title(entry: Entry, index: number): string;
   blank?: Entry;
   help?: string;
+  /** More buttons for one entry's card, before its own (move and remove) */
+  actions?(entry: Entry, index: number): React.ReactNode;
 }
 
 /** Members that count something start at one, so a fresh card is already a sensible objective. */
@@ -39,7 +41,7 @@ function blankEntry(members: readonly ListMemberDef[]): Entry {
  * export never meets more entries than the columns can hold.
  */
 export function ListFieldEditor(props: ListFieldEditorProps): React.JSX.Element | null {
-  const { fieldId, aggregate, onChange, noun, addLabel, title, blank, help } = props;
+  const { fieldId, aggregate, onChange, noun, addLabel, title, blank, help, actions } = props;
   const field = fieldById(fieldId);
   if (!field || field.shape !== 'list' || !Object.prototype.hasOwnProperty.call(aggregate.values, fieldId)) return null;
 
@@ -104,6 +106,7 @@ export function ListFieldEditor(props: ListFieldEditorProps): React.JSX.Element 
             <header className="entry-card__head">
               <h4 className="entry-card__title">{title(entry, i)}</h4>
               <div className="entry-card__actions">
+                {actions?.(entry, i)}
                 <button type="button" className="entry-card__btn" aria-label={`Move ${noun} ${i + 1} up`}
                   disabled={disabled || i === 0} onClick={() => write(moveEntry(entries, i, i - 1))}>↑</button>
                 <button type="button" className="entry-card__btn" aria-label={`Move ${noun} ${i + 1} down`}
