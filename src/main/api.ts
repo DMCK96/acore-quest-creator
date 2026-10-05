@@ -78,7 +78,8 @@ import { compilePatrols, hasPointActions } from '../core/patrol/compile';
 import { ENTITY_KEYS, ENTITY_TABLES, readEntityContext } from '../core/entities/context';
 import { emptyGiversOf } from '../core/modules/givers';
 import { narrowTo, objectivesOf, questItemsOf, questRefs, questUses, relationOwners } from '../core/entities/links';
-import { NPC_TYPE_VALUE, OBJECT_TYPE_VALUE, RANK_VALUE, newOnly, projectEntitiesSchema, readProjectEntities, type ProjectEntities, type QuestEntities } from '../core/entities/model';
+import { newOnly, projectEntitiesSchema, readProjectEntities, type ProjectEntities, type QuestEntities } from '../core/entities/model';
+import { itemFromRows, npcFromRows, objectFromRows } from '../core/entities/from-rows';
 import { entityIssues } from '../core/entities/validate';
 import { gmCommands } from '../core/testing/gm';
 import { TerrainFormatError, gridFileName, parseMapFile, terrainHeight, type TerrainFile } from '../core/game/terrain';
@@ -1348,40 +1349,29 @@ export function createApi(deps: ApiDeps): Api {
     entityTemplate: (kind, entry) =>
       run(async () => {
         const live = connected();
-        const numberOf = (raw: string | null | undefined, fallback = 0): number => {
-          const n = Number(raw);
-          return raw === null || raw === undefined || !Number.isFinite(n) ? fallback : n;
-        };
-        const nameOf = <T extends Record<string, number>>(map: T, value: number, fallback: keyof T): keyof T =>
-          (Object.keys(map) as (keyof T)[]).find((k) => map[k] === value) ?? fallback;
+        const key = [String(entry)];
+        const none = { sharedLoot: 0, spawnCount: 0 };
         if (kind === 'creature') {
-          const [row] = await rowsOrNone(live.db, 'creature_template', { entry: [String(entry)] });
-          if (!row) return null;
-          const [model] = await rowsOrNone(live.db, 'creature_template_model', { CreatureID: [String(entry)], Idx: ['0'] });
-          const [gear] = await rowsOrNone(live.db, 'creature_equip_template', { CreatureID: [String(entry)], ID: ['1'] });
+          const creature_template = await rowsOrNone(live.db, 'creature_template', { entry: key });
+          if (creature_template.length === 0) return null;
+          const creature_template_model = await rowsOrNone(live.db, 'creature_template_model', { CreatureID: key, Idx: ['0'] });
+          const creature_equip_template = await rowsOrNone(live.db, 'creature_equip_template', { CreatureID: key, ID: ['1'] });
+          const n = npcFromRows(entry, { creature_template, creature_template_model, creature_equip_template }, none);
           return {
-            name: row.name ?? '', subname: row.subname ?? '',
-            minLevel: numberOf(row.minlevel, 1), maxLevel: numberOf(row.maxlevel, 1), faction: numberOf(row.faction, 35),
-            rank: nameOf(RANK_VALUE, numberOf(row.rank), 'normal'), type: nameOf(NPC_TYPE_VALUE, numberOf(row.type), 'none'),
-            healthModifier: numberOf(row.HealthModifier, 1), damageModifier: numberOf(row.DamageModifier, 1),
-            displayId: numberOf(model?.CreatureDisplayID), scale: numberOf(model?.DisplayScale, 1),
-            equipment: { mainHand: numberOf(gear?.ItemID1), offHand: numberOf(gear?.ItemID2), ranged: numberOf(gear?.ItemID3) },
+            name: n.name, subname: n.subname, minLevel: n.minLevel, maxLevel: n.maxLevel, faction: n.faction, rank: n.rank, type: n.type,
+            healthModifier: n.healthModifier, damageModifier: n.damageModifier, displayId: n.displayId, scale: n.scale, equipment: n.equipment,
           };
         }
         if (kind === 'item') {
-          const [item] = await rowsOrNone(live.db, 'item_template', { entry: [String(entry)] });
-          if (!item) return null;
-          return {
-            name: item.name ?? '', displayId: numberOf(item.displayid), itemClass: numberOf(item.class), subclass: numberOf(item.subclass),
-            inventoryType: numberOf(item.InventoryType),
-          };
+          const item_template = await rowsOrNone(live.db, 'item_template', { entry: key });
+          if (item_template.length === 0) return null;
+          const i = itemFromRows(entry, { item_template });
+          return { name: i.name, displayId: i.displayId, itemClass: i.itemClass, subclass: i.subclass, inventoryType: i.inventoryType };
         }
-        const [row] = await rowsOrNone(live.db, 'gameobject_template', { entry: [String(entry)] });
-        if (!row) return null;
-        return {
-          name: row.name ?? '', type: nameOf(OBJECT_TYPE_VALUE, numberOf(row.type), 'generic'),
-          displayId: numberOf(row.displayId), size: numberOf(row.size, 1),
-        };
+        const gameobject_template = await rowsOrNone(live.db, 'gameobject_template', { entry: key });
+        if (gameobject_template.length === 0) return null;
+        const o = objectFromRows(entry, { gameobject_template }, none);
+        return { name: o.name, type: o.type, displayId: o.displayId, size: o.size };
       }),
 
     itemColumns: () => run(async () => exportSchema(connected()).tables.item_template ?? []),
