@@ -104,6 +104,22 @@ describe('rotations on the Quests graph', () => {
     expect(outlined).toBe('.canvas--multi .react-flow__node.selected .quest-card');
   });
 
+  it('a plain click on a quest inside a multi-selection selects just that quest and opens it', async () => {
+    const { api } = await canvas();
+    const [wolves, boars] = await screen.findAllByTestId('quest-node');
+    const flow = screen.getByTestId('rf__wrapper');
+    fireEvent.keyDown(document.body, { key: 'Control', ctrlKey: true });
+    fireEvent.click(wolves!, { ctrlKey: true });
+    fireEvent.click(boars!, { ctrlKey: true });
+    fireEvent.keyUp(document.body, { key: 'Control' });
+    await waitFor(() => expect(flow).toHaveClass('canvas--multi'));
+    fireEvent.click(boars!, { clientX: 10, clientY: 10 });
+    await waitFor(() => expect(api.openQuest).toHaveBeenCalledWith(60002));
+    await waitFor(() => expect(flow).not.toHaveClass('canvas--multi'));
+    expect(within(screen.getByRole('toolbar', { name: 'Quest tools' })).queryByRole('button', { name: 'Rotate these quests…' })).toBeNull();
+    expect(flow.querySelectorAll('.react-flow__node.selected')).toHaveLength(1);
+  });
+
   it('the click that ends a drag neither opens nor outlines the quest', async () => {
     const { api } = await canvas();
     const [wolves] = await screen.findAllByTestId('quest-node');

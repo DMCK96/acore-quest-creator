@@ -494,6 +494,8 @@ export interface Api {
   worldChanges(): Promise<Result<WorldChange[]>>;
   /** A spawn group as the layer has it, else as the database's pool; null when there is none. */
   worldGroup(id: number): Promise<Result<SpawnGroup | null>>;
+  /** Every spawn under a group through all its levels (the layer's copy of each group, else the database's), by kind and guid. */
+  worldGroupSpawns(id: number): Promise<Result<{ kind: 'npc' | 'object'; guid: number }[]>>;
   /** A spawn group described for the view: its members by name and where they stand. */
   worldGroupView(id: number): Promise<Result<GroupView | null>>;
   /** The spawn groups on a map (the database's and the layer's), by name. */
@@ -752,6 +754,7 @@ const REQUEST_SCHEMAS: Record<keyof Api, z.ZodType<unknown[]>> = {
   worldChanges: z.tuple([]),
   worldGroup: z.tuple([z.number().int().min(1)]),
   worldGroupView: z.tuple([z.number().int().min(1)]),
+  worldGroupSpawns: z.tuple([z.number().int().min(1)]),
   worldGroupsOnMap: z.tuple([z.number().int().min(0)]),
   worldNewGroupId: z.tuple([]),
   worldCheckGroup: z.tuple([spawnGroupArg, groupMovesArg]),

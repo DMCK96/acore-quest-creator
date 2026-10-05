@@ -14,7 +14,7 @@ vi.mock('../../src/renderer/world3d/world3d', () => ({
     const canvas = document.createElement('canvas');
     options.container.appendChild(canvas);
     const world = { options, canvas, dispose: vi.fn(), lookAt: vi.fn(), setSpawnVisibility: vi.fn(), setOwnSpawns: vi.fn(), select: vi.fn(), selectSpawns: vi.fn(),
-      setWorldLayer: vi.fn(), setMode: vi.fn(), setPlacing: vi.fn(), cancelDrag: vi.fn(), setMarked: vi.fn(), setGroupView: vi.fn(),
+      setWorldLayer: vi.fn(), setMode: vi.fn(), setPlacing: vi.fn(), cancelDrag: vi.fn(), setMarked: vi.fn(), setGroupView: vi.fn(), setGroupSpawns: vi.fn(),
       setActive: vi.fn(), setScenery: vi.fn(), setTool: vi.fn(), setFalloff: vi.fn(), setPendingMovement: vi.fn(), spawnMovement: vi.fn(() => null), startPath: vi.fn(), finishPath: vi.fn(), cancelPath: vi.fn(), undoPoint: vi.fn(),
       selectedSpawns: vi.fn(() => []), groundAt: vi.fn(() => null), lastPointer: vi.fn(() => null), hasSpawn: vi.fn(() => true), routeOf: vi.fn(() => null),
       camera: () => ({ position: { x: 0, y: 0, z: 0 }, direction: { x: 1, y: 0, z: 0 } }),
@@ -65,6 +65,32 @@ describe('the group as the view draws it', () => {
       members: [{ kind: 'creature', guid: 39203 }, { kind: 'creature', guid: 39207 }, { kind: 'object', guid: 5 }],
       points: [{ x: 10, y: 0, z: 0 }, { x: 12, y: 0, z: 0 }, { x: 14, y: 3, z: 0 }],
     });
+  });
+});
+
+describe("the spawns under the layer's top-level groups", () => {
+  it('are asked for each group with an event, one whose database event was cleared, and a deleted one that had an event', async () => {
+    vi.stubGlobal('fetch', async () => new Response(new Uint8Array([1]), { status: 200 }));
+    const existing = (event: Record<string, string> | null) => ({ kind: 'existing', original: { template: {}, members: [], event } });
+    const group = (id: number, extra: Record<string, unknown>) => ({ id, name: 'g', map: 571, maxActive: 1, event: null, origin: { kind: 'new' }, members: [], ...extra });
+    const groups = [
+      group(9, { event: { id: 4, during: true } }),
+      group(19, { origin: existing({ eventEntry: '12', pool_entry: '19' }) }),
+      group(30, { origin: existing({ eventEntry: '12', pool_entry: '30' }), removed: true }),
+      group(40, { origin: existing(null) }),
+      group(41, { origin: existing({ eventEntry: '12', pool_entry: '41' }), event: { id: 12, during: true }, members: [{ type: 'group', id: 42, chance: 0 }] }),
+      group(42, { origin: existing({ eventEntry: '5', pool_entry: '42' }) }),
+    ];
+    const api = makeMockApi({
+      worldLayer: vi.fn(async () => okv({ spawns: [], routes: [], added: [], groups })),
+      mapFloors: vi.fn(async () => okv({ reason: 'none' })),
+      worldGroupSpawns: vi.fn(async (id: number) => okv([{ kind: 'npc', guid: id * 100 }])),
+    });
+    render(<NamesProvider api={api}><HistoryProvider store={createAppStore(api)}><World3DView map={571} start={{ x: 0, y: 0, z: 0 }} hasClient /></HistoryProvider></NamesProvider>);
+    await waitFor(() => expect(worlds).toHaveLength(1));
+    await waitFor(() => expect(worlds[0].setGroupSpawns).toHaveBeenCalled());
+    expect(vi.mocked(api.worldGroupSpawns).mock.calls.map((c: any[]) => c[0]).sort((a: number, b: number) => a - b)).toEqual([9, 19, 30, 41]);
+    expect([...worlds[0].setGroupSpawns.mock.lastCall[0].keys()].sort((a: number, b: number) => a - b)).toEqual([9, 19, 30, 41]);
   });
 });
 

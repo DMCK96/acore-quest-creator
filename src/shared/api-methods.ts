@@ -54,6 +54,7 @@ export const API_METHODS = [
   'worldChanges',
   'worldGroup',
   'worldGroupView',
+  'worldGroupSpawns',
   'worldGroupsOnMap',
   'worldNewGroupId',
   'worldCheckGroup',

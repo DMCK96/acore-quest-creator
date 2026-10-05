@@ -107,6 +107,8 @@ export interface World3D {
   setFalloff(falloff: Falloff): void;
   /** Draws the world layer's edits over the database's spawns and routes. */
   setWorldLayer(layer: WorldLayer): void;
+  /** Every spawn under each top-level layer group with an event, through all its levels, by group id. */
+  setGroupSpawns(byGroup: ReadonlyMap<number, readonly { kind: 'npc' | 'object'; guid: number }[]>): void;
   /** Whether the gizmo moves or rotates. */
   setMode(mode: 'move' | 'rotate'): void;
   /** Starts placing an existing NPC or object (each click on the ground places one), or stops with null. */
@@ -609,6 +611,7 @@ export function createWorld3D(options: World3DOptions): World3D {
     setTool: (next) => applyTool(next),
     setFalloff: (falloff) => editor.setFalloff(falloff),
     setWorldLayer: (layer) => followLayer(manager.setWorldLayer(layer)),
+    setGroupSpawns: (byGroup) => followLayer(manager.setGroupSpawns(byGroup)),
     setMode: (mode) => editor.setMode(mode),
     setPlacing: (target) => {
       placing = target;

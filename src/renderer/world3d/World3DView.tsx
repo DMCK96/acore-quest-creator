@@ -545,6 +545,7 @@ function WorldStage({
           if (!activeRef.current) created.setActive(false);
           if (looksRef.current.size > 0) created.setLooks(looksRef.current);
           if (ownRef.current) created.setOwnSpawns(ownRef.current);
+          if (groupSpawnsRef.current.size > 0) created.setGroupSpawns(groupSpawnsRef.current);
           world.current = created;
           bringIntoViewRef.current();
           void apiRef.current?.worldLayer().then((result) => live && result.ok && applyLayer(result.value));
@@ -574,6 +575,34 @@ function WorldStage({
     looksSet.current = looksRef.current.size > 0;
     world.current?.setLooks(looksRef.current);
   }, [looksKey]);
+
+  // Every spawn under each top-level layer group with an event, or whose database event was cleared, and
+  // under each deleted group that had one, through all its levels: the database groups between are known
+  // to the main process only, so the event walk would otherwise stop at them
+  const groupsKey = JSON.stringify(groupsOf(layer));
+  const groupSpawnsRef = useRef<ReadonlyMap<number, readonly { kind: 'npc' | 'object'; guid: number }[]>>(new Map());
+  useEffect(() => {
+    const all = groupsOf(layerRef.current);
+    const groups = all.filter((g) => !g.removed);
+    const held = new Set(groups.flatMap((g) => g.members.flatMap((m) => (m.type === 'group' ? [m.id] : []))));
+    const hadEvent = (g: (typeof all)[number]): boolean => g.origin.kind === 'existing' && Number(g.origin.original.event?.eventEntry ?? 0) !== 0;
+    const tops = [
+      ...groups.filter((g) => (g.event || hadEvent(g)) && !held.has(g.id)),
+      ...all.filter((g) => g.removed && hadEvent(g)),
+    ];
+    const current = apiRef.current;
+    if (!current || (tops.length === 0 && groupSpawnsRef.current.size === 0)) return;
+    let live = true;
+    void Promise.all(tops.map(async (g) => [g.id, await current.worldGroupSpawns(g.id)] as const)).then((answers) => {
+      if (!live) return;
+      const byGroup = new Map(answers.flatMap(([id, r]) => (r.ok ? [[id, r.value] as const] : [])));
+      groupSpawnsRef.current = byGroup;
+      world.current?.setGroupSpawns(byGroup);
+    });
+    return () => {
+      live = false;
+    };
+  }, [groupsKey]);
 
   // The open quest's own spawns, redrawn as they change.
   useEffect(() => {

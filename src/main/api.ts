@@ -36,7 +36,7 @@ import { refCheckerFor, validateQuest, type Issue, type RefChecker } from '../co
 import { TOOL_VERSION } from '../core/version';
 import { addSpawn, deleteGroup, dropGroupMember, dropMember, dropQuestMember, groupsOf, hasWorldChanges, isAdded, moveSpawn, movementsOf, putGroup, respawnsOf, revertGroup, revertMovement, revertRespawn, revertRoute, revertSpawn, setMovement, setRespawn, setRoute, worldStatements, type RoutePoint, type SpawnDefaults, type WorldLayer } from '../core/world/layer';
 import { isQuestPool, memberKey, validateGroup, type GroupMember, type SpawnGroup } from '../core/world/groups';
-import { databaseQuestFacts, groupContext, groupDrifted, listPools, projectQuestFacts, readGroup } from './world/groups-api';
+import { databaseQuestFacts, groupContext, groupDrifted, listPools, projectQuestFacts, readGroup, spawnsUnder } from './world/groups-api';
 import { IDLE } from '../core/world/movement';
 import { describeStep } from './project/step-labels';
 import type { HistoryStep } from './project/history';
@@ -2265,6 +2265,12 @@ export function createApi(deps: ApiDeps): Api {
       }),
 
     worldGroup: (id) => run(async () => groupOf(connected().db, id)),
+
+    worldGroupSpawns: (id) =>
+      run(async () => {
+        const db = connected().db;
+        return spawnsUnder(db, deps.session.world.get(), await pools(db), id);
+      }),
 
     worldGroupView: (id) =>
       run(async () => {

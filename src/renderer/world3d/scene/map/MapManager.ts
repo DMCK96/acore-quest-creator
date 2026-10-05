@@ -218,6 +218,11 @@ class MapManager extends EventTarget {
     this.#spawnManager.setWorldLayer(layer).catch((error) => console.warn(`3D view: the world changes could not be drawn: ${describeError(error)}`));
   }
 
+  /** Every spawn under each top-level layer group with an event, through all its levels, by group id */
+  setGroupSpawns(byGroup: ReadonlyMap<number, readonly { kind: 'npc' | 'object'; guid: number }[]>) {
+    this.#spawnManager.setGroupSpawns(byGroup).catch((error) => console.warn(`3D view: the spawn groups' events could not be drawn: ${describeError(error)}`));
+  }
+
   /** Which of an NPC's route points a ray passes close to, or null */
   pickRoutePoint(ray: THREE.Ray, guid: number) {
     return this.#spawnManager.pickRoutePoint(ray, guid);
