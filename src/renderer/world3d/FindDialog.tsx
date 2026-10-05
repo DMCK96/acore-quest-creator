@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import type { SpawnDot } from '@core/db/spawns';
 import { worldMapById } from '@core/map/world-maps';
+import type { GroupView } from '@shared/ipc';
 import type { WorldLayer } from '@core/world/layer';
 import { useApi } from '../state/names';
 import { trapTab } from '../components/trap-tab';
@@ -66,18 +67,49 @@ export function FindDialog({
   from,
   preset,
   onGo,
+  onGoToGroup,
   onClose,
 }: {
   from: { map: number; x: number; y: number; z: number };
   preset?: FindPreset;
   onGo(spawn: FoundSpawn): void;
+  /** Going to a spawn group the map has: its view, as the server's pools read */
+  onGoToGroup?(view: GroupView): void;
   onClose(): void;
 }): React.JSX.Element {
   const dialog = useRef<HTMLDivElement>(null);
   const api = useApi();
-  const [kind, setKind] = useState<Kind>('creature');
+  const [mode, setMode] = useState<Kind | 'group'>('creature');
+  const grouping = mode === 'group';
+  const kind: Kind = mode === 'group' ? 'creature' : mode;
   const [text, setText] = useState('');
-  const { hits, error, searched } = useEntityHits(kind === 'creature' ? 'creature' : 'gameobject', text);
+  const { hits, error, searched } = useEntityHits(kind === 'creature' ? 'creature' : 'gameobject', grouping ? '' : text);
+  const [groups, setGroups] = useState<{ id: number; name: string; maxActive: number; members: number }[] | null>(null);
+  const [groupProblem, setGroupProblem] = useState<string | null>(null);
+
+  // The map's spawn groups, read once when the kind is picked
+  useEffect(() => {
+    if (!grouping || !api || groups) return;
+    let live = true;
+    void api.worldGroupsOnMap(from.map).then((r) => {
+      if (!live) return;
+      if (r.ok) setGroups(r.value);
+      else setGroupProblem(r.error.message);
+    });
+    return () => {
+      live = false;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [grouping, api]);
+
+  const goToGroup = async (id: number): Promise<void> => {
+    if (!api) return;
+    const r = await api.worldGroupView(id);
+    if (!r.ok) setGroupProblem(r.error.message);
+    else if (r.value) onGoToGroup?.(r.value);
+    else setGroupProblem('That spawn group is no longer there.');
+  };
+  const shownGroups = (groups ?? []).filter((g) => g.name.toLowerCase().includes(text.trim().toLowerCase()));
   const [chosen, setChosen] = useState<{ entry: number; name: string } | null>(null);
   const [spawns, setSpawns] = useState<FoundSpawn[] | null>(null);
   const [capped, setCapped] = useState(false);
@@ -150,14 +182,31 @@ export function FindDialog({
         {!chosen && (
           <>
             <div className="place-dialog__kinds" role="radiogroup" aria-label="What to find">
-              {(['creature', 'object'] as const).map((k) => (
+              {(['creature', 'object', 'group'] as const).map((k) => (
                 <label key={k}>
-                  <input type="radio" name="find-kind" checked={kind === k} onChange={() => setKind(k)} />
-                  {k === 'creature' ? 'NPC' : 'Object'}
+                  <input type="radio" name="find-kind" checked={mode === k} onChange={() => setMode(k)} />
+                  {k === 'creature' ? 'NPC' : k === 'object' ? 'Object' : 'Spawn group'}
                 </label>
               ))}
             </div>
             <input type="search" className="place-dialog__search" aria-label="Find by name or ID" placeholder="Type a name or ID" autoFocus value={text} onChange={(e) => setText(e.target.value)} />
+            {grouping && (
+              <>
+                <ul className="place-dialog__list" aria-label="Matches">
+                  {shownGroups.map((g) => (
+                    <li key={g.id}>
+                      <button type="button" className="place-dialog__hit" onClick={() => void goToGroup(g.id)}>
+                        {`${g.name} · ${g.maxActive} of ${g.members} at a time`}
+                        <span className="place-dialog__detail">#{g.id}</span>
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+                {groups && shownGroups.length === 0 && <p className="place-dialog__note">No spawn group on this map matches.</p>}
+                {groupProblem && <p className="place-dialog__note">{groupProblem}</p>}
+              </>
+            )}
+            {!grouping && (
             <ul className="place-dialog__list" aria-label="Matches">
               {hits.map((hit) => (
                 <li key={hit.id}>
@@ -170,8 +219,9 @@ export function FindDialog({
                 </li>
               ))}
             </ul>
-            {searched && !error && hits.length === 0 && <p className="place-dialog__note">Nothing in the database matches.</p>}
-            {error && <p className="place-dialog__note">{error}</p>}
+            )}
+            {!grouping && searched && !error && hits.length === 0 && <p className="place-dialog__note">Nothing in the database matches.</p>}
+            {!grouping && error && <p className="place-dialog__note">{error}</p>}
           </>
         )}
         {chosen && (

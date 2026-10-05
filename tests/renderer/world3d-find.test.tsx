@@ -4,7 +4,7 @@ import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { NamesProvider } from '../../src/renderer/state/names';
 import { makeMockApi, okv } from './mock-api';
-import { foundSpawns } from '../../src/renderer/world3d/FindDialog';
+import { foundSpawns, FindDialog } from '../../src/renderer/world3d/FindDialog';
 
 const worlds = vi.hoisted(() => [] as any[]);
 vi.mock('../../src/renderer/world3d/world3d', () => ({
@@ -160,5 +160,20 @@ describe('the find panel in the 3D screen', () => {
     const { errv } = await import('./mock-api');
     await open({ findSpawns: vi.fn(async () => errv('NOT_CONNECTED', 'Connect to a world database first.')) });
     expect(await screen.findByText('Connect to a world database first.')).toBeTruthy();
+  });
+});
+
+describe('finding a spawn group', () => {
+  it("finds the map's spawn groups by name and goes to one", async () => {
+    const view = { id: 32492, name: 'Path 1', map: 571, maxActive: 1, members: [{ key: 'npc:39203', type: 'spawn' as const, name: 'Drake', chance: 10, at: { x: 10, y: 0, z: 0 } }] };
+    const api = makeMockApi({ worldGroupsOnMap: vi.fn(async () => okv([{ id: 32492, name: 'Path 1', maxActive: 1, members: 2 }, { id: 32493, name: 'Path 2', maxActive: 1, members: 2 }])),
+      worldGroupView: vi.fn(async () => okv(view)) });
+    const onGoToGroup = vi.fn();
+    render(<NamesProvider api={api}><FindDialog from={{ map: 571, x: 0, y: 0, z: 0 }} onGo={vi.fn()} onGoToGroup={onGoToGroup} onClose={vi.fn()} /></NamesProvider>);
+    await userEvent.click(screen.getByRole('radio', { name: 'Spawn group' }));
+    await userEvent.type(screen.getByRole('searchbox', { name: 'Find by name or ID' }), 'path 1');
+    await userEvent.click(await screen.findByRole('button', { name: /Path 1 · 1 of 2 at a time/ }));
+    await waitFor(() => expect(onGoToGroup).toHaveBeenCalledWith(view));
+    expect(screen.queryByRole('button', { name: /Path 2/ })).toBeNull();
   });
 });

@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import type { CanvasNode, OpenResult, QuestSpawnGroup } from '@shared/ipc';
+import type { CanvasNode, GroupView, OpenResult, QuestSpawnGroup } from '@shared/ipc';
 import type { FieldValue } from '@core/registry/types';
 import { EMPTY_ENTITIES, newSpawn } from '@core/entities/model';
 import type { Placement } from '@core/world/layer';
@@ -195,6 +195,24 @@ export function WorldWorkspace({
       event: spawn.event, added: spawn.note === 'placed', nonce: (previous?.nonce ?? 0) + 1,
     }));
   };
+  // A spawn group: the camera goes to the middle of its members, and its first spawn is focused
+  const findGroup = (view: GroupView): void => {
+    setFinding(false);
+    const placed = view.members.filter((m) => m.at);
+    if (placed.length > 0) {
+      const mean = (axis: 'x' | 'y' | 'z'): number => placed.reduce((sum, m) => sum + m.at![axis], 0) / placed.length;
+      goTo({ x: mean('x'), y: mean('y'), z: mean('z') }, view.map);
+    }
+    const first = view.members.find((m) => m.type === 'spawn' && m.at);
+    const [prefix, guid] = first?.key.split(':') ?? [];
+    if (first?.at && (prefix === 'npc' || prefix === 'object') && Number.isFinite(Number(guid))) {
+      const at = first.at;
+      setFocus((previous) => ({
+        kind: prefix === 'npc' ? 'creature' : 'object', guid: Number(guid), entry: 0, name: first.name, x: at.x, y: at.y, z: at.z,
+        event: null, added: false, nonce: (previous?.nonce ?? 0) + 1,
+      }));
+    }
+  };
   const parsed = { x: Number(typed.x), y: Number(typed.y), z: Number(typed.z) };
   const valid = [typed.x, typed.y, typed.z].every((v) => v.trim() !== '') && Object.values(parsed).every(Number.isFinite);
 
@@ -364,7 +382,7 @@ export function WorldWorkspace({
           onClose={() => leaveWelcome()}
         />
       )}
-      {finding && <FindDialog from={{ map: mapId, ...at }} onGo={find} onClose={() => setFinding(false)} />}
+      {finding && <FindDialog from={{ map: mapId, ...at }} onGo={find} onGoToGroup={findGroup} onClose={() => setFinding(false)} />}
       {preset && (
         <FindDialog
           from={{ map: mapId, ...at }}
