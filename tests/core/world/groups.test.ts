@@ -89,6 +89,14 @@ describe('quest rotations and events', () => {
     expect(validateGroup(rotation({ event: { id: 4, during: true } }), ctx())).toContain('A quest rotation cannot follow an event.');
   });
 
+  it('a quest with both daily and weekly bits counts as daily, and an out-of-range count names the offered-each-reset rule', () => {
+    const both = new Map([[60001, { title: 'Both', daily: true, weekly: true, hasGiver: true }], [60002, { title: 'Boars', daily: true, weekly: false, hasGiver: true }]]);
+    const c = context({ quest: (id: number) => both.get(id) ?? null });
+    expect(validateGroup(rotation(), c)).toEqual([]);
+    expect(validateGroup(rotation({ maxActive: 3 }), c)).toEqual(['Offered each reset must be between 1 and the number of quests.']);
+    expect(validateGroup(path({ maxActive: 3 }), c)).toContain('Up at once must be between 1 and the number of members.');
+  });
+
   it('a rotation needs at least two quests', () => {
     expect(validateGroup(rotation({ members: [daily(60001)] }), ctx())).toContain('A rotation needs at least two quests.');
     expect(validateGroup(rotation(), ctx())).not.toContain('A rotation needs at least two quests.');

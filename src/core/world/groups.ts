@@ -91,7 +91,7 @@ export function validateGroup(group: SpawnGroup, context: GroupContext): string[
   const members = group.members;
   if (members.length === 0) problems.push('Add at least one member.');
   if (!(group.maxActive >= 1 && group.maxActive <= members.length)) {
-    problems.push('Up at once must be between 1 and the number of members.');
+    problems.push(isQuestPool(group) ? 'Offered each reset must be between 1 and the number of quests.' : 'Up at once must be between 1 and the number of members.');
   }
   const spawnSide: Chanced[] = members.filter((m): m is Chanced => m.type !== 'quest');
   const total = round2(spawnSide.reduce((sum, m) => sum + round2(m.chance), 0));
@@ -112,7 +112,8 @@ export function validateGroup(group: SpawnGroup, context: GroupContext): string[
         continue;
       }
       if (quest.daily) anyDaily = true;
-      if (quest.weekly) anyWeekly = true;
+      // The server's IsDaily wins when both bits are set
+      if (quest.weekly && !quest.daily) anyWeekly = true;
       if (!quest.daily && !quest.weekly) problems.push(`${quest.title} is not a daily or weekly quest.`);
       if (!quest.hasGiver) problems.push(`${quest.title} has no giver, so it is never offered.`);
       const other = context.groupOfQuest(m.questId);
