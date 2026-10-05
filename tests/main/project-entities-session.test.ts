@@ -49,7 +49,7 @@ describe('project file version 4', () => {
   const doc = (over: Partial<ProjectDocument> = {}): ProjectDocument => ({ ...defaultProjectMeta('P', 'C:\\out'), quests: [], world: EMPTY_WORLD, entities: store('Hela'), ...over });
 
   it('is version 4 and round-trips the store', () => {
-    expect(PROJECT_VERSION).toBe(4);
+    expect(PROJECT_VERSION).toBeGreaterThanOrEqual(4);
     expect(parseProject(serializeProject(doc())).entities).toEqual(store('Hela'));
   });
 

@@ -116,6 +116,32 @@ describe('project file: the world layer', () => {
     expect(parseProject(serializeProject(doc({ world: { ...world, movements } }))).world.movements).toEqual(movements);
   });
 
+  it('keeps respawn edits, spawn groups, route walkers and placed spawns\' respawn times through a save and reopen', () => {
+    const full = {
+      ...world,
+      routes: [{ ...world.routes[0]!, walkerEntries: [{ entry: 1423, name: 'Stormwind Guard' }] }],
+      added: [{ ...world.added[0]!, respawnSecs: 2700 }, world.added[1]!],
+      respawns: [{ kind: 'creature' as const, guid: 80330, entry: 1423, name: 'Stormwind Guard', map: 0, original: 300, current: 120 }],
+      groups: [
+        { id: 900001, name: 'Path 1', map: 0, maxActive: 1, origin: { kind: 'new' as const },
+          members: [{ type: 'spawn' as const, kind: 'npc' as const, guid: 80331, entry: 1423, chance: 0 }, { type: 'group' as const, id: 32492, chance: 25.5 }] },
+        { id: 32492, name: 'Drake', map: 0, maxActive: 1, removed: true, members: [{ type: 'spawn' as const, kind: 'object' as const, guid: 80332, entry: 2000, chance: 0 }],
+          origin: { kind: 'existing' as const, original: {
+            template: { entry: '32492', max_limit: '1', description: 'Drake' },
+            members: [{ table: 'pool_gameobject' as const, row: { guid: '80332', pool_entry: '32492', chance: '0', description: null } }],
+            event: { eventEntry: '12', pool_entry: '32492' },
+          } } },
+      ],
+    };
+    expect(parseProject(serializeProject(doc({ world: full }))).world).toEqual(full);
+  });
+
+  it('writes no respawns or groups for a layer without any, as before', () => {
+    const saved = JSON.parse(serializeProject(doc({ world }))).world;
+    expect(saved).not.toHaveProperty('respawns');
+    expect(saved).not.toHaveProperty('groups');
+  });
+
   it('writes no movements for a layer without any, as before', () => {
     expect(JSON.parse(serializeProject(doc({ world }))).world).not.toHaveProperty('movements');
   });
