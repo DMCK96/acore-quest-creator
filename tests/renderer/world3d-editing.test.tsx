@@ -73,17 +73,18 @@ describe('editing in the quest map\'s 3D view', () => {
     await waitFor(() => expect(world.setWorldLayer).toHaveBeenLastCalledWith(moved));
     expect(worldMoveSpawn).toHaveBeenCalledWith('creature', 80330, { x: 1, y: 2, z: 3, orientation: 1.5, rotation: null });
     expect(onChange).not.toHaveBeenCalled();
-    expect(screen.getByRole('button', { name: 'World changes (1)' })).toBeTruthy();
+    // The quest's own NPC counts too: it is in the project patch
+    expect(screen.getByRole('button', { name: 'Project changes (2)' })).toBeTruthy();
   });
 
-  it('opens the World changes list from its button, and draws the layer a revert leaves', async () => {
+  it('opens the Project changes list from its button, and draws the layer a revert leaves', async () => {
     const worldChanges = vi.fn(async () => okv([{ ...moved.spawns[0], type: 'spawn', drifted: false }]));
     const worldRevert = vi.fn(async () => okv(EMPTY));
     const { world } = await questMap(makeMockApi({ worldLayer: vi.fn(async () => okv(moved)), worldChanges, worldRevert }));
-    await userEvent.click(await screen.findByRole('button', { name: 'World changes (1)' }));
+    await userEvent.click(await screen.findByRole('button', { name: 'Project changes (2)' }));
     await userEvent.click(await screen.findByRole('button', { name: 'Revert Guard' }));
     await waitFor(() => expect(world.setWorldLayer).toHaveBeenLastCalledWith(EMPTY));
-    expect(screen.getByRole('button', { name: 'World changes (0)' })).toBeDisabled();
+    expect(screen.getByRole('button', { name: 'Project changes (1)' })).toBeEnabled();
   });
 
   it('shows where the selected spawn now stands after it is moved', async () => {

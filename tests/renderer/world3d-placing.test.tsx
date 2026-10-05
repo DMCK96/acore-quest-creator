@@ -82,7 +82,7 @@ describe('placing an existing NPC or object from the 3D view', () => {
     expect(world.select).toHaveBeenLastCalledWith({ kind: 'creature', guid: 90001 });
     expect(await screen.findByText('Stormwind Guard')).toBeTruthy();
     expect(screen.getByText(/Placed here; it is not in the database/)).toBeTruthy();
-    expect(screen.getByRole('button', { name: 'World changes (1)' })).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Project changes (1)' })).toBeTruthy();
   });
 
   it('sends an object to the gameobject table', async () => {

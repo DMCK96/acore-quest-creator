@@ -57,6 +57,8 @@ export interface AppState {
   recoveries: RecoveryEntry[];
   preview: Difference[] | null;
   exportResult: ExportResult | null;
+  /** Where the project patch went when it was exported after a quest's (null until then) */
+  projectPatch: { applyPath: string; revertPath: string } | null;
   exportError: ApiError | null;
   hasDevProfile: boolean;
   pendingApply: { sql: string } | null;
@@ -140,6 +142,8 @@ export interface AppState {
   closeEditor(): Promise<void>;
   loadPreview(): Promise<void>;
   exportQuest(): Promise<void>;
+  /** Writes the project patch (its new NPCs, objects, items and world changes) that the quest needs first */
+  exportProject(): Promise<void>;
   prepareApply(): Promise<void>;
   confirmApply(): Promise<void>;
   cancelApply(): void;
@@ -272,6 +276,7 @@ export function createAppStore(api: Api, opts: { saveDelayMs?: number } = {}): A
     recoveries: [],
     preview: null,
     exportResult: null,
+    projectPatch: null,
     exportError: null,
     hasDevProfile: false,
     pendingApply: null,
@@ -382,6 +387,7 @@ export function createAppStore(api: Api, opts: { saveDelayMs?: number } = {}): A
         results: [],
         preview: null,
         exportResult: null,
+        projectPatch: null,
         exportError: null,
         pendingApply: null,
         appliedCount: null,
@@ -712,12 +718,19 @@ export function createAppStore(api: Api, opts: { saveDelayMs?: number } = {}): A
       const { open } = get();
       if (!open) return;
       await get().flushSave();
-      set({ exportError: null });
+      set({ exportError: null, projectPatch: null });
       const result = await api.exportQuest(open.questId);
       if (result.ok) set({ exportResult: result.value, exportError: null });
       else set({ exportResult: null, exportError: result.error });
       // Marking a quest exported is a change to the project.
       if (result.ok) await get().loadProjectState();
+    },
+
+    async exportProject() {
+      await get().flushSave();
+      const result = await api.exportProject();
+      if (result.ok) set({ projectPatch: { applyPath: result.value.applyPath, revertPath: result.value.revertPath }, exportError: null });
+      else set({ projectPatch: null, exportError: result.error });
     },
 
     async prepareApply() {
@@ -1004,6 +1017,7 @@ export function createAppStore(api: Api, opts: { saveDelayMs?: number } = {}): A
       dirty: false,
       preview: null,
       exportResult: null,
+      projectPatch: null,
       exportError: null,
       historyNote: null,
       worldLayer: null,

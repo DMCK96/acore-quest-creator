@@ -12,7 +12,8 @@ import type { ViewSpawns } from '@core/db/view-spawns';
 import { chooseZ, floorCandidates } from '@core/map/floors';
 import { EMPTY_WORLD, movementsOf, type Placement, type WorldLayer } from '@core/world/layer';
 import type { SpawnEdit, SpawnRef } from './edits';
-import { WorldChanges } from './WorldChanges';
+import { ProjectChanges } from './ProjectChanges';
+import { useProjectEntities } from '../state/project-entities';
 import { PlaceDialog, type Chosen } from './PlaceDialog';
 import { OrbMark } from '../components/OrbMark';
 import type { PlaceRequest } from './placing';
@@ -135,8 +136,10 @@ interface ViewProps {
   onQuestRole?(role: Role, target: RoleTarget, on: boolean): string | null;
   /** The right-click menu's New … here: one project NPC or object with a spawn at `at`, as one step */
   onCreateEntity?(what: 'creature' | 'object', at: Placement, forQuest: boolean): Promise<void>;
-  /** The right-click menu's Edit NPC… / Edit object… */
-  onEditEntity?(kind: 'creature' | 'object', entry: number): void;
+  /** The right-click menu's Edit NPC… / Edit object…, and Edit in Project changes (which lists items too) */
+  onEditEntity?(kind: 'creature' | 'object' | 'item', entry: number): void;
+  /** Project changes' Go to: brings a spawn of the project's into view, on whichever map it is */
+  onGoToSpawn?(target: Omit<FocusTarget, 'nonce'> & { map: number }): void;
   /** The right-click menu's Make lootable… / Stop being lootable */
   onSetLootable?(entry: number, on: boolean): Promise<void>;
   /** Whether a project object can be looted; null for one that is not the project's */
@@ -206,7 +209,7 @@ class Contained extends Component<{ children: ReactNode }, { failure: string | n
 
 function WorldStage({
   map, start, hasClient, own, onSelect, onOwnEdit, focus, active = true, showArea = true, onArea, onPlaceChange, quest, chainIds, onQuestRole, onNewQuest, onShowSpawns,
-  onCreateEntity, onEditEntity, onSetLootable, lootable,
+  onCreateEntity, onEditEntity, onSetLootable, lootable, onGoToSpawn,
 }: ViewProps): React.JSX.Element {
   const container = useRef<HTMLDivElement>(null);
   const world = useRef<World3D | null>(null);
@@ -241,11 +244,13 @@ function WorldStage({
   const [note, setNote] = useState<string | null>(null);
   const [shared, setShared] = useState<SharedRoute | null>(null);
   const [changesOpen, setChangesOpen] = useState(false);
-  const changes = layer.spawns.length + layer.routes.length + layer.added.length + movementsOf(layer).length;
+  const projectEntities = useProjectEntities()?.entities;
+  const changes = layer.spawns.length + layer.routes.length + layer.added.length + movementsOf(layer).length
+    + (projectEntities ? projectEntities.npcs.length + projectEntities.objects.length + projectEntities.items.length : 0);
   // Choosing an existing NPC or object to place, and the one being placed (each click on the ground puts one down)
   const [choosing, setChoosing] = useState(false);
   const [placing, setPlacing] = useState<Chosen | null>(null);
-  /** A layer from the World changes list (after a revert): kept and drawn */
+  /** A layer from the Project changes list (after a revert): kept and drawn */
   const takeLayer = (next: WorldLayer): void => {
     layerRef.current = next;
     setLayer(next);
@@ -695,7 +700,7 @@ function WorldStage({
               Place…
             </button>
             <button type="button" className="btn" disabled={changes === 0} onClick={() => setChangesOpen(true)}>
-              World changes ({changes})
+              Project changes ({changes})
             </button>
           </div>
         </fieldset>
@@ -760,7 +765,23 @@ function WorldStage({
           {note}
         </p>
       )}
-      {changesOpen && api && <WorldChanges api={api} onLayer={takeLayer} onClose={() => setChangesOpen(false)} layerSeq={undone?.seq ?? 0} />}
+      {changesOpen && api && (
+        <ProjectChanges
+          api={api}
+          onLayer={takeLayer}
+          onClose={() => setChangesOpen(false)}
+          layerSeq={undone?.seq ?? 0}
+          onEdit={onEditEntity ? (kind, entry) => onEditEntity(kind === 'npc' ? 'creature' : kind, entry) : undefined}
+          onGoTo={
+            onGoToSpawn
+              ? (kind, entity, spawn) => {
+                  setChangesOpen(false);
+                  onGoToSpawn({ kind, guid: spawn.guid, entry: entity.entry, name: entity.name, map: spawn.map, x: spawn.x, y: spawn.y, z: spawn.z, event: null, added: false });
+                }
+              : undefined
+          }
+        />
+      )}
       {!unavailable && menu.elements}
       {shared && (
         <SharedRouteDialog
@@ -850,7 +871,7 @@ function SelectedSpawn({ spawn, note, onClose, onRemove }: { spawn: PickedSpawn;
       </p>
       {spawn.event && <p>Only during event {spawn.event.id}{spawn.event.name ? `: ${spawn.event.name}` : ''}</p>}
       {spawn.pathId > 0 && <p>Route {spawn.pathId}</p>}
-      {spawn.added && <p>Placed here; it is not in the database until the world patch is applied.</p>}
+      {spawn.added && <p>Placed here; it is not in the database until the project patch is applied.</p>}
       {note && <p className="world3d__selected-note">{note}</p>}
       {onRemove && (
         <p className="world3d__selected-actions">

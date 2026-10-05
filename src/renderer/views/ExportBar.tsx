@@ -99,6 +99,8 @@ export function ExportStatus({ store }: { store: AppStore }): React.JSX.Element 
   const exportResult = store((s) => s.exportResult);
   const exportError = store((s) => s.exportError);
   const appliedCount = store((s) => s.appliedCount);
+  const projectPatch = store((s) => s.projectPatch);
+  const exportProject = store((s) => s.exportProject);
 
   if (exportError) {
     return (
@@ -121,6 +123,19 @@ export function ExportStatus({ store }: { store: AppStore }): React.JSX.Element 
                 <li key={i}>{w.message}</li>
               ))}
             </ul>
+          )}
+          {exportResult.usesProject > 0 && (
+            <p>
+              This quest uses {exportResult.usesProject} new NPCs, objects or items from the project patch.{' '}
+              <button type="button" className="btn" onClick={() => void exportProject()}>
+                Export project patch
+              </button>
+            </p>
+          )}
+          {projectPatch && (
+            <p>
+              Project patch written to <code>{projectPatch.applyPath}</code>
+            </p>
           )}
         </>
       )}

@@ -162,10 +162,10 @@ describe('the right-click menu in the 3D view', () => {
     await waitFor(() => expect(api.worldAddSpawn).toHaveBeenCalledWith('creature', 1423, 0, placement, 90001));
   });
 
-  it('counts movement changes on the World changes button', async () => {
+  it('counts movement changes on the Project changes button', async () => {
     const movements = [{ guid: 80330, entry: 1423, name: 'Guard', map: 0, addonRow: false, original: { type: 'idle', wander: 0, pathId: null }, current: { type: 'wander', wander: 5, pathId: null } }];
     await view({ worldLayer: vi.fn(async () => okv({ ...EMPTY, movements })) });
-    expect(await screen.findByRole('button', { name: 'World changes (1)' })).toBeEnabled();
+    expect(await screen.findByRole('button', { name: 'Project changes (1)' })).toBeEnabled();
   });
 
   it('does not paste or duplicate while a path is drawn', async () => {

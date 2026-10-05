@@ -294,7 +294,11 @@ export function WorldWorkspace({
         onNewQuest={onNewQuest ? (giver, after) => onNewQuest(giver, after && quest ? quest.open.questId : null) : undefined}
         onShowSpawns={(groups, scope) => setPreset(presetOf(groups, scope))}
         onCreateEntity={createEntity}
-        onEditEntity={(kind, entry) => setEditor({ kind: kind === 'creature' ? 'npc' : 'object', entry, isNew: false })}
+        onEditEntity={(kind, entry) => setEditor({ kind: kind === 'creature' ? 'npc' : kind, entry, isNew: false })}
+        onGoToSpawn={({ map, ...target }) => {
+          goTo({ x: target.x, y: target.y, z: target.z }, map);
+          setFocus((previous) => ({ ...target, nonce: (previous?.nonce ?? 0) + 1 }));
+        }}
         onSetLootable={setLootable}
         lootable={lootable}
       />

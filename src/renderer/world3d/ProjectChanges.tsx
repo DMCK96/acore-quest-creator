@@ -1,24 +1,36 @@
 import { useEffect, useRef, useState } from 'react';
 import type { Api, Movement, Placement, RoutePoint, WorldChange, WorldLayer } from '@shared/ipc';
+import type { CustomNpc, CustomObject, Spawn } from '@core/entities/model';
 import { trapTab } from '../components/trap-tab';
+import { otherUsers, useProjectEntities, type ProjectQuestUse } from '../state/project-entities';
 import '../views/ProjectDialog.css';
 
 /**
- * Every edit in the project's world layer, as it was in the database and as it is now: revert one,
- * or export them all as the world patch and the patch that puts the database back.
+ * What the project adds to the world database: its new NPCs, objects and items (edit one, or go to
+ * its spawn), and every edit in its world layer as it was in the database and as it is now (revert
+ * one). Exports them all as the project patch and the patch that puts the database back.
  */
-export function WorldChanges({
+export function ProjectChanges({
   api,
   onLayer,
   onClose,
+  onEdit,
+  onGoTo,
   layerSeq = 0,
 }: {
   api: Api;
   onLayer(layer: WorldLayer): void;
   onClose(): void;
+  /** Opens the editor of one of the project's NPCs, objects or items */
+  onEdit?(kind: 'npc' | 'object' | 'item', entry: number): void;
+  /** Takes the camera to a spawn of one of the project's NPCs or objects */
+  onGoTo?(kind: 'creature' | 'object', entity: CustomNpc | CustomObject, spawn: Spawn): void;
   /** Moves when an undo or redo changed the layer, so the list is read again */
   layerSeq?: number;
 }): React.JSX.Element {
+  const project = useProjectEntities();
+  const entities = project?.entities;
+  const count = entities ? entities.npcs.length + entities.objects.length + entities.items.length : 0;
   const dialog = useRef<HTMLDivElement>(null);
   const [changes, setChanges] = useState<WorldChange[] | null>(null);
   const [exported, setExported] = useState<{ applyPath: string; revertPath: string } | null>(null);
@@ -64,18 +76,37 @@ export function WorldChanges({
         className="modal world-changes"
         role="dialog"
         aria-modal="true"
-        aria-label="World changes"
+        aria-label="Project changes"
         onKeyDown={(e) => {
           if (e.key === 'Escape') onClose();
           trapTab(e, dialog.current);
         }}
       >
         <header className="modal__header">
-          <h2>World changes</h2>
+          <h2>Project changes</h2>
           <button type="button" className="btn btn--icon" aria-label="Close" onClick={onClose}>
             ✕
           </button>
         </header>
+        {entities && count > 0 && (
+          <section className="project-changes__entities" aria-label="New NPCs, objects & items">
+            <h3 className="section-label">New NPCs, objects &amp; items</h3>
+            <ul className="project-changes__list">
+              {entities.npcs.map((npc) => (
+                <EntityRow key={`npc:${npc.entry}`} kind="npc" entry={npc.entry} name={npc.name} spawns={npc.spawns.length} quests={project.quests}
+                  onEdit={onEdit} onGoTo={npc.spawns[0] && onGoTo ? () => onGoTo('creature', npc, npc.spawns[0]) : undefined} />
+              ))}
+              {entities.objects.map((object) => (
+                <EntityRow key={`object:${object.entry}`} kind="object" entry={object.entry} name={object.name} spawns={object.spawns.length} quests={project.quests}
+                  onEdit={onEdit} onGoTo={object.spawns[0] && onGoTo ? () => onGoTo('object', object, object.spawns[0]) : undefined} />
+              ))}
+              {entities.items.map((item) => (
+                <EntityRow key={`item:${item.entry}`} kind="item" entry={item.entry} name={item.name} spawns={null} quests={project.quests} onEdit={onEdit} />
+              ))}
+            </ul>
+          </section>
+        )}
+        {count > 0 && <h3 className="section-label">World changes</h3>}
         {changes && changes.length === 0 && <p>No world changes.</p>}
         {changes && changes.length > 0 && (
           <table className="world-changes__table">
@@ -106,12 +137,49 @@ export function WorldChanges({
           <button type="button" className="btn" onClick={onClose}>
             Close
           </button>
-          <button type="button" className="btn btn--primary" disabled={!changes || changes.length === 0} onClick={() => void exportAll()}>
-            Export world patch
+          <button type="button" className="btn btn--primary" disabled={!changes || changes.length + count === 0} onClick={() => void exportAll()}>
+            Export project patch
           </button>
         </div>
       </div>
     </div>
+  );
+}
+
+const KIND_LABEL = { npc: 'NPC', object: 'Object', item: 'Item' } as const;
+const USE_KEY = { npc: 'npcs', object: 'objects', item: 'items' } as const;
+
+/** One of the project's NPCs, objects or items: what it is, how many spawns it has, and the quests that use it */
+function EntityRow({
+  kind, entry, name, spawns, quests, onEdit, onGoTo,
+}: {
+  kind: 'npc' | 'object' | 'item';
+  entry: number;
+  name: string;
+  /** Null for items, which have none */
+  spawns: number | null;
+  quests: readonly ProjectQuestUse[];
+  onEdit?(kind: 'npc' | 'object' | 'item', entry: number): void;
+  onGoTo?(): void;
+}): React.JSX.Element {
+  const label = name.trim() || `${KIND_LABEL[kind]} ${entry}`;
+  const users = otherUsers(quests, null, USE_KEY[kind], entry);
+  const parts = [`${KIND_LABEL[kind]} ${entry}`];
+  if (spawns !== null) parts.push(`${spawns} ${spawns === 1 ? 'spawn' : 'spawns'}`);
+  if (users.length > 0) parts.push(`used by ${users.join(', ')}`);
+  return (
+    <li className="project-changes__entity" aria-label={label}>
+      <span className="project-changes__name">{label}</span>
+      <span className="project-changes__facts">{parts.join(' · ')}</span>
+      <span className="project-changes__actions">
+        <button type="button" className="btn" disabled={!onEdit} onClick={() => onEdit?.(kind, entry)}>
+          Edit
+        </button>
+        <button type="button" className="btn" disabled={!onGoTo} onClick={onGoTo}>
+          Go to
+        </button>
+      </span>
+    </li>
   );
 }
 

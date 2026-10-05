@@ -18,7 +18,7 @@ vi.mock('../../src/renderer/world3d/world3d', () => ({
   },
 }));
 import { World3DView } from '../../src/renderer/world3d/World3DView';
-import { WorldChanges } from '../../src/renderer/world3d/WorldChanges';
+import { ProjectChanges } from '../../src/renderer/world3d/ProjectChanges';
 
 afterEach(() => { worlds.length = 0; vi.unstubAllGlobals(); });
 const EMPTY = { spawns: [], routes: [], added: [], movements: [] };
@@ -36,12 +36,12 @@ describe('views after an undo', () => {
     expect(worlds[0].cancelDrag).toHaveBeenCalled();
   });
 
-  it('World changes reloads its list when the layer changes while it is open', async () => {
+  it('Project changes reloads its list when the layer changes while it is open', async () => {
     const worldChanges = vi.fn(async () => okv([]));
     const api = makeMockApi({ worldChanges });
-    const { rerender } = render(<WorldChanges api={api} onLayer={vi.fn()} onClose={vi.fn()} layerSeq={0} />);
+    const { rerender } = render(<ProjectChanges api={api} onLayer={vi.fn()} onClose={vi.fn()} layerSeq={0} />);
     await waitFor(() => expect(worldChanges).toHaveBeenCalledTimes(1));
-    rerender(<WorldChanges api={api} onLayer={vi.fn()} onClose={vi.fn()} layerSeq={1} />);
+    rerender(<ProjectChanges api={api} onLayer={vi.fn()} onClose={vi.fn()} layerSeq={1} />);
     await waitFor(() => expect(worldChanges).toHaveBeenCalledTimes(2));
   });
 });

@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { act, render, screen, waitFor } from '@testing-library/react';
+import { act, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { NamesProvider } from '../../src/renderer/state/names';
 import { ProjectEntitiesProvider } from '../../src/renderer/state/project-entities';
@@ -119,5 +119,18 @@ describe('creating and editing from the World view', () => {
     mount({ ...EMPTY_ENTITIES, objects: [crate] });
     await waitFor(() => expect(worlds).toHaveLength(1));
     await waitFor(() => expect(worlds[0].setOwnSpawns).toHaveBeenCalledWith(expect.objectContaining({ objects: [expect.objectContaining({ guid: 7000001, own: true })] })));
+  });
+
+  it('Project changes edits a project object and goes to its spawn', async () => {
+    mount({ ...EMPTY_ENTITIES, objects: [crate] });
+    await waitFor(() => expect(worlds).toHaveLength(1));
+    await userEvent.click(await screen.findByRole('button', { name: 'Project changes (1)' }));
+    const row = screen.getByRole('listitem', { name: 'Crate' });
+    await userEvent.click(within(row).getByRole('button', { name: 'Go to' }));
+    expect(screen.queryByRole('dialog', { name: 'Project changes' })).toBeNull();
+    await waitFor(() => expect(worlds.at(-1).select).toHaveBeenCalledWith({ kind: 'object', guid: 7000001 }));
+    await userEvent.click(screen.getByRole('button', { name: 'Project changes (1)' }));
+    await userEvent.click(within(screen.getByRole('listitem', { name: 'Crate' })).getByRole('button', { name: 'Edit' }));
+    expect(await screen.findByRole('dialog', { name: 'Object: Crate' })).toBeTruthy();
   });
 });
