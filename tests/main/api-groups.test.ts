@@ -187,4 +187,22 @@ describe('spawn groups through the API', () => {
     expect(await members()).toEqual([901, 902]);
     expect(((await api.projectEntities()) as any).value.npcs[0].spawns).toHaveLength(2);
   });
+  it('takes a group origin from the layer copy or the database, never from what the renderer sends', async () => {
+    const { api } = await setup();
+    const group: any = ((await api.worldGroup(32492)) as any).value;
+    const forged = { kind: 'existing', original: { template: { entry: '32492', max_limit: '9', description: 'forged' }, members: [], event: null } };
+    const saved: any = await api.worldSetGroup({ ...group, name: 'Path one', origin: forged, removed: true }, []);
+    expect(saved.ok).toBe(true);
+    const copy = saved.value.groups.find((g: any) => g.id === 32492);
+    expect(copy.origin).toEqual(group.origin);
+    expect(copy.removed).toBeUndefined();
+    // Saved again with another forgery, the layer's copy still wins
+    const again: any = await api.worldSetGroup({ ...copy, name: 'Path 1', origin: forged }, []);
+    expect(again.value.groups.find((g: any) => g.id === 32492).origin).toEqual(group.origin);
+    // An id with no pool and no layer copy is new, whatever the renderer says
+    const ghost: any = await api.worldSetGroup({ id: 40000, name: 'Ghost', map: 0, maxActive: 1, origin: forged,
+      members: [{ type: 'spawn', kind: 'npc', guid: 80330, entry: 32491, chance: 0 }] } as any, []);
+    expect(ghost.ok).toBe(true);
+    expect(ghost.value.groups.find((g: any) => g.id === 40000).origin).toEqual({ kind: 'new' });
+  });
 });

@@ -1198,6 +1198,19 @@ export function createApi(deps: ApiDeps): Api {
     return known ?? (await readGroup(db, id));
   }
 
+  /**
+   * A group sent by the renderer as main saves or checks it: its origin is the layer copy's, else the
+   * database pool's (with the rows it was read from), else new; the origin and `removed` it was sent with
+   * are not trusted
+   */
+  async function trustedGroup(db: WorldDb, sent: SpawnGroup): Promise<SpawnGroup> {
+    const { removed: _removed, origin: _origin, ...fields } = sent;
+    const copy = groupsOf(deps.session.world.get()).find((g) => g.id === sent.id);
+    if (copy) return { ...fields, origin: copy.origin };
+    const pool = await readGroup(db, sent.id);
+    return { ...fields, origin: pool ? pool.origin : { kind: 'new' } };
+  }
+
   /** Where a spawn stands: as moved or placed in the layer, as the project has it, else as the database has it */
   async function spawnAt(db: WorldDb, kind: 'npc' | 'object', guid: number): Promise<{ x: number; y: number; z: number } | null> {
     const table = kind === 'npc' ? 'creature' : 'gameobject';
@@ -2194,12 +2207,17 @@ export function createApi(deps: ApiDeps): Api {
         return Math.max(dbMax, ...groupsOf(deps.session.world.get()).map((g) => g.id), 0) + 1;
       }),
 
-    worldCheckGroup: (group, moves) =>
-      run(async () => validateGroup(group, await groupContext(connected().db, deps.session.world.get(), projectEntities(), moves, group))),
+    worldCheckGroup: (sent, moves) =>
+      run(async () => {
+        const db = connected().db;
+        const group = await trustedGroup(db, sent);
+        return validateGroup(group, await groupContext(db, deps.session.world.get(), projectEntities(), moves, group));
+      }),
 
-    worldSetGroup: (group, moves) =>
+    worldSetGroup: (sent, moves) =>
       run(() => asOneStep(async () => {
         const db = connected().db;
+        const group = await trustedGroup(db, sent);
         const reasons = validateGroup(group, await groupContext(db, deps.session.world.get(), projectEntities(), moves, group));
         if (reasons.length > 0) {
           throw fail('VALIDATION', 'This spawn group cannot be saved.', { issues: reasons.map((message): Issue => ({ severity: 'error', code: 'GROUP', message })) });
