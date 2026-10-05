@@ -22,7 +22,9 @@ export const PROJECT_FORMAT = 'acore-quest-creator/project';
  * them on a save, so it refuses the file instead).
  */
 export const PROJECT_VERSION = 6;
-export const PROJECT_EXTENSION = 'aqc';
+export const PROJECT_EXTENSION = 'awe';
+/** Every extension a project opens from: `.aqc` is what the app saved before it was renamed. */
+export const PROJECT_EXTENSIONS = [PROJECT_EXTENSION, 'aqc'] as const;
 export const DEFAULT_PROJECT_NAME = 'Untitled Project';
 export const DEFAULT_ID_RANGE = { start: 60000, end: 99999 } as const;
 
@@ -360,7 +362,7 @@ const fileSchema = z.object({
   entities: z.unknown().optional(),
 });
 
-const NOT_A_PROJECT = 'This file is not an ACORE Quest Creator project.';
+const NOT_A_PROJECT = 'This file is not an Azeroth World Editor project.';
 
 export function parseProject(text: string): ProjectDocument {
   let raw: unknown;

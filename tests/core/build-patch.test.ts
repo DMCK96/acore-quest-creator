@@ -103,7 +103,7 @@ describe('renderPatch and patchFileName', () => {
     const { aggregate, snapshot, schema } = await setup({ LogTitle: "O'Neil" });
     const sql = renderPatch(buildPatch({ aggregate, snapshot, schema, registry }).statements, schema, { toolVersion: '0.1.0', questId: 60001, date: '2026_09_21' });
     const lines = sql.split('\n');
-    expect(lines[0]).toBe('-- ACORE Quest Creator 0.1.0');
+    expect(lines[0]).toBe('-- Azeroth World Editor 0.1.0');
     expect(sql).toContain('-- Quest: 60001');
     expect(sql).toContain(`-- Schema: ${schema.hash}`);
     expect(sql).toContain('DELETE FROM `quest_template` WHERE `ID` = 60001;');

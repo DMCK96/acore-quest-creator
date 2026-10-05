@@ -674,7 +674,7 @@ describe('project files over the API', () => {
     pfs.files.set('C:\\w\\bad.aqc', 'nope');
     const r = await api.openProject('C:\\w\\bad.aqc');
     expect(r).toMatchObject({ ok: false, error: { code: 'PROJECT_FILE' } });
-    expect((r as any).error.message).toMatch(/not an ACORE Quest Creator project/);
+    expect((r as any).error.message).toMatch(/not an Azeroth World Editor project/);
   });
   it('reports a failed save as SAVE_FAILED', async () => {
     const { api, pfs } = makeApi();

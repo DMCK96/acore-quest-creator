@@ -3,6 +3,7 @@ import type { AppStore } from '../state/app-store';
 import { QuestOrb } from '../components/QuestOrb';
 import { ConnectionCard } from '../connection/ConnectionCard';
 import { draftFromProfiles, validateDraft, type ConnectionDraft, type DraftErrors } from '../connection/draft';
+import logo from '../assets/awe-logo.png';
 import './LoginScreen.css';
 
 /**
@@ -121,7 +122,8 @@ export function LoginScreen({
         <QuestOrb />
       </div>
       <ConnectionCard
-        title="ACORE Quest Creator"
+        title="Azeroth World Editor"
+        logo={logo}
         subtitle="Connect to your AzerothCore world database."
         error={error}
         submitLabel={busy ? 'Connecting…' : returning ? 'Connect' : 'Save and connect'}

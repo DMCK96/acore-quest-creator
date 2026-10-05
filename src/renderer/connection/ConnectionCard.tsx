@@ -10,6 +10,7 @@ import './ConnectionCard.css';
  */
 export function ConnectionCard({
   title,
+  logo,
   titleId,
   subtitle,
   error,
@@ -26,6 +27,8 @@ export function ConnectionCard({
   ...form
 }: {
   title: string;
+  /** An image shown in place of the title text, which becomes its alt text. */
+  logo?: string;
   titleId?: string;
   subtitle: string;
   error: string | null;
@@ -46,7 +49,7 @@ export function ConnectionCard({
     <form ref={formRef} className="conn-card" noValidate aria-busy={busy || undefined} {...form}>
       <div className="conn-card__header">
         <h1 id={titleId} className="conn-card__title">
-          {title}
+          {logo ? <img className="conn-card__logo" src={logo} alt={title} /> : title}
         </h1>
         <p className="conn-card__subtitle">{subtitle}</p>
         {onClose && (

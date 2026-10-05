@@ -37,9 +37,9 @@ function setup(answers: { save?: (string | null)[]; open?: (string | null)[]; un
 
 describe('suggestedFileName', () => {
   it('replaces characters Windows forbids and adds the extension', () => {
-    expect(suggestedFileName('Wolves: part 2/3')).toBe('Wolves_ part 2_3.aqc');
-    expect(suggestedFileName('a<b>c"d\\e|f?g*h')).toBe('a_b_c_d_e_f_g_h.aqc');
-    expect(suggestedFileName('  ')).toBe('Untitled Project.aqc');
+    expect(suggestedFileName('Wolves: part 2/3')).toBe('Wolves_ part 2_3.awe');
+    expect(suggestedFileName('a<b>c"d\\e|f?g*h')).toBe('a_b_c_d_e_f_g_h.awe');
+    expect(suggestedFileName('  ')).toBe('Untitled Project.awe');
   });
 });
 
@@ -55,7 +55,7 @@ describe('ProjectController', () => {
     await recovery.tick(session);
     expect(recoveryFiles(fs)).toHaveLength(1);
     expect(await c.saveAs()).toEqual({ done: true });
-    expect(asked.save).toEqual(['Untitled Project.aqc']);
+    expect(asked.save).toEqual(['Untitled Project.awe']);
     expect(parseProject(fs.files.get(P)!).quests.map((x) => x.questId)).toEqual([60000]);
     expect(c.state()).toMatchObject({ filePath: P, dirty: false });
     expect(store.recent.list()).toEqual([{ path: P, name: 'Untitled Project', openedAt: now().toISOString() }]);

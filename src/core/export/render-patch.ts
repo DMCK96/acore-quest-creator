@@ -88,7 +88,7 @@ export function renderPatch(
   meta: PatchMeta,
 ): string {
   const header = [
-    `-- ACORE Quest Creator ${meta.toolVersion}`,
+    `-- Azeroth World Editor ${meta.toolVersion}`,
     typeof meta.questId === 'number' ? `-- Quest: ${meta.questId}` : `-- ${meta.label ?? 'Patch'}`,
     `-- Schema: ${schema.hash}`,
     `-- Generated: ${meta.date}`,

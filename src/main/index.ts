@@ -14,8 +14,9 @@ import { createClientImagery, nodeClientFs } from './client-imagery';
 import { ASSET_SCHEME, parseAssetUrl } from '../core/client/asset-url';
 import { createMapTiles, parseTileUrl, type MapTiles } from './map-tiles';
 import { createSecretBox } from './secret-box';
+import { moveProfileFromOldName } from './profile-move';
 import { openStore, type Store } from './store/store';
-import { DEFAULT_PROJECT_NAME, PROJECT_EXTENSION, defaultProjectMeta } from './project/project-file';
+import { DEFAULT_PROJECT_NAME, PROJECT_EXTENSIONS, defaultProjectMeta } from './project/project-file';
 import { createProjectSession, type ProjectSession } from './project/session';
 import { createProjectController, type Dialogs, type ProjectController } from './project/controller';
 import { createCloseGuard, windowTitle } from './project/close-guard';
@@ -37,6 +38,7 @@ const STORE_FILE = 'quest-creator.sqlite';
  */
 const userDataOverride = process.env['ACQC_USER_DATA'];
 if (userDataOverride) app.setPath('userData', userDataOverride);
+else moveProfileFromOldName(app.getPath('appData'), app.getPath('userData'));
 
 /**
  * An unpackaged app (`npm run dev`, or `electron out/main/index.js` as Playwright launches it) reads
@@ -48,7 +50,7 @@ const envFile = process.env['ACQC_ENV_FILE'] ?? (app.isPackaged ? 'none' : join(
 if (envFile !== 'none' && existsSync(envFile)) process.loadEnvFile(envFile);
 
 /** Where patches go when the connection names no export folder (Settings → Export folder). */
-const defaultOutputDir = (): string => join(app.getPath('documents'), 'ACORE Quest Creator', 'sql');
+const defaultOutputDir = (): string => join(app.getPath('documents'), 'Azeroth World Editor', 'sql');
 
 /**
  * Drizzle's migration files. In development they sit in the repo, two levels above this bundle
@@ -162,7 +164,7 @@ function registerIpc(api: Api): void {
 /** Recovery copies are written this often while there are unsaved changes (the e2e test shortens it). */
 const recoveryIntervalMs = (): number => Number(process.env['ACQC_RECOVERY_INTERVAL_MS']) || 30000;
 
-const PROJECT_FILTERS = [{ name: 'Quest Creator project', extensions: [PROJECT_EXTENSION] }];
+const PROJECT_FILTERS = [{ name: 'Azeroth World Editor project', extensions: [...PROJECT_EXTENSIONS] }];
 
 /**
  * The native dialogs, parented to whichever window is focused. `dialog.*` is looked up on every
@@ -204,7 +206,7 @@ function createWindow(session: ProjectSession, recovery: Recovery, projects: Pro
     minWidth: 720,
     minHeight: 500,
     show: false,
-    title: 'ACORE Quest Creator',
+    title: 'Azeroth World Editor',
     webPreferences: {
       preload: join(__dirname, '../preload/index.cjs'),
       contextIsolation: true,

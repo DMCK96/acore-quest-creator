@@ -3,7 +3,7 @@ import type { ProjectController } from './controller';
 /** How long a close waits for the renderer to hand over its debounced edits before going ahead. */
 export const FLUSH_TIMEOUT_MS = 2000;
 
-const APP_NAME = 'ACORE Quest Creator';
+const APP_NAME = 'Azeroth World Editor';
 
 export function windowTitle(name: string, dirty: boolean): string {
   return `${name}${dirty ? ' •' : ''} — ${APP_NAME}`;
