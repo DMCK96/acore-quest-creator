@@ -494,7 +494,7 @@ export interface Api {
   historyEnd(token: number): Promise<Result<true>>;
   /** Writes the world patch and its revert to the export folder. */
   /** Writes the project patch (new NPCs, objects, items and world changes) and its revert. */
-  exportProject(): Promise<Result<{ applyPath: string; revertPath: string; sql: string }>>;
+  exportProject(): Promise<Result<{ applyPath: string; revertPath: string; sql: string; warnings: string[] }>>;
   /** Where an NPC or object stands in the world, for jumping to it on the map. */
   entitySpawns(kind: 'creature' | 'gameobject', entry: number): Promise<Result<SpawnDot[]>>;
   /** Every spawn of one NPC or object (up to a few hundred, `capped` when there are more), for jumping to them in the 3D view. */

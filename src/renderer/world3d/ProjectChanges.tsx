@@ -33,7 +33,7 @@ export function ProjectChanges({
   const count = project?.tracked.length ?? 0;
   const dialog = useRef<HTMLDivElement>(null);
   const [changes, setChanges] = useState<WorldChange[] | null>(null);
-  const [exported, setExported] = useState<{ applyPath: string; revertPath: string } | null>(null);
+  const [exported, setExported] = useState<{ applyPath: string; revertPath: string; warnings: string[] } | null>(null);
   const [error, setError] = useState<string | null>(null);
   // What must be fixed before the patch can be written, one line each
   const [issues, setIssues] = useState<string[]>([]);
@@ -70,7 +70,7 @@ export function ProjectChanges({
     setError(null);
     setIssues([]);
     const result = await api.exportProject();
-    if (result.ok) setExported({ applyPath: result.value.applyPath, revertPath: result.value.revertPath });
+    if (result.ok) setExported({ applyPath: result.value.applyPath, revertPath: result.value.revertPath, warnings: result.value.warnings ?? [] });
     else {
       setError(result.error.message);
       setIssues(errorsOf(result.error));
@@ -140,6 +140,13 @@ export function ProjectChanges({
             <p>Written:</p>
             <p>{exported.applyPath}</p>
             <p>{exported.revertPath}</p>
+            {exported.warnings.length > 0 && (
+              <ul className="world-changes__warnings">
+                {exported.warnings.map((warning) => (
+                  <li key={warning}>{warning}</li>
+                ))}
+              </ul>
+            )}
           </div>
         )}
         <div className="world3d__dialog-actions">
