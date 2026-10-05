@@ -25,9 +25,11 @@ describe('NPCs, objects & items module', () => {
     expect(openEditor).toHaveBeenCalledWith({ kind: 'item', entry: 990300 });
   });
 
-  it('cannot edit an existing entity the project only changed', async () => {
-    await mountBody('entities', {}, { openEditor: vi.fn(async () => null), tracked: [{ ...tr('npc', 5, 'Guard'), origin: 'existing', changes: ['spawns'] } as TrackedEntity] });
-    expect(within(screen.getByRole('listitem', { name: 'Guard' })).getByRole('button', { name: 'Edit' }).hasAttribute('disabled')).toBe(true);
+  it('edits an existing entity the project only changed too', async () => {
+    const openEditor = vi.fn(async () => null);
+    await mountBody('entities', {}, { openEditor, tracked: [{ ...tr('npc', 5, 'Guard'), origin: 'existing', changes: ['spawns'] } as TrackedEntity] });
+    await userEvent.click(within(screen.getByRole('listitem', { name: 'Guard' })).getByRole('button', { name: 'Edit' }));
+    expect(openEditor).toHaveBeenCalledWith({ kind: 'npc', entry: 5 });
   });
 
   it('adds NPCs and objects through the one editor, with no copy picker', async () => {

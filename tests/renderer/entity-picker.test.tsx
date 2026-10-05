@@ -4,6 +4,7 @@ import { act, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { NamesProvider, useNameBook } from '../../src/renderer/state/names';
 import { EntityPicker } from '../../src/renderer/controls/EntityPicker';
+import { EntityEditorProvider } from '../../src/renderer/entities/EntityEditorContext';
 import { FactionSelect } from '../../src/renderer/controls/FactionSelect';
 import { SkillSelect } from '../../src/renderer/controls/SkillSelect';
 import { makeMockApi, okv, errv } from './mock-api';
@@ -17,6 +18,20 @@ function mount(value: number, api = makeMockApi({ lookupNames: wolfNames }), onC
 }
 
 describe('EntityPicker', () => {
+  it('offers Edit… on a chosen NPC when an editor can be opened, and opens it on that entry', async () => {
+    const openEditor = vi.fn(async () => null);
+    render(<NamesProvider api={makeMockApi()}><EntityEditorProvider open={openEditor}>
+      <EntityPicker id="g" label="Giver" kind="creature" value={1423} onChange={vi.fn()} />
+    </EntityEditorProvider></NamesProvider>);
+    await userEvent.click(screen.getByRole('button', { name: 'Edit Giver' }));
+    expect(openEditor).toHaveBeenCalledWith({ kind: 'npc', entry: 1423 });
+  });
+
+  it('offers no Edit… for a quest, nothing chosen, or outside an editor', () => {
+    render(<NamesProvider api={makeMockApi()}><EntityPicker id="q" label="Quest" kind="quest" value={60001} onChange={vi.fn()} /></NamesProvider>);
+    expect(screen.queryByRole('button', { name: 'Edit Quest' })).toBeNull();
+  });
+
   it('searches by name and picks a hit', async () => {
     const api = makeMockApi({
       lookupNames: wolfNames,

@@ -54,11 +54,19 @@ describe('Project changes', () => {
     expect(within(screen.getByRole('listitem', { name: 'Crate' })).getByRole('button', { name: 'Go to' })).toHaveProperty('disabled', true);
   });
 
-  it('lists existing NPCs the project changed beside its new ones', () => {
-    mount([{ kind: 'npc', entry: 1423, name: 'Stormwind Guard', origin: 'existing', changes: ['spawns'], usedBy: [], goTo: null }]);
+  it('lists existing NPCs the project changed beside its new ones, and edits them too', async () => {
+    const { onEdit } = mount([{ kind: 'npc', entry: 1423, name: 'Stormwind Guard', origin: 'existing', changes: ['spawns'], usedBy: [], goTo: null }]);
     const row = screen.getByRole('listitem', { name: 'Stormwind Guard' });
     expect(within(row).getByText('NPC 1423 · Spawns changed')).toBeTruthy();
-    expect(within(row).getByRole('button', { name: 'Edit' })).toHaveProperty('disabled', true);
+    await userEvent.click(within(row).getByRole('button', { name: 'Edit' }));
+    expect(onEdit).toHaveBeenCalledWith('npc', 1423);
+  });
+
+  it('says which existing ones the database changed since', async () => {
+    const api = makeMockApi({ worldChanges: vi.fn(async () => okv([])), existingDrift: vi.fn(async () => okv([{ kind: 'npc' as const, entry: 1423 }])) });
+    mount([{ kind: 'npc', entry: 1423, name: 'Stormwind Guard', origin: 'existing', changes: ['details'], usedBy: [], goTo: null }], api);
+    expect(await within(screen.getByRole('listitem', { name: 'Stormwind Guard' })).findByText('Changed in the database since')).toBeTruthy();
+    expect(api.existingDrift).toHaveBeenCalledTimes(1);
   });
 
   it('exports the project patch with only new NPCs and no world changes', async () => {

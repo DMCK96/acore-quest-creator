@@ -119,6 +119,15 @@ export function WorldWorkspace({
     if (opened) setEditor({ kind: opened.kind, entry: opened.entry, isNew: true, tab: 'basics' });
   };
 
+  /** Edit NPC… / Edit object…: an existing one is brought into the project first, then its editor opens */
+  const editEntity = async (what: 'creature' | 'object' | 'item', entry: number): Promise<void> => {
+    if (!project) return;
+    const kind = what === 'creature' ? 'npc' : what;
+    const error = await project.ensure({ kind, entry });
+    if (error) setNote(error);
+    else setEditor({ kind, entry, isNew: false });
+  };
+
   /** Make lootable… / Stop being lootable on a project object, asking first when it would stop doing something else */
   const setLootable = async (entry: number, on: boolean): Promise<void> => {
     const object = storeRef.current.objects.find((o) => o.entry === entry);
@@ -307,7 +316,7 @@ export function WorldWorkspace({
         onNewQuest={onNewQuest ? (giver, after) => onNewQuest(giver, after && quest ? quest.open.questId : null) : undefined}
         onShowSpawns={(groups, scope) => setPreset(presetOf(groups, scope))}
         onCreateEntity={createEntity}
-        onEditEntity={(kind, entry) => setEditor({ kind: kind === 'creature' ? 'npc' : kind, entry, isNew: false })}
+        onEditEntity={(kind, entry) => void editEntity(kind, entry)}
         onGoToSpawn={({ map, ...target }) => {
           goTo({ x: target.x, y: target.y, z: target.z }, map);
           setFocus((previous) => ({ ...target, nonce: (previous?.nonce ?? 0) + 1 }));

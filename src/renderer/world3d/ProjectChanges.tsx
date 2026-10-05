@@ -4,6 +4,7 @@ import type { SpawnLocation } from '@core/entities/entity';
 import { trapTab } from '../components/trap-tab';
 import { useProjectEntities } from '../state/project-entities';
 import { EntityList } from '../entities/EntityList';
+import { useExistingDrift } from '../entities/use-existing-drift';
 import '../views/ProjectDialog.css';
 
 /**
@@ -22,7 +23,7 @@ export function ProjectChanges({
   api: Api;
   onLayer(layer: WorldLayer): void;
   onClose(): void;
-  /** Opens the editor of one of the project's NPCs, objects or items */
+  /** Opens the editor of one of the project's NPCs, objects or items (an existing one is brought into the project first) */
   onEdit?(kind: 'npc' | 'object' | 'item', entry: number): void;
   /** Takes the camera to a spawn of one of the project's NPCs or objects */
   onGoTo?(location: SpawnLocation): void;
@@ -31,6 +32,8 @@ export function ProjectChanges({
 }): React.JSX.Element {
   const project = useProjectEntities();
   const count = project?.tracked.length ?? 0;
+  // Existing entities whose rows the database changed since they were brought in: read when opened and after an undo
+  const drifted = useExistingDrift(api, project?.tracked ?? [], layerSeq);
   const dialog = useRef<HTMLDivElement>(null);
   const [changes, setChanges] = useState<WorldChange[] | null>(null);
   const [exported, setExported] = useState<{ applyPath: string; revertPath: string; warnings: string[] } | null>(null);
@@ -102,7 +105,7 @@ export function ProjectChanges({
             <EntityList
               tracked={project.tracked}
               quests={project.quests}
-              canEdit={(e) => e.origin === 'new'}
+              drifted={drifted}
               onEdit={(ref) => onEdit?.(ref.kind, ref.entry)}
               onGoTo={(e) => e.goTo && onGoTo?.(e.goTo)}
             />

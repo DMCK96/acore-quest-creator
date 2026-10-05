@@ -3,6 +3,8 @@ import { questUses } from '@core/entities/links';
 import { EntityList } from '../../entities/EntityList';
 import { useEntityEditor, type EditorRequest } from '../../entities/EntityEditorContext';
 import { useProjectEntities } from '../../state/project-entities';
+import { useApi } from '../../state/names';
+import { useExistingDrift } from '../../entities/use-existing-drift';
 import type { ModuleBodyProps } from '../body-props';
 import { AddFromProject } from './AddFromProject';
 import '../../scripts/scripts.css';
@@ -10,7 +12,7 @@ import '../../entities/editor.css';
 
 /**
  * The project's NPCs, objects and items: everything new and every existing one it changed, this quest's first,
- * each with the other quests that use it. New ones are edited in their editor; any other in the project can
+ * each with the other quests that use it. Each is edited in its editor; any other in the project can
  * be added to the quest in a part it plays.
  */
 export function EntitiesBody({ open, onChange }: ModuleBodyProps): React.JSX.Element {
@@ -19,6 +21,7 @@ export function EntitiesBody({ open, onChange }: ModuleBodyProps): React.JSX.Ele
   const quests = project?.quests ?? [];
   const use = questUses({ questId: open.questId, aggregate: open.aggregate }, store);
   const openEditor = useEntityEditor();
+  const drifted = useExistingDrift(useApi(), project?.tracked ?? []);
   const [error, setError] = useState<string | null>(null);
   const [adding, setAdding] = useState(false);
 
@@ -48,7 +51,7 @@ export function EntitiesBody({ open, onChange }: ModuleBodyProps): React.JSX.Ele
           Add from project…
         </button>
       </div>
-      <EntityList tracked={project?.tracked ?? []} quests={quests} openQuestId={open.questId} canEdit={(e) => e.origin === 'new'} onEdit={(ref) => void request(ref)} />
+      <EntityList tracked={project?.tracked ?? []} quests={quests} openQuestId={open.questId} drifted={drifted} onEdit={(ref) => void request(ref)} />
       {adding && <AddFromProject store={store} use={use} values={open.aggregate.values} onChange={onChange} onClose={() => setAdding(false)} />}
     </div>
   );
