@@ -286,7 +286,7 @@ describe('the right-click menu in the 3D view', () => {
   });
 
   it('Group these spawns makes a new group of the selection, saved as one step', async () => {
-    const { api, world } = await view({ worldNewGroupId: vi.fn(async () => okv(900001)), worldCheckGroup: vi.fn(async () => okv([])), worldSetGroup: vi.fn(async () => okv(EMPTY)) });
+    const { api, world } = await view({ worldNewGroupId: vi.fn(async () => okv(900001)), worldCheckGroup: vi.fn(async () => okv({ reasons: [], notes: [] })), worldSetGroup: vi.fn(async () => okv(EMPTY)) });
     const other = { ...guard, guid: 80331, entry: 68, name: 'Other' };
     world.selectedSpawns.mockReturnValue([guard, other]);
     rightClick(world, { ground: at, hit: { type: 'spawn', spawn: guard }, selection: [guard, other] });

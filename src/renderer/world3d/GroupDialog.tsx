@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import type { GroupMember, GroupMove, SpawnGroup } from '@shared/ipc';
+import type { GroupCheck, GroupMember, GroupMove, SpawnGroup } from '@shared/ipc';
 import { equalShare, memberKey } from '@core/world/groups';
 import { trapTab } from '../components/trap-tab';
 import '../views/ProjectDialog.css';
@@ -28,6 +28,7 @@ const rowOf = (member: GroupMember): Row => ({ member, mode: member.chance === 0
  * once, and each member's chance (an equal share of what the percentages leave, or a percentage of
  * its own). Other groups on the map can be added as members. The group is checked after each change
  * and the reasons it cannot be saved are listed; a spawn already in another group can be moved here.
+ * Notes (a group a move empties, which the save deletes) are listed too but do not block it.
  */
 export function GroupDialog({
   group,
@@ -41,7 +42,7 @@ export function GroupDialog({
   group: SpawnGroup;
   /** Members by name, keyed as `memberKey` keys them */
   names: ReadonlyMap<string, string>;
-  check(group: SpawnGroup, moves: GroupMove[]): Promise<string[]>;
+  check(group: SpawnGroup, moves: GroupMove[]): Promise<GroupCheck>;
   groupsOnMap: { id: number; name: string }[];
   onSave(group: SpawnGroup, moves: GroupMove[]): void;
   onRespawnAll?(): void;
@@ -53,6 +54,7 @@ export function GroupDialog({
   const [rows, setRows] = useState<Row[]>(() => group.members.map(rowOf));
   const [moves, setMoves] = useState<GroupMove[]>([]);
   const [reasons, setReasons] = useState<string[]>([]);
+  const [notes, setNotes] = useState<string[]>([]);
   const [adding, setAdding] = useState(false);
 
   const nameOf = (m: GroupMember): string => {
@@ -73,8 +75,16 @@ export function GroupDialog({
     const seq = ++latest.current;
     const timer = setTimeout(() => {
       void check(edited, moves).then(
-        (found) => seq === latest.current && setReasons(found),
-        (error: unknown) => seq === latest.current && setReasons([error instanceof Error ? error.message : String(error)]),
+        (found) => {
+          if (seq !== latest.current) return;
+          setReasons(found.reasons);
+          setNotes(found.notes);
+        },
+        (error: unknown) => {
+          if (seq !== latest.current) return;
+          setReasons([error instanceof Error ? error.message : String(error)]);
+          setNotes([]);
+        },
       );
     }, CHECK_DELAY_MS);
     return () => clearTimeout(timer);
@@ -227,6 +237,13 @@ export function GroupDialog({
                   </li>
                 );
               })}
+            </ul>
+          )}
+          {notes.length > 0 && (
+            <ul className="world3d__group-dialog-notes">
+              {notes.map((note) => (
+                <li key={note}>{note}</li>
+              ))}
             </ul>
           )}
           <div className="world3d__dialog-actions">

@@ -91,7 +91,7 @@ describe('spawn groups through the API', () => {
     const mother = out.value.groups.find((g: any) => g.id === 32491);
     expect(mother.members).toEqual([{ type: 'group', id: 32492, chance: 0 }]);
     expect(out.value.groups.find((g: any) => g.id === 32493).removed).toBe(true);
-    expect(((await api.worldCheckGroup(mother, [])) as any).value).toEqual([]);
+    expect(((await api.worldCheckGroup(mother, [])) as any).value.reasons).toEqual([]);
     expect(((await api.exportProject()) as any).ok).toBe(true);
     // One step: a single undo puts both back
     await api.historyUndo();
@@ -103,14 +103,14 @@ describe('spawn groups through the API', () => {
     const mother: any = ((await api.worldGroup(32491)) as any).value;
     const child: any = ((await api.worldGroup(32493)) as any).value;
     session.world.put({ spawns: [], routes: [], added: [], groups: [{ ...child, removed: true }] });
-    expect(((await api.worldCheckGroup(mother, [])) as any).value).toContain('Group 32493 is not there any more.');
+    expect(((await api.worldCheckGroup(mother, [])) as any).value.reasons).toContain('Group 32493 is not there any more.');
   });
 
   it('saves a valid new group as one step, and refuses one the server would not load, with why', async () => {
     const { api } = await setup();
     const group = { id: 32494, name: 'Two drakes', map: 571, maxActive: 1, origin: { kind: 'new' },
       members: [{ type: 'spawn', kind: 'npc', guid: 39203, entry: 32491, chance: 0 }, { type: 'spawn', kind: 'npc', guid: 80330, entry: 32491, chance: 0 }] };
-    expect(((await api.worldCheckGroup(group as any, [])) as any).value).toEqual(['Spawn 39203 is already in group 32492.', 'Spawn 80330 is on another map.']);
+    expect(((await api.worldCheckGroup(group as any, [])) as any).value.reasons).toEqual(['Spawn 39203 is already in group 32492.', 'Spawn 80330 is on another map.']);
     const refused: any = await api.worldSetGroup(group as any, []);
     expect(refused.ok).toBe(false);
     expect(refused.error.issues.map((i: any) => i.message)).toContain('Spawn 80330 is on another map.');
@@ -123,7 +123,7 @@ describe('spawn groups through the API', () => {
   it('refuses a mailbox: the server pools only lootable and usable objects', async () => {
     const { api } = await setup();
     const group = { id: 32494, name: 'Mail', map: 571, maxActive: 1, origin: { kind: 'new' }, members: [{ type: 'spawn', kind: 'object', guid: 5, entry: 143981, chance: 0 }] };
-    expect(((await api.worldCheckGroup(group as any, [])) as any).value).toEqual(['Spawn 5 cannot be pooled: only chests (herbs and veins are chests), usable objects and fishing schools can be.']);
+    expect(((await api.worldCheckGroup(group as any, [])) as any).value.reasons).toEqual(['Spawn 5 cannot be pooled: only chests (herbs and veins are chests), usable objects and fishing schools can be.']);
   });
 
   it('deletes, lists, reverts and exports group changes', async () => {
@@ -232,5 +232,35 @@ describe('spawn groups through the API', () => {
     // The group holding it follows it to its new id
     expect(again.value.groups[0].members).toEqual([{ type: 'group', id: 32497, chance: 0 }]);
     expect(((await api.exportProject()) as any).ok).toBe(true);
+  });
+  it('re-checks the group a moved spawn leaves, naming it, and refuses the save while it would be wrong', async () => {
+    const { api } = await setup();
+    const group = { id: 32494, name: 'Vyragosa alone', map: 571, maxActive: 1, origin: { kind: 'new' }, members: [{ type: 'spawn', kind: 'npc', guid: 39207, entry: 32630, chance: 0 }] };
+    const moves = [{ kind: 'npc', guid: 39207 }] as const;
+    const checked: any = await api.worldCheckGroup(group as any, moves as any);
+    // Path 1 keeps only the drake at 10%
+    expect(checked.value).toEqual({ reasons: ['Path 1 would then: With no equal-share member, the chances must add up to 100%.'], notes: [] });
+    const refused: any = await api.worldSetGroup(group as any, moves as any);
+    expect(refused.ok).toBe(false);
+    expect(refused.error.issues.map((i: any) => i.message)).toEqual(['Path 1 would then: With no equal-share member, the chances must add up to 100%.']);
+    expect(((await api.worldLayer()) as any).value.groups ?? []).toEqual([]);
+  });
+
+  it('a group every member is moved out of is deleted in the same step, with a note rather than a reason', async () => {
+    const { api } = await setup();
+    const group = { id: 32494, name: 'Both', map: 571, maxActive: 1, origin: { kind: 'new' }, members: [
+      { type: 'spawn', kind: 'npc', guid: 39203, entry: 32491, chance: 0 }, { type: 'spawn', kind: 'npc', guid: 39207, entry: 32630, chance: 0 }] };
+    const moves = [{ kind: 'npc', guid: 39203 }, { kind: 'npc', guid: 39207 }];
+    expect(((await api.worldCheckGroup(group as any, moves as any)) as any).value).toEqual({ reasons: [], notes: ['Path 1 would then be empty and is deleted.'] });
+    const saved: any = await api.worldSetGroup(group as any, moves as any);
+    expect(saved.ok).toBe(true);
+    const byId = new Map(saved.value.groups.map((g: any) => [g.id, g]));
+    expect((byId.get(32492) as any).removed).toBe(true);
+    // The group that held it lets go of it, as deleting it would
+    expect((byId.get(32491) as any).members).toEqual([{ type: 'group', id: 32493, chance: 0 }]);
+    expect((byId.get(32494) as any).members.map((m: any) => m.guid)).toEqual([39203, 39207]);
+    expect(((await api.exportProject()) as any).ok).toBe(true);
+    await api.historyUndo();
+    expect(((await api.worldLayer()) as any).value.groups ?? []).toEqual([]);
   });
 });

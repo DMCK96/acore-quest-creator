@@ -542,7 +542,7 @@ export function useWorldMenu(deps: WorldMenuDeps): {
           groupsOnMap={groupEdit.groupsOnMap}
           check={async (group, moves) => {
             const result = await d.current.api?.worldCheckGroup(group, moves);
-            return !result ? ['Needs the world database'] : result.ok ? result.value : [result.error.message];
+            return !result ? { reasons: ['Needs the world database'], notes: [] } : result.ok ? result.value : { reasons: [result.error.message], notes: [] };
           }}
           onSave={(group, moves) => {
             saveGroup(group, moves).catch((error: unknown) => d.current.setNote(error instanceof Error ? error.message : String(error)));
