@@ -106,6 +106,20 @@ describe('project file: the world layer', () => {
     expect(text.indexOf('"world"')).toBeLessThan(text.indexOf('"entities"'));
   });
 
+  it("keeps NPCs' movement edits (wander and paths) through a save and reopen", () => {
+    const movements = [
+      { guid: 80330, entry: 1423, name: 'Stormwind Guard', map: 0, addonRow: false, addonSeed: { mount: '0', bytes1: null },
+        originalRaw: { wander: 0, type: 0 }, original: { type: 'idle' as const, wander: 0, pathId: null }, current: { type: 'path' as const, wander: 0, pathId: 803300 } },
+      { guid: 80333, entry: 1423, name: 'Stormwind Guard', map: 0, addonRow: true,
+        original: { type: 'idle' as const, wander: 0, pathId: null }, current: { type: 'wander' as const, wander: 12, pathId: null } },
+    ];
+    expect(parseProject(serializeProject(doc({ world: { ...world, movements } }))).world.movements).toEqual(movements);
+  });
+
+  it('writes no movements for a layer without any, as before', () => {
+    expect(JSON.parse(serializeProject(doc({ world }))).world).not.toHaveProperty('movements');
+  });
+
   it('opens a version 2 project, saved before spawns could be placed, with none', () => {
     const raw = JSON.parse(serializeProject(doc({ world })));
     raw.version = 2;

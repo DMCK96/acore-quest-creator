@@ -4,7 +4,8 @@ import type { FidelityReport } from '../../core/roundtrip/verify';
 import { TOOL_VERSION } from '../../core/version';
 import { migrateQuestEntities } from '../../core/entities/migrate';
 import { EMPTY_ENTITIES, readProjectEntities, type ProjectEntities } from '../../core/entities/model';
-import { EMPTY_WORLD, type Placement, type RoutePoint, type WorldLayer } from '../../core/world/layer';
+import { EMPTY_WORLD, movementsOf, type Placement, type RoutePoint, type WorldLayer } from '../../core/world/layer';
+import type { Movement } from '../../core/world/movement';
 import type { Viewport } from '../../shared/ipc';
 
 /**
@@ -102,6 +103,7 @@ export function defaultProjectMeta(name: string, outputDir: string): ProjectMeta
 }
 
 const placement = (p: Placement) => ({ x: p.x, y: p.y, z: p.z, orientation: p.orientation, rotation: p.rotation });
+const movement = (m: Movement) => ({ type: m.type, wander: m.wander, pathId: m.pathId });
 const point = (p: RoutePoint) => ({ x: p.x, y: p.y, z: p.z, rest: p.rest });
 
 /**
@@ -139,6 +141,17 @@ export function serializeProject(doc: ProjectDocument): string {
         kind: a.kind, guid: a.guid, entry: a.entry, name: a.name, map: a.map, placement: placement(a.placement),
         look: { displayId: a.look.displayId, scale: a.look.scale, equipment: a.look.equipment, preset: a.look.preset },
       })),
+      // Left out while there are none, so a project with no movement edits saves as it did before
+      ...(movementsOf(doc.world).length > 0
+        ? {
+            movements: movementsOf(doc.world).map((m) => ({
+              guid: m.guid, entry: m.entry, name: m.name, map: m.map, addonRow: m.addonRow,
+              ...(m.addonSeed ? { addonSeed: m.addonSeed } : {}),
+              ...(m.originalRaw ? { originalRaw: { wander: m.originalRaw.wander, type: m.originalRaw.type } } : {}),
+              original: movement(m.original), current: movement(m.current),
+            })),
+          }
+        : {}),
     },
     entities: doc.entities,
   };
