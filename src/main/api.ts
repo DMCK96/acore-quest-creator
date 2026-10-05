@@ -35,7 +35,7 @@ import { loadSchema } from '../core/schema/load';
 import { refCheckerFor, validateQuest, type Issue, type RefChecker } from '../core/validate/validate';
 import { TOOL_VERSION } from '../core/version';
 import { addSpawn, hasWorldChanges, isAdded, moveSpawn, movementsOf, respawnsOf, revertMovement, revertRespawn, revertRoute, revertSpawn, setMovement, setRespawn, setRoute, worldStatements, type RoutePoint, type SpawnDefaults, type WorldLayer } from '../core/world/layer';
-import { deleteGroup, dropMember, groupsOf, putGroup, revertGroup } from '../core/world/layer';
+import { deleteGroup, dropGroupMember, dropMember, groupsOf, putGroup, revertGroup } from '../core/world/layer';
 import { memberKey, validateGroup, type SpawnGroup } from '../core/world/groups';
 import { groupContext, groupDrifted, listPools, readGroup } from './world/groups-api';
 import { IDLE } from '../core/world/movement';
@@ -2211,9 +2211,19 @@ export function createApi(deps: ApiDeps): Api {
 
     worldDeleteGroup: (id) =>
       run(async () => {
-        const group = await groupOf(connected().db, id);
+        const db = connected().db;
+        const group = await groupOf(db, id);
         if (!group) throw fail('BAD_REQUEST', `There is no spawn group ${id}.`);
-        const next = deleteGroup(deps.session.world.get(), group);
+        // A database group that holds it, and that the layer has not changed, is read in so it can let go of it
+        const start = deps.session.world.get();
+        const heldInLayer = groupsOf(start).some((g) => !g.removed && g.members.some((m) => m.type === 'group' && m.id === id));
+        const [row] = heldInLayer ? [] : await rowsOrNone(db, 'pool_pool', { pool_id: String(id) });
+        const motherId = row ? Number(row.mother_pool) : null;
+        const mother = motherId !== null && !groupsOf(start).some((g) => g.id === motherId) ? await readGroup(db, motherId) : null;
+        // Nothing is awaited from here to the layer being put back, so it is one step
+        let next = deps.session.world.get();
+        if (mother && !groupsOf(next).some((g) => g.id === mother.id)) next = putGroup(next, mother);
+        next = deleteGroup(dropGroupMember(next, id), group);
         deps.session.world.put(next);
         return next;
       }),

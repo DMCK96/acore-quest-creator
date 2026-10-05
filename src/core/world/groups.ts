@@ -26,6 +26,7 @@ export interface SpawnGroup {
 }
 
 export interface GroupContext {
+  /** Every group reachable from the checked group's members: the layer's copy, else the database's */
   groups: ReadonlyMap<number, SpawnGroup>;
   spawnMap(kind: 'npc' | 'object', guid: number): number | null;
   /** The template type of an object spawn; null when not known */
@@ -92,8 +93,10 @@ export function validateGroup(group: SpawnGroup, context: GroupContext): string[
       const other = context.groupOfSpawn(m.kind, m.guid);
       if (other !== null && other !== group.id) problems.push(`Spawn ${m.guid} is already in group ${other}.`);
     } else {
+      // Every member group is in the context (the layer's copy, else the database's); a missing one, or one deleted here, is gone
       const child = context.groups.get(m.id);
-      if (child && child.map !== group.map) problems.push(`Group ${m.id} is on another map.`);
+      if (!child || child.removed) problems.push(`Group ${m.id} is not there any more.`);
+      else if (child.map !== group.map) problems.push(`Group ${m.id} is on another map.`);
       const other = context.groupOfGroup(m.id);
       if (other !== null && other !== group.id) problems.push(`Group ${m.id} is already inside group ${other}.`);
       if (reaches(m.id, group.id, context.groups)) cycle = true;

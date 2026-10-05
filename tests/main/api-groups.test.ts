@@ -83,6 +83,28 @@ describe('spawn groups through the API', () => {
     expect(wholeReads).toBe(2);
   });
 
+  it('deleting a group inside another takes it out of that group in the same step, so no member is left dangling', async () => {
+    const { api } = await setup();
+    const out: any = await api.worldDeleteGroup(32493);
+    expect(out.ok).toBe(true);
+    const mother = out.value.groups.find((g: any) => g.id === 32491);
+    expect(mother.members).toEqual([{ type: 'group', id: 32492, chance: 0 }]);
+    expect(out.value.groups.find((g: any) => g.id === 32493).removed).toBe(true);
+    expect(((await api.worldCheckGroup(mother, [])) as any).value).toEqual([]);
+    expect(((await api.exportProject()) as any).ok).toBe(true);
+    // One step: a single undo puts both back
+    await api.historyUndo();
+    expect(((await api.worldLayer()) as any).value.groups ?? []).toEqual([]);
+  });
+
+  it('names a member group deleted here when its holder is checked', async () => {
+    const { api, session } = await setup();
+    const mother: any = ((await api.worldGroup(32491)) as any).value;
+    const child: any = ((await api.worldGroup(32493)) as any).value;
+    session.world.put({ spawns: [], routes: [], added: [], groups: [{ ...child, removed: true }] });
+    expect(((await api.worldCheckGroup(mother, [])) as any).value).toContain('Group 32493 is not there any more.');
+  });
+
   it('saves a valid new group as one step, and refuses one the server would not load, with why', async () => {
     const { api } = await setup();
     const group = { id: 32494, name: 'Two drakes', map: 571, maxActive: 1, origin: { kind: 'new' },
@@ -109,12 +131,15 @@ describe('spawn groups through the API', () => {
     const changes: any = await api.worldChanges();
     expect(changes.value).toContainEqual(expect.objectContaining({ type: 'group', id: 32493, removed: true, drifted: false }));
     db.update('pool_template', { entry: '32493' }, { max_limit: '2' });
-    expect(((await api.worldChanges()) as any).value.find((c: any) => c.type === 'group').drifted).toBe(true);
+    expect(((await api.worldChanges()) as any).value.find((c: any) => c.type === 'group' && c.id === 32493).drifted).toBe(true);
     const out: any = await api.exportProject();
-    expect(out.ok).toBe(true);
+    expect(out.error).toBeUndefined();
     expect([...written.values()].find((t) => t.includes('DELETE FROM `pool_template`'))).toBeTruthy();
     const back: any = await api.worldRevert({ kind: 'group', id: 32493 });
-    expect(back.value.groups ?? []).toEqual([]);
+    // The group that held it is a change of its own, reverted on its own
+    expect(back.value.groups.map((g: any) => g.id)).toEqual([32491]);
+    const both: any = await api.worldRevert({ kind: 'group', id: 32491 });
+    expect(both.value.groups ?? []).toEqual([]);
   });
 
   it('gives each spawn of the 3D view its group, or null', async () => {

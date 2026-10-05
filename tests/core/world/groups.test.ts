@@ -48,4 +48,11 @@ describe('a spawn group', () => {
     const away = new Map([[32492, path()], [32493, path({ id: 32493, map: 0 })]]);
     expect(validateGroup(mother, context({ groups: away }))).toContain('Group 32493 is on another map.');
   });
+
+  it('a member group that is gone, or deleted here, is named', () => {
+    const mother = path({ id: 32491, name: 'Drake', members: [{ type: 'group', id: 32492, chance: 0 }, { type: 'group', id: 32493, chance: 0 }] });
+    expect(validateGroup(mother, context({ groups: new Map([[32492, path()]]) }))).toContain('Group 32493 is not there any more.');
+    const deleted = new Map([[32492, path()], [32493, path({ id: 32493, removed: true })]]);
+    expect(validateGroup(mother, context({ groups: deleted }))).toEqual(['Group 32493 is not there any more.']);
+  });
 });
