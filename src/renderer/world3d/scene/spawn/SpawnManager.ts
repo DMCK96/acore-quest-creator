@@ -429,7 +429,11 @@ class SpawnManager {
     };
     // The top-level layer group each spawn is under by that group's full membership, which reaches
     // through database groups the loaded spawns do not name
-    const underTop = new globalThis.Map<string, number>();
+    // (null under a group deleted here: those spawns are in no group, so lose its database event)
+    const underTop = new globalThis.Map<string, number | null>();
+    for (const [id, spawns] of this.#groupSpawns) {
+      if (layerGroupIds.has(id) && !liveGroups.has(id)) for (const s of spawns) underTop.set(`${s.kind}:${s.guid}`, null);
+    }
     for (const [id, spawns] of this.#groupSpawns) {
       if (!liveGroups.has(id) || motherInLayer.has(id)) continue;
       for (const s of spawns) underTop.set(`${s.kind}:${s.guid}`, id);
@@ -440,7 +444,7 @@ class SpawnManager {
       const group = groupOf(kind, s);
       const key = `${kind}:${s.guid}`;
       const walked = inLayerGroup.has(key) ? undefined : underTop.get(key);
-      const top = walked !== undefined ? { id: walked, layer: true } : group === null ? null : topOf(group);
+      const top = walked === null ? null : walked !== undefined ? { id: walked, layer: true } : group === null ? null : topOf(group);
       const db = s.poolEvent ?? null;
       const dropDb = db !== null && !db.alsoOwn && !(top !== null && !top.layer && top.id === db.pool);
       const set = top?.layer ? liveGroups.get(top.id)!.event : null;
@@ -523,8 +527,9 @@ class SpawnManager {
   }
 
   /**
-   * Every spawn under each top-level layer group with an event, through all its levels, by group id:
-   * the event walk reaches them through database groups the loaded spawns do not name
+   * Every spawn under each top-level layer group with an event (or a cleared one), and each deleted group
+   * that had one, through all its levels, by group id: the event walk reaches them through database
+   * groups the loaded spawns do not name
    */
   async setGroupSpawns(byGroup: ReadonlyMap<number, readonly { kind: 'npc' | 'object'; guid: number }[]>) {
     this.#groupSpawns = byGroup;

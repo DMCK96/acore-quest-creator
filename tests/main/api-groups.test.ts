@@ -231,6 +231,10 @@ describe('spawn groups through the API', () => {
     const out: any = await api.worldGroupSpawns(9);
     expect(out.value).toEqual([{ kind: 'npc', guid: 39203 }, { kind: 'npc', guid: 39204 }]);
     expect(((await api.worldGroupSpawns(32492)) as any).value).toEqual([{ kind: 'npc', guid: 39203 }]);
+    // A deleted group is walked as the database has it, so its spawns can lose the event it had
+    const top: any = ((await api.worldGroup(32491)) as any).value;
+    session.world.put({ spawns: [], routes: [], added: [], groups: [{ ...top, removed: true }] } as any);
+    expect(((await api.worldGroupSpawns(32491)) as any).value.map((s: any) => s.guid)).toEqual([39203, 39204, 39207, 39208]);
   });
 
   it('gives each spawn of the 3D view its group, or null', async () => {

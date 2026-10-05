@@ -576,14 +576,20 @@ function WorldStage({
     world.current?.setLooks(looksRef.current);
   }, [looksKey]);
 
-  // Every spawn under each top-level layer group with an event, through all its levels: the database
-  // groups between are known to the main process only, so the event walk would otherwise stop at them
+  // Every spawn under each top-level layer group with an event, or whose database event was cleared, and
+  // under each deleted group that had one, through all its levels: the database groups between are known
+  // to the main process only, so the event walk would otherwise stop at them
   const groupsKey = JSON.stringify(groupsOf(layer));
   const groupSpawnsRef = useRef<ReadonlyMap<number, readonly { kind: 'npc' | 'object'; guid: number }[]>>(new Map());
   useEffect(() => {
-    const groups = groupsOf(layerRef.current).filter((g) => !g.removed);
+    const all = groupsOf(layerRef.current);
+    const groups = all.filter((g) => !g.removed);
     const held = new Set(groups.flatMap((g) => g.members.flatMap((m) => (m.type === 'group' ? [m.id] : []))));
-    const tops = groups.filter((g) => g.event && !held.has(g.id));
+    const hadEvent = (g: (typeof all)[number]): boolean => g.origin.kind === 'existing' && Number(g.origin.original.event?.eventEntry ?? 0) !== 0;
+    const tops = [
+      ...groups.filter((g) => (g.event || hadEvent(g)) && !held.has(g.id)),
+      ...all.filter((g) => g.removed && hadEvent(g)),
+    ];
     const current = apiRef.current;
     if (!current || (tops.length === 0 && groupSpawnsRef.current.size === 0)) return;
     let live = true;

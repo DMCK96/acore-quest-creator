@@ -231,7 +231,7 @@ export async function listPools(db: WorldDb): Promise<PoolSummary[]> {
 
 /**
  * Every spawn under group `id` through all its levels, by kind and guid: each group as the layer has it
- * (a removed one holds nothing), else as the database's pool, whose member groups come from `pools`. A
+ * (a removed one holds nothing, but `id` itself removed is walked as the database has it), else as the database's pool, whose member groups come from `pools`. A
  * spawn or group a layer group holds is under that layer group only, not a database group that still
  * lists it.
  */
@@ -256,7 +256,8 @@ export async function spawnsUnder(db: WorldDb, layer: WorldLayer, pools: readonl
     const g = walk.pop()!;
     if (seen.has(g)) continue;
     seen.add(g);
-    const copy = inLayer.get(g);
+    // A deleted group is walked as the database has it, so its spawns can lose the event it had
+    const copy = g === id && inLayer.get(g)?.removed ? undefined : inLayer.get(g);
     if (copy) {
       if (copy.removed) continue;
       for (const m of copy.members) {
