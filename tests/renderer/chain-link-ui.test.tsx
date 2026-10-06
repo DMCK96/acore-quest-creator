@@ -20,6 +20,7 @@ vi.mock('@xyflow/react', async (original) => {
 });
 
 import { ChainDock } from '../../src/renderer/views/dock/ChainDock';
+import { ChainLinkMenu } from '../../src/renderer/views/dock/ChainLinkMenu';
 
 const drift = { missingTables: [], unregistered: [], missingColumns: [], typeMismatches: [] };
 const form = { name: 'w', role: 'world' as const, host: 'h', port: 1, user: 'u', database: 'd', password: 'p' };
@@ -113,6 +114,28 @@ describe('linking quests in the store', () => {
     expect(await store.getState().linkQuests(10, 11)).toBe(false);
     expect(store.getState().error).toBe('Quest 11 is gone');
     expect(api.updateQuest).not.toHaveBeenCalled();
+    // The quest that was open is still the one shown, on the screen it was on
+    expect([store.getState().open!.questId, store.getState().screen]).toEqual([10, 'preview']);
+  });
+
+  it('keeps the refusal shown once the quest that was open is back', async () => {
+    const { api, store } = await connected({ openQuest: async (id: number) => okv(questOf(id, id === 11 ? { [PREV]: 500 } : {})) });
+    await store.getState().openQuest(10);
+    expect(await store.getState().linkQuests(10, 11)).toBe(false);
+    expect(store.getState().open!.questId).toBe(10);
+    expect(store.getState().error).toBe('Bears already unlocks after another quest; change it in the quest editor.');
+    expect(api.updateQuest).not.toHaveBeenCalled();
+  });
+
+  it('a link whose write failed keeps its error and its unsent edit', async () => {
+    const { store } = await connected({ updateQuest: async () => errv('UNKNOWN', 'disk full') });
+    await store.getState().openQuest(10);
+    expect(await store.getState().linkQuests(10, 11)).toBe(false);
+    expect(store.getState().error).toBe('disk full');
+    // The edit is still there to send, on the quest it belongs to
+    expect(store.getState().dirty).toBe(true);
+    expect(store.getState().open!.questId).toBe(11);
+    expect(store.getState().open!.aggregate.values[PREV]).toBe(10);
   });
 
   it('unlinkQuests clears the target prerequisite only when it is that quest', async () => {
@@ -148,6 +171,18 @@ describe('linking quests on the graph', () => {
     expect(flow.props!.nodesConnectable).toBe(false);
   });
 
+  // The editor is over the graph, or stepped aside while the author places in the World: a link would bring it back
+  it('cannot link or unlink while the quest editor is open', async () => {
+    const { store } = await graph(linked('unlock.afterTurnIn', 11));
+    await act(async () => {
+      await store.getState().openQuest(10);
+      store.getState().editQuest();
+    });
+    expect(flow.props!.nodesConnectable).toBe(false);
+    rightClick('10>11>unlock.afterTurnIn');
+    expect(screen.queryByRole('menu', { name: 'Link actions' })).toBeNull();
+  });
+
   const linked = (component: string, owner: number) => ({
     listNodes: async () => okv([nodeOf({ questId: 10, title: 'Wolves', links: [{ to: 11, component: component as never, owner }] }), nodeOf({ questId: 11, title: 'Bears', x: 320 })]),
     openQuest: async (id: number) => okv(questOf(id, id === 11 ? { [PREV]: 10 } : {})),
@@ -180,5 +215,21 @@ describe('linking quests on the graph', () => {
     rightClick('10>11>unlock.afterTurnIn');
     await userEvent.keyboard('{Escape}');
     expect(screen.queryByRole('menu', { name: 'Link actions' })).toBeNull();
+  });
+});
+
+describe('the link menu', () => {
+  it('stays inside the window when opened near its edge', () => {
+    vi.spyOn(window, 'innerWidth', 'get').mockReturnValue(400);
+    vi.spyOn(window, 'innerHeight', 'get').mockReturnValue(300);
+    vi.spyOn(HTMLElement.prototype, 'offsetWidth', 'get').mockReturnValue(200);
+    vi.spyOn(HTMLElement.prototype, 'offsetHeight', 'get').mockReturnValue(40);
+    try {
+      render(<ChainLinkMenu at={{ x: 390, y: 295 }} label="Remove link" onPick={() => {}} onClose={() => {}} />);
+      const menu = screen.getByRole('menu', { name: 'Link actions' });
+      expect([menu.style.left, menu.style.top]).toEqual(['200px', '260px']);
+    } finally {
+      vi.restoreAllMocks();
+    }
   });
 });

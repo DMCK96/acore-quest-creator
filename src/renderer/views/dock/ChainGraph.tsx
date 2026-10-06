@@ -16,7 +16,7 @@ import type { AppStore } from '../../state/app-store';
 import type { CanvasNode } from '@shared/ipc';
 import { QuestNodeCard } from '../QuestNodeCard';
 import { toFlowEdges, type LinkEdge } from '../canvas-edges';
-import { DRAG_LINK } from './chain-link';
+import { DRAG_LINK } from '@core/links/drag-link';
 import { encodePart } from '../../world3d/chain-drop';
 import { ChainLinkMenu } from './ChainLinkMenu';
 import { questParts, questRoles } from '@core/modules/quest-roles';
@@ -100,6 +100,9 @@ export function ChainGraph({
   const questPools = store((s) => s.questPools);
   const focus = store((s) => s.focus);
   const saving = store((s) => s.saving);
+  // The quest editor is over the graph, or stepped aside while the author works in the World: a link
+  // (which opens the quest it edits) would bring it back over what they are doing
+  const editing = store((s) => s.screen === 'edit');
   const linkQuests = store((s) => s.linkQuests);
   const unlinkQuests = store((s) => s.unlinkQuests);
   const names = useNameBook();
@@ -212,12 +215,12 @@ export function ChainGraph({
           // Below React Flow's floor of 0.5, so Fit view fits a long chain into a dock beside the world
           minZoom={0.2}
           defaultViewport={viewport}
-          // No new link while a quest edit is on its way: the link edits a quest too
-          nodesConnectable={!saving}
+          // No new link while a quest edit is on its way (the link edits a quest too), nor while editing
+          nodesConnectable={!saving && !editing}
           onConnect={(connection) => void linkQuests(Number(connection.source), Number(connection.target))}
           onEdgeContextMenu={(event, edge) => {
             event.preventDefault();
-            setLinkMenu({ at: { x: event.clientX, y: event.clientY }, ...linkAction(edge as LinkEdge) });
+            if (!editing) setLinkMenu({ at: { x: event.clientX, y: event.clientY }, ...linkAction(edge as LinkEdge) });
           }}
           // A click selects (Ctrl, Cmd or Shift adds); a drag moves without selecting. Nothing is deleted by key.
           multiSelectionKeyCode={MULTI_SELECT_KEYS}

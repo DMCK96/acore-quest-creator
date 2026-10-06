@@ -29,15 +29,25 @@ export async function loadHistory({ api, set }: Pick<SliceArgs, 'api' | 'set'>):
   if (list.ok) set({ history: list.value });
 }
 
+/** How many times an undo sends what is pending before it gives up on an author still typing */
+const MAX_FLUSH_ROUNDS = 5;
+
 export function createHistorySlice({ api, kit, set, get }: SliceArgs): HistorySlice {
   /**
    * An undo, redo or jump. What is pending goes first, so the undo takes back the newest change and
-   * not the one before it; if that could not be saved, nothing is undone.
+   * not the one before it; an edit typed while that was on its way is sent too. If it could not be
+   * saved, nothing is undone, and the error says why.
    */
   async function travel(call: () => Promise<Result<HistoryResult>>): Promise<void> {
     while (kit.holds.size > 0) await Promise.all([...kit.holds]);
-    await get().flushAll();
-    if (get().dirty) return;
+    for (let round = 0; round < MAX_FLUSH_ROUNDS; round++) {
+      await get().flushAll();
+      if (!get().dirty || get().error !== null) break;
+    }
+    if (get().dirty) {
+      if (get().error === null) set({ error: 'Nothing was undone or redone: an edit is still being sent. Try again.' });
+      return;
+    }
     kit.lateEdits = new Map();
     try {
       const result = await call();

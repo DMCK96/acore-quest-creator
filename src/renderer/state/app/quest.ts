@@ -19,9 +19,10 @@ export interface QuestSlice {
   links: QuestLinks | null;
   /**
    * Loads a quest into the preview and focuses it; false when it failed or a newer open replaced it.
-   * `keepFocus` opens it only to work on it, leaving the focus (and so the World) where it was.
+   * `working` opens it only to work on it: the focus (and so the World) stays where it was, and a
+   * failed open leaves the screen as it was, on the quest still open.
    */
-  openQuest(id: number, position?: NodePosition, options?: { keepFocus?: boolean }): Promise<boolean>;
+  openQuest(id: number, position?: NodePosition, options?: { working?: boolean }): Promise<boolean>;
   /** Adds the quest and every quest chained to it to the canvas, then opens the one picked. */
   addQuestChain(id: number, position?: NodePosition): Promise<void>;
   newQuest(position?: NodePosition): Promise<void>;
@@ -60,7 +61,7 @@ export function createQuestSlice({ api, kit, set, get }: SliceArgs): QuestSlice 
       const result = position === undefined ? await api.openQuest(id) : await api.openQuest(id, position);
       if (token !== kit.openToken) return false;
       if (!result.ok) {
-        set({ error: result.error.message, screen: 'pick' });
+        set(options?.working ? { error: result.error.message } : { error: result.error.message, screen: 'pick' });
         return false;
       }
       set({
@@ -72,7 +73,7 @@ export function createQuestSlice({ api, kit, set, get }: SliceArgs): QuestSlice 
         error: null,
         dirty: false,
       });
-      if (!options?.keepFocus) get().setFocus(id);
+      if (!options?.working) get().setFocus(id);
       await get().loadNodes();
       await get().loadLinks();
       return true;
@@ -122,6 +123,8 @@ export function createQuestSlice({ api, kit, set, get }: SliceArgs): QuestSlice 
         error: null,
         dirty: false,
       });
+      // The World goes to it as on any open (a quest with nothing placed yet says so)
+      get().setFocus(result.value.questId);
       await get().loadNodes();
       await get().loadLinks();
     },

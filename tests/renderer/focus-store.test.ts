@@ -44,6 +44,20 @@ describe('focus', () => {
     expect(s.getState().focus).toMatchObject({ questId: 62, part: null });
   });
 
+  it('a new quest is the focus', async () => {
+    const s = createAppStore(makeMockApi({ newQuest: async () => okv(sampleOpen({ questId: 64 })) }), { saveDelayMs: 0 });
+    s.getState().setFocus(7, { kind: 'creature', entry: 1 });
+    await s.getState().newQuest();
+    expect(s.getState().focus).toMatchObject({ questId: 64, part: null });
+  });
+
+  it('a new quest from an NPC is the focus', async () => {
+    const s = createAppStore(makeMockApi({ newQuest: async () => okv(sampleOpen({ questId: 65 })) }), { saveDelayMs: 0 });
+    s.getState().setFocus(7);
+    await s.getState().newQuestFrom({ entry: 12000001, name: 'Hela' }, null);
+    expect(s.getState().focus).toMatchObject({ questId: 65, part: null });
+  });
+
   it('a failed open leaves the focus alone', async () => {
     const s = createAppStore(makeMockApi({ openQuest: async () => ({ ok: false, error: { code: 'x', message: 'no' } }) as never }), { saveDelayMs: 0 });
     s.getState().setFocus(3);

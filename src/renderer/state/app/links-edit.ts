@@ -1,5 +1,5 @@
 import type { FieldValue } from '@core/registry/types';
-import { checkLink, linkFields, PREV_QUEST_FIELD, prerequisiteRefusal, questLabel } from '../../views/dock/chain-link';
+import { checkLink, linkFields, PREV_QUEST_FIELD, prerequisiteRefusal, questLabel } from '@core/links/drag-link';
 import type { SliceArgs } from './types';
 
 /** Linking and unlinking quests from the chain graph, each one step of the history */
@@ -14,8 +14,9 @@ export function createLinksEditSlice({ set, get }: SliceArgs): LinksEditSlice {
   /**
    * Edits quest `questId` as one step: it is opened when it is not the open quest, `work` makes its
    * edits through `setValue` (false: it made none), and the quest that was open is opened again
-   * after, on the screen it was on. With a quest open the focus stays on it throughout, so the World
-   * does not fly to the edited quest and back. True when the edits reached the project.
+   * after, on the screen it was on, still showing why a link was refused. With a quest open the focus
+   * stays on it throughout, so the World does not fly to the edited quest and back. True when the
+   * edits reached the project; an edit that could not be sent stays open, unsent, with its error.
    */
   async function editQuest(questId: number, label: string, work: (values: Record<string, FieldValue>) => boolean): Promise<boolean> {
     const was = get().open?.questId ?? null;
@@ -24,16 +25,17 @@ export function createLinksEditSlice({ set, get }: SliceArgs): LinksEditSlice {
     let edited = false;
     await get().historyStep(async () => {
       if (get().open?.questId !== questId) {
-        // A failed open shows why; one another open overtook leaves that one be
-        if (!(await get().openQuest(questId, undefined, { keepFocus: was !== null }))) return;
+        // A failed open shows why, on the quest still open; one another open overtook leaves that one be
+        if (!(await get().openQuest(questId, undefined, { working: was !== null }))) return;
         switched = true;
       }
       edited = work(get().open!.aggregate.values);
     }, label, { questId });
-    // The step sent the edit and redrew the graph; a failed send is left dirty with its error shown
-    const landed = edited && !get().dirty;
-    if (switched && was !== null && (await get().openQuest(was, undefined, { keepFocus: true }))) set({ screen });
-    return landed;
+    // The step sent the edit and redrew the graph; a failed send is still pending, and is not dropped
+    if (edited && get().dirty) return false;
+    const error = get().error;
+    if (switched && was !== null && (await get().openQuest(was, undefined, { working: true }))) set({ screen, error });
+    return edited;
   }
 
   return {

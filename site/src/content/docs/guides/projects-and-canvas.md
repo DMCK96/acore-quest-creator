@@ -20,7 +20,7 @@ Choose a card to open the quest: the World flies to its NPCs, and a preview besi
 
 ## Link quests
 
-Drag from the dot on the right of one quest's card to the dot on the left of another to make turning in the first unlock the second. The link is drawn at once and is one step you can [undo](/azeroth-world-editor/guides/undo/). A link is refused, with a message saying why, when it would lead a quest to itself, when the two quests are already linked, or when the second quest already unlocks after a different quest.
+Drag from the dot on the right of one quest's card to the dot on the left of another to make turning in the first unlock the second. The link is drawn at once and is one step you can [undo](/azeroth-world-editor/guides/undo/). A link is refused, with a message saying why, when it would lead a quest to itself, when the two quests are already linked, when the second quest already unlocks after a different quest, or when it would make a loop (the second quest already leads round to the first). Links are made with the quest editor closed.
 
 Right-click a line for what you can do with it. **Remove link** takes away a turn-in link made this way. Other kinds of link, such as a quest offered straight away or a breadcrumb, show **Edit in the quest editor**, which opens the quest that holds the link.
 
