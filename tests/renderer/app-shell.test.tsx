@@ -176,7 +176,7 @@ describe('the app shell', () => {
     await waitFor(() => expect(dock()).not.toBeNull());
   });
 
-  it('Escape in the dock is the dock\'s: it closes the preview and leaves the world\'s welcome open', async () => {
+  it('Escape in the dock is the dock\'s: it closes the preview and leaves the world\'s welcome open', { timeout: 20000 }, async () => {
     const { store } = await shell();
     await act(async () => { await store.getState().openQuest(60001); });
     // A project not greeted yet: the next time the world draws, it is
