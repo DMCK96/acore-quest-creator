@@ -69,6 +69,7 @@ export function createQuestSlice({ api, kit, set, get }: SliceArgs): QuestSlice 
         error: null,
         dirty: false,
       });
+      get().setFocus(id);
       await get().loadNodes();
       await get().loadLinks();
       return true;
@@ -199,6 +200,7 @@ export function createQuestSlice({ api, kit, set, get }: SliceArgs): QuestSlice 
       set({ error: null });
       await get().flushSave();
       set({ screen: 'pick', open: null, dirty: false, links: null });
+      get().setFocus(null);
     },
     // A failed save is the one thing that must survive closing: clearing `error` first drops a
     // stale message, and `flushSave` puts a fresh one back if the edit did not reach the project.
@@ -206,6 +208,7 @@ export function createQuestSlice({ api, kit, set, get }: SliceArgs): QuestSlice 
       set({ error: null });
       await get().flushSave();
       set({ screen: 'pick', open: null, dirty: false, links: null });
+      get().setFocus(null);
       await get().loadNodes();
     },
     // The Availability tab reads from `links`, so every point that changes which quest is open

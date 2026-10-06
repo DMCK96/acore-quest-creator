@@ -61,6 +61,7 @@ export function createHistorySlice({ api, kit, set, get }: SliceArgs): HistorySl
     if (open && mine) {
       if (mine.aggregate === null) {
         set({ screen: 'pick', open: null, dirty: false, links: null, openPanel: null });
+        get().setFocus(null);
       } else {
         const late = kit.lateEdits;
         kit.lateEdits = null;

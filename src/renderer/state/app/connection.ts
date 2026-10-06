@@ -177,9 +177,11 @@ export function createConnectionSlice({ api, kit, set, get }: SliceArgs): Connec
       // The session has already switched, so a blocked database leaves the editor for the login screen.
       if (summary.blocking) {
         set({ ...blockedBy(summary), ...closed });
+        get().setFocus(null);
         return null;
       }
       set((s) => ({ summary, error: null, screen: 'pick', connection: s.connection + 1, ...closed }));
+      get().setFocus(null);
       // The canvas's links, starts and issue counts are read from the database just connected.
       await get().loadNodes();
       await loadHistory({ api, set });
