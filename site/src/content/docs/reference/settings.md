@@ -25,8 +25,8 @@ The world database is only ever read.
 
 | Setting | Meaning |
 | --- | --- |
-| Server data folder | The worldserver's data folder, the one holding `dbc/`. Adds XP values, name search for spells and models, ground height and floors on the map. |
-| Game client folder | The folder with `Wow.exe`. Adds zone art and the minimap to the quest map. |
+| Server data folder | The worldserver's data folder, the one holding `dbc/`. Adds XP values, name search for spells and models, and ground height and floors in the World. |
+| Game client folder | The folder with `Wow.exe`. The World is drawn from it in 3D. |
 | Export folder | Where **Export patch** writes SQL files. Empty: `Documents/Azeroth World Editor/sql`. |
 
 All three are optional.
@@ -41,11 +41,11 @@ All three are optional.
 
 ## Preferences
 
-The **Preferences** tab holds how the app looks on this computer. **Quest dock** puts the **Quests** dock **Under the world** or **Beside the world**; each side remembers its own size. Preferences are kept on this computer, not in the project.
+The **Preferences** tab holds how the app looks on this computer. **Quest dock** puts the **Quests** dock **Under the world** or **Beside the world**; each side remembers its own size. Drag the bar between the World and the dock to resize it. Preferences are kept on this computer, not in the project. The **✕** in the corner closes Settings from either tab.
 
 ## Where the app keeps its data
 
-Connection details, recent projects, recovery copies and cached map tiles live in the app's data folder:
+Connection details, recent projects and recovery copies live in the app's data folder:
 
 | System | Folder |
 | --- | --- |

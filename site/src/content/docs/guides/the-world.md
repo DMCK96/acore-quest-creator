@@ -99,7 +99,7 @@ Placing, pasting and removing are undone with **Ctrl+Z** like any other change.
 - **Start path here**: with one NPC selected that has no route, right-click the ground where its path should begin. Each click then adds the next point. **Enter** or **Esc** finishes, **Ctrl+Z** takes back the last point, and **Cancel path** puts everything back. A path needs at least two points.
 - **Change wander distance…**: how far the NPC roams from where it stands, 0 to 100 yards. Its circle follows what you type.
 - **Remove path**: the NPC stands still. A path the database already has is left in place for any other NPC that walks it.
-- **Point settings…** (right-click a point of a shown route): what the NPC does there. On a route the database has: how long it waits, whether it walks or runs on from there, and the way it faces; a waypoint script the point already runs is named and kept. On your own NPC's patrol: the same, plus its actions (saying a line, an emote, a pose, a spell, a sound, mounting, using an object by its spawn guid), as on the quest map. **Apply** is one undo step.
+- **Point settings…** (right-click a point of a shown route): what the NPC does there. On a route the database has: how long it waits, whether it walks or runs on from there, and the way it faces; a waypoint script the point already runs is named and kept. On your own NPC's patrol: the same, plus its actions (saying a line, an emote, a pose, a spell, a sound, mounting, using an object by its spawn guid); see [patrols](/azeroth-world-editor/guides/patrols/#what-happens-at-a-point). **Apply** is one undo step.
 
 These work for any NPC, whether the database has it or you made it.
 

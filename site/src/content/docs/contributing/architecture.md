@@ -12,9 +12,9 @@ Azeroth World Editor is an [Electron](https://www.electronjs.org/) app written i
 ```
 src/
   core/       Pure logic: no Electron, no React. Quest model, schema, SQL, scripts, map maths.
-  main/       Electron's main process: the IPC API, the project store, database connections, map tiles.
+  main/       Electron's main process: the IPC API, the project store, database connections, the game client's files.
   preload/    The bridge that exposes the main process's API to the interface.
-  renderer/   The React interface: the World (world3d/), views, modules, editors, the map.
+  renderer/   The React interface: the World (world3d/), the Quests dock (views/dock/), views, modules, editors.
   shared/     Types shared by main and renderer, such as the IPC contract.
 drizzle/      Migrations for the local project store.
 tests/        core, main, renderer, integration, e2e and docs tests.
@@ -27,9 +27,9 @@ Inside `src/core`, each feature has its own folder: `scripts` (quest scripting s
 
 ## Processes
 
-- The **main process** (`src/main`) owns everything with side effects: the MySQL connection to the world database (read-only) and optional dev database, the open project and its undo history, the local store (SQLite through Drizzle), the file system, the game client and server data folders, the `awe-map://` protocol that serves map tiles and the `awe-wow://` protocol that serves game client files to the 3D view.
+- The **main process** (`src/main`) owns everything with side effects: the MySQL connection to the world database (read-only) and optional dev database, the open project and its undo history, the local store (SQLite through Drizzle), the file system, the game client and server data folders, and the `awe-wow://` protocol that serves game client files to the 3D view.
 - The **API** the renderer calls is `createApi` in `src/main/api/`. It has one module per area (`connection-api`, `lookup-api`, `quests-api`, `map-api`, `entities-api`, `world-layer-api`, `spawn-groups-api`, `history-api`, `export-api` and `project-api`), and each implements its interface from the contract in `src/shared/ipc/`, where each area has a file with its types and its part of `Api` (`QuestsApi`, `MapApi` and so on), and `requests.ts` validates every call as it arrives. The areas are built from shared services, made once in `services.ts`: the connection, the project context, the server data files, the export checks, patch building, spawn groups and history travel. A new call is declared in its area's interface, given a request schema, and written in its area's module; a new area is a new pair of files, its interface added to `Api` and its module spread into `createApi`.
-- The **renderer** (`src/renderer`) is the interface. It talks to the main process only through the API that `src/preload` exposes; state lives in [Zustand](https://zustand.docs.pmnd.rs/) stores in `src/renderer/state`. The app store (`app-store.ts`) is made of slices under `state/app/`, one per area (connection, quest, canvas, rotations, world, export, project, history), each with its own interface; what they share that is not state (debounce timers, request tokens, the undo hold) is the `Kit` in `kit.ts`.
+- The **renderer** (`src/renderer`) is the interface. It talks to the main process only through the API that `src/preload` exposes; state lives in [Zustand](https://zustand.docs.pmnd.rs/) stores in `src/renderer/state`. The app store (`app-store.ts`) is made of slices under `state/app/`, one per area (connection, quest, canvas, focus, links, rotations, world, export, project, history, shell), each with its own interface; what they share that is not state (debounce timers, request tokens, the undo hold) is the `Kit` in `kit.ts`.
 
 ## The 3D view
 
@@ -57,9 +57,18 @@ The app is built around the **World**: the game world in 3D, drawn from the user
 
 `npm run test:world3d` opens the real 3D code in a browser (software WebGL, no graphics card) against a fake game client built by `tests/world3d/fake-client.ts`. The failures here are usually silent, an empty view, so write each test to fail against the old code before fixing. See [Testing](/azeroth-world-editor/contributing/testing/).
 
-### Where it is going
+### One interface
 
-The next step is one interface: the quest chain view built into the 3D view, alongside it. Selecting a quest, or an NPC or object in a quest, takes the World to them, and a change made in either shows in the other at once, around simple click-and-drag workflows. Changes to the 3D view should keep that direction in mind.
+The World and the quest chain are one workspace:
+
+- **The dock.** `views/dock/DockLayout.tsx` lays out the World and the **Quests** dock under or beside it. The dock is closed when the app starts and opens with **Quests** in the top bar or when a quest is opened; the World keeps one wrapper, so it never remounts. The quest editor is a centred modal over both (`views/QuestEditorModal.tsx`).
+- **The focus.** `state/app/focus.ts` holds the one quest, and part of it, that every view agrees on. Opening a quest sets it, and `world3d/useFocusFollow.ts` takes the camera to the quest's nearest NPC or object, unless the author moved the camera after the focus was set. Selecting a giver, ender or objective of the open quest in the World (by a click or with Find) sets the focused part, and the quest's card marks it; that selection never moves the camera.
+- **Preferences.** `preferences/store.ts` keeps this computer's preferences, such as the dock's side and its size on each side, in local storage under `acqc.preferences`, never in the project file. The Settings dialog is built from the sections in `views/settings/sections.ts`; a new tab is a new entry there.
+- **Linking by drag.** Dragging from one quest card's handle to another's makes turning in the first unlock the second. `views/dock/chain-link.ts` decides whether the link is allowed, and `state/app/links-edit.ts` writes it as one undo step without moving the focus.
+- **Placing by drag.** The open quest's card lists its NPCs and objects; each row drags onto the 3D view (`world3d/chain-drop.ts`, `CHAIN_DRAG_TYPE`) to place a spawn there, as one undo step. The rows carry no "placed" marker, because telling whether a database NPC has a spawn would cost a database read per row.
+- **Quest positions.** The open quest's script and fight positions and its POI are drawn as labelled pins (`world3d/scene/marker/MarkerLayer.ts`, built from `world3d/quest-markers.ts`), selected and dragged like spawns.
+
+The 2D quest map and Leaflet were removed when the World took over placing, patrols and quest positions.
 
 ## From the editor to SQL
 
@@ -73,5 +82,5 @@ See [What gets written to the database](/azeroth-world-editor/reference/database
 
 ## Interface conventions
 
-- Creating and editing happen in **centred modals**. The side panel is only for previews (the quest map is the exception).
+- Creating and editing happen in **centred modals**. The side panel is only for previews.
 - Copy is written in **author terms**: quests, givers, NPCs, scenes. Table and column names appear only where an admin needs them, such as the Changes dialog.

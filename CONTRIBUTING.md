@@ -30,9 +30,11 @@ More: [Development setup](https://dmck96.github.io/azeroth-world-editor/contribu
 | Path | What lives there |
 | --- | --- |
 | `src/core` | Pure logic with no Electron or React: quest model, schema, SQL, scripts, combat, map maths. |
-| `src/main` | Electron's main process: the IPC API, the project store, database connections, map tiles. |
+| `src/main` | Electron's main process: the IPC API, the project store, database connections, the game client's files. |
 | `src/preload` | The bridge exposing the main process's API to the interface. |
-| `src/renderer` | The React interface. |
+| `src/renderer` | The React interface. `state/app/` holds the app store's slices, `preferences/` this computer's preferences. |
+| `src/renderer/views/dock` | The **Quests** dock: `DockLayout` (the World plus a resizable dock under or beside it), `ChainDock` and its `ChainGraph`. |
+| `src/renderer/views/settings` | The Settings dialog's sections, one tab each. |
 | `src/renderer/world3d` | The World: the 3D view, its editing tools and its right-click menu. `scene/` is the vendored Three.js renderer. |
 | `src/shared` | Types shared by main and renderer. |
 | `drizzle/` | Migrations for the local project store. |
@@ -55,7 +57,18 @@ The app opens on the World, and most new work touches it. The decisions to keep:
 - **Frame time is a budget:** measure per-frame work in a busy place such as Goldshire.
 - **Ported code keeps its credit:** licence and authors beside the code, and an entry in [CREDITS.md](CREDITS.md).
 
-Next on the roadmap is one interface: the quest chain view built into the 3D view, each following the other's selection and changes, with click-and-drag workflows. Design new World features with that in mind.
+### One interface
+
+The World and the quest chain are one workspace, and these are the pieces that keep them so:
+
+- **The dock.** `views/dock/DockLayout.tsx` lays out the World and the **Quests** dock under or beside it, closed when the app starts; the World keeps one wrapper, so it never remounts when the dock opens, closes or moves. The quest editor is a centred modal over both (`views/QuestEditorModal.tsx`).
+- **The focus.** `state/app/focus.ts` is the one quest, and part of it, that every view agrees on. Opening a quest sets it; `world3d/useFocusFollow.ts` takes the camera there (unless the author moved it since), and an NPC or object of the open quest selected in the World sets the focused part, which the quest's card marks.
+- **Preferences.** `preferences/store.ts` keeps this computer's preferences (the dock's side and sizes) in local storage under `acqc.preferences`, never in the project. Settings is built from `views/settings/sections.ts`: a new tab is a new entry there.
+- **Linking by drag.** Dragging from one quest card's handle to another's makes turning in the first unlock the second (`views/dock/chain-link.ts` checks it, `state/app/links-edit.ts` writes it as one undo step).
+- **Placing by drag.** A part row on the open quest's card drags onto the 3D view (`world3d/chain-drop.ts`, `CHAIN_DRAG_TYPE`) to place a spawn of it there, one undo step. The rows have no "placed" marker: telling whether a database NPC has a spawn would cost a read per row.
+- **Quest positions.** Script and fight positions and the POI of the open quest are pins in the scene (`world3d/scene/marker/MarkerLayer.ts`, from `world3d/quest-markers.ts`), selected and dragged like spawns.
+
+The 2D quest map is gone: placing, patrols and quest positions are all in the World, and Leaflet is no longer a dependency.
 
 More: [Architecture: the 3D view](https://dmck96.github.io/azeroth-world-editor/contributing/architecture/#the-3d-view)
 
@@ -77,7 +90,7 @@ More: [Testing](https://dmck96.github.io/azeroth-world-editor/contributing/testi
 
 - **Commits** follow [Conventional Commits](https://www.conventionalcommits.org/) with a scope: `feat(quest): …`, `fix(ui): …`, `docs(site): …`.
 - **Logic goes in `src/core`** and is unit-tested there. Write the failing test first; for the 3D view, check it fails against the old code, since its failures are often a silently empty view.
-- **Creating and editing happen in centred modals**; the side panel is only for previews (the quest map is the exception).
+- **Creating and editing happen in centred modals**; the side panel is only for previews.
 - **Interface copy is written in author terms**: quests, givers, NPCs and scenes, never table and column names.
 - **Comments explain why**, not what.
 
