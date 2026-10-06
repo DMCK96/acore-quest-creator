@@ -112,6 +112,10 @@ export function ChainGraph({
   // is holding a reference to never get silently detached from a remount.
   const [ready, setReady] = useState(false);
   const flushTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // Each card's size as React Flow last measured it. The nodes are rebuilt from the store on every
+  // render, and one handed over without its size is hidden until measured again, so a double-click
+  // whose first click opens the quest would land its second on the pane and make a new quest.
+  const measured = useRef(new Map<string, { width: number; height: number }>());
   // The right-clicked link's menu: where, and what it offers
   const [linkMenu, setLinkMenu] = useState<{ at: { x: number; y: number }; label: string; run(): void } | null>(null);
 
@@ -147,6 +151,7 @@ export function ChainGraph({
     id: String(n.questId),
     type: 'quest',
     position: { x: n.x, y: n.y },
+    measured: measured.current.get(String(n.questId)),
     draggable: true,
     selected: selectedIds.has(n.questId),
     data: {
@@ -237,6 +242,7 @@ export function ChainGraph({
               });
             }
             for (const change of changes) {
+              if (change.type === 'dimensions' && change.dimensions) measured.current.set(change.id, change.dimensions);
               if (change.type !== 'position') continue;
               if (change.position) moveNode(Number(change.id), change.position.x, change.position.y);
               if (change.dragging === false) scheduleFlush();
