@@ -9,8 +9,14 @@ export interface Preferences {
 
 export const PREFERENCES_KEY = 'acqc.preferences';
 const VERSION = 1;
-const MIN_SIZE = 0.15;
-const MAX_SIZE = 0.85;
+/** The smallest and largest share of the window the dock takes */
+export const DOCK_MIN_SIZE = 0.15;
+export const DOCK_MAX_SIZE = 0.85;
+
+/** A dock size kept between the smallest and the largest */
+export function clampDockSize(n: number): number {
+  return Math.min(DOCK_MAX_SIZE, Math.max(DOCK_MIN_SIZE, n));
+}
 
 export const DEFAULT_PREFERENCES: Preferences = {
   dockSide: 'bottom',
@@ -22,7 +28,7 @@ let snapshot: Preferences | null = null;
 
 function size(value: unknown, fallback: number): number {
   if (typeof value !== 'number' || !Number.isFinite(value) || value <= 0) return fallback;
-  return Math.min(MAX_SIZE, Math.max(MIN_SIZE, value));
+  return clampDockSize(value);
 }
 
 export function parsePreferences(raw: string | null): Preferences {

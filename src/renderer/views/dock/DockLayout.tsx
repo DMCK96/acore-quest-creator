@@ -1,14 +1,8 @@
-import { useCallback, useEffect, useRef, type KeyboardEvent, type PointerEvent, type ReactNode } from 'react';
-import type { DockSide } from '../../preferences/store';
+import { useRef, useState, type KeyboardEvent, type PointerEvent, type ReactNode } from 'react';
+import { DOCK_MAX_SIZE, DOCK_MIN_SIZE, clampDockSize, type DockSide } from '../../preferences/store';
 import './DockLayout.css';
 
-const MIN_SIZE = 0.15;
-const MAX_SIZE = 0.85;
 const KEY_STEP = 0.05;
-
-export function clampSize(n: number): number {
-  return Math.min(MAX_SIZE, Math.max(MIN_SIZE, n));
-}
 
 const round = (n: number) => Math.round(n * 1000) / 1000;
 
@@ -17,35 +11,46 @@ interface Props {
   side: DockSide;
   /** The dock's fraction of the container along the split axis. */
   size: number;
+  /** Told the size a key or a finished divider drag left */
   onSize(size: number): void;
   main: ReactNode;
   dock: ReactNode;
-  /** Called after a size, side or open change, once layout has settled. */
-  onResize?(): void;
 }
 
-/** Main view plus a resizable dock below or beside it. Main keeps one wrapper so it never remounts. */
-export function DockLayout({ open, side, size, onSize, main, dock, onResize }: Props) {
+/**
+ * Main view plus a resizable dock below or beside it. Main keeps one wrapper so it never remounts. A
+ * divider drag is followed here and handed on once, when it is let go, so the size is not stored and
+ * the app not redrawn at every step of it.
+ */
+export function DockLayout({ open, side, size, onSize, main, dock }: Props) {
   const containerRef = useRef<HTMLDivElement>(null);
-  const onResizeRef = useRef(onResize);
-  onResizeRef.current = onResize;
+  // The size a divider drag has reached; null while none is under way
+  const [dragged, setDragged] = useState<number | null>(null);
+  const draggedRef = useRef<number | null>(null);
+  const shown = dragged ?? size;
 
-  useEffect(() => {
-    const frame = requestAnimationFrame(() => onResizeRef.current?.());
-    return () => cancelAnimationFrame(frame);
-  }, [open, side, size]);
-
-  const fractionAt = useCallback((e: PointerEvent): number => {
+  const fractionAt = (e: PointerEvent): number => {
     const rect = containerRef.current!.getBoundingClientRect();
     const fraction = side === 'bottom' ? (rect.bottom - e.clientY) / rect.height : (rect.right - e.clientX) / rect.width;
-    return clampSize(fraction);
-  }, [side]);
+    return round(clampDockSize(fraction));
+  };
 
   const onPointerDown = (e: PointerEvent<HTMLDivElement>) => {
     e.currentTarget.setPointerCapture?.(e.pointerId);
+    draggedRef.current = size;
+    setDragged(size);
   };
   const onPointerMove = (e: PointerEvent<HTMLDivElement>) => {
-    if (e.currentTarget.hasPointerCapture?.(e.pointerId)) onSize(fractionAt(e));
+    if (draggedRef.current === null) return;
+    draggedRef.current = fractionAt(e);
+    setDragged(draggedRef.current);
+  };
+  // Let go, or the pointer taken away (the window lost focus): the size it reached is kept
+  const endDrag = () => {
+    const reached = draggedRef.current;
+    draggedRef.current = null;
+    setDragged(null);
+    if (reached !== null && reached !== size) onSize(reached);
   };
 
   const onKeyDown = (e: KeyboardEvent<HTMLDivElement>) => {
@@ -53,7 +58,7 @@ export function DockLayout({ open, side, size, onSize, main, dock, onResize }: P
     const shrink = side === 'bottom' ? 'ArrowDown' : 'ArrowRight';
     if (e.key !== grow && e.key !== shrink) return;
     e.preventDefault();
-    onSize(clampSize(round(size + (e.key === grow ? KEY_STEP : -KEY_STEP))));
+    onSize(clampDockSize(round(size + (e.key === grow ? KEY_STEP : -KEY_STEP))));
   };
 
   return (
@@ -64,16 +69,18 @@ export function DockLayout({ open, side, size, onSize, main, dock, onResize }: P
           className="dock-layout__divider"
           role="separator"
           aria-orientation={side === 'right' ? 'vertical' : 'horizontal'}
-          aria-valuenow={Math.round(size * 100)}
-          aria-valuemin={MIN_SIZE * 100}
-          aria-valuemax={MAX_SIZE * 100}
+          aria-valuenow={Math.round(shown * 100)}
+          aria-valuemin={DOCK_MIN_SIZE * 100}
+          aria-valuemax={DOCK_MAX_SIZE * 100}
           tabIndex={0}
           onPointerDown={onPointerDown}
           onPointerMove={onPointerMove}
+          onPointerUp={endDrag}
+          onLostPointerCapture={endDrag}
           onKeyDown={onKeyDown}
         />
       )}
-      {open && <div className="dock-layout__dock" style={{ flexBasis: `${size * 100}%` }}>{dock}</div>}
+      {open && <div className="dock-layout__dock" style={{ flexBasis: `${shown * 100}%` }}>{dock}</div>}
     </div>
   );
 }

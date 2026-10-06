@@ -1,12 +1,18 @@
 // @vitest-environment jsdom
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
-  DEFAULT_PREFERENCES, PREFERENCES_KEY, parsePreferences, readPreferences, subscribePreferences, writePreferences,
+  DEFAULT_PREFERENCES, PREFERENCES_KEY, clampDockSize, parsePreferences, readPreferences, subscribePreferences, writePreferences,
 } from '../../src/renderer/preferences/store';
 
 afterEach(() => localStorage.clear());
 
 describe('preferences store', () => {
+  it('keeps a dock size between 15% and 85%', () => {
+    expect(clampDockSize(0)).toBe(0.15);
+    expect(clampDockSize(2)).toBe(0.85);
+    expect(clampDockSize(0.5)).toBe(0.5);
+  });
+
   it('gives the defaults for nothing, junk, or the wrong version', () => {
     expect(parsePreferences(null)).toEqual(DEFAULT_PREFERENCES);
     expect(parsePreferences('{not json')).toEqual(DEFAULT_PREFERENCES);

@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 
 const created = vi.hoisted(() => [] as { options: any; dispose: ReturnType<typeof vi.fn>; lookAt: ReturnType<typeof vi.fn>; setPlacing: ReturnType<typeof vi.fn> }[]);
@@ -124,6 +124,19 @@ describe('the app shell', () => {
     expect(screen.getByTestId('chain-dock')).toBeTruthy();
     await userEvent.click(screen.getByRole('button', { name: 'Quests' }));
     expect(screen.queryByTestId('chain-dock')).toBeNull();
+  });
+
+  // After a reconnect the shell is drawn again: a quest opened before then is not a reason to open the dock
+  it('a shell drawn again leaves the dock closed for a quest opened before it', async () => {
+    const { api, store } = await shell();
+    await act(async () => { await store.getState().openQuest(60001); });
+    expect(dock()).not.toBeNull();
+    cleanup();
+    render(<NamesProvider api={api}><AppShell store={store} /></NamesProvider>);
+    await new Promise((r) => setTimeout(r, 20));
+    expect(dock()).toBeNull();
+    await act(async () => { await store.getState().openQuest(60001); });
+    await waitFor(() => expect(dock()).not.toBeNull());
   });
 
   it('follows the Preferences dock side', async () => {

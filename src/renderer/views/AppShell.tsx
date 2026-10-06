@@ -36,8 +36,10 @@ export function AppShell({ store }: { store: AppStore }): React.JSX.Element {
   const focus = store((s) => s.focus);
   const [goTo, setGoTo] = useState<{ map: number; x: number; y: number; z: number; nonce: number } | undefined>();
 
-  // When the author last opened or closed the dock themselves, on the store's clock
-  const toggledAt = useRef(0);
+  // When the author last opened or closed the dock themselves, on the store's clock; drawn again (after
+  // a reconnect), the shell starts from now, so a quest opened before it does not open the dock
+  const toggledAt = useRef<number | null>(null);
+  toggledAt.current ??= store.getState().moment();
   const toggleDock = useCallback(() => {
     toggledAt.current = store.getState().moment();
     setDockOpen((was) => !was);
@@ -46,7 +48,7 @@ export function AppShell({ store }: { store: AppStore }): React.JSX.Element {
   // A quest opened from anywhere is previewed in the dock, so the dock opens; but not for an open the
   // author has since turned away from, by closing the dock while it was on its way
   useEffect(() => {
-    if (questsAsked > toggledAt.current) setDockOpen(true);
+    if (questsAsked > toggledAt.current!) setDockOpen(true);
   }, [questsAsked]);
 
   // Show in World / Go to: the quest, or one of its NPCs or objects, becomes the focus, which the World
