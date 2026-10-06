@@ -40,6 +40,16 @@ describe('an existing entity from its rows', () => {
     expect(npcFromRows(1423, guardRows, counts).seenBy).toBe('living');
   });
 
+  it("an NPC's event default is what all its spawns share, else as each spawn has it, else as is when not read", () => {
+    const spawns = [{ guid: '1' }, { guid: '2' }];
+    const shared = { ...guardRows, creature: spawns, game_event_creature: [{ eventEntry: '12', guid: '1' }, { eventEntry: '12', guid: '2' }] };
+    expect(npcFromRows(1423, shared, counts).events).toEqual({ mode: 'during', events: [12] });
+    const mixed = { ...guardRows, creature: spawns, game_event_creature: [{ eventEntry: '12', guid: '1' }] };
+    expect(npcFromRows(1423, mixed, counts).events).toBe('asIs');
+    expect(npcFromRows(1423, { ...guardRows, creature: spawns }, counts).events).toBeNull();
+    expect(npcFromRows(1423, guardRows, counts).events).toBe('asIs');
+  });
+
   it('an NPC with no model or weapons rows reads as unarmed with no look', () => {
     const bare = npcFromRows(1423, { creature_template: guardRows.creature_template }, counts);
     expect(bare).toMatchObject({ displayId: 0, scale: 1, equipment: { mainHand: 0, offHand: 0, ranged: 0 }, loot: [] });

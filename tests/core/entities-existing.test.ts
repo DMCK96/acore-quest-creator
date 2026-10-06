@@ -236,3 +236,37 @@ describe('a new loot id for an existing NPC or chest', () => {
     expect((existingStatements(withLoot, [], ids).apply.find((s) => s.kind === 'insert' && s.table === 'gameobject_template') as any).row.Data1).toBe('5001');
   });
 });
+
+describe("an existing NPC's spawn events in its rows", () => {
+  const fixture = async () => {
+    const { forkDb } = await import('../helpers/fixtures');
+    const db = forkDb();
+    db.insert('creature_template', template);
+    db.insert('creature', { guid: '80330', id1: '1423', map: '0' });
+    db.insert('game_event_creature', { eventEntry: '12', guid: '80330' });
+    return db;
+  };
+
+  it('reads its spawns and their event rows with its other rows', async () => {
+    const { readOriginalRows } = await import('../../src/core/entities/existing');
+    const read = await readOriginalRows(await fixture(), 'npc', 1423);
+    expect(read!.creature).toEqual([{ guid: '80330' }]);
+    expect(read!.game_event_creature).toEqual([{ eventEntry: '12', guid: '80330' }]);
+  });
+
+  it('does not count tables a project saved before they were read as drift', async () => {
+    const db = await fixture();
+    const { readOriginalRows } = await import('../../src/core/entities/existing');
+    const read = (await readOriginalRows(db, 'npc', 1423))!;
+    const older = { ...read };
+    delete (older as any).creature;
+    delete (older as any).game_event_creature;
+    const npc = npcFromRows(1423, older, { sharedLoot: 0, spawnCount: 1 });
+    expect(await existingDrift(db, store(npc))).toEqual([]);
+  });
+
+  it('writes no event rows for an NPC exported unedited', () => {
+    const { apply } = existingStatements(store(), []);
+    expect(apply.some((s) => s.table === 'game_event_creature')).toBe(false);
+  });
+});
