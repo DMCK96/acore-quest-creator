@@ -11,18 +11,23 @@ import type { EventRow, PlannedSpawn } from './spawn-events';
 
 type RowReader = Pick<WorldDb, 'selectRows'>;
 
-/** An entry's spawn guids, ascending; stock AzerothCore names the spawn's NPC `id1`, older forks `id` */
+/**
+ * An entry's spawn guids, ascending. Stock AzerothCore names a spawn's NPC `id1`, and a spawn can be
+ * one of up to three (`id2`, `id3`); older forks name the one NPC `id`.
+ */
 export async function npcSpawnGuids(db: RowReader, entry: number): Promise<number[]> {
-  const read = async (column: string) => db.selectRows('creature', { [column]: String(entry) });
+  const where = (column: string) => ({ [column]: String(entry) });
   let rows;
   try {
-    rows = await read('id1');
+    rows = await db.selectRows('creature', where('id1'));
   } catch (error) {
     if (error instanceof UnknownTableError) return [];
     if (!(error instanceof UnknownColumnError)) throw error;
-    rows = await rowsOrNone(db, 'creature', { id: String(entry) });
+    rows = await rowsOrNone(db, 'creature', where('id'));
   }
-  return rows.map((r) => Number(r.guid)).filter(Number.isFinite).sort((a, b) => a - b);
+  const others = await Promise.all(['id2', 'id3'].map((column) => rowsOrNone(db, 'creature', where(column))));
+  const guids = [...rows, ...others.flat()].map((r) => Number(r.guid)).filter(Number.isFinite);
+  return [...new Set(guids)].sort((a, b) => a - b);
 }
 
 /** Each guid's `game_event_creature` rows (none for a guid without any); empty when the table is not there */

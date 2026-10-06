@@ -17,6 +17,14 @@ describe('reading an NPC\'s spawns and their events', () => {
     expect(rows.get(80330)!.map((r) => r.eventEntry).sort()).toEqual(['-4', '12']);
   });
 
+  it('counts a spawn that may be the NPC as one of its other entries (id2, id3)', async () => {
+    const db = forkDb();
+    db.insert('creature', { guid: '7', id1: '99', id2: '1423', map: '0' });
+    db.insert('creature', { guid: '8', id1: '98', id3: '1423', map: '0' });
+    db.insert('creature', { guid: '9', id1: '1423', map: '0' });
+    expect(await npcSpawnGuids(db, 1423)).toEqual([7, 8, 9]);
+  });
+
   it('reads nothing when the event table is missing', async () => {
     const db = forkDb();
     db.dropTable('game_event_creature');
