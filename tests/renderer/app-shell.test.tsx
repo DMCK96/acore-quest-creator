@@ -280,9 +280,12 @@ describe('the app shell', () => {
     const { store } = await shell({ questSpawnList });
     await waitFor(() => expect(created).toHaveLength(1));
     await act(async () => { await store.getState().openQuest(60001); });
-    await waitFor(() => expect(questSpawnList).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(created[0]!.lookAt).toHaveBeenCalledWith(500, 10, 20));
+    // The card's placed marks read the quest's spawns too, so count from here
+    await waitFor(() => expect(within(dock()!).getByRole('button', { name: 'Show in World' })).toBeTruthy());
+    const before = questSpawnList.mock.calls.length;
     await userEvent.click(within(dock()!).getByRole('button', { name: 'Show in World' }));
-    await waitFor(() => expect(questSpawnList).toHaveBeenCalledTimes(2));
+    await waitFor(() => expect(questSpawnList.mock.calls.length).toBeGreaterThan(before));
   });
 
   it('selecting a part of the open quest in the world focuses it, without moving the camera', async () => {

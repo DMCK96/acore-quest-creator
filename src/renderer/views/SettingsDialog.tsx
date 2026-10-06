@@ -6,7 +6,7 @@ import './ProjectDialog.css';
 import './SettingsDialog.css';
 
 /**
- * The Settings modal over the canvas: a tab per section (the connection, the preferences). Every
+ * The Settings modal over the World: a tab per section (the connection, the preferences). Every
  * section stays mounted, so edits in one survive a look at another. A section mid-save reports it
  * busy and the dialog will not close or change tab until it is done: closing would lose a failure
  * nobody else shows.

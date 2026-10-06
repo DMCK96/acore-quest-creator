@@ -7,9 +7,9 @@ import './ProjectDialog.css';
 import './AddExistingDialog.css';
 
 /**
- * A small modal over the dimmed canvas around `QuestPicker`'s search: choosing a result adds that
+ * A small modal over the dimmed World around `QuestPicker`'s search: choosing a result adds that
  * quest *and every quest chained to it*, with the chosen one at the centre of the graph on screen
- * and its editor open, instead of `QuestPicker`'s own default of opening the one quest wherever the
+ * and its preview open, instead of `QuestPicker`'s own default of opening the one quest wherever the
  * API puts it.
  */
 export function AddExistingDialog({
