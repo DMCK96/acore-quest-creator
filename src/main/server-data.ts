@@ -14,8 +14,6 @@ export interface ServerDataFiles {
   /** The file's bytes, found by name in any letter case; null when the folder has no such file. */
   read(dir: string, fileName: string): Promise<Uint8Array | null>;
   isDir(dir: string): Promise<boolean>;
-  /** The file names in a folder; empty when it cannot be read. */
-  list?(dir: string): Promise<string[]>;
 }
 
 export interface ServerData {
@@ -94,9 +92,6 @@ export function createServerDataFiles(options: { listingTtlMs?: number; now?: ()
         listings.delete(dir);
         return null;
       }
-    },
-    async list(dir) {
-      return (await list(dir)) ?? [];
     },
     async isDir(dir) {
       try {

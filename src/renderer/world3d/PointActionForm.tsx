@@ -46,7 +46,6 @@ export function PointActionForm({
   onChange(next: PointAction): void;
   onMove(by: -1 | 1): void;
   onRemove(): void;
-  /** Picks another object to use on the map; absent where the view cannot pick one */
 }): React.JSX.Element {
   function fields(): React.ReactNode {
     switch (action.kind) {

@@ -7,7 +7,7 @@ import { createAppStore } from '../../src/renderer/state/app-store';
 import { HistoryProvider } from '../../src/renderer/state/history-context';
 import { ProjectEntitiesProvider } from '../../src/renderer/state/project-entities';
 import { EMPTY_ENTITIES, newNpc } from '../../src/core/entities/model';
-import { makeMockApi, okv, errv, sampleOpen } from './mock-api';
+import { makeMockApi, okv, errv } from './mock-api';
 
 const worlds = vi.hoisted(() => [] as any[]);
 vi.mock('../../src/renderer/world3d/world3d', () => ({

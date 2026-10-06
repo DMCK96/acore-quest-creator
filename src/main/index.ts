@@ -1,7 +1,7 @@
 import { app, BrowserWindow, dialog, ipcMain, protocol, safeStorage } from 'electron';
 import { existsSync } from 'node:fs';
-import { mkdir, readdir, readFile, writeFile } from 'node:fs/promises';
-import { dirname, join } from 'node:path';
+import { mkdir, readdir, writeFile } from 'node:fs/promises';
+import { join } from 'node:path';
 import { openMysqlDevDb } from '../core/db/mysql-dev-db';
 import { openMysqlWorldDb } from '../core/db/mysql-world-db';
 import { FLUSH_DONE_CHANNEL, FLUSH_REQUEST_CHANNEL, HISTORY_CHANNEL } from '../shared/api-methods';

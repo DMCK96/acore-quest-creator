@@ -1,12 +1,10 @@
-import type { Pace, Patrol, PatrolPoint, PointAction, ProjectEntities } from '../entities/model';
-import type { FieldValue } from '../registry/types';
+import type { Patrol, PatrolPoint, PointAction, ProjectEntities } from '../entities/model';
 
 /**
  * Edits to a new NPC's patrol, all pure: each returns a new patrol and leaves the one given as it
  * was. An index or action id that is not there changes nothing.
  */
 
-type Values = Readonly<Record<string, unknown>>;
 export type At = { x: number; y: number; z: number };
 
 /** How long a point waits when a pose or a facing is chosen on a point that did not wait. */
