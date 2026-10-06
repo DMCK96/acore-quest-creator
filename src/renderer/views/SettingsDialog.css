@@ -1,15 +1,83 @@
-/* Settings shows the login screen's connection card, centred, scrolling if the window is short. */
+/* Settings is the login screen's frosted card, centred, scrolling if the window is short. */
 .settings-backdrop {
   align-items: center;
   padding: 1rem;
 }
 
-.settings-backdrop .conn-card {
+.settings-dialog {
   max-height: 100%;
   overflow-y: auto;
 }
 
 /* Focus lands on the dialog itself when it opens; the fields show their own rings. */
-.settings-backdrop .conn-card:focus {
+.settings-dialog:focus {
   outline: none;
+}
+
+/* The connection card sits inside the dialog's own card, so it drops its frame. */
+.settings-dialog .conn-card {
+  width: auto;
+  padding: 0;
+  background: none;
+  backdrop-filter: none;
+  border: 0;
+  box-shadow: none;
+}
+
+.settings-tabs {
+  display: flex;
+  gap: 0.25rem;
+  border-bottom: 1px solid var(--glass-border);
+}
+
+.settings-tabs__tab {
+  appearance: none;
+  border: 0;
+  border-bottom: 2px solid transparent;
+  margin-bottom: -1px;
+  padding: 0.4em 1em;
+  background: none;
+  color: var(--text-muted);
+  font-family: var(--font-display);
+  font-size: 1em;
+  cursor: pointer;
+}
+
+.settings-tabs__tab:hover:not(:disabled) {
+  color: var(--text);
+}
+
+.settings-tabs__tab[aria-selected='true'] {
+  border-bottom-color: var(--accent);
+  color: var(--accent-strong);
+}
+
+.settings-tabs__tab:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.settings-prefs {
+  display: flex;
+  flex-direction: column;
+  gap: 0.8rem;
+}
+
+.settings-prefs__heading {
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: 1.2rem;
+  font-weight: normal;
+}
+
+.settings-prefs__group {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.settings-prefs__choice {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
 }

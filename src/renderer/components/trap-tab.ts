@@ -2,7 +2,7 @@
 export function trapTab(e: React.KeyboardEvent, container: HTMLElement | null): void {
   if (e.key !== 'Tab' || !container) return;
   const focusable = [...container.querySelectorAll<HTMLElement>('button, [href], input, select, textarea, [tabindex]')]
-    .filter((el) => el.tabIndex >= 0 && !(el as HTMLButtonElement).disabled);
+    .filter((el) => el.tabIndex >= 0 && !(el as HTMLButtonElement).disabled && !el.closest('[hidden]'));
   if (focusable.length === 0) {
     e.preventDefault();
     return;
