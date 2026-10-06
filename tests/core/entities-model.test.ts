@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { ENTITIES_FIELD, newNpc, newObject, newSpawn, readEntities, writeEntities } from '../../src/core/entities/model';
+import { ENTITIES_FIELD, newNpc, newObject, newSpawn, readEntities, readProjectEntities, writeEntities } from '../../src/core/entities/model';
 
 describe('entity model', () => {
   it('round-trips entities and reads none from an old project', () => {
@@ -15,7 +15,7 @@ describe('entity model', () => {
   it('starts new entities with sensible defaults', () => {
     expect(newNpc(5)).toMatchObject({ entry: 5, name: '', minLevel: 1, maxLevel: 1, faction: 35, scale: 1, rank: 'normal', type: 'humanoid', questGiver: false, gossip: false, healthModifier: 1, damageModifier: 1, spawns: [] });
     expect(newObject(6)).toMatchObject({ entry: 6, type: 'goober', size: 1, spawns: [] });
-    expect(newSpawn(7)).toEqual({ guid: 7, map: 0, x: 0, y: 0, z: 0, o: 0, respawnSecs: 300, wander: 0, patrol: null, rotation: null });
+    expect(newSpawn(7)).toEqual({ guid: 7, map: 0, x: 0, y: 0, z: 0, o: 0, respawnSecs: 300, wander: 0, patrol: null, rotation: null, events: 'npc' });
   });
   it('reads spawns saved before patrols as not patrolling, and keeps a saved patrol', () => {
     const old = { guid: 1, map: 0, x: 0, y: 0, z: 0, o: 0, respawnSecs: 300, wander: 0 };
@@ -24,5 +24,30 @@ describe('entity model', () => {
     const spawns = readEntities(values).npcs[0]!.spawns;
     expect(spawns[0]!.patrol).toBeNull();
     expect(spawns[1]!.patrol).toEqual(patrol);
+  });
+});
+
+describe('NPC visibility fields', () => {
+  it('a new NPC is seen by the living and always in the world; a new spawn follows its NPC', () => {
+    expect(newNpc(12000001)).toMatchObject({ seenBy: 'living', events: null });
+    expect(newSpawn(6000001).events).toBe('npc');
+  });
+
+  it('an NPC saved before visibility existed keeps the database as it is', () => {
+    const saved = { ...newNpc(12000001), spawns: [{ ...newSpawn(6000001) }] } as Record<string, unknown>;
+    delete saved.seenBy;
+    delete saved.events;
+    delete (saved.spawns as Record<string, unknown>[])[0]!.events;
+    const [npc] = readProjectEntities({ npcs: [saved], objects: [], items: [] }).npcs;
+    expect(npc!.seenBy).toBeUndefined();
+    expect(npc!.events).toBe('asIs');
+    expect(npc!.spawns[0]!.events).toBe('npc');
+  });
+
+  it('keeps a rule with several events and refuses one with none', () => {
+    const during = { ...newNpc(1), events: { mode: 'during', events: [12, 4] } };
+    expect(readProjectEntities({ npcs: [during], objects: [], items: [] }).npcs[0]!.events).toEqual({ mode: 'during', events: [12, 4] });
+    const empty = { ...newNpc(1), events: { mode: 'except', events: [] } };
+    expect(readProjectEntities({ npcs: [empty], objects: [], items: [] }).npcs).toEqual([]);
   });
 });
