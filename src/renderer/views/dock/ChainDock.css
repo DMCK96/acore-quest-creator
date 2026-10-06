@@ -13,6 +13,21 @@
   flex: 1;
   position: relative;
   min-width: 0;
+  min-height: 0;
+}
+
+/* A narrow dock (beside the world) has no room for the preview beside the graph: it goes under it */
+@container dock (max-width: 720px) {
+  .chain-dock {
+    flex-direction: column;
+  }
+
+  .chain-dock .quest-preview {
+    width: auto;
+    height: 50%;
+    border-left: 0;
+    border-top: 1px solid var(--border);
+  }
 }
 
 /* Top left over the graph: the quest actions on the same frosted card as the world's place card, and the

@@ -1,8 +1,10 @@
+/* A container, so the cards over the view make room for each other by the view's width, the dock beside it or not */
 .world3d {
   position: relative;
   flex: 1;
   min-width: 0;
   background: #1c2230;
+  container: world / inline-size;
 }
 
 .world3d__stage,
@@ -715,7 +717,7 @@
 }
 
 /* A narrow view has no room between the place card and the layers card: the tools go under the place card */
-@media (max-width: 980px) {
+@container world (max-width: 980px) {
   .world3d__tools {
     top: 144px;
     left: 14px;

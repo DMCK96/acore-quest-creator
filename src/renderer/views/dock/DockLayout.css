@@ -16,11 +16,13 @@
   min-height: 0;
   position: relative;
 }
+/* A container, so what the dock holds can lay itself out for the dock's width rather than the window's */
 .dock-layout__dock {
   flex: 0 0 auto;
   min-width: 0;
   min-height: 0;
   overflow: auto;
+  container: dock / inline-size;
 }
 
 .dock-layout__divider {
