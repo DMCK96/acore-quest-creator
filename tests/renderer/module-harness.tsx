@@ -23,7 +23,7 @@ import { ProjectEntitiesProvider, type ProjectQuestUse } from '../../src/rendere
 import type { ProjectEntities } from '../../src/core/entities/model';
 import type { TrackedEntity } from '../../src/core/entities/entity';
 import { makeMockApi, sampleOpen } from './mock-api';
-import { ShowInWorldProvider, type ShowInWorld } from '../../src/renderer/world3d/ShowInWorldContext';
+import { PlaceInWorldProvider, ShowInWorldProvider, type PlaceInWorld, type ShowInWorld } from '../../src/renderer/world3d/ShowInWorldContext';
 
 /** Renders one module body over a brand new quest (level 10) with `over` applied on top. */
 export async function mountBody(
@@ -35,6 +35,8 @@ export async function mountBody(
     entities?: ProjectEntities; quests?: ProjectQuestUse[]; setEntities?: Mock; tracked?: TrackedEntity[];
     /** The host's Show in World, given to the body as the app shell gives it */
     showInWorld?: ShowInWorld;
+    /** The host's Place in world, given to the body as the app shell gives it */
+    placeInWorld?: PlaceInWorld;
   } = {},
 ): Promise<{ onChange: Mock; api: Api }> {
   const schema = await loadSchema(forkDb(), registry.tables.map((t) => t.table));
@@ -42,7 +44,8 @@ export async function mountBody(
   const aggregate = { ...a, values: { ...a.values, 'quest_template.QuestLevel': 10, ...over }, readOnly: opts.readOnly ?? [], sharedItems: opts.sharedItems ?? {} };
   const api = opts.api ?? makeMockApi();
   const onChange = opts.onChange ?? vi.fn();
-  const withShow = (ui: React.ReactNode): React.ReactNode => (opts.showInWorld ? <ShowInWorldProvider value={opts.showInWorld}>{ui}</ShowInWorldProvider> : ui);
+  const withPlace = (ui: React.ReactNode): React.ReactNode => (opts.placeInWorld ? <PlaceInWorldProvider value={opts.placeInWorld}>{ui}</PlaceInWorldProvider> : ui);
+  const withShow = (ui: React.ReactNode): React.ReactNode => withPlace(opts.showInWorld ? <ShowInWorldProvider value={opts.showInWorld}>{ui}</ShowInWorldProvider> : ui);
   const withEditor = (ui: React.ReactNode): React.ReactNode => withShow(opts.openEditor ? <EntityEditorProvider open={opts.openEditor}>{ui}</EntityEditorProvider> : ui);
   const entities = opts.entities ?? readEntities(over);
   const project = { entities, setEntities: opts.setEntities ?? vi.fn(), quests: opts.quests ?? [], layer: { spawns: [], routes: [], added: [] }, setLayer: vi.fn(), tracked: opts.tracked ?? [], create: vi.fn(async () => ({ error: 'not here' })), remove: vi.fn(async () => null), adopt: vi.fn(async () => ({ error: 'not here' })), ensure: vi.fn(async () => null) };

@@ -30,31 +30,33 @@ describe('giver card: new NPCs and objects', () => {
   it('shows a project NPC by name with Edit NPC, and no fields of its own', async () => {
     const openEditor = vi.fn(async () => null);
     const values = { creature_queststarter: [{ id: 12000005 }], [ENTITIES_FIELD]: writeEntities({ npcs: [{ ...newNpc(12000005), name: 'Hela' }], objects: [], items: [] }) };
-    await mountBody('giver', values, { openEditor, openMap: vi.fn() });
+    await mountBody('giver', values, { openEditor, placeInWorld: vi.fn() });
     const card = screen.getByRole('region', { name: 'Starts at 1' });
     expect(within(card).queryByLabelText('NPC name')).toBeNull();
     expect(within(card).getByText('Made with this quest.')).toBeTruthy();
     await userEvent.click(within(card).getByRole('button', { name: 'Edit NPC' }));
     expect(openEditor).toHaveBeenCalledWith({ kind: 'npc', entry: 12000005 });
-    expect(within(card).getByRole('button', { name: 'Place on map' })).toBeTruthy();
+    expect(within(card).getByRole('button', { name: 'Place in world' })).toBeTruthy();
   });
 
-  it('shows a placed NPC on the map and offers its patrol', async () => {
-    const openMap = vi.fn();
+  it('shows a placed NPC in the World and offers its patrol', async () => {
+    const placeInWorld = vi.fn();
+    const showInWorld = vi.fn();
     const npc = { ...newNpc(12000005), name: 'Hela', spawns: [{ ...newSpawn(900), x: 1, y: 2 }] };
-    await mountBody('giver', { creature_queststarter: [{ id: 12000005 }], [ENTITIES_FIELD]: writeEntities({ npcs: [npc], objects: [], items: [] }) }, { openMap });
+    await mountBody('giver', { creature_queststarter: [{ id: 12000005 }], [ENTITIES_FIELD]: writeEntities({ npcs: [npc], objects: [], items: [] }) }, { placeInWorld, showInWorld });
     const card = screen.getByRole('region', { name: 'Starts at 1' });
-    await userEvent.click(within(card).getByRole('button', { name: 'Show on map' }));
-    expect(openMap).toHaveBeenCalledWith('spawn:npc:12000005:900');
+    await userEvent.click(within(card).getByRole('button', { name: 'Go to Hela' }));
+    expect(showInWorld).toHaveBeenCalledWith({ questId: 60001, kind: 'creature', entry: 12000005 });
     await userEvent.click(within(card).getByRole('button', { name: 'Draw patrol' }));
-    expect(openMap).toHaveBeenCalledWith({ kind: 'patrol', entry: 12000005, guid: 900 });
+    expect(placeInWorld).toHaveBeenCalledWith({ kind: 'patrol', entry: 12000005, guid: 900 });
   });
 
-  it('shows no name field or map buttons for an NPC already in the world', async () => {
-    await mountBody('giver', { creature_queststarter: [{ id: 240 }] }, { openMap: vi.fn() });
+  it('shows no name field or World buttons for an NPC already in the world', async () => {
+    await mountBody('giver', { creature_queststarter: [{ id: 240 }] }, { placeInWorld: vi.fn() });
     const card = screen.getByRole('region', { name: 'Starts at 1' });
     expect(within(card).queryByLabelText('NPC name')).toBeNull();
-    expect(within(card).queryByRole('button', { name: 'Place on map' })).toBeNull();
+    expect(within(card).queryByRole('button', { name: 'Place in world' })).toBeNull();
+    expect(within(card).queryByRole('button', { name: 'Draw patrol' })).toBeNull();
   });
 
   it('offers New object, not New NPC, on an object card', async () => {

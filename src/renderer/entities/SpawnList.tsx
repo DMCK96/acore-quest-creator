@@ -2,7 +2,7 @@ import type { Spawn, SpawnEvents } from '@core/entities/model';
 import { newSpawn } from '@core/entities/model';
 import { NumberField } from '../scripts/fields';
 import { PositionInput } from '../scripts/PositionInput';
-import { useMapOpener } from '../map/MapOpener';
+import { usePlaceInWorld } from '../world3d/ShowInWorldContext';
 import type { GameEvent } from '../controls/EventPicker';
 import { EventRuleField } from './EventRuleField';
 
@@ -20,7 +20,7 @@ export function SpawnList({
   eventChoices,
 }: {
   idPrefix: string;
-  /** Whose spawns these are, for their markers on the quest map. */
+  /** Whose spawns these are, for showing them, placing them and drawing their patrols in the World. */
   ownerKey?: { kind: 'npc' | 'obj'; entry: number };
   spawns: readonly Spawn[];
   /** NPCs can wander around their spawn point; objects cannot. */
@@ -31,7 +31,8 @@ export function SpawnList({
   /** An NPC's spawns can follow game events of their own: the events the database has */
   eventChoices?: readonly GameEvent[];
 }): React.JSX.Element {
-  const openMap = useMapOpener();
+  const placeInWorld = usePlaceInWorld();
+  const kind = ownerKey?.kind === 'obj' ? 'object' : 'creature';
   const set = (i: number, spawn: Spawn): void => onChange(spawns.map((s, j) => (j === i ? spawn : s)));
 
   async function add(): Promise<void> {
@@ -61,7 +62,7 @@ export function SpawnList({
               idPrefix={`${idPrefix}-spawn${i}`}
               value={{ x: spawn.x, y: spawn.y, z: spawn.z, o: spawn.o }}
               map={spawn.map}
-              markerId={ownerKey ? `spawn:${ownerKey.kind}:${ownerKey.entry}:${spawn.guid}` : undefined}
+              onShowInWorld={ownerKey && placeInWorld ? () => placeInWorld({ kind: 'spawn', spawn: kind, entry: ownerKey.entry, guid: spawn.guid }) : undefined}
               onChange={(p, map) => set(i, { ...spawn, ...p, map: map ?? spawn.map })}
             />
             <NumberField label="Respawn (seconds)" value={spawn.respawnSecs} min={0} onChange={(respawnSecs) => set(i, { ...spawn, respawnSecs: Math.round(respawnSecs) })} />
@@ -72,11 +73,11 @@ export function SpawnList({
             {wanders && !patrols(spawn) && (
               <NumberField label="Wander (yards)" value={spawn.wander} min={0} onChange={(wander) => set(i, { ...spawn, wander })} />
             )}
-            {ownerKey?.kind === 'npc' && openMap && (
+            {ownerKey?.kind === 'npc' && placeInWorld && (
               <div className="scene-row">
                 {patrols(spawn) && <p className="scene-hint">Walks a patrol of {spawn.patrol!.points.length} points.</p>}
                 <button type="button" className="entry-card__btn"
-                  onClick={() => openMap({ kind: 'patrol', entry: ownerKey.entry, guid: spawn.guid })}>
+                  onClick={() => placeInWorld({ kind: 'patrol', entry: ownerKey.entry, guid: spawn.guid })}>
                   {patrols(spawn) ? 'Edit patrol' : 'Draw patrol'}
                 </button>
               </div>
@@ -87,10 +88,9 @@ export function SpawnList({
       <button type="button" className="btn" onClick={() => void add()}>
         Add spawn
       </button>
-      {spawns.length === 0 && ownerKey && openMap && (
-        <button type="button" className="btn"
-          onClick={() => openMap({ kind: 'place', target: { kind: ownerKey.kind === 'npc' ? 'npc' : 'object', entry: ownerKey.entry } })}>
-          Place on map
+      {spawns.length === 0 && ownerKey && placeInWorld && (
+        <button type="button" className="btn" onClick={() => placeInWorld({ kind, entry: ownerKey.entry })}>
+          Place in world
         </button>
       )}
     </div>

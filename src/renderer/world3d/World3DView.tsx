@@ -151,7 +151,20 @@ interface ViewProps {
   onNewQuest?(giver: { entry: number; name: string }, after: boolean): void;
   /** Told the spawns of the open quest or its chain, when they are shown, to list them. */
   onShowSpawns?(groups: QuestSpawnGroup[], scope: 'quest' | 'chain'): void;
+  /** An editor's Place in world: placing that NPC or object starts, as Place… does (each request is its own) */
+  placeRequest?: { kind: 'creature' | 'object'; entry: number; name: string; nonce: number };
+  /** An editor's Draw patrol: a project NPC spawn's new path is started once it is drawn; one with a route is left to edit */
+  patrolRequest?: { guid: number; name: string; nonce: number };
+  /** Told when what an editor asked is done: placing stopped, or the patrol drawn or left */
+  onRequestEnd?(): void;
 }
+
+/** How often, and how many times, a patrol request looks for its NPC in the view while the world loads */
+const PATROL_LOOK_MS = 250;
+const PATROL_LOOKS = 120;
+
+/** A patrol an editor asked for: its NPC is looked for, then its path drawn, or its route edited */
+type Patrolling = { guid: number; name: string; stage: 'finding' | 'drawing' | 'editing' };
 
 /** How often the view checks where the camera rests, and how far it must move to count */
 const PLACE_CHECK_MS = 2000;
@@ -214,7 +227,7 @@ class Contained extends Component<{ children: ReactNode }, { failure: string | n
 
 function WorldStage({
   map, start, hasClient, own, onSelect, onOwnEdit, focus, showArea = true, onArea, onPlaceChange, quest, chainIds, onQuestRole, onNewQuest, onShowSpawns,
-  onCreateEntity, onEditEntity, onSetLootable, onGoToSpawn,
+  onCreateEntity, onEditEntity, onSetLootable, onGoToSpawn, placeRequest, patrolRequest, onRequestEnd,
 }: ViewProps): React.JSX.Element {
   const container = useRef<HTMLDivElement>(null);
   const world = useRef<World3D | null>(null);
@@ -258,6 +271,26 @@ function WorldStage({
   // Choosing an existing NPC or object to place, and the one being placed (each click on the ground puts one down)
   const [choosing, setChoosing] = useState(false);
   const [placing, setPlacing] = useState<Chosen | null>(null);
+  const placingRef = useRef(placing);
+  placingRef.current = placing;
+  // Whether the placing under way is one an editor asked for, which is told when it stops
+  const placeAsked = useRef(false);
+  const [patrolling, setPatrolling] = useState<Patrolling | null>(null);
+  const patrollingRef = useRef(patrolling);
+  patrollingRef.current = patrolling;
+  const onRequestEndRef = useRef(onRequestEnd);
+  onRequestEndRef.current = onRequestEnd;
+  /** Ends the patrol an editor asked for (a path being drawn is finished first) and says so */
+  const endPatrol = (): void => {
+    const was = patrollingRef.current;
+    if (!was) return;
+    patrollingRef.current = null;
+    setPatrolling(null);
+    if (was.stage === 'drawing') world.current?.finishPath();
+    onRequestEndRef.current?.();
+  };
+  const endPatrolRef = useRef(endPatrol);
+  endPatrolRef.current = endPatrol;
   /** A layer from the Project changes list (after a revert): kept and drawn */
   const takeLayer = (next: WorldLayer): void => {
     layerRef.current = next;
@@ -557,7 +590,12 @@ function WorldStage({
                 for (const change of changes) await send(change);
               }),
             onContextMenu: (target, client) => live && menuRef.current.open(target, client),
-            onDrawing: (drawing) => live && menuRef.current.onDrawing(drawing),
+            onDrawing: (drawing) => {
+              if (!live) return;
+              menuRef.current.onDrawing(drawing);
+              // The path an editor asked for is drawn (or given up): the editor comes back
+              if (!drawing && patrollingRef.current?.stage === 'drawing') endPatrolRef.current();
+            },
             onShortcut: (code) => live && menuRef.current.shortcut(code),
             onSelection: (next) => live && setSummary(next),
             onTool: (tool) => live && setLayers((l) => ({ ...l, tool })),
@@ -582,6 +620,7 @@ function WorldStage({
           created.setFalloff({ on: layersRef.current.falloff, radius: layersRef.current.falloffRadius });
           if (looksRef.current.size > 0) created.setLooks(looksRef.current);
           if (ownRef.current) created.setOwnSpawns(ownRef.current);
+          if (placingRef.current) created.setPlacing({ kind: placingRef.current.kind, entry: placingRef.current.entry });
           if (groupSpawnsRef.current.size > 0) created.setGroupSpawns(groupSpawnsRef.current);
           world.current = created;
           bringIntoViewRef.current();
@@ -659,10 +698,79 @@ function WorldStage({
     }
   }, [layers]);
 
-  // What is being placed, told to the world
+  // What is being placed, told to the world; a placing an editor asked for says when it stops
   useEffect(() => {
     world.current?.setPlacing(placing ? { kind: placing.kind, entry: placing.entry } : null);
+    if (placing || !placeAsked.current) return;
+    placeAsked.current = false;
+    onRequestEndRef.current?.();
   }, [placing]);
+
+  // An editor's Place in world
+  useEffect(() => {
+    if (!placeRequest) return;
+    placeAsked.current = true;
+    setPlacing({ kind: placeRequest.kind, entry: placeRequest.entry, name: placeRequest.name });
+    // The keys (Esc stops) are the view's
+    container.current?.querySelector('canvas')?.focus();
+    // Only a new request starts placing
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [placeRequest?.nonce]);
+
+  // An editor's Draw patrol: the NPC is looked for until it is drawn (its world may still be loading),
+  // then a new path is started at it; one that already walks a route has it shown to edit
+  useEffect(() => {
+    if (!patrolRequest) return;
+    const { guid, name } = patrolRequest;
+    const asked: Patrolling = { guid, name, stage: 'finding' };
+    patrollingRef.current = asked;
+    setPatrolling(asked);
+    // The keys (Enter finishes the path) are the view's
+    container.current?.querySelector('canvas')?.focus();
+    let looks = 0;
+    let live = true;
+    const stage = (next: Patrolling['stage']): void => {
+      if (!live || patrollingRef.current?.guid !== guid) return;
+      const now = { ...patrollingRef.current, stage: next };
+      patrollingRef.current = now;
+      setPatrolling(now);
+    };
+    const timer = setInterval(() => {
+      const current = world.current;
+      const info = current?.spawnOf('creature', guid);
+      if (!current || !info) {
+        looks += 1;
+        if (looks >= PATROL_LOOKS) {
+          clearInterval(timer);
+          setNote(`${name} could not be found in the view.`);
+          endPatrolRef.current();
+        }
+        return;
+      }
+      clearInterval(timer);
+      if (info.pathId > 0) {
+        stage('editing');
+        return;
+      }
+      void apiRef.current?.patrolPathId(guid).then((id) => {
+        if (!live || patrollingRef.current?.guid !== guid) return;
+        // No path id, or the world was rebuilt meanwhile (another map): the patrol is given up
+        if (!id.ok || world.current !== current) {
+          if (!id.ok) setNote(id.error.message);
+          endPatrolRef.current();
+          return;
+        }
+        stage('drawing');
+        current.startPath(guid, id.value, info.placement);
+      });
+    }, PATROL_LOOK_MS);
+    return () => {
+      live = false;
+      clearInterval(timer);
+    };
+    // Only a new request starts a patrol
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [patrolRequest?.nonce]);
 
   /** Takes a spawn placed in this view back out of the world layer */
   async function removePlaced(spawn: PickedSpawn): Promise<void> {
@@ -872,6 +980,16 @@ function WorldStage({
         <p role="status" className="world3d__placing">
           Placing {placing.name || `${placing.kind === 'creature' ? 'NPC' : 'object'} ${placing.entry}`} (#{placing.entry}): click the ground to put one down. Esc stops.
           <button type="button" className="btn" onClick={() => setPlacing(null)}>
+            Done
+          </button>
+        </p>
+      )}
+      {!unavailable && patrolling && (
+        <p role="status" className="world3d__placing">
+          {patrolling.stage === 'finding' ? `Finding ${patrolling.name}…`
+            : patrolling.stage === 'drawing' ? `Drawing ${patrolling.name}’s patrol: click the ground to add points. Enter finishes.`
+            : `${patrolling.name}’s patrol: drag its points; Shift-click adds one.`}
+          <button type="button" className="btn" onClick={endPatrol}>
             Done
           </button>
         </p>

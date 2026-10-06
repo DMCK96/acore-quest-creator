@@ -85,7 +85,7 @@ Right-click (without dragging) for a menu about what is under the cursor: a rout
 
 ### Place, copy and paste
 
-- **Place NPC here…** and **Place object here…**: pick an existing NPC or object, and one is put down where you right-clicked, facing you, on the server's floor. **Place…** in the Layers card places one with each click instead, until **Esc**. You can also drag an NPC or object from the open quest's card in the Quests dock and drop it on the ground.
+- **Place NPC here…** and **Place object here…**: pick an existing NPC or object, and one is put down where you right-clicked, facing you, on the server's floor. **Place…** in the Layers card places one with each click instead, until **Esc**. You can also drag an NPC or object from the open quest's card in the Quests dock and drop it on the ground. One of the project's own NPCs or objects gets a new spawn of its own, even before the database has it.
 - **Copy**, **Paste here** and **Duplicate** (also **Ctrl+C**, **Ctrl+V** and **Ctrl+D**): a copied group keeps its layout and facing. **Ctrl+V** pastes under the cursor, and Duplicate puts the copy beside the original. A paste copies what a spawn is, how it faces, its respawn time, how far it wanders and an NPC's own game events. It does not copy a path: a pasted NPC that walked a path stands still, and you draw it a new one.
 - **Respawn time…**: how long a spawn takes to come back after it dies or is despawned, in minutes and seconds. It starts from the spawn's current time. With several spawns selected the item reads **Respawn time of _n_ spawns…** and sets them all; if they differ the boxes start empty. It works on any spawn, a new one, one you placed, or one the database already has.
 - **Event…**: which game events NPC spawns follow of their own: **Same as the NPC**, **Always**, **Only during…** or **Gone during…** one or more events. For one spawn the dialog first says what it follows now, including a spawn the database has both appearing during some events and gone during others, which is kept unless you choose something else. With several NPCs selected the item reads **Event of _n_ spawns…**; if they differ nothing is chosen at first. Objects are left out. The NPC's own setting is in the [NPC editor](/azeroth-world-editor/guides/npcs-and-objects/#visibility).
@@ -99,7 +99,7 @@ Placing, pasting and removing are undone with **Ctrl+Z** like any other change.
 - **Start path here**: with one NPC selected that has no route, right-click the ground where its path should begin. Each click then adds the next point. **Enter** or **Esc** finishes, **Ctrl+Z** takes back the last point, and **Cancel path** puts everything back. A path needs at least two points.
 - **Change wander distance…**: how far the NPC roams from where it stands, 0 to 100 yards. Its circle follows what you type.
 - **Remove path**: the NPC stands still. A path the database already has is left in place for any other NPC that walks it.
-- **Point settings…** (right-click a point of a shown route): what the NPC does there. On a route the database has: how long it waits, whether it walks or runs on from there, and the way it faces; a waypoint script the point already runs is named and kept. On your own NPC's patrol: the same, plus its actions (saying a line, an emote, a pose, a spell, a sound, mounting), as on the quest map. **Apply** is one undo step.
+- **Point settings…** (right-click a point of a shown route): what the NPC does there. On a route the database has: how long it waits, whether it walks or runs on from there, and the way it faces; a waypoint script the point already runs is named and kept. On your own NPC's patrol: the same, plus its actions (saying a line, an emote, a pose, a spell, a sound, mounting, using an object by its spawn guid), as on the quest map. **Apply** is one undo step.
 
 These work for any NPC, whether the database has it or you made it.
 
@@ -119,6 +119,16 @@ On the ground, with a quest open:
 - **New NPC here…** and **New object here…** make a new [NPC or object](/azeroth-world-editor/guides/npcs-and-objects/) for the project, with a spawn where you right-clicked, and open its editor. No quest needs to be open.
 - On any NPC or object, **Edit NPC…** or **Edit object…** opens its editor. For one the database already has this needs the world database connected; see [Change an NPC or object that already exists](/azeroth-world-editor/guides/npcs-and-objects/#change-one-that-already-exists).
 - On an object, **Make lootable…** turns it into a chest and opens its loot. **Stop being lootable** turns it back.
+
+### Your own NPCs from their editor
+
+The editors work in the World too. On a giver card, or under **Placement** in an NPC or object editor:
+
+- **Place in world** steps the editor aside and places the NPC or object with each click on the ground, as **Place…** does. **Done** or **Esc** brings the editor back where it was.
+- **Show in World** beside a spawn takes the camera to that spawn and selects it.
+- **Draw patrol** (or **Edit patrol**) goes to the spawn and starts its path; **Enter** finishes it and brings the editor back. See [patrols](/azeroth-world-editor/guides/patrols/).
+
+Without a game client these are not offered.
 
 An NPC or object is the project's, and a quest uses it by naming it. The project's NPCs and objects are drawn and edited in the World whether or not a quest is open. A move, or a path you give one, stays with the NPC, whichever quest uses it.
 

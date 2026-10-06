@@ -2,7 +2,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import { render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import type { LeafletMapProps } from '../../src/renderer/map/LeafletMap';
 import { mountEditor } from './module-harness';
 import { createAppStore } from '../../src/renderer/state/app-store';
 import { ProjectEntitiesFromStore } from '../../src/renderer/state/project-entities';
@@ -15,8 +14,6 @@ import { loadSchema } from '@core/schema/load';
 import { ENTITIES_FIELD, newItem, newNpc, newSpawn, readEntities, writeEntities } from '../../src/core/entities/model';
 import { forkDb } from '../helpers/fixtures';
 import { makeMockApi, okv, sampleOpen } from './mock-api';
-
-vi.mock('../../src/renderer/map/LeafletMap', () => ({ LeafletMap: (_p: LeafletMapProps) => <div aria-label="Leaflet stand-in" /> }));
 
 const hela = { ...newNpc(12000005), name: 'Hela', displayId: 3167 };
 const withHela = (npc = hela) => ({ [ENTITIES_FIELD]: writeEntities({ npcs: [npc], objects: [], items: [] }), creature_queststarter: [{ id: npc.entry }] });
@@ -100,33 +97,6 @@ describe('the editor in the quest flow', () => {
     await screen.findByRole('dialog', { name: 'New NPC' });
     await userEvent.keyboard('{Escape}');
     expect(screen.queryByRole('dialog', { name: 'New NPC' })).toBeNull();
-    expect(screen.getByRole('dialog', { name: 'Quest Giver' })).toBeTruthy();
-  });
-
-  it('the editor hides for the map and comes back on the same tab', async () => {
-    await mountFlow();
-    await userEvent.click(within(screen.getByRole('list', { name: 'Modules' })).getByRole('button', { name: /^Quest Giver/ }));
-    await userEvent.click(screen.getByRole('button', { name: 'New NPC for starts at 1' }));
-    const editor = await screen.findByRole('dialog', { name: 'New NPC' });
-    await userEvent.click(within(editor).getByRole('tab', { name: 'Placement' }));
-    await userEvent.click(within(editor).getByRole('button', { name: 'Place on map' }));
-    expect(screen.queryByRole('dialog', { name: 'New NPC' })).toBeNull();
-    await userEvent.click(within(await screen.findByRole('dialog', { name: 'Quest map' })).getByRole('button', { name: 'Close' }));
-    const back = await screen.findByRole('dialog', { name: 'New NPC' });
-    expect(within(back).getByRole('tab', { name: 'Placement' })).toHaveAttribute('aria-selected', 'true');
-  });
-
-  it('Escape on the map goes back to the editor over the module it came from', async () => {
-    await mountFlow();
-    await userEvent.click(within(screen.getByRole('list', { name: 'Modules' })).getByRole('button', { name: /^Quest Giver/ }));
-    await userEvent.click(screen.getByRole('button', { name: 'New NPC for starts at 1' }));
-    const editor = await screen.findByRole('dialog', { name: 'New NPC' });
-    await userEvent.click(within(editor).getByRole('tab', { name: 'Placement' }));
-    await userEvent.click(within(editor).getByRole('button', { name: 'Place on map' }));
-    await screen.findByRole('dialog', { name: 'Quest map' });
-    await userEvent.keyboard('{Escape}');
-    expect(screen.queryByRole('dialog', { name: 'Quest map' })).toBeNull();
-    expect(await screen.findByRole('dialog', { name: 'New NPC' })).toBeTruthy();
     expect(screen.getByRole('dialog', { name: 'Quest Giver' })).toBeTruthy();
   });
 

@@ -11,12 +11,13 @@ A **patrol** is a route a new NPC walks, over and over. At each point it can wai
 
 ## Draw a route
 
-1. Place the NPC on the [quest map](/azeroth-world-editor/guides/quest-map/).
-2. Choose **Draw patrol**. The panel shows **Patrol: _name_**.
-3. Click the map to add points in order. Each shows as **Point 1**, **Point 2** and so on.
-4. Choose **Done**.
+1. Place the NPC in the world with **Place in world** on its card (or **Add spawn** in its editor).
+2. Choose **Draw patrol** on its card, or beside one of its spawns under **Placement** in its editor. The editor steps aside and [the World](/azeroth-world-editor/guides/the-world/) goes to that spawn.
+3. Click the ground to add points in order. **Enter** finishes the path and brings the editor back; **Done** does the same.
 
-Under **Starts**, choose whether the NPC sets off walking or running. **Clear route** removes every point.
+An NPC that already patrols offers **Edit patrol** instead: its route is shown to drag, and **Shift-click** adds a point. **Done** brings the editor back.
+
+On the [quest map](/azeroth-world-editor/guides/quest-map/), **Draw patrol** on a selected spawn draws a route by clicking the map. Under **Starts**, choose whether the NPC sets off walking or running. **Clear route** removes every point.
 
 The NPC walks from its spawn through each point and back to where it stands, then starts again.
 
@@ -34,7 +35,7 @@ Right-click a point for its actions:
 - **Use an object…**
 - **Insert point after**, **Remove point**
 
-Choose a point's button in the panel to edit its settings there. In the World, right-click a point of the route and choose **Point settings…** for the same settings (the facing is typed in degrees there, and an object to use is picked on the quest map).
+Choose a point's button in the panel to edit its settings there. In the World, right-click a point of the route and choose **Point settings…** for the same settings (the facing is typed in degrees there, and an object to use is given by its spawn guid and picked by name).
 
 :::note
 A fight pauses the patrol; the NPC carries on after combat. A new or changed patrol starts after a server restart.

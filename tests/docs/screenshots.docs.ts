@@ -165,17 +165,17 @@ test.describe.serial('docs screenshots', () => {
   });
 
   test('quest-map', async () => {
-    const card = page.getByRole('dialog', { name: 'Quest Giver' }).getByRole('region', { name: 'Starts at 1' });
-    await card.getByRole('button', { name: 'Place on map' }).click();
+    // The giver card's Place in world places in the 3D World; the quest map places from a click on it
+    await page.getByRole('button', { name: 'Map', exact: true }).click();
     const map = page.getByRole('dialog', { name: 'Quest map' });
-    await expect(map.getByText('Click where Foreman Brask should stand.')).toBeVisible();
     await map.getByRole('combobox', { name: 'Map' }).selectOption({ label: 'Eastern Kingdoms' });
     await map.getByRole('combobox', { name: 'Jump to' }).fill('Marshal McBride');
     await map.getByRole('option', { name: /Marshal McBride/ }).first().click();
     const canvas = map.locator('.quest-map__canvas');
     const box = (await canvas.boundingBox())!;
     await page.mouse.click(box.x + box.width / 2, box.y + box.height / 2);
-    await expect(map.getByText('Placed. Drag to adjust, or draw its patrol.')).toBeVisible();
+    await map.getByRole('button', { name: 'Add a spawn here for Foreman Brask' }).click();
+    await expect(map.getByRole('region', { name: 'Selected position' })).toBeVisible();
     await expect.poll(async () => Number(await canvas.getAttribute('data-dot-count'))).toBeGreaterThan(0);
     await page.waitForTimeout(2000); // relief and imagery tiles
     await shot(page, 'quest-map');
@@ -205,7 +205,6 @@ test.describe.serial('docs screenshots', () => {
     await page.keyboard.press('Escape');
     await map.getByRole('button', { name: 'Done' }).click();
     await map.getByRole('button', { name: 'Close' }).click();
-    await page.keyboard.press('Escape');
     await expect(page.getByRole('dialog', { name: 'Quest Giver' })).toHaveCount(0);
   });
 

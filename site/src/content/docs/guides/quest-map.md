@@ -9,7 +9,7 @@ The **quest map** shows the world with your quest's NPCs and objects on it, and 
 
 ![The quest map over Northshire Valley, with a new NPC placed and existing spawns around it](../../../assets/screenshots/quest-map.png)
 
-Open it with **Map** in the quest's header, or with **Place on map** on a giver's card.
+Open it with **Map** in the quest's header.
 
 ## Find a place
 

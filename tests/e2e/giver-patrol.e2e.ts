@@ -53,10 +53,10 @@ test('a new quest giver is made, placed and given a patrol with a line to say, a
   await npc.getByRole('button', { name: 'Done' }).click();
   const card = giver.getByRole('region', { name: 'Starts at 1' });
   await expect(card.getByText('Patrol Hela')).toBeVisible();
-  await card.getByRole('button', { name: 'Place on map' }).click();
+  // The card's Place in world places in the 3D World; the quest map places from a click on it
+  await page.getByRole('button', { name: 'Map', exact: true }).click();
 
   const map = page.getByRole('dialog', { name: 'Quest map' });
-  await expect(map.getByText('Click where Patrol Hela should stand.')).toBeVisible();
   // Northshire: pick the map, then click the middle of the canvas.
   await map.getByRole('combobox', { name: 'Map' }).selectOption({ label: 'Eastern Kingdoms' });
   await map.getByRole('combobox', { name: 'Jump to' }).fill('Marshal McBride');
@@ -66,8 +66,8 @@ test('a new quest giver is made, placed and given a patrol with a line to say, a
   const cx = box.x + box.width / 2;
   const cy = box.y + box.height / 2;
   await page.mouse.click(cx, cy);
-  await expect(map.getByText('Placed. Drag to adjust, or draw its patrol.')).toBeVisible();
-  await map.getByRole('button', { name: 'Draw patrol' }).click();
+  await map.getByRole('button', { name: 'Add a spawn here for Patrol Hela' }).click();
+  await map.getByRole('region', { name: 'Selected position' }).getByRole('button', { name: 'Draw patrol' }).click();
   await expect(map.getByRole('heading', { name: 'Patrol: Patrol Hela' })).toBeVisible();
   // Above and left of the spawn: its label runs off to the right and takes clicks of its own.
   await page.mouse.click(cx, cy - 80);
@@ -88,8 +88,7 @@ test('a new quest giver is made, placed and given a patrol with a line to say, a
   await page.screenshot({ path: 'test-results/giver-patrol.png' });
   await map.getByRole('button', { name: 'Done' }).click();
   await map.getByRole('button', { name: 'Close' }).click();
-  await expect(page.getByRole('dialog', { name: 'Quest Giver' })).toBeVisible();
-  await page.keyboard.press('Escape');
+  await expect(map).toHaveCount(0);
 
   // The same NPC editor opens from NPCs, objects & items, with the patrol on its Placement tab.
   await page.getByRole('list', { name: 'Modules' }).getByRole('button', { name: /^NPCs, objects & items/ }).click();

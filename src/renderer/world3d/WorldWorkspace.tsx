@@ -2,7 +2,7 @@ import { popPlace, pushPlace, type CameraPlace } from './camera-history';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import type { CanvasNode, GroupView, OpenResult, QuestSpawnGroup } from '@shared/ipc';
 import type { FieldValue } from '@core/registry/types';
-import { EMPTY_ENTITIES, newSpawn, type CustomObject } from '@core/entities/model';
+import { EMPTY_ENTITIES, newSpawn, type CustomObject, type ProjectEntities } from '@core/entities/model';
 import type { Placement } from '@core/world/layer';
 import { EntityEditorHost, type EditorState } from '../entities/EntityEditorHost';
 import { useHistorySteps } from '../state/history-context';
@@ -23,7 +23,7 @@ import { FindDialog, type FindPreset, type FoundSpawn } from './FindDialog';
 import { TeleportDialog } from './TeleportDialog';
 import { QuestOrb } from '../components/QuestOrb';
 import { questPlace } from './quest-place';
-import type { ShowTarget } from './ShowInWorldContext';
+import { PlaceInWorldProvider, useAsideForWorld, type ShowTarget, type WorldRequest } from './ShowInWorldContext';
 import { useFocusFollow } from './useFocusFollow';
 import type { FocusPart, FocusSlice } from '../state/app/focus';
 import { NEEDS_DATABASE } from './menu/section';
@@ -58,6 +58,10 @@ export interface WorldWorkspaceProps {
   onFocusPart?(questId: number, part: FocusPart): void;
   /** Now, on the clock `focus.at` is read against (the store's `moment`) */
   now?: () => number;
+  /** An editor's Place in world, Draw patrol or a spawn's Show in World; each request is its own */
+  request?: WorldRequest & { nonce: number };
+  /** Told when what an editor asked is done (placing stopped, the patrol drawn), so the editor comes back */
+  onRequestEnd?(): void;
 }
 
 const NO_FOCUS: FocusSlice['focus'] = { questId: null, part: null, nonce: 0, at: 0 };
@@ -84,6 +88,12 @@ function presetOf(groups: QuestSpawnGroup[], scope: 'quest' | 'chain'): FindPres
 
 type Point = { x: number; y: number; z: number };
 
+/** One spawn of the project's own NPC or object, as Find lists it; null when the project has no such spawn */
+function ownSpawnOf(store: ProjectEntities, kind: 'creature' | 'object', entry: number, guid: number, name: string): FoundSpawn | null {
+  const spawn = (kind === 'object' ? store.objects : store.npcs).find((e) => e.entry === entry)?.spawns.find((s) => s.guid === guid);
+  return spawn ? { kind, guid, entry, name, map: spawn.map, x: spawn.x, y: spawn.y, z: spawn.z, event: null, note: null } : null;
+}
+
 /** How long the welcome takes to fade from the world once something is chosen (matches Welcome.css) */
 const WELCOME_FADE_MS = 500;
 
@@ -95,7 +105,7 @@ const WELCOME_FADE_MS = 500;
  */
 export function WorldWorkspace({
   hasClient, projectKey, projectName, onOpenSettings, onShowQuests, onStartQuest, quest, onQuestField, onNewQuest, goTo: goToRequest,
-  focus: shared = NO_FOCUS, onFocusPart, now = Date.now,
+  focus: shared = NO_FOCUS, onFocusPart, now = Date.now, request, onRequestEnd,
 }: WorldWorkspaceProps): React.JSX.Element {
   // The open quest's values as last changed here, so edits made one after another build on each other
   const values = useRef(quest?.open.aggregate.values);
@@ -120,6 +130,8 @@ export function WorldWorkspace({
   namesRef.current = names;
   // The NPC or object editor, opened from the right-click menu
   const [editor, setEditor] = useState<EditorState | null>(null);
+  // The editor steps aside while the author places or draws in the world from it
+  const [editorAside, editorPlace] = useAsideForWorld();
   const [note, setNote] = useState<string | null>(null);
 
   /** New NPC here… / New object here…: one project NPC or object with a spawn where it was asked for, as one step */
@@ -376,6 +388,33 @@ export function WorldWorkspace({
       }));
     }
   };
+
+  // An editor's request: placing starts, or the camera goes to the exact spawn (and its patrol is drawn)
+  const [placeRequest, setPlaceRequest] = useState<{ kind: 'creature' | 'object'; entry: number; name: string; nonce: number } | undefined>();
+  const [patrolRequest, setPatrolRequest] = useState<{ guid: number; name: string; nonce: number } | undefined>();
+  const onRequestEndRef = useRef(onRequestEnd);
+  onRequestEndRef.current = onRequestEnd;
+  useEffect(() => {
+    const asked = request;
+    if (!asked) return;
+    const kind = asked.kind === 'patrol' ? 'creature' : asked.kind === 'spawn' ? asked.spawn : asked.kind;
+    const name = giverName({ kind: kind === 'object' ? 'gameobject' : 'creature', id: asked.entry }, namesRef.current, storeRef.current);
+    if (asked.kind !== 'patrol' && asked.kind !== 'spawn') {
+      setPlaceRequest((was) => ({ kind, entry: asked.entry, name, nonce: (was?.nonce ?? 0) + 1 }));
+      return;
+    }
+    const spawn = ownSpawnOf(storeRef.current, kind, asked.entry, asked.guid, name);
+    if (!spawn || !worldMapById(spawn.map)) {
+      setNote(spawn ? `${name} stands on a map the 3D view does not draw.` : 'That spawn is no longer in the project.');
+      if (asked.kind === 'patrol') onRequestEndRef.current?.();
+      return;
+    }
+    find(spawn);
+    if (asked.kind === 'patrol') setPatrolRequest((was) => ({ guid: spawn.guid, name, nonce: (was?.nonce ?? 0) + 1 }));
+    // Only a new request is acted on
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [request?.nonce]);
+
   const parsed = { x: Number(typed.x), y: Number(typed.y), z: Number(typed.z) };
   const valid = [typed.x, typed.y, typed.z].every((v) => v.trim() !== '') && Object.values(parsed).every(Number.isFinite);
 
@@ -492,6 +531,9 @@ export function WorldWorkspace({
           setFocus((previous) => ({ ...target, nonce: (previous?.nonce ?? 0) + 1 }));
         }}
         onSetLootable={setLootable}
+        placeRequest={placeRequest}
+        patrolRequest={patrolRequest}
+        onRequestEnd={() => onRequestEndRef.current?.()}
       />
       {note && (
         <p className="world3d__note" role="status">
@@ -502,11 +544,13 @@ export function WorldWorkspace({
         </p>
       )}
       {editor && project && (
-        <div className="modal-backdrop">
-          <EntityEditorHost entities={project.entities} onChange={(next) => project.setEntities(next)} quests={project.quests} layer={project.layer}
-            state={editor} onTab={(tab) => setEditor((was) => (was ? { ...was, tab } : was))} onClose={() => setEditor(null)}
-            onDelete={(kind, entry) => project.remove(kind, entry)} />
-        </div>
+        <PlaceInWorldProvider value={editorPlace}>
+          <div className="modal-backdrop" hidden={editorAside}>
+            <EntityEditorHost entities={project.entities} onChange={(next) => project.setEntities(next)} quests={project.quests} layer={project.layer}
+              state={editor} onTab={(tab) => setEditor((was) => (was ? { ...was, tab } : was))} onClose={() => setEditor(null)}
+              onDelete={(kind, entry) => project.remove(kind, entry)} />
+          </div>
+        </PlaceInWorldProvider>
       )}
       <section className="world-place glass" aria-label="Place">
         <h2 className="world-place__title">{area ?? mapName}</h2>

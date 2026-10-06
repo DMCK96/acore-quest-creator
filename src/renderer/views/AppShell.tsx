@@ -10,7 +10,7 @@ import { DockLayout } from './dock/DockLayout';
 import { usePreferences } from '../preferences/usePreferences';
 import { WorldWorkspace } from '../world3d/WorldWorkspace';
 import { projectKey } from '../world3d/welcome-seen';
-import { ShowInWorldProvider, type ShowTarget } from '../world3d/ShowInWorldContext';
+import { PlaceInWorldProvider, ShowInWorldProvider, type PlaceInWorld, type ShowTarget, type WorldRequest } from '../world3d/ShowInWorldContext';
 import { QuestEditorModal } from './QuestEditorModal';
 import { ProjectDialog } from './ProjectDialog';
 import { SettingsDialog } from './SettingsDialog';
@@ -56,6 +56,22 @@ export function AppShell({ store }: { store: AppStore }): React.JSX.Element {
     store.getState().setFocus(target.questId, 'kind' in target ? { kind: target.kind, entry: target.entry } : null, { again: true });
   }, [store]);
 
+  // Place in world, Draw patrol and a spawn's Show in World from an editor: the World does it, and the
+  // editor that asked is told once it is done. A request made before the last is done ends that one
+  const [worldRequest, setWorldRequest] = useState<(WorldRequest & { nonce: number }) | undefined>();
+  const requestEnd = useRef<(() => void) | undefined>(undefined);
+  const placeInWorld = useCallback<PlaceInWorld>((request, onEnd) => {
+    const before = requestEnd.current;
+    requestEnd.current = onEnd;
+    before?.();
+    setWorldRequest((was) => ({ ...request, nonce: (was?.nonce ?? 0) + 1 }));
+  }, []);
+  const endRequest = useCallback(() => {
+    const end = requestEnd.current;
+    requestEnd.current = undefined;
+    end?.();
+  }, []);
+
   // The project's name and quests are read as soon as the app is up, for the bar and the world, not only
   // once the dock first opens. Unsaved work a crash left behind is offered once, then too.
   useEffect(() => {
@@ -98,6 +114,7 @@ export function AppShell({ store }: { store: AppStore }): React.JSX.Element {
   return (
     <ProjectEntitiesFromStore store={store}>
     <ShowInWorldProvider value={hasClient ? showInWorld : null}>
+    <PlaceInWorldProvider value={hasClient ? placeInWorld : null}>
     <div className="app-shell">
       <AppBar
         store={store}
@@ -140,6 +157,8 @@ export function AppShell({ store }: { store: AppStore }): React.JSX.Element {
               focus={focus}
               onFocusPart={(questId, part) => store.getState().setFocus(questId, part)}
               now={store.getState().moment}
+              request={worldRequest}
+              onRequestEnd={endRequest}
               onQuestField={(fieldId, value) => store.getState().setValue(fieldId, value)}
               onNewQuest={(giver, previous) => {
                 // The NPC gives the new quest and takes it back; in a chain, it comes after the one that was
@@ -156,6 +175,7 @@ export function AppShell({ store }: { store: AppStore }): React.JSX.Element {
       {showSettings && <SettingsDialog store={store} onClose={() => setShowSettings(false)} />}
       <RecoveryDialog store={store} />
     </div>
+    </PlaceInWorldProvider>
     </ShowInWorldProvider>
     </ProjectEntitiesFromStore>
   );

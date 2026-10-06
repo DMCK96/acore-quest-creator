@@ -3,11 +3,11 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 
-const created = vi.hoisted(() => [] as { options: any; dispose: ReturnType<typeof vi.fn>; lookAt: ReturnType<typeof vi.fn> }[]);
+const created = vi.hoisted(() => [] as { options: any; dispose: ReturnType<typeof vi.fn>; lookAt: ReturnType<typeof vi.fn>; setPlacing: ReturnType<typeof vi.fn> }[]);
 vi.mock('../../src/renderer/world3d/world3d', () => ({
   createWorld3D: (options: any) => {
     const world = {
-      options, setOwnSpawns: vi.fn(), setWorldLayer: vi.fn(), setMarked: vi.fn(),
+      options, setOwnSpawns: vi.fn(), setWorldLayer: vi.fn(), setMarked: vi.fn(), setPlacing: vi.fn(),
       dispose: vi.fn(), cancelPath: vi.fn(), lookAt: vi.fn(), select: vi.fn(), setSpawnVisibility: vi.fn(), setScenery: vi.fn(), setTool: vi.fn(), setFalloff: vi.fn(), target: () => ({ x: 0, y: 0, z: 0 }),
       spawnStatus: () => ({ capped: { creatures: false, objects: false }, error: null, loading: 0 }),
     };
@@ -20,6 +20,7 @@ import { createAppStore } from '../../src/renderer/state/app-store';
 import { AppShell } from '../../src/renderer/views/AppShell';
 import { NamesProvider } from '../../src/renderer/state/names';
 import { DEFAULT_PREFERENCES, writePreferences } from '../../src/renderer/preferences/store';
+import { newNpc } from '../../src/core/entities/model';
 import { makeMockApi, okv, sampleOpen, nodeOf } from './mock-api';
 
 const drift = { missingTables: [], unregistered: [], missingColumns: [], typeMismatches: [] };
@@ -285,6 +286,41 @@ describe('the app shell', () => {
     expect(store.getState().focus).toMatchObject({ questId: 60001, part: { kind: 'creature', entry: 1423 } });
     await new Promise((r) => setTimeout(r, 20));
     expect(world.lookAt.mock.calls.length).toBe(before);
+  });
+
+  describe('Place in world from the quest editor', () => {
+    const values = { 'quest_template.LogTitle': 'Wolves', creature_queststarter: [{ id: 12000005 }] };
+    async function editing(client = true) {
+      const { store } = await shell({
+        openQuest: async () => okv(sampleOpen({ aggregate: { ...sampleOpen().aggregate, values } })),
+        projectEntities: async () => okv({ npcs: [{ ...newNpc(12000005), name: 'Hela' }], objects: [], items: [] }),
+      }, client);
+      await act(async () => {
+        await store.getState().loadEntities();
+        await store.getState().openQuest(60001);
+      });
+      act(() => store.getState().editQuest());
+      await userEvent.click(within(screen.getByRole('list', { name: 'Modules' })).getByRole('button', { name: /^Quest Giver/ }));
+      return store;
+    }
+
+    it('steps the editor aside, places the NPC in the world, and brings the editor back on its panel', async () => {
+      await editing();
+      await waitFor(() => expect(created).toHaveLength(1));
+      await userEvent.click(within(screen.getByRole('dialog', { name: 'Quest Giver' })).getByRole('button', { name: 'Place in world' }));
+      expect(screen.queryByRole('dialog', { name: 'Edit quest' })).toBeNull();
+      await waitFor(() => expect(created[0]!.setPlacing).toHaveBeenLastCalledWith({ kind: 'creature', entry: 12000005 }));
+      expect(screen.getByText(/Placing Hela \(#12000005\)/)).toBeTruthy();
+      act(() => created[0]!.options.onPlaceEnd());
+      expect(await screen.findByRole('dialog', { name: 'Edit quest' })).toBeTruthy();
+      expect(screen.getByRole('dialog', { name: 'Quest Giver' })).toBeTruthy();
+    });
+
+    it('is not offered without a game client', async () => {
+      await editing(false);
+      expect(within(screen.getByRole('dialog', { name: 'Quest Giver' })).getByText('Made with this quest.')).toBeTruthy();
+      expect(screen.queryByRole('button', { name: 'Place in world' })).toBeNull();
+    });
   });
 
   it('leaves the open quest alone when the new quest cannot be made', async () => {

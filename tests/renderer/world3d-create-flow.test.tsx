@@ -9,6 +9,7 @@ import { clearClipboard } from '../../src/renderer/world3d/clipboard';
 import { EMPTY_ENTITIES, newNpc, newObject, newSpawn, type ProjectEntities } from '../../src/core/entities/model';
 import { markWelcomeSeen } from '../../src/renderer/world3d/welcome-seen';
 import { writeLastPlace } from '../../src/renderer/world3d/last-place';
+import { PlaceInWorldProvider, type PlaceInWorld } from '../../src/renderer/world3d/ShowInWorldContext';
 
 const worlds = vi.hoisted(() => [] as any[]);
 vi.mock('../../src/renderer/world3d/world3d', () => ({
@@ -37,7 +38,7 @@ const crateSpawn = { kind: 'object' as const, guid: 7000001, entry: 9100001, nam
 const dbGoober = { ...newObject(181000), name: 'Lever', displayId: 2, origin: { kind: 'existing' as const, original: {}, sharedLoot: 0, spawnCount: 1, locked: [] as ('type' | 'loot' | 'fight')[] } };
 const dbGooberSpawn = { kind: 'object' as const, guid: 55, entry: 181000, name: 'Lever', own: false, added: false, pathId: 0, wander: 0, map: 0, group: null, respawnSecs: 300, objectType: 10, placement: { x: 1, y: 2, z: 3, orientation: 0, rotation: null } };
 
-function mount(entities: ProjectEntities = EMPTY_ENTITIES) {
+function mount(entities: ProjectEntities = EMPTY_ENTITIES, place: PlaceInWorld | null = null) {
   vi.stubGlobal('fetch', async () => new Response(new Uint8Array([1]), { status: 200 }));
   const api = makeMockApi({ worldLayer: vi.fn(async () => okv({ spawns: [], routes: [], added: [] })), allocateIds: vi.fn(async () => okv([6000007])),
     mapFloors: vi.fn(async () => okv({ floors: [31], ground: 31 })) });
@@ -60,7 +61,9 @@ function mount(entities: ProjectEntities = EMPTY_ENTITIES) {
   const ui = () => (
     <NamesProvider api={api}>
       <ProjectEntitiesProvider value={value()}>
-        <WorldWorkspace hasClient projectKey="p" projectName="P" onOpenSettings={vi.fn()} onShowQuests={vi.fn()} onStartQuest={vi.fn()} />
+        <PlaceInWorldProvider value={place}>
+          <WorldWorkspace hasClient projectKey="p" projectName="P" onOpenSettings={vi.fn()} onShowQuests={vi.fn()} onStartQuest={vi.fn()} />
+        </PlaceInWorldProvider>
       </ProjectEntitiesProvider>
     </NamesProvider>
   );
@@ -88,6 +91,24 @@ describe('creating and editing from the World view', () => {
     const own = { kind: 'creature' as const, guid: 6000001, entry: 12000001, name: 'Hela', own: true, added: false, pathId: 0, wander: 0, map: 0, placement: { x: 1, y: 2, z: 3, orientation: 0, rotation: null } };
     rightClick({ ground: at, hit: { type: 'spawn', spawn: own }, selection: [own] });
     expect(screen.getByRole('menuitem', { name: 'Edit NPC…' })).toBeTruthy();
+  });
+
+  it('the NPC editor opened here steps aside while its patrol is drawn, and comes back on its tab', async () => {
+    const hela = { ...newNpc(12000001), name: 'Hela', displayId: 1, spawns: [{ ...newSpawn(6000001), x: 1, y: 2, z: 3 }] };
+    const ends: (() => void)[] = [];
+    const place = vi.fn((_request, onEnd?: () => void) => { if (onEnd) ends.push(onEnd); });
+    mount({ ...EMPTY_ENTITIES, npcs: [hela] }, place);
+    await waitFor(() => expect(worlds).toHaveLength(1));
+    const own = { kind: 'creature' as const, guid: 6000001, entry: 12000001, name: 'Hela', own: true, added: false, pathId: 0, wander: 0, map: 0, placement: { x: 1, y: 2, z: 3, orientation: 0, rotation: null } };
+    rightClick({ ground: at, hit: { type: 'spawn', spawn: own }, selection: [own] });
+    await userEvent.click(screen.getByRole('menuitem', { name: 'Edit NPC…' }));
+    const editor = await screen.findByRole('dialog', { name: 'NPC: Hela' });
+    await userEvent.click(within(editor).getByRole('tab', { name: 'Placement' }));
+    await userEvent.click(within(editor).getByRole('button', { name: 'Draw patrol' }));
+    expect(place).toHaveBeenCalledWith({ kind: 'patrol', entry: 12000001, guid: 6000001 }, expect.any(Function));
+    expect(screen.queryByRole('dialog', { name: 'NPC: Hela' })).toBeNull();
+    act(() => ends.shift()!());
+    expect(within(screen.getByRole('dialog', { name: 'NPC: Hela' })).getByRole('tab', { name: 'Placement' })).toHaveAttribute('aria-selected', 'true');
   });
 
   it('Edit NPC on a database NPC brings it into the project and opens its editor', async () => {

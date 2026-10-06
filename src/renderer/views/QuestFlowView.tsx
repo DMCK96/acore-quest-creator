@@ -51,6 +51,7 @@ export function QuestFlowView({ store }: { store: AppStore }): React.JSX.Element
   const [editor, setEditor] = useState<EditorState | null>(null);
   const editorRef = useRef(editor);
   editorRef.current = editor;
+  const root = useRef<HTMLDivElement>(null);
   const closeEditor = useCallback(() => setEditor(null), []);
   const onEditorTab = useCallback((tab: string) => setEditor((e) => (e ? { ...e, tab } : e)), []);
 
@@ -65,7 +66,8 @@ export function QuestFlowView({ store }: { store: AppStore }): React.JSX.Element
   // Escape closes the open panel first, and leaves the editor only when nothing is open.
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent): void => {
-      if (e.key !== 'Escape') return;
+      // Stepped aside for the World, whose Escape it is
+      if (e.key !== 'Escape' || root.current?.closest('[hidden]')) return;
       const state = store.getState();
       // The map goes back to where it was opened from, like its Close button; the editor sits on top
       // of the panel that opened it, so it closes before that panel.
@@ -138,7 +140,7 @@ export function QuestFlowView({ store }: { store: AppStore }): React.JSX.Element
   return (
     <EntityEditorProvider open={openEditor}>
     <MapOpenerProvider open={openMap}>
-    <div className="quest-flow">
+    <div ref={root} className="quest-flow">
       <div className="quest-flow__main">
         <button type="button" className="btn quest-flow__back" onClick={() => void backToChain()}>
           ← Back to chain

@@ -19,6 +19,7 @@ export function PositionInput({
   onChange,
   map,
   markerId,
+  onShowInWorld,
 }: {
   idPrefix: string;
   value: Position;
@@ -28,6 +29,8 @@ export function PositionInput({
   map?: number;
   /** The quest map's marker for this position; with it, a link opens the map there. */
   markerId?: string;
+  /** Shows what stands at this position in the World; with it, a Show in World link does */
+  onShowInWorld?(): void;
 }): React.JSX.Element {
   const [paste, setPaste] = useState('');
   const [groundNote, setGroundNote] = useState<string | null>(null);
@@ -79,6 +82,11 @@ export function PositionInput({
         {markerId && openMap && (
           <button type="button" className="entry-card__btn position-input__map" onClick={() => openMap(markerId)}>
             Show on map
+          </button>
+        )}
+        {onShowInWorld && (
+          <button type="button" className="entry-card__btn position-input__map" onClick={onShowInWorld}>
+            Show in World
           </button>
         )}
       </div>

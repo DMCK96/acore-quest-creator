@@ -2,6 +2,7 @@ import { useEffect, useRef } from 'react';
 import type { AppStore } from '../state/app-store';
 import { trapTab } from '../components/trap-tab';
 import { QuestFlowView } from './QuestFlowView';
+import { PlaceInWorldProvider, useAsideForWorld } from '../world3d/ShowInWorldContext';
 import './ProjectDialog.css';
 import './QuestEditorModal.css';
 
@@ -9,7 +10,9 @@ import './QuestEditorModal.css';
  * The quest editor in a centred modal over the world: the module boxes and the panel of the one
  * being edited. Nothing renders unless a quest is being edited. Escape is not heard here:
  * QuestFlowView decides it (an inner panel or the entity editor closes first, the editor last), so
- * there is one place that does. Settings, opened on top, catches Escape before either.
+ * there is one place that does. Settings, opened on top, catches Escape before either. While the
+ * author places or draws in the World from inside it, it steps aside, keeping its panel and editor, and
+ * comes back once they are done.
  */
 export function QuestEditorModal({ store }: { store: AppStore }): React.JSX.Element | null {
   const editing = store((s) => s.screen === 'edit');
@@ -18,6 +21,8 @@ export function QuestEditorModal({ store }: { store: AppStore }): React.JSX.Elem
 
 function EditorDialog({ store }: { store: AppStore }): React.JSX.Element {
   const dialog = useRef<HTMLDivElement | null>(null);
+  const [aside, placeInWorld] = useAsideForWorld();
+  const wasAside = useRef(false);
 
   // Focus moves in on opening and back to what opened it on closing.
   useEffect(() => {
@@ -27,9 +32,15 @@ function EditorDialog({ store }: { store: AppStore }): React.JSX.Element {
       if (opener?.isConnected) opener.focus();
     };
   }, []);
+  // Back from the World: focus comes back in
+  useEffect(() => {
+    if (aside) wasAside.current = true;
+    else if (wasAside.current) dialog.current?.focus();
+  }, [aside]);
 
   return (
-    <div className="modal-backdrop quest-editor-backdrop" onMouseDown={(e) => e.target === e.currentTarget && void store.getState().backToChain()}>
+    <PlaceInWorldProvider value={placeInWorld}>
+    <div className="modal-backdrop quest-editor-backdrop" hidden={aside} onMouseDown={(e) => e.target === e.currentTarget && void store.getState().backToChain()}>
       <div
         ref={dialog}
         className="quest-editor-modal"
@@ -45,5 +56,6 @@ function EditorDialog({ store }: { store: AppStore }): React.JSX.Element {
         <QuestFlowView store={store} />
       </div>
     </div>
+    </PlaceInWorldProvider>
   );
 }
