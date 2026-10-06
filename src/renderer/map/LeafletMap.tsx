@@ -4,6 +4,7 @@ import 'leaflet/dist/leaflet.css';
 import { circleOutline, GRID_SIZE, LEAFLET_TRANSFORM, MAX_VIEW_ZOOM, MAX_ZOOM, MIN_ZOOM } from '@core/map/coords';
 import type { QuestMarker } from '@core/map/positions';
 import type { MapBox, SpawnDot } from '@shared/ipc';
+import { MAP_TILE_SCHEME } from '@core/client/schemes';
 
 /**
  * The one place that touches Leaflet: a map of one WoW map drawn from the relief tiles, with the
@@ -127,7 +128,7 @@ export function LeafletMap(props: LeafletMapProps): React.JSX.Element {
     const map = mapRef.current;
     if (!map) return;
     tiles.current?.remove();
-    tiles.current = L.tileLayer(`acqc-map://tile/${props.map}/{z}/{x}/{y}.png`, {
+    tiles.current = L.tileLayer(`${MAP_TILE_SCHEME}://tile/${props.map}/{z}/{x}/{y}.png`, {
       tileSize: 256, minZoom: MIN_ZOOM, maxZoom: MAX_VIEW_ZOOM, minNativeZoom: MIN_ZOOM, maxNativeZoom: MAX_ZOOM, noWrap: true,
       bounds: L.latLngBounds([-HALF, -HALF], [HALF, HALF]),
     }).addTo(map);

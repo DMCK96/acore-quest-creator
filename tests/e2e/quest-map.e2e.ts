@@ -55,7 +55,7 @@ test('a new NPC spawn is shown on the quest map and moved by dragging', async ()
   await card.getByRole('button', { name: 'Done' }).click();
   await page.keyboard.press('Escape');
 
-  const tileLoaded = page.waitForResponse((r) => r.url().startsWith('acqc-map://tile/0/6/') && r.status() === 200);
+  const tileLoaded = page.waitForResponse((r) => r.url().startsWith('awe-map://tile/0/6/') && r.status() === 200);
   await page.getByRole('button', { name: 'Map', exact: true }).click();
   const map = page.getByRole('dialog', { name: 'Quest map' });
   await expect(map).toBeVisible();
@@ -77,7 +77,7 @@ test('a new NPC spawn is shown on the quest map and moved by dragging', async ()
   // Zoomed out, the painted art shows and the dots go.
   const zoomOut = map.getByRole('button', { name: 'Zoom out' });
   const zoomIn = map.getByRole('button', { name: 'Zoom in' });
-  const artLoaded = page.waitForResponse((r) => r.url().startsWith('acqc-map://tile/0/4/') && r.status() === 200);
+  const artLoaded = page.waitForResponse((r) => r.url().startsWith('awe-map://tile/0/4/') && r.status() === 200);
   for (let i = 0; i < 3; i++) {
     await zoomOut.click();
     await page.waitForTimeout(350);

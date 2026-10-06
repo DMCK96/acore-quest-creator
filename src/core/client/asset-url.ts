@@ -1,10 +1,12 @@
 /**
- * The address of one game client file as the 3D view asks for it: `acqc-wow://file/<path>`, where
+ * The address of one game client file as the 3D view asks for it: `awe-wow://file/<path>`, where
  * the path is the client's own, lower-cased with forward slashes (`world/maps/azeroth/azeroth.wdt`).
  * MPQ lookups ignore case and the kind of slash, so the path is passed on as it came.
  */
 
-export const ASSET_SCHEME = 'acqc-wow';
+import { ASSET_SCHEME } from './schemes';
+
+export { ASSET_SCHEME };
 const PREFIX = `${ASSET_SCHEME}://file/`;
 
 /** The client path an address names; null for another scheme, an empty path or one that climbs out. */

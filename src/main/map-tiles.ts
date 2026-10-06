@@ -7,9 +7,10 @@ import { downsample, emptyPixels, reliefPixels } from '../core/map/relief';
 import type { ClientStatus } from '../shared/ipc';
 import type { AreaLookup, MapImagery } from './client-imagery';
 import type { ServerDataFiles } from './server-data';
+import { MAP_TILE_SCHEME } from '../core/client/schemes';
 
 /**
- * Map tiles for the quest map, served to the page as `acqc-map://tile/<map>/<zoom>/<tx>/<ty>.png`.
+ * Map tiles for the quest map, served to the page as `awe-map://tile/<map>/<zoom>/<tx>/<ty>.png`.
  *
  * The relief: a zoom-6 tile is one grid of the server data folder's terrain, and each zoom out is
  * four tiles shrunk into one. With a game client folder, the picture comes from the client instead:
@@ -39,7 +40,7 @@ interface Drawn {
   pixels: Uint8Array | null;
 }
 
-const TILE_URL = /^acqc-map:\/\/tile\/(\d+)\/(\d+)\/(\d+)\/(\d+)\.png$/;
+const TILE_URL = new RegExp(String.raw`^${MAP_TILE_SCHEME}://tile/(\d+)/(\d+)/(\d+)/(\d+)\.png$`);
 /** Part of every cached tile's path: raise it when tiles are drawn differently, so old ones are redrawn. */
 const RELIEF_VERSION = 'r2';
 const PICTURE_VERSION = 'r3';

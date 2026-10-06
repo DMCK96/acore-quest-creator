@@ -21,7 +21,7 @@ import type { SpawnInfo } from './scene/spawn/SpawnManager';
 
 /**
  * The 3D world: the game's own terrain, props and models for one map, read from the client's
- * archives through `acqc-wow://`, drawn with Three.js by Wowser's scene classes. World units are
+ * archives through `awe-wow://`, drawn with Three.js by Wowser's scene classes. World units are
  * the server's (yards, X north, Y west, Z up), so a spawn's `position_x/y/z` is its place here.
  */
 

@@ -27,7 +27,7 @@ Inside `src/core`, each feature has its own folder: `scripts` (quest scripting s
 
 ## Processes
 
-- The **main process** (`src/main`) owns everything with side effects: the MySQL connection to the world database (read-only) and optional dev database, the open project and its undo history, the local store (SQLite through Drizzle), the file system, the game client and server data folders, the `acqc-map://` protocol that serves map tiles and the `acqc-wow://` protocol that serves game client files to the 3D view.
+- The **main process** (`src/main`) owns everything with side effects: the MySQL connection to the world database (read-only) and optional dev database, the open project and its undo history, the local store (SQLite through Drizzle), the file system, the game client and server data folders, the `awe-map://` protocol that serves map tiles and the `awe-wow://` protocol that serves game client files to the 3D view.
 - The **renderer** (`src/renderer`) is the interface. It talks to the main process only through the API that `src/preload` exposes; state lives in [Zustand](https://zustand.docs.pmnd.rs/) stores in `src/renderer/state`.
 
 ## The 3D view
@@ -36,7 +36,7 @@ The app is built around the **World**: the game world in 3D, drawn from the user
 
 ### How it is built
 
-- **Files come straight from the client.** The main process opens the client's MPQ archives in the game's own load order and serves each file at `acqc-wow://file/<path>`. Nothing is extracted, copied or hosted, and the repo never contains game files.
+- **Files come straight from the client.** The main process opens the client's MPQ archives in the game's own load order and serves each file at `awe-wow://file/<path>`. Nothing is extracted, copied or hosted, and the repo never contains game files.
 - **Drawing is [Three.js](https://threejs.org/).** Terrain, doodads (trees, fences, carts) and animated models come from [wowserhq/scene](https://github.com/wowserhq/scene), copied into `world3d/scene/` because the editor changes its insides. Its README lists every change from upstream. Buildings (WMO), liquids, dressed characters and the editing tools were written here or adapted from MIT-licensed projects.
 - **Loaders run in Web Workers;** the main thread only builds Three.js objects from what they return.
 - **World units are the server's:** yards, X north, Y west, Z up. A spawn's `position_x/y/z` is its place in the scene, with no conversion anywhere. Keep it that way.
