@@ -95,6 +95,8 @@ export function createQuestSlice({ api, kit, set, get }: SliceArgs): QuestSlice 
         error: truncated ? `Only the first ${questIds.length} quests of this chain were added.` : null,
         dirty: false,
       });
+      // The quest picked from the chain is the open one, so the World goes to it as on any open
+      get().setFocus(open.questId);
       await get().loadNodes();
       await get().loadLinks();
     },

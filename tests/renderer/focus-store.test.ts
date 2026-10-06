@@ -37,6 +37,13 @@ describe('focus', () => {
     expect(s.getState().focus).toMatchObject({ questId: 7, part: null });
   });
 
+  it('adding an existing chain focuses the quest it opens', async () => {
+    const s = createAppStore(makeMockApi({ addQuestChain: async () => okv({ open: sampleOpen({ questId: 62 }), questIds: [62, 40], truncated: false }) }), { saveDelayMs: 0 });
+    s.getState().setFocus(7, { kind: 'creature', entry: 1 });
+    await s.getState().addQuestChain(62);
+    expect(s.getState().focus).toMatchObject({ questId: 62, part: null });
+  });
+
   it('a failed open leaves the focus alone', async () => {
     const s = createAppStore(makeMockApi({ openQuest: async () => ({ ok: false, error: { code: 'x', message: 'no' } }) as never }), { saveDelayMs: 0 });
     s.getState().setFocus(3);
