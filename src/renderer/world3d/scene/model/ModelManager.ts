@@ -11,6 +11,7 @@ import ModelLoader from './loader/ModelLoader.js';
 import { MaterialSpec, ModelSpec, TextureSpec } from './loader/types.js';
 import SceneLight from '../light/SceneLight.js';
 import ModelAnimator from './ModelAnimator.js';
+import { createAnimator } from './animator-tracks.js';
 import { groupVisible, lookKey, ModelLookInput, texturePathFor } from './look.js';
 
 type ModelResources = {
@@ -89,7 +90,7 @@ class ModelManager {
   async #loadResources(refId: string, path: string) {
     const spec = await this.#loader.loadSpec(path);
 
-    const animator = this.#createAnimator(spec);
+    const animator = createAnimator(spec);
     const geometry = this.#createGeometry(spec);
 
     const resources: ModelResources = {
@@ -260,89 +261,6 @@ class ModelManager {
       resources.lookGeometries.set(key, geometry);
     }
     return geometry;
-  }
-
-  #createAnimator(spec: ModelSpec) {
-    if (spec.loops.length === 0 && spec.sequences.length === 0) {
-      return null;
-    }
-
-    const animator = new ModelAnimator(spec.loops, spec.sequences, spec.skinned ? spec.bones : []);
-
-    const hasTextureWeights =
-      spec.textureWeights.length > 1 ||
-      spec.textureWeights[0]?.weightTrack.sequenceKeys.length > 1 ||
-      spec.textureWeights[0]?.weightTrack.sequenceKeys[0].length > 1 ||
-      spec.textureWeights[0]?.weightTrack.sequenceKeys[0][0] !== 0x7fff;
-
-    if (hasTextureWeights) {
-      for (const [index, textureWeight] of spec.textureWeights.entries()) {
-        animator.registerTrack(
-          { state: 'textureWeights', index },
-          textureWeight.weightTrack,
-          THREE.NumberKeyframeTrack,
-          (value: number) => value / 0x7fff,
-        );
-      }
-    }
-
-    for (const [index, textureTransform] of spec.textureTransforms.entries()) {
-      animator.registerTrack(
-        { state: 'textureTransforms', index, property: 'translation' },
-        textureTransform.translationTrack,
-        THREE.VectorKeyframeTrack,
-      );
-
-      animator.registerTrack(
-        { state: 'textureTransforms', index, property: 'rotation ' },
-        textureTransform.rotationTrack,
-        THREE.QuaternionKeyframeTrack,
-      );
-
-      animator.registerTrack(
-        { state: 'textureTransforms', index, property: 'scaling' },
-        textureTransform.scalingTrack,
-        THREE.VectorKeyframeTrack,
-      );
-    }
-
-    for (const [index, materialColor] of spec.materialColors.entries()) {
-      animator.registerTrack(
-        { state: 'materialColors', index, property: 'color' },
-        materialColor.colorTrack,
-        THREE.ColorKeyframeTrack,
-      );
-
-      animator.registerTrack(
-        { state: 'materialColors', index, property: 'alpha' },
-        materialColor.alphaTrack,
-        THREE.NumberKeyframeTrack,
-        (value: number) => value / 0x7fff,
-      );
-    }
-
-    for (const [index, bone] of spec.bones.entries()) {
-      animator.registerTrack(
-        { state: 'bones', index, property: 'translation' },
-        bone.translationTrack,
-        THREE.VectorKeyframeTrack,
-      );
-
-      animator.registerTrack(
-        { state: 'bones', index, property: 'rotation' },
-        bone.rotationTrack,
-        THREE.QuaternionKeyframeTrack,
-        (value: number) => (value > 0 ? value - 0x7fff : value + 0x7fff) / 0x7fff,
-      );
-
-      animator.registerTrack(
-        { state: 'bones', index, property: 'scale' },
-        bone.scaleTrack,
-        THREE.VectorKeyframeTrack,
-      );
-    }
-
-    return animator;
   }
 }
 
