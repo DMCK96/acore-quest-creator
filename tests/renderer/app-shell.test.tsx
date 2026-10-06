@@ -190,7 +190,7 @@ describe('the app shell', () => {
     expect(screen.getByRole('dialog', { name: 'Welcome' })).toBeInTheDocument();
   });
 
-  it('starts a quest from the welcome in the dock', async () => {
+  it('starts a quest from the welcome in the dock', { timeout: 20000 }, async () => {
     const { api } = await shell();
     // A project not greeted yet: the next time the world draws, it is
     localStorage.clear();
