@@ -81,7 +81,13 @@ function worldChanges(before: WorldLayer, after: WorldLayer): WorldChange[] {
     const was = addedBefore.get(key);
     if (isDeepStrictEqual(was, s)) continue;
     const at = s.placement;
-    out.push({ text: was ? `Moved ${s.name}` : `Placed ${s.name}`, where: { map: s.map, x: at.x, y: at.y, z: at.z, spawn: { kind: s.kind, guid: s.guid } } });
+    // A spawn placed before says what about it changed
+    const what = !was ? `Placed ${s.name}`
+      : !isDeepStrictEqual(was.placement, s.placement) ? `Moved ${s.name}`
+      : was.respawnSecs !== s.respawnSecs ? `Respawn time of ${s.name}`
+      : !isDeepStrictEqual(was.events, s.events) ? `Events of ${s.name}`
+      : `Changed ${s.name}`;
+    out.push({ text: what, where: { map: s.map, x: at.x, y: at.y, z: at.z, spawn: { kind: s.kind, guid: s.guid } } });
   }
   for (const [key, s] of addedBefore) {
     if (addedAfter.has(key)) continue;
