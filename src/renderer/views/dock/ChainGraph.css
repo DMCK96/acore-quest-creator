@@ -1,6 +1,15 @@
 .chain-graph {
   position: absolute;
   inset: 0;
+  /* Sized by the dock, so its own size can decide what fits over the graph */
+  container: chain-graph / size;
+}
+
+/* A small dock: the minimap (200 x 150) would cover the cards and the handles links are dragged from */
+@container chain-graph (max-height: 420px) or (max-width: 640px) {
+  .chain-graph .react-flow__minimap {
+    display: none;
+  }
 }
 
 .react-flow__minimap {
