@@ -492,7 +492,7 @@ export function WorldWorkspace({
       )}
       {editor && project && (
         <div className="modal-backdrop">
-          <EntityEditorHost entities={project.entities} onChange={(next) => project.setEntities(next)} quests={project.quests}
+          <EntityEditorHost entities={project.entities} onChange={(next) => project.setEntities(next)} quests={project.quests} layer={project.layer}
             state={editor} onTab={(tab) => setEditor((was) => (was ? { ...was, tab } : was))} onClose={() => setEditor(null)}
             onDelete={(kind, entry) => project.remove(kind, entry)} />
         </div>

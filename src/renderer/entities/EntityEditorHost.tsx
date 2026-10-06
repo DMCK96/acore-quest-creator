@@ -5,6 +5,9 @@ import type { ProjectQuestUse } from '../state/project-entities';
 import type { AllocKind } from '@shared/ipc';
 import { PanelFrame } from '../modules/ModulePanel';
 import { useApi } from '../state/names';
+import { useGameEvents } from '../state/game-events';
+import { npcSpawnFacts } from '@core/entities/spawn-events';
+import { EMPTY_WORLD, type WorldLayer } from '@core/world/layer';
 import { ItemEditor } from './item/ItemEditor';
 import { NpcEditor } from './npc/NpcEditor';
 import type { ExistingFacts } from './existing-facts';
@@ -44,7 +47,10 @@ export function EntityEditorHost({
   onClose,
   onDelete,
   hasServerData = true,
+  layer = EMPTY_WORLD,
 }: {
+  /** The project's changes to the world: an existing NPC's placed spawns and their own events */
+  layer?: WorldLayer;
   /** Whether the connection names a server data folder, which looks are named from. */
   hasServerData?: boolean;
   /** The project's NPCs, objects and items */
@@ -59,6 +65,7 @@ export function EntityEditorHost({
   onDelete?(kind: 'npc' | 'object' | 'item', entry: number): void | Promise<unknown>;
 }): React.JSX.Element | null {
   const api = useApi();
+  const events = useGameEvents();
   const npc = state.kind === 'npc' ? entities.npcs.find((n) => n.entry === state.entry) : undefined;
   const object = state.kind === 'object' ? entities.objects.find((o) => o.entry === state.entry) : undefined;
   const item = state.kind === 'item' ? entities.items.find((i) => i.entry === state.entry) : undefined;
@@ -169,7 +176,8 @@ export function EntityEditorHost({
       )}
       {npc && (
         <NpcEditor npc={npc} onChange={saveNpc} allocateSpawn={() => allocate('creatureSpawn')} tab={tab} onTab={chooseTab}
-          others={entities.npcs.filter((n) => n.entry !== npc.entry)} hasServerData={hasServerData} quests={questChoices} existing={existing} />
+          others={entities.npcs.filter((n) => n.entry !== npc.entry)} hasServerData={hasServerData} quests={questChoices} existing={existing}
+          events={events} spawnFacts={npcSpawnFacts(npc, layer, existing?.spawnCount ?? 0)} />
       )}
       {object && (
         <ObjectEditor object={object} onChange={saveObject} allocateSpawn={() => allocate('gameobjectSpawn')} allocatePage={() => allocate('page')}

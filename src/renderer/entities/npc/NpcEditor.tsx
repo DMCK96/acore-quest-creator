@@ -1,4 +1,8 @@
 import type { CustomNpc, Spawn } from '@core/entities/model';
+import { npcSpawnFacts } from '@core/entities/spawn-events';
+import { isSpiritNpc } from '@core/entities/visibility';
+import { EMPTY_WORLD } from '@core/world/layer';
+import type { GameEvent } from '../../controls/EventPicker';
 import { FightEditor } from '../../combat/FightEditor';
 import { CreditQuestsProvider } from '../../combat/credit-quests';
 import { NumberField } from '../../scripts/fields';
@@ -24,6 +28,8 @@ export function NpcEditor({
   others,
   quests = [],
   existing,
+  events = [],
+  spawnFacts,
 }: {
   npc: CustomNpc;
   /** Set when the database already has it */
@@ -38,12 +44,19 @@ export function NpcEditor({
   hasServerData?: boolean;
   /** The project's quests a fight's credit can name, those that use the NPC first */
   quests?: readonly { questId: number; title: string }[];
+  /** The game events the database has */
+  events?: readonly GameEvent[];
+  /** How many spawns it has and how many follow events of their own (the host counts the world layer's) */
+  spawnFacts?: { spawns: number; overrides: number };
 }): React.JSX.Element {
+  const facts = spawnFacts ?? npcSpawnFacts(npc, EMPTY_WORLD, existing?.spawnCount ?? 0);
   const credit = { quests, defaultQuest: quests[0]?.questId ?? 0 };
   const fightLocked = existing?.locked.includes('fight') ?? false;
   const name = npc.name.trim() || `NPC ${npc.entry}`;
   const tabs: EditorTab[] = [
-    { id: 'basics', label: 'Basics', render: () => <NpcBasics npc={npc} onChange={onChange} /> },
+    { id: 'basics', label: 'Basics', render: () => (
+      <NpcBasics npc={npc} onChange={onChange} events={events} spawns={facts.spawns} overrides={facts.overrides} spirit={isSpiritNpc(npc)} />
+    ) },
     { id: 'look', label: 'Look & gear', render: () => <NpcLook npc={npc} onChange={onChange} others={others} hasServerData={hasServerData} /> },
     {
       id: 'fight',
@@ -80,7 +93,7 @@ export function NpcEditor({
       label: 'Placement',
       render: () => (
         <SpawnList idPrefix={`npc-${npc.entry}`} ownerKey={{ kind: 'npc', entry: npc.entry }} spawns={npc.spawns} wanders
-          onChange={(spawns: Spawn[]) => onChange({ ...npc, spawns })} allocate={allocateSpawn} />
+          onChange={(spawns: Spawn[]) => onChange({ ...npc, spawns })} allocate={allocateSpawn} eventChoices={events} />
       ),
     });
   }

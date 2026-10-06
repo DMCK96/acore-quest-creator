@@ -213,7 +213,7 @@ export function QuestFlowView({ store }: { store: AppStore }): React.JSX.Element
         />
       )}
       {editor && openPanel !== 'map' && (
-        <EntityEditorHost entities={project?.entities ?? EMPTY_ENTITIES} onChange={(next) => project?.setEntities(next)} quests={project?.quests ?? []}
+        <EntityEditorHost entities={project?.entities ?? EMPTY_ENTITIES} onChange={(next) => project?.setEntities(next)} quests={project?.quests ?? []} layer={project?.layer}
           state={editor} onTab={onEditorTab} onClose={closeEditor} hasServerData={hasServerData}
           onDelete={(kind, entry) => store.getState().deleteEntity(kind, entry)} />
       )}
