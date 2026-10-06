@@ -34,6 +34,12 @@ describe('an existing entity from its rows', () => {
     expect(npcFromRows(1423, grouped, counts)).toMatchObject({ loot: [], origin: { locked: ['loot'] } });
   });
 
+  it('reads who sees the NPC from its flags', () => {
+    const ghost = { ...guardRows, creature_template: [{ ...guardRows.creature_template[0]!, flags_extra: '1024', type_flags: '0' }] };
+    expect(npcFromRows(1423, ghost, counts).seenBy).toBe('dead');
+    expect(npcFromRows(1423, guardRows, counts).seenBy).toBe('living');
+  });
+
   it('an NPC with no model or weapons rows reads as unarmed with no look', () => {
     const bare = npcFromRows(1423, { creature_template: guardRows.creature_template }, counts);
     expect(bare).toMatchObject({ displayId: 0, scale: 1, equipment: { mainHand: 0, offHand: 0, ranged: 0 }, loot: [] });

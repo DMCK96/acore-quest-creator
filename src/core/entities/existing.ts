@@ -4,6 +4,7 @@ import { UnknownColumnError, UnknownTableError, type WorldDb } from '../db/world
 import type { PatchStatement } from '../export/build-patch';
 import { ITEM_SLOT_BLOCKS, itemRow } from './item-columns';
 import { itemFromRows, npcFromRows } from './from-rows';
+import { seenByColumns, seenByOf } from './visibility';
 import {
   existingOnly, NPC_TYPE_VALUE, OBJECT_TYPE_VALUE, RANK_VALUE,
   type CustomItem, type CustomNpc, type CustomObject, type LootRow, type OriginalRows, type Page, type ProjectEntities, type StoredOrigin,
@@ -151,6 +152,8 @@ function npcStatements(out: Statements, npc: CustomNpc, origin: Existing, givers
       HealthModifier: text(n.healthModifier), DamageModifier: text(n.damageModifier), npcflag: text(flags),
       AIName: !fightLocked && !fightIsEmpty(n.fight) ? 'SmartAI' : (original.AIName ?? ''),
       lootid: text(lootId),
+      // Written only when changed: absent on an NPC saved before it could be set, its flags stay as they are
+      ...(n.seenBy && n.seenBy !== seenByOf(original) ? seenByColumns(n.seenBy, original) : {}),
     };
   };
   const asRead = npcFromRows(npc.entry, origin.original, { sharedLoot: origin.sharedLoot, spawnCount: origin.spawnCount });

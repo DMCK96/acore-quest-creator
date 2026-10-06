@@ -35,6 +35,12 @@ describe('compileEntities', () => {
     expect(Number(spawn.rotation2)).toBeCloseTo(1, 5);
     expect(Number(spawn.rotation3)).toBeCloseTo(0, 5);
   });
+  it('writes who sees a new NPC into its flags', () => {
+    const one = (seenBy: 'living' | 'dead' | 'both') => compile({ entities: { npcs: [{ ...npc, seenBy }], objects: [], items: [] } }).inserts.creature_template![0]!;
+    expect(one('dead')).toMatchObject({ flags_extra: '1024', type_flags: '0' });
+    expect(one('both')).toMatchObject({ flags_extra: '0', type_flags: '2' });
+    expect(one('living')).toMatchObject({ flags_extra: '0', type_flags: '0' });
+  });
   it('makes an NPC that gives or takes the quest a quest giver', () => {
     expect(compile({ givers: [12000001] }).inserts.creature_template![0]!.npcflag).toBe('2');
     const flagged = compile({ entities: { npcs: [{ ...npc, gossip: true }], objects: [], items: [] } });
