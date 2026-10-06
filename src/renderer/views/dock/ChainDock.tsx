@@ -6,7 +6,6 @@ import { ChainGraph } from './ChainGraph';
 import { ChainEmpty } from './ChainEmpty';
 import { QuestPicker } from '../QuestPicker';
 import { QuestPreview } from '../QuestPreview';
-import { QuestFlowView } from '../QuestFlowView';
 import { AddExistingDialog } from '../AddExistingDialog';
 import { RotationDialog } from '../RotationDialog';
 import './ChainDock.css';
@@ -100,8 +99,6 @@ function ChainDockInner({ store }: { store: AppStore }): React.JSX.Element {
         <ChainGraph store={store} selectedIds={selectedIds} onSelectedIds={setSelectedIds} onRotation={(id) => void openRotation(id)} />
       </div>
       {screen === 'preview' && <QuestPreview store={store} />}
-      {/* The quest editor, over the dock, until it moves to a modal of its own */}
-      {screen === 'edit' && <QuestFlowView store={store} />}
       {showAddExisting && <AddExistingDialog store={store} center={paneCenter} onClose={() => setShowAddExisting(false)} />}
       {rotationEdit && (
         <RotationDialog

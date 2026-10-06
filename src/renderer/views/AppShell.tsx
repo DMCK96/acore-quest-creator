@@ -11,6 +11,7 @@ import { usePreferences } from '../preferences/usePreferences';
 import { WorldWorkspace } from '../world3d/WorldWorkspace';
 import { projectKey } from '../world3d/welcome-seen';
 import { ShowInWorldProvider, type ShowTarget } from '../world3d/ShowInWorldContext';
+import { QuestEditorModal } from './QuestEditorModal';
 import { ProjectDialog } from './ProjectDialog';
 import { SettingsDialog } from './SettingsDialog';
 import { RecoveryDialog } from './RecoveryDialog';
@@ -147,6 +148,7 @@ export function AppShell({ store }: { store: AppStore }): React.JSX.Element {
           dock={<ChainDock store={store} />}
         />
       </div>
+      <QuestEditorModal store={store} />
       {showProject && <ProjectDialog store={store} onClose={() => setShowProject(false)} />}
       {showSettings && <SettingsDialog store={store} onClose={() => setShowSettings(false)} />}
       <RecoveryDialog store={store} />

@@ -1,7 +1,7 @@
 .quest-flow {
-  position: absolute;
-  inset: 0;
-  z-index: 5;
+  position: relative;
+  flex: 1;
+  min-width: 0;
   display: flex;
   background: var(--bg);
   overflow: hidden;

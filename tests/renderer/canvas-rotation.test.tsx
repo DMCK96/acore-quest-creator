@@ -4,6 +4,7 @@ import { createEvent, fireEvent, render, screen, waitFor, within } from '@testin
 import userEvent from '@testing-library/user-event';
 import { readFileSync } from 'node:fs';
 import { createAppStore } from '../../src/renderer/state/app-store';
+import { QuestEditorModal } from '../../src/renderer/views/QuestEditorModal';
 import { ChainDock } from '../../src/renderer/views/dock/ChainDock';
 import { makeMockApi, okv, errv, sampleOpen, nodeOf } from './mock-api';
 
@@ -41,7 +42,7 @@ async function canvas(over: Record<string, any> = {}) {
   });
   const store = createAppStore(api, { saveDelayMs: 0 });
   await store.getState().connect(form);
-  const view = render(<ChainDock store={store} />);
+  const view = render(<><ChainDock store={store} /><QuestEditorModal store={store} /></>);
   return { api, store, view };
 }
 
