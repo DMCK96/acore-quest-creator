@@ -42,28 +42,40 @@ export async function spawnEventRows(db: RowReader, guids: readonly number[]): P
 
 const describeOf = (row: RawRow | undefined, fallback: string): string => (row?.description ? String(row.description) : fallback);
 
-/** The event a database pool's top-level group follows, with the name of the pool the spawn is in; null when none */
-async function poolEventOf(db: RowReader, guid: number): Promise<{ group: string; event: number } | null> {
-  const [member] = await rowsOrNone(db, 'pool_creature', { guid: String(guid) });
-  if (!member?.pool_entry) return null;
-  const own = String(member.pool_entry);
-  const [template] = await rowsOrNone(db, 'pool_template', { entry: own });
-  let top = own;
-  // A nested group follows its top-level group's event; a few levels is all the server nests
-  for (let i = 0; i < 8; i += 1) {
-    const [mother] = await rowsOrNone(db, 'pool_pool', { pool_id: top });
-    if (!mother?.mother_pool) break;
-    top = String(mother.mother_pool);
+/**
+ * The event each spawn's database pool follows (its top-level group's), with the name of the pool the
+ * spawn is in; spawns in no pool, or in one that follows no event, are left out. Read a level at a time
+ * for every spawn at once, so many spawns cost a few queries.
+ */
+async function poolEventsOf(db: RowReader, guids: readonly number[]): Promise<Map<number, { group: string; event: number }>> {
+  const out = new Map<number, { group: string; event: number }>();
+  if (guids.length === 0) return out;
+  const members = await rowsOrNone(db, 'pool_creature', { guid: guids.map(String) });
+  const ownOf = new Map(members.filter((m) => m.pool_entry).map((m) => [Number(m.guid), String(m.pool_entry)]));
+  const owns = [...new Set(ownOf.values())];
+  if (owns.length === 0) return out;
+  const names = new Map((await rowsOrNone(db, 'pool_template', { entry: owns })).map((t) => [String(t.entry), t]));
+  // Each pool's top-level group: a nested group follows its top-level group's event, and the server nests a few levels at most
+  const topOf = new Map(owns.map((o) => [o, o]));
+  for (let level = 0; level < 8; level += 1) {
+    const tops = [...new Set(topOf.values())];
+    const mothers = new Map((await rowsOrNone(db, 'pool_pool', { pool_id: tops })).filter((m) => m.mother_pool).map((m) => [String(m.pool_id), String(m.mother_pool)]));
+    if (mothers.size === 0) break;
+    for (const [own, top] of topOf) if (mothers.has(top)) topOf.set(own, mothers.get(top)!);
   }
-  const [event] = await rowsOrNone(db, 'game_event_pool', { pool_entry: top });
-  if (!event?.eventEntry) return null;
-  return { group: describeOf(template, `Pool ${own}`), event: Math.abs(Number(event.eventEntry)) };
+  const eventOf = new Map((await rowsOrNone(db, 'game_event_pool', { pool_entry: [...new Set(topOf.values())] })).map((e) => [String(e.pool_entry), Math.abs(Number(e.eventEntry))]));
+  for (const [guid, own] of ownOf) {
+    const event = eventOf.get(topOf.get(own)!);
+    if (event) out.set(guid, { group: describeOf(names.get(own), `Pool ${own}`), event });
+  }
+  return out;
 }
 
 /**
- * What the patch should say about its spawn events: an event the database does not have, and a spawn
- * that follows events of its own while in a group that follows one (the server applies both). `names`
- * gives the project NPCs' names by entry.
+ * What the patch should say about the spawn events it writes: an event the database does not have, and
+ * a spawn that follows events of its own while in a group that follows one (the server applies both).
+ * A group the world layer holds is read from the layer, the rest from the database. `names` gives the
+ * project NPCs' names by entry.
  */
 export async function spawnEventWarnings(
   db: RowReader,
@@ -73,20 +85,23 @@ export async function spawnEventWarnings(
 ): Promise<string[]> {
   const ruled = plan.filter((p): p is PlannedSpawn & { rule: NonNullable<PlannedSpawn['rule']> } => p.rule !== null);
   if (ruled.length === 0) return [];
-  const ids = [...new Set(ruled.flatMap((p) => p.rule.events))].sort((a, b) => a - b);
-  const known = new Map((await rowsOrNone(db, 'game_event', { eventEntry: ids.map(String) })).map((r) => [Number(r.eventEntry), r]));
-  const warnings = ids.filter((id) => !known.has(id)).map((id) => `Event ${id} is not in game_event.`);
-  const eventName = async (id: number): Promise<string> => {
-    const row = known.get(id) ?? (await rowsOrNone(db, 'game_event', { eventEntry: String(id) }))[0];
-    return describeOf(row, `Event ${id}`);
+  const layerGroupOf = (guid: number) => groupsOf(layer).find((g) => g.members.some((m) => m.type === 'spawn' && m.kind === 'npc' && m.guid === guid));
+  const fromLayer = new Map(ruled.map((p) => [p.guid, layerGroupOf(p.guid)] as const).filter(([, g]) => g !== undefined));
+  const pools = await poolEventsOf(db, ruled.map((p) => p.guid).filter((g) => !fromLayer.has(g)));
+  const groupOf = (guid: number): { group: string; event: number } | undefined => {
+    const g = fromLayer.get(guid);
+    if (!g) return pools.get(guid);
+    return !g.removed && g.event ? { group: g.name || `Group ${g.id}`, event: g.event.id } : undefined;
   };
-  const groups = groupsOf(layer).filter((g) => !g.removed && g.event);
+  const ids = [...new Set([...ruled.flatMap((p) => p.rule.events), ...ruled.flatMap((p) => groupOf(p.guid)?.event ?? [])])].sort((a, b) => a - b);
+  const known = new Map((await rowsOrNone(db, 'game_event', { eventEntry: ids.map(String) })).map((r) => [Number(r.eventEntry), r]));
+  const ruledIds = new Set(ruled.flatMap((p) => p.rule.events));
+  const warnings = ids.filter((id) => ruledIds.has(id) && !known.has(id)).map((id) => `Event ${id} is not in game_event.`);
   for (const { guid, entry } of ruled) {
-    const inLayer = groups.find((g) => g.members.some((m) => m.type === 'spawn' && m.kind === 'npc' && m.guid === guid));
-    const found = inLayer ? { group: inLayer.name || `Group ${inLayer.id}`, event: inLayer.event!.id } : await poolEventOf(db, guid);
+    const found = groupOf(guid);
     if (!found) continue;
     const name = names.get(entry) ?? `NPC ${entry}`;
-    warnings.push(`${name} (spawn ${guid}) follows events of its own and is in group ${found.group}, which follows ${await eventName(found.event)}. The server applies both.`);
+    warnings.push(`${name} (spawn ${guid}) follows events of its own and is in group ${found.group}, which follows ${describeOf(known.get(found.event), `Event ${found.event}`)}. The server applies both.`);
   }
   return warnings;
 }

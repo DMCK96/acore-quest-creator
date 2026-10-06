@@ -644,7 +644,7 @@ class SpawnManager {
       const base = { kind, guid, entry: data.entry, name: data.name, own: data.own, added: data.added ?? false, map: data.map, group: data.group ?? null, respawnSecs: data.respawnSecs ?? 300 };
       if (kind === 'creature') {
         const c = data as ViewCreature;
-        return { ...base, pathId: c.pathId ?? 0, wander: c.wander, placement: { x: c.x, y: c.y, z: c.z, orientation: c.orientation, rotation: null }, spawnEvents: c.spawnEvents ?? 'npc' };
+        return { ...base, pathId: c.pathId ?? 0, wander: c.wander, placement: { x: c.x, y: c.y, z: c.z, orientation: c.orientation, rotation: null }, spawnEvents: c.spawnEvents === undefined ? 'npc' : c.spawnEvents };
       }
       const o = data as ViewObject;
       const objectType = o.objectType ?? -1;

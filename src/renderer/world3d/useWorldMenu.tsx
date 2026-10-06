@@ -396,7 +396,7 @@ export function useWorldMenu(deps: WorldMenuDeps): {
       case 'spawnEvents': {
         if (!action.spawns.every(still)) return;
         const read = await api?.gameEvents();
-        const targets = action.spawns.map((s): EventsTarget => ({ ref: refOf(s), name: s.name, events: s.spawnEvents ?? 'npc' }));
+        const targets = action.spawns.map((s): EventsTarget => ({ ref: refOf(s), name: s.name, events: s.spawnEvents === undefined ? 'npc' : s.spawnEvents }));
         setSpawnEvents({ targets, events: read?.ok ? read.value : [] });
         return;
       }

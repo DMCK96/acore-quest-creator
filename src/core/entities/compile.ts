@@ -233,6 +233,9 @@ export function compileEntities(input: {
   add('creature_template_model', sorted(entities.npcs.map((n) => n.entry)).map((e) => ({ CreatureID: text(e), Idx: '0' })));
   add('creature_equip_template', sorted(entities.npcs.map((n) => n.entry)).map((e) => ({ CreatureID: text(e), ID: '1' })));
   add('creature', sorted(creatureGuids).map((g) => ({ guid: text(g) })));
+  // A removed spawn's game events go with it; a current spawn's are the spawn event writer's (spawn-events.ts)
+  const currentGuids = new Set(entities.npcs.flatMap((n) => n.spawns.map((s) => s.guid)));
+  add('game_event_creature', sorted([...creatureGuids].filter((g) => !currentGuids.has(g))).map((g) => ({ guid: text(g) })));
   add('gameobject_template', sorted(entities.objects.map((o) => o.entry)).map((e) => ({ entry: text(e) })));
   add('gameobject', sorted(objectGuids).map((g) => ({ guid: text(g) })));
   add('item_template', sorted(entities.items.map((i) => i.entry)).map((e) => ({ entry: text(e) })));

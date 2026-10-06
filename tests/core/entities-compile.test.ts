@@ -64,4 +64,9 @@ describe('compileEntities', () => {
     expect(out.deletes.creature).toEqual([{ guid: '6000001' }, { guid: '6000009' }]);
     expect(out.deletes.gameobject).toEqual([{ guid: '7000001' }, { guid: '7000009' }]);
   });
+  it('takes away the game events of a removed spawn, and leaves a current spawn\'s to the spawn event writer', () => {
+    const out = compile({ context: { ...EMPTY_ENTITY_CONTEXT,
+      taggedCreatureSpawns: [{ guid: '6000009', Comment: 'AQC q60001 npc12000001' }, { guid: '6000001', Comment: 'AQC q60001 npc12000001' }] } });
+    expect(out.deletes.game_event_creature).toEqual([{ guid: '6000009' }]);
+  });
 });

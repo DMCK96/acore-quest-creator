@@ -6,6 +6,8 @@ import { defaultProjectMeta } from '../../src/main/project/project-file';
 import type { ProjectController } from '../../src/main/project/controller';
 import { EMPTY_ENTITIES, newNpc, newSpawn } from '../../src/core/entities/model';
 import { forkDb } from '../helpers/fixtures';
+import { readOriginalRows } from '../../src/core/entities/existing';
+import { npcFromRows } from '../../src/core/entities/from-rows';
 
 const box = { encrypt: (s: string) => Uint8Array.from(Buffer.from(s)), decrypt: (b: Uint8Array) => Buffer.from(b).toString() };
 async function setup() {
@@ -20,7 +22,7 @@ async function setup() {
   const rec: any = await api.saveProfile({ name: 'w', role: 'world', host: 'h', port: 1, user: 'u', database: 'd', password: 'p' });
   await api.connect(rec.value.id);
   await api.saveProfile({ name: 'd', role: 'dev', host: 'h', port: 1, user: 'u', database: 'dev', password: 'p' });
-  return { api, written, executed, session };
+  return { api, written, executed, session, db };
 }
 const hela = { ...newNpc(12000001), name: 'Hela', displayId: 1, spawns: [newSpawn(6000001)] };
 
@@ -87,6 +89,30 @@ describe('spawn events in the project patch', () => {
     expect(out.ok).toBe(true);
     expect(out.value.sql).toMatch(/INSERT INTO `game_event_creature` \(`eventEntry`, `guid`\) VALUES \(12, 6000001\)/);
     expect(written.get(out.value.revertPath)).toMatch(/DELETE FROM `game_event_creature` WHERE `guid` = 6000001/);
+  });
+
+  it('says on export when an NPC follows an event the database does not have', async () => {
+    const { api } = await setup();
+    await api.putProjectEntities({ ...EMPTY_ENTITIES, npcs: [{ ...hela, events: { mode: 'during' as const, events: [999] } }] });
+    const out: any = await api.exportProject();
+    expect(out.value.warnings).toContain('Event 999 is not in game_event.');
+  });
+
+  it('does not warn about a spawn the patch leaves as the database has it', async () => {
+    const { api, db } = await setup();
+    db.insert('creature_template', { entry: '1423', name: 'Stormwind Guard', minlevel: '55', maxlevel: '56' });
+    db.insert('creature_template_model', { CreatureID: '1423', Idx: '0', CreatureDisplayID: '3167', DisplayScale: '1', Probability: '1' });
+    db.insert('creature', { guid: '80330', id1: '1423', map: '0' });
+    db.insert('game_event', { eventEntry: '12', description: 'Darkmoon Faire' });
+    db.insert('game_event_creature', { eventEntry: '12', guid: '80330' });
+    db.insert('pool_template', { entry: '500', max_limit: '1', description: 'Camp' });
+    db.insert('pool_creature', { guid: '80330', pool_entry: '500', chance: '0', description: 'Camp' });
+    db.insert('game_event_pool', { eventEntry: '12', pool_entry: '500' });
+    const guard = npcFromRows(1423, (await readOriginalRows(db, 'npc', 1423))!, { sharedLoot: 0, spawnCount: 1 });
+    expect(guard.events).toEqual({ mode: 'during', events: [12] });
+    await api.putProjectEntities({ ...EMPTY_ENTITIES, npcs: [{ ...guard, maxLevel: 60 }] });
+    const out: any = await api.exportProject();
+    expect(out.value.warnings).toEqual([]);
   });
 
   it('writes nothing for a new NPC that is always in the world and has no rows', async () => {

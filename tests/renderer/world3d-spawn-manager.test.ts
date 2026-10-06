@@ -600,6 +600,13 @@ describe('the world layer in the view', () => {
     expect(m.info('creature', 99)).toBeNull();
   });
 
+  it('describes a spawn whose own events are always as always, not as following its NPC', async () => {
+    const m = manager({ creatures: [creature(1, 1, { x: 0.5, y: 0.5 })], objects: [], capped: { creatures: false, objects: false } });
+    await m.loadArea(1, 0, box);
+    await m.setWorldLayer({ spawns: [], routes: [], added: [], spawnEvents: [{ guid: 1, entry: 1, name: 'n', map: 0, original: [], current: null }] });
+    expect(m.info('creature', 1)!.spawnEvents).toBeNull();
+  });
+
   it('says which spawn group a drawn spawn is in, as the world layer has the groups', async () => {
     const m = manager({ creatures: [creature(1, 1, { x: 0.5, y: 0.5, group: 7 }), creature(2, 1, { x: 0.5, y: 0.5, group: 8 }), creature(3, 1, { x: 0.5, y: 0.5, group: null })], objects: [object(4, 2, { x: 0.5, y: 0.5, group: 7 })], capped: { creatures: false, objects: false } });
     await m.loadArea(1, 0, box);

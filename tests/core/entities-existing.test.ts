@@ -265,6 +265,17 @@ describe("an existing NPC's spawn events in its rows", () => {
     expect(await existingDrift(db, store(npc))).toEqual([]);
   });
 
+  it('does not count a spawn added or taken away as drift, but does count a spawn\'s events changing', async () => {
+    const db = await fixture();
+    const { readOriginalRows } = await import('../../src/core/entities/existing');
+    const npc = npcFromRows(1423, (await readOriginalRows(db, 'npc', 1423))!, { sharedLoot: 0, spawnCount: 1 });
+    db.insert('creature', { guid: '80331', id1: '1423', map: '0' });
+    db.insert('game_event_creature', { eventEntry: '4', guid: '80331' });
+    expect(await existingDrift(db, store(npc))).toEqual([]);
+    db.insert('game_event_creature', { eventEntry: '7', guid: '80330' });
+    expect(await existingDrift(db, store(npc))).toEqual([{ kind: 'npc', entry: 1423, name: 'Stormwind Guard' }]);
+  });
+
   it('writes no event rows for an NPC exported unedited', () => {
     const { apply } = existingStatements(store(), []);
     expect(apply.some((s) => s.table === 'game_event_creature')).toBe(false);

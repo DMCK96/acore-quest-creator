@@ -295,6 +295,21 @@ export function sameRows(a: readonly Row[], b: readonly RawRow[]): boolean {
  * rows are read again as `readOriginalRows` read them and compared table by table. The Project changes
  * badge and the export's warning both come from here, so they always agree.
  */
+/**
+ * A table's rows then and now, as drift compares them. Spawns coming and going are not the NPC's rows
+ * (the patch does not write them), so the spawn list is not compared, and spawn events only for the
+ * spawns both lists have.
+ */
+function comparable(table: string, was: OriginalRows, now: OriginalRows): [Row[], Row[]] {
+  if (table === 'creature') return [[], []];
+  if (table !== 'game_event_creature') return [was[table] ?? [], (now[table] ?? []) as Row[]];
+  const guidsOf = (rows: OriginalRows) => new Set((rows.creature ?? []).map((r) => r.guid));
+  const before = guidsOf(was);
+  const after = guidsOf(now);
+  const both = (rows: Row[]) => rows.filter((r) => before.has(r.guid ?? null) && after.has(r.guid ?? null));
+  return [both(was[table] ?? []), both((now[table] ?? []) as Row[])];
+}
+
 export async function existingDrift(db: RowReader, store: ProjectEntities): Promise<{ kind: Kind; entry: number; name: string }[]> {
   const edited = existingOnly(store);
   const all = [
@@ -308,7 +323,7 @@ export async function existingDrift(db: RowReader, store: ProjectEntities): Prom
     const was = entity.origin.original;
     const now = await readOriginalRows(db, kind, entity.entry);
     // A project saved before a table was read has none of it, which is not a change
-    const changed = !now || Object.keys(was).some((table) => !sameRows(was[table] ?? [], now[table] ?? []));
+    const changed = !now || Object.keys(was).some((table) => !sameRows(...comparable(table, was, now)));
     if (changed) drifted.push({ kind, entry: entity.entry, name: entity.name || String(entity.entry) });
   }
   return drifted;

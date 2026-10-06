@@ -56,6 +56,22 @@ describe('spawn event warnings', () => {
     ]);
   });
 
+  it('reads the groups of many spawns in a few queries, not some per spawn', async () => {
+    const db = forkDb();
+    db.insert('game_event', { eventEntry: '12', description: 'Darkmoon Faire' });
+    db.insert('pool_template', { entry: '500', max_limit: '1', description: 'Camp' });
+    db.insert('game_event_pool', { eventEntry: '12', pool_entry: '500' });
+    const plan = Array.from({ length: 50 }, (_, i) => {
+      db.insert('pool_creature', { guid: String(1000 + i), pool_entry: '500', chance: '0', description: 'Camp' });
+      return { guid: 1000 + i, entry: 1423, rule: { mode: 'during' as const, events: [12] } };
+    });
+    let reads = 0;
+    const counting = { selectRows: (table: string, where: any) => { reads += 1; return db.selectRows(table, where); } };
+    const warnings = await spawnEventWarnings(counting, plan, EMPTY_WORLD, new Map([[1423, 'Guard']]));
+    expect(warnings).toHaveLength(50);
+    expect(reads).toBeLessThanOrEqual(8);
+  });
+
   it('says nothing for an always rule or a spawn in no group', async () => {
     const db = forkDb();
     expect(await spawnEventWarnings(db, [{ guid: 1, entry: 1, rule: null }], EMPTY_WORLD, new Map())).toEqual([]);

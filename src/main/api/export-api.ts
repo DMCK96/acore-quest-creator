@@ -90,11 +90,12 @@ export function createExportApi(s: Services): ExportApi {
           throw fail('BAD_REQUEST', 'There are no NPCs, objects, items or world changes to export.');
         }
         await guardProject(live);
-        const { apply, revert, schema, lootWarnings } = await projectPatch(live);
+        const { apply, revert, schema, lootWarnings, eventWarnings } = await projectPatch(live);
         // Applying writes the rows as edited here, so whatever the database changed since is overwritten
         const warnings = [
           ...(await existingDrift(live.db, store)).map((e) => `"${e.name}" changed in the database since it was edited here; applying the patch overwrites that.`),
           ...lootWarnings,
+          ...eventWarnings,
         ];
         const date = patchDate(deps.now());
         const sql = renderPatch(apply, schema, { toolVersion: TOOL_VERSION, date, label: 'Project changes' });

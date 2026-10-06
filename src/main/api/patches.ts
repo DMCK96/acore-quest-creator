@@ -97,7 +97,7 @@ export function createPatches(ctx: ApiContext) {
    * ones over their own rows, then the world layer's edits, with a revert that deletes what the first
    * part writes, puts the existing ones' original rows back and puts the world back.
    */
-  async function projectPatch(live: Session): Promise<{ apply: PatchStatement[]; revert: PatchStatement[]; schema: SchemaInfo; warnings: string[]; lootWarnings: string[] }> {
+  async function projectPatch(live: Session): Promise<{ apply: PatchStatement[]; revert: PatchStatement[]; schema: SchemaInfo; warnings: string[]; lootWarnings: string[]; eventWarnings: string[] }> {
     const store = projectEntities();
     const layer: WorldLayer = deps.session.world.get();
     const all = quests.list();
@@ -137,7 +137,9 @@ export function createPatches(ctx: ApiContext) {
     for (const npc of store.npcs) if (npc.origin.kind === 'existing') dbGuids.set(npc.entry, await npcSpawnGuids(live.db, npc.entry));
     const eventPlan = spawnEventPlan({ npcs: store.npcs, layer, dbGuids });
     const events = spawnEventStatements(eventPlan, await spawnEventRows(live.db, eventPlan.map((p) => p.guid)));
-    const eventWarnings = await spawnEventWarnings(live.db, eventPlan, layer, new Map(store.npcs.map((n) => [n.entry, n.name || `NPC ${n.entry}`])));
+    // Only the spawns the patch writes are worth a word: the rest stay as the database has them
+    const eventsWritten = new Set(events.apply.flatMap((st) => (st.kind === 'delete' ? [Number(st.key.guid)] : [])));
+    const eventWarnings = await spawnEventWarnings(live.db, eventPlan.filter((p) => eventsWritten.has(p.guid)), layer, new Map(store.npcs.map((n) => [n.entry, n.name || `NPC ${n.entry}`])));
     const of = (list: readonly PatchStatement[], kind: PatchStatement['kind']) => list.filter((st) => st.kind === kind);
     // Deletes first; the entities before the SmartAI rows that act on them; the world's edits last
     const apply = [
@@ -164,7 +166,7 @@ export function createPatches(ctx: ApiContext) {
     revert.push(...existing.revert);
     revert.push(...world.revert);
     revert.push(...events.revert);
-    return { apply, revert, schema, warnings: [...compiledEntities.warnings, ...scripts.compiled.warnings, ...loot.warnings, ...eventWarnings], lootWarnings: loot.warnings };
+    return { apply, revert, schema, warnings: [...compiledEntities.warnings, ...scripts.compiled.warnings, ...loot.warnings, ...eventWarnings], lootWarnings: loot.warnings, eventWarnings };
   }
 
   /**
