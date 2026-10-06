@@ -14,7 +14,7 @@ After you connect, the app opens on the **World**. Your quests are in the **Ques
 - **New quest** makes a quest from scratch and opens it straight away.
 - **Add existing quest** searches your world database by name or ID. Picking one brings in its **whole chain**: the quest you picked and every quest chained to it.
 
-Choose a card to preview the quest in a panel on the right: its giver, objectives, dialogue, rewards and more at a glance. The open quest's card lists its NPCs and objects (givers, enders and objectives); the one you selected in the World, or last went to, is marked. From the preview, **Edit quest** opens it, **Remove from canvas** takes it off the canvas (your database is not touched) and **Close preview** hides the panel.
+Choose a card to preview the quest in a panel on the right: its giver, objectives, dialogue, rewards and more at a glance. The open quest's card lists its NPCs and objects (givers, enders and objectives); the one you selected in the World, or last went to, is marked. Drag one of them onto the World to place a spawn of it where you drop it, facing you; it is one step you can undo, and an NPC or object can have more than one spawn. From the preview, **Edit quest** opens it, **Remove from canvas** takes it off the canvas (your database is not touched) and **Close preview** hides the panel.
 
 ## Link quests
 

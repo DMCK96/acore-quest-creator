@@ -17,6 +17,7 @@ import type { CanvasNode } from '@shared/ipc';
 import { QuestNodeCard } from '../QuestNodeCard';
 import { toFlowEdges, type LinkEdge } from '../canvas-edges';
 import { DRAG_LINK } from './chain-link';
+import { encodePart } from '../../world3d/chain-drop';
 import { ChainLinkMenu } from './ChainLinkMenu';
 import { questParts, questRoles } from '@core/modules/quest-roles';
 import { giverName } from '@core/modules/summaries';
@@ -39,7 +40,7 @@ interface QuestNodeData extends Record<string, unknown> {
   onAddChain: () => void;
   rotation: { name: string; daily: boolean } | null;
   onRotation: () => void;
-  parts?: { key: string; name: string; focused: boolean }[];
+  parts?: { key: string; name: string; focused: boolean; drag: string }[];
 }
 
 /** A quest's card between its handles: a link is dragged out of the right one into another's left */
@@ -161,12 +162,13 @@ export function ChainGraph({
         const pool = poolOf.get(n.questId);
         if (pool) onRotation(pool.id);
       },
-      // The open quest's card lists its NPCs and objects, the one in focus marked
+      // The open quest's card lists its NPCs and objects, the one in focus marked; each drags onto the 3D view
       parts: open?.questId === n.questId
         ? openParts.map((t) => ({
             key: `${t.kind}:${t.id}`,
             name: giverName(t, names, entities),
             focused: focus.questId === n.questId && focus.part?.kind === t.kind && focus.part.entry === t.id,
+            drag: encodePart({ kind: t.kind, entry: t.id }),
           }))
         : undefined,
     } satisfies QuestNodeData,

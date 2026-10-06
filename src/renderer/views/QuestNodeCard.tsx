@@ -1,5 +1,6 @@
 import { useRef, useState } from 'react';
 import type { CanvasNode, StartBadge } from '@shared/ipc';
+import { CHAIN_DRAG_TYPE } from '../world3d/chain-drop';
 import './QuestNodeCard.css';
 
 /** Roughly the width a node occupies on the canvas; used to lay out new nodes. */
@@ -38,8 +39,11 @@ export function QuestNodeCard({
 }: {
   node: CanvasNode;
   selected: boolean;
-  /** The NPCs and objects with a part in the quest, listed on the open quest's card; the focused one is marked */
-  parts?: { key: string; name: string; focused: boolean }[];
+  /**
+   * The NPCs and objects with a part in the quest, listed on the open quest's card; the focused one is
+   * marked. Each is dragged out (onto the 3D view, to place it) as its `drag` data.
+   */
+  parts?: { key: string; name: string; focused: boolean; drag: string }[];
   /** The quest rotation this quest is in, if any */
   rotation?: { name: string; daily: boolean } | null;
   /** The rotation tag's click: open the rotation */
@@ -126,7 +130,18 @@ export function QuestNodeCard({
       {parts && parts.length > 0 && (
         <ul className="quest-card__parts" aria-label="Parts">
           {parts.map((part) => (
-            <li key={part.key} className="quest-card__part" aria-current={part.focused ? 'true' : undefined}>
+            <li
+              key={part.key}
+              // nodrag: dragging the row carries the part out, and leaves the card where it is
+              className="quest-card__part nodrag"
+              aria-current={part.focused ? 'true' : undefined}
+              title="Drag onto the 3D view to place it"
+              draggable
+              onDragStart={(e) => {
+                e.dataTransfer.setData(CHAIN_DRAG_TYPE, part.drag);
+                e.dataTransfer.effectAllowed = 'copy';
+              }}
+            >
               {part.name}
             </li>
           ))}

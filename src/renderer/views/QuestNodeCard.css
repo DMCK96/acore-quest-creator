@@ -74,6 +74,10 @@
   white-space: nowrap;
 }
 
+.quest-card__part[draggable='true'] {
+  cursor: grab;
+}
+
 .quest-card__part[aria-current='true'] {
   background: var(--accent-soft);
   color: var(--accent);

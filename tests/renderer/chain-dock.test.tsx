@@ -1,9 +1,10 @@
 // @vitest-environment jsdom
 import { describe, it, expect, vi } from 'vitest';
-import { render, screen, waitFor, within } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { createAppStore } from '../../src/renderer/state/app-store';
 import { ChainDock } from '../../src/renderer/views/dock/ChainDock';
+import { CHAIN_DRAG_TYPE, encodePart } from '../../src/renderer/world3d/chain-drop';
 import { makeMockApi, okv, sampleOpen, nodeOf } from './mock-api';
 
 const drift = { missingTables: [], unregistered: [], missingColumns: [], typeMismatches: [] };
@@ -65,6 +66,21 @@ describe('the chain dock', () => {
     store.getState().setFocus(60001, { kind: 'creature', entry: 1423 });
     await waitFor(() => expect(giver).toHaveAttribute('aria-current', 'true'));
     expect(ender).not.toHaveAttribute('aria-current');
+  });
+
+  it('lets each NPC or object row be dragged out as a copy, without dragging the card', async () => {
+    const values = { 'quest_template.LogTitle': 'Wolves', creature_queststarter: [{ id: 1423 }], gameobject_questender: [{ id: 77 }] };
+    const { store } = await chainDock({ openQuest: async (id: number) => okv(sampleOpen({ questId: id, aggregate: { ...sampleOpen().aggregate, values } })) });
+    const card = (await screen.findAllByTestId('quest-node'))[0]!;
+    await store.getState().openQuest(60001);
+    const parts = await within(card).findByRole('list', { name: 'Parts' });
+    const ender = within(parts).getByText('Object #77').closest('li')!;
+    expect(ender).toHaveAttribute('draggable', 'true');
+    expect(ender).toHaveClass('nodrag');
+    const dataTransfer = { setData: vi.fn(), effectAllowed: 'all' };
+    fireEvent.dragStart(ender, { dataTransfer });
+    expect(dataTransfer.setData).toHaveBeenCalledWith(CHAIN_DRAG_TYPE, encodePart({ kind: 'gameobject', entry: 77 }));
+    expect(dataTransfer.effectAllowed).toBe('copy');
   });
 
   it('places an added chain at the middle of the graph, not of the window', async () => {

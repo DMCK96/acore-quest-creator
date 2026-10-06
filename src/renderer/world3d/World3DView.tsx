@@ -18,6 +18,7 @@ import { EMPTY_ENTITIES } from '@core/entities/model';
 import { PlaceDialog, type Chosen } from './PlaceDialog';
 import { OrbMark } from '../components/OrbMark';
 import type { PlaceRequest } from './placing';
+import { CHAIN_DRAG_TYPE, dropToRequest } from './chain-drop';
 import { useWorldMenu } from './useWorldMenu';
 import type { QuestMenuInfo } from './menu/model';
 import type { Role, RoleTarget } from '@core/modules/quest-roles';
@@ -42,6 +43,7 @@ const CONTROLS: [string, string][] = [
   ['O', 'Falloff: nearby route points follow a move'],
   ['[ / ]', 'Falloff radius'],
   ['Place…', 'Choose an existing NPC or object, then click the ground'],
+  ['Drag from the Quests dock', 'Drop the open quest’s NPC or object on the ground to place it'],
   ['Delete', 'Remove the selected route points'],
   ['Ctrl+Z / Ctrl+Y', 'Undo and redo'],
   ['Right-click', 'Menu: place, copy, paste, paths, quest'],
@@ -324,6 +326,10 @@ function WorldStage({
   mapRef.current = map;
   // Edits as the view sends them, set by the world that is up; paths started here, which the database lacks
   const sendRef = useRef<(change: SpawnEdit) => Promise<boolean>>(async () => false);
+  // Places a spawn in the world that is up; a click while placing and a part dropped from the chain alike
+  const placeRef = useRef<(request: PlaceRequest) => Promise<void>>(async () => {});
+  /** One placement is one step of the project's history */
+  const placeStep = (request: PlaceRequest): void => void runStepRef.current(() => placeRef.current(request));
   const newPaths = useRef(new Set<number>());
   /** A path the database does not have: started here, or found in the layer made from nothing (before a restart) */
   const isNewPath = (pathId: number): boolean => newPaths.current.has(pathId) || layerRef.current.routes.some((r) => r.pathId === pathId && r.original.length === 0);
@@ -479,6 +485,7 @@ function WorldStage({
       return kept;
     };
     sendRef.current = send;
+    placeRef.current = place;
     const beforeRouteEdit = (spawn: SpawnRef, pathId: number): Promise<boolean> => {
       if (spawn.own) return Promise.resolve(true);
       let answer = answers.get(pathId);
@@ -538,7 +545,7 @@ function WorldStage({
             floorZ,
             beforeRouteEdit,
             onNotice: (message) => live && setNote(message),
-            onPlace: (request) => void runStepRef.current(() => place(request)),
+            onPlace: (request) => placeStep(request),
             // A gesture waiting for the floor holds undo, so Ctrl+Z takes it back rather than the step before
             onGestureStart: () => holdRef.current(),
             onPlaceEnd: () => live && setPlacing(null),
@@ -695,6 +702,23 @@ function WorldStage({
   const chosen = typeof layers.events === 'number' && !nearbyEvents.some((e) => e.id === layers.events) ? [{ id: layers.events, name: layers.eventName ?? '' }] : [];
   const eventChoices = [...nearbyEvents, ...chosen];
 
+  /** The ground under a drag of a quest's part from the chain, or null when it is not one or is over the sky */
+  const dropGround = (event: React.DragEvent): { x: number; y: number; z: number } | null =>
+    Array.from(event.dataTransfer.types).includes(CHAIN_DRAG_TYPE) ? (world.current?.groundAt({ x: event.clientX, y: event.clientY }) ?? null) : null;
+  const onDragOver = (event: React.DragEvent): void => {
+    if (!dropGround(event)) return;
+    event.preventDefault();
+    event.dataTransfer.dropEffect = 'copy';
+  };
+  // A part dropped on the ground is placed there, as a click while placing would
+  const onDrop = (event: React.DragEvent): void => {
+    const current = world.current;
+    const request = current && dropToRequest(event.dataTransfer.getData(CHAIN_DRAG_TYPE), dropGround(event), current.camera().position);
+    if (!request) return;
+    event.preventDefault();
+    placeStep(request);
+  };
+
   /** A click on a tool leaves the keyboard with the view, so Tab, G and R still reach it */
   const keepFocus = (event: React.MouseEvent): void => event.preventDefault();
 
@@ -754,7 +778,7 @@ function WorldStage({
 
   return (
     <div className="world3d" aria-label="3D view">
-      <div ref={container} className="world3d__stage" />
+      <div ref={container} className="world3d__stage" onDragOver={onDragOver} onDrop={onDrop} />
       {showArea && area && <p className="world3d__area">{area}</p>}
       {missing.length > 0 && (
         <p className="world3d__missing" title={missing.join('\n')}>
