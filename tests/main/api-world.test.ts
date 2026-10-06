@@ -358,6 +358,15 @@ describe('movement through the API', () => {
     expect(back.value.spawnEvents).toEqual([]);
   });
 
+  it('Same as the NPC on a spawn with no events of its own changes nothing: no undo step, no save', async () => {
+    const { api, session } = await setup(world);
+    const steps = ((await api.historyList()) as any).value.steps.length;
+    session.markSaved('C:\\p.json');
+    await api.worldSetSpawnEvents(80330, 'npc');
+    expect(((await api.historyList()) as any).value.steps.length).toBe(steps);
+    expect(session.dirty()).toBe(false);
+  });
+
   it("Same as the NPC takes a spawn's own events away", async () => {
     const { api } = await setup(world);
     await api.worldSetSpawnEvents(80330, null);

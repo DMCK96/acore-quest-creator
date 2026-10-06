@@ -344,6 +344,8 @@ export function setRespawn(layer: WorldLayer, edit: Omit<WorldRespawnEdit, 'curr
  */
 export function setSpawnEvents(layer: WorldLayer, edit: Omit<WorldEventEdit, 'current'>, to: SpawnEvents): WorldLayer {
   if (isAdded(layer, 'creature', edit.guid)) {
+    // Nothing of its own to take away is no change at all
+    if (to === 'npc' && layer.added.every((a) => a.kind !== 'creature' || a.guid !== edit.guid || a.events === undefined)) return layer;
     const added = layer.added.map((a) => {
       if (a.kind !== 'creature' || a.guid !== edit.guid) return a;
       const { events: _, ...rest } = a;
@@ -354,7 +356,7 @@ export function setSpawnEvents(layer: WorldLayer, edit: Omit<WorldEventEdit, 'cu
   const all = spawnEventsOf(layer);
   const known = all.find((e) => e.guid === edit.guid);
   const rest = all.filter((e) => e !== known);
-  if (to === 'npc') return { ...layer, spawnEvents: rest };
+  if (to === 'npc') return known ? { ...layer, spawnEvents: rest } : layer;
   const entry: WorldEventEdit = known ? { ...known, current: to } : { ...edit, current: to };
   return { ...layer, spawnEvents: known ? all.map((e) => (e === known ? entry : e)) : [...all, entry] };
 }
