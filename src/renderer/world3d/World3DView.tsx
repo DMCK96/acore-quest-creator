@@ -18,7 +18,7 @@ import { EMPTY_ENTITIES } from '@core/entities/model';
 import { PlaceDialog, type Chosen } from './PlaceDialog';
 import { OrbMark } from '../components/OrbMark';
 import type { PlaceRequest } from './placing';
-import { CHAIN_DRAG_TYPE, dropToRequest } from './chain-drop';
+import { CHAIN_DRAG_TYPE, dropToRequest, groundOverDrag } from './chain-drop';
 import { useWorldMenu } from './useWorldMenu';
 import type { QuestMenuInfo } from './menu/model';
 import type { Role, RoleTarget } from '@core/modules/quest-roles';
@@ -136,6 +136,8 @@ interface ViewProps {
   onArea?(name: string | null): void;
   /** Told where the camera rests (the point it looks at) once it has moved more than a yard. */
   onPlaceChange?(place: { x: number; y: number; z: number }): void;
+  /** Told each time the author moves the camera themselves, as it happens */
+  onCameraInput?(): void;
   /** The open quest, for the right-click menu's quest items; none leaves them out. */
   quest?: QuestMenuInfo;
   /** The quests of the open quest's chain, for showing the chain's spawns. */
@@ -235,7 +237,7 @@ class Contained extends Component<{ children: ReactNode }, { failure: string | n
 }
 
 function WorldStage({
-  map, start, hasClient, own, onSelect, onOwnEdit, focus, showArea = true, onArea, onPlaceChange, quest, chainIds, onQuestRole, onNewQuest, onShowSpawns,
+  map, start, hasClient, own, onSelect, onOwnEdit, focus, showArea = true, onArea, onPlaceChange, onCameraInput, quest, chainIds, onQuestRole, onNewQuest, onShowSpawns,
   onCreateEntity, onEditEntity, onSetLootable, onGoToSpawn, placeRequest, patrolRequest, onRequestEnd, markers, onMarkerMove, markerFocus,
 }: ViewProps): React.JSX.Element {
   const container = useRef<HTMLDivElement>(null);
@@ -260,6 +262,8 @@ function WorldStage({
   onAreaRef.current = onArea;
   const onPlaceChangeRef = useRef(onPlaceChange);
   onPlaceChangeRef.current = onPlaceChange;
+  const onCameraInputRef = useRef(onCameraInput);
+  onCameraInputRef.current = onCameraInput;
   // A spawn to bring into view; kept until the world that is to show it is there (a map switch builds a new one)
   const pendingFocus = useRef<FocusTarget | null>(null);
   // The world layer as the main process last gave it, drawn over the database
@@ -612,6 +616,7 @@ function WorldStage({
             onShortcut: (code) => live && menuRef.current.shortcut(code),
             onSelection: (next) => live && setSummary(next),
             onTool: (tool) => live && setLayers((l) => ({ ...l, tool })),
+            onCameraInput: () => live && onCameraInputRef.current?.(),
             onFalloff: (falloff) => live && setLayers((l) => ({ ...l, falloff: falloff.on, falloffRadius: falloff.radius })),
             floorZ,
             beforeRouteEdit,
@@ -847,18 +852,21 @@ function WorldStage({
   const chosen = typeof layers.events === 'number' && !nearbyEvents.some((e) => e.id === layers.events) ? [{ id: layers.events, name: layers.eventName ?? '' }] : [];
   const eventChoices = [...nearbyEvents, ...chosen];
 
-  /** The ground under a drag of a quest's part from the chain, or null when it is not one or is over the sky */
-  const dropGround = (event: React.DragEvent): { x: number; y: number; z: number } | null =>
-    Array.from(event.dataTransfer.types).includes(CHAIN_DRAG_TYPE) ? (world.current?.groundAt({ x: event.clientX, y: event.clientY }) ?? null) : null;
+  /** Whether a drag over the view carries a quest's part from the chain */
+  const carriesPart = (event: React.DragEvent): boolean => Array.from(event.dataTransfer.types).includes(CHAIN_DRAG_TYPE);
+  // The ground under the drag, asked for at most once a frame: a drop over the sky is refused as it moves
+  const [dragGround] = useState(() => groundOverDrag((client) => world.current?.groundAt(client) ?? null));
   const onDragOver = (event: React.DragEvent): void => {
-    if (!dropGround(event)) return;
+    if (!carriesPart(event) || !dragGround.at({ x: event.clientX, y: event.clientY })) return;
     event.preventDefault();
     event.dataTransfer.dropEffect = 'copy';
   };
-  // A part dropped on the ground is placed there, as a click while placing would
+  // A part dropped on the ground is placed there, as a click while placing would; where it fell is asked afresh
   const onDrop = (event: React.DragEvent): void => {
+    dragGround.reset();
     const current = world.current;
-    const request = current && dropToRequest(event.dataTransfer.getData(CHAIN_DRAG_TYPE), dropGround(event), current.camera().position);
+    const ground = current && carriesPart(event) ? current.groundAt({ x: event.clientX, y: event.clientY }) : null;
+    const request = current && dropToRequest(event.dataTransfer.getData(CHAIN_DRAG_TYPE), ground, current.camera().position);
     if (!request) return;
     event.preventDefault();
     placeStep(request);
@@ -923,7 +931,7 @@ function WorldStage({
 
   return (
     <div className="world3d" aria-label="3D view">
-      <div ref={container} className="world3d__stage" onDragOver={onDragOver} onDrop={onDrop} />
+      <div ref={container} className="world3d__stage" onDragOver={onDragOver} onDragLeave={() => dragGround.reset()} onDrop={onDrop} />
       {showArea && area && <p className="world3d__area">{area}</p>}
       {missing.length > 0 && (
         <p className="world3d__missing" title={missing.join('\n')}>

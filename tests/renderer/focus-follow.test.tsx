@@ -52,12 +52,15 @@ describe('useFocusFollow', () => {
     expect(p.note).not.toHaveBeenCalled();
   });
 
+  // The view hidden and shown again runs the effect again with the same focus: it is not followed twice
   it('handles each nonce once', async () => {
     const p = base();
-    const { rerender } = renderHook(() => useFocusFollow(p));
+    const { rerender } = renderHook((shown: boolean) => useFocusFollow({ ...p, shown }), { initialProps: true });
     await flush();
-    rerender();
+    rerender(false);
+    rerender(true);
     await flush();
+    expect(p.placeOf).toHaveBeenCalledTimes(1);
     expect(p.jump).toHaveBeenCalledTimes(1);
   });
 

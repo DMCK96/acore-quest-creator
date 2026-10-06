@@ -34,3 +34,39 @@ export function dropToRequest(data: string, ground: { x: number; y: number; z: n
   const kind = part.kind === 'gameobject' ? 'object' : 'creature';
   return { target: { kind, entry: part.entry }, at: placementAt(ground, camera, kind) };
 }
+
+type Point = { x: number; y: number; z: number };
+
+/** How far, in pixels, the pointer may move in a drag before the ground under it is asked for again */
+const DRAG_SLOP_PX = 4;
+
+/**
+ * The ground under a drag over the view, asked for at most once a frame and only once the pointer has
+ * moved a few pixels: a drag-over comes many times a frame, and each ask casts a ray through the world.
+ * `reset` forgets it, once the drag has left or dropped.
+ */
+export function groundOverDrag(
+  groundAt: (client: { x: number; y: number }) => Point | null,
+  nextFrame: (run: () => void) => void = requestAnimationFrame,
+): { at(client: { x: number; y: number }): Point | null; reset(): void } {
+  let last: { x: number; y: number; ground: Point | null } | null = null;
+  // Asked already this frame
+  let asked = false;
+  return {
+    at(client) {
+      const moved = !last || Math.hypot(client.x - last.x, client.y - last.y) > DRAG_SLOP_PX;
+      if (moved && !asked) {
+        last = { x: client.x, y: client.y, ground: groundAt(client) };
+        asked = true;
+        nextFrame(() => {
+          asked = false;
+        });
+      }
+      return last!.ground;
+    },
+    reset() {
+      last = null;
+      asked = false;
+    },
+  };
+}

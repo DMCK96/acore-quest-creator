@@ -64,6 +64,8 @@ export interface World3DOptions {
   onSelection?(summary: SelectionSummary): void;
   /** Told when Tab flipped between Camera and Select. */
   onTool?(tool: Tool): void;
+  /** Told each time the author moves the camera (a drag, the wheel, the flying keys), as it happens. */
+  onCameraInput?(): void;
   /** Told when falloff was switched or its radius changed by a key or the wheel. */
   onFalloff?(falloff: Falloff): void;
   /** Told when a new path starts or stops being drawn, and how many points it has. */
@@ -389,6 +391,7 @@ export function createWorld3D(options: World3DOptions): World3D {
     },
     blocked: () => editor.blocked || markers.blocked,
     onContextClick: (x, y, client) => contextClick(x, y, client),
+    onCameraInput: () => options.onCameraInput?.(),
   });
   const solid = (): THREE.Object3D[] => manager.root.children.filter(clickable);
   // The open quest's positions: a marker let go after a drag along the ground lands on the server's floor there

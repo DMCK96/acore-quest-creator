@@ -61,9 +61,13 @@ type WorldControlsOptions = {
    * was over the view: asks for the menu, at a place on screen and where it is in the window
    */
   onContextClick?(ndcX: number, ndcY: number, client: { x: number; y: number }): void;
+  /** Told each time the author moves the camera (a drag, the wheel, the flying keys), as it happens */
+  onCameraInput?(): void;
 };
 
 const UP = new THREE.Vector3(0, 0, 1);
+/** The keys that fly or turn the camera */
+const FLY_KEYS = ['KeyW', 'KeyA', 'KeyS', 'KeyD', 'KeyQ', 'KeyE', 'KeyX', 'Space', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'];
 
 class WorldControls {
   /** Where the map streams from: under the camera */
@@ -81,6 +85,7 @@ class WorldControls {
   readonly #onModeChange: (tool: Tool) => void;
   readonly #blocked: () => boolean;
   readonly #onContextClick: (ndcX: number, ndcY: number, client: { x: number; y: number }) => void;
+  readonly #onCameraInput: () => void;
   /** Where the pointer last was over the view, for the menu key */
   #lastPointer: { x: number; y: number } | null = null;
 
@@ -106,6 +111,7 @@ class WorldControls {
     this.#onModeChange = options.onModeChange ?? (() => {});
     this.#blocked = options.blocked ?? (() => false);
     this.#onContextClick = options.onContextClick ?? (() => {});
+    this.#onCameraInput = options.onCameraInput ?? (() => {});
 
     // Focusable, so keys can be kept to the view
     if (!dom.hasAttribute('tabindex')) dom.tabIndex = 0;
@@ -193,6 +199,8 @@ class WorldControls {
   update(delta: number): void {
     if (this.#keys.size === 0 || !this.#hasFocus()) return;
     const held = (...codes: string[]) => codes.some((code) => this.#keys.has(code));
+    if (!held(...FLY_KEYS)) return;
+    this.#onCameraInput();
     const speed = FLY_SPEED * (held('ShiftLeft', 'ShiftRight') ? FAST : 1) * delta;
 
     const turn = (held('KeyQ') ? 1 : 0) - (held('KeyE') ? 1 : 0);
@@ -286,8 +294,13 @@ class WorldControls {
     const dy = event.clientY - drag.y;
     drag.x = event.clientX;
     drag.y = event.clientY;
-    if (drag.box) this.#showMarquee(drag.startX, drag.startY, event.clientX, event.clientY);
-    else if (drag.button === 2) this.look(dx, dy);
+    if (drag.box) {
+      this.#showMarquee(drag.startX, drag.startY, event.clientX, event.clientY);
+      return;
+    }
+    if (dx === 0 && dy === 0) return;
+    if (drag.button <= 2) this.#onCameraInput();
+    if (drag.button === 2) this.look(dx, dy);
     else if (drag.button === 0) this.orbit(dx, dy);
     else if (drag.button === 1) this.pan(dx, dy, drag.panScale);
   };
@@ -346,6 +359,7 @@ class WorldControls {
     if (this.#onWheelClaim(event.deltaY)) return;
     const [x, y] = this.#ndc(event);
     const step = Math.max(MIN_STEP, this.#distanceAt(x, y) * WHEEL_SHARE) * (event.shiftKey ? FAST : 1);
+    this.#onCameraInput();
     this.dolly((-event.deltaY / 100) * step);
   };
 

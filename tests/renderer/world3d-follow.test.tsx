@@ -7,7 +7,7 @@ import { makeMockApi, okv } from './mock-api';
 import { clearClipboard } from '../../src/renderer/world3d/clipboard';
 import { EMPTY_ENTITIES } from '../../src/core/entities/model';
 import { markWelcomeSeen } from '../../src/renderer/world3d/welcome-seen';
-import { readLastPlace, writeLastPlace } from '../../src/renderer/world3d/last-place';
+import { writeLastPlace } from '../../src/renderer/world3d/last-place';
 
 const worlds = vi.hoisted(() => [] as any[]);
 vi.mock('../../src/renderer/world3d/world3d', () => ({
@@ -81,12 +81,11 @@ describe('following the focus', () => {
     await waitFor(() => expect(worlds.at(-1).options.map).toBe(1));
   });
 
-  it('leaves the camera where the author moved it after the focus was set', { timeout: 8000 }, async () => {
+  it('leaves the camera where the author moved it after the focus was set', async () => {
     const view = mount({ now: () => 20 });
     await waitFor(() => expect(worlds).toHaveLength(1));
-    // The author flies the camera at moment 20: the view reports where it rests on its next check
-    worlds[0].target = () => ({ x: 40, y: 2, z: 3 });
-    await waitFor(() => expect(readLastPlace().x).toBe(40), { timeout: 3000 });
+    // The author flies the camera at moment 20
+    worlds[0].options.onCameraInput();
     view.rerender({ focus: quest() });
     await new Promise((r) => setTimeout(r, 50));
     expect(api.questSpawnList).not.toHaveBeenCalled();
@@ -94,15 +93,30 @@ describe('following the focus', () => {
     expect(screen.getByRole('button', { name: 'Back' })).toHaveProperty('disabled', true);
   });
 
-  it('still selects a focused NPC in view when the author moved the camera, and does not move it', { timeout: 8000 }, async () => {
+  it('still selects a focused NPC in view when the author moved the camera, and does not move it', async () => {
     const near = { ...giver, map: 0, x: 100, y: 2, z: 3 };
     const view = mount({ now: () => 20 }, vi.fn(async () => okv([{ questId: 60001, title: 'Q', spawns: [near], capped: false, cut: 0 }])));
     await waitFor(() => expect(worlds).toHaveLength(1));
-    worlds[0].target = () => ({ x: 40, y: 2, z: 3 });
-    await waitFor(() => expect(readLastPlace().x).toBe(40), { timeout: 3000 });
+    worlds[0].options.onCameraInput();
     view.rerender({ focus: part(12000001) });
     await waitFor(() => expect(worlds[0].select).toHaveBeenCalledWith({ kind: 'creature', guid: 6000001 }));
     expect(worlds[0].lookAt).not.toHaveBeenCalledWith(100, 2, 4, true);
+    expect(screen.getByRole('button', { name: 'Back' })).toHaveProperty('disabled', true);
+  });
+
+  // The view says so as the author starts moving the camera, not only once it rests
+  it('leaves the camera alone when the author moves it while the quest’s place is read', async () => {
+    let clock = 5;
+    let answer: (value: unknown) => void = () => {};
+    const view = mount({ now: () => clock }, vi.fn(() => new Promise((resolve) => { answer = resolve; })));
+    await waitFor(() => expect(worlds).toHaveLength(1));
+    view.rerender({ focus: quest(), now: () => clock });
+    await waitFor(() => expect(api.questSpawnList).toHaveBeenCalledTimes(1));
+    clock = 20;
+    worlds[0].options.onCameraInput();
+    answer(okv([{ questId: 60001, title: 'Q', spawns: [giver], capped: false, cut: 0 }]));
+    await new Promise((r) => setTimeout(r, 50));
+    expect(worlds).toHaveLength(1);
     expect(screen.getByRole('button', { name: 'Back' })).toHaveProperty('disabled', true);
   });
 

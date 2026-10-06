@@ -259,7 +259,7 @@ export function WorldWorkspace({
   const placeRef = useRef<Point>({ x: first.x, y: first.y, z: first.z });
   const areaRef = useRef(area);
   areaRef.current = area;
-  // When the camera last moved (a flight, a drag or a jump), on `now`'s clock: a focus set before then is not followed
+  // When the camera last moved (the author flying or dragging it, or a jump), on `now`'s clock: a focus set before then is not followed
   const lastCameraMove = useRef(0);
   const nowRef = useRef(now);
   nowRef.current = now;
@@ -550,11 +550,11 @@ export function WorldWorkspace({
         showArea={false}
         onArea={setArea}
         onPlaceChange={(place) => {
-          // The place the camera was last sent to is reported back once it rests there; anything else is the author moving it
-          const was = placeRef.current;
-          if (Math.hypot(place.x - was.x, place.y - was.y, place.z - was.z) > 1) lastCameraMove.current = nowRef.current();
           placeRef.current = place;
           writeLastPlace({ map: mapRef.current, ...place });
+        }}
+        onCameraInput={() => {
+          lastCameraMove.current = nowRef.current();
         }}
         own={own}
         onOwnEdit={
