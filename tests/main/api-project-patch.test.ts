@@ -15,7 +15,7 @@ async function setup() {
   const session = createProjectSession(defaultProjectMeta('P', 'C:\\out'));
   const api = createApi({ store: openStore(':memory:', box), openWorldDb: async () => db,
     openDevDb: async () => ({ execute: async (sql: string[]) => { executed.push(sql); }, close: async () => {} }) as any,
-    fs: { writeFile: async (p: string, t: string) => { written.set(p, t); }, ensureDir: async () => {}, listDir: async () => [...written.keys()].map((p) => p.split('\\').at(-1)!) },
+    fs: { writeFile: async (p: string, t: string) => { written.set(p, t); }, ensureDir: async () => {}, listDir: async () => [...written.keys()].map((p) => p.split(/[\\/]/).at(-1)!) },
     now: () => new Date('2026-10-04T12:00:00Z'), session, projects: {} as ProjectController, exportDirOverride: 'C:\\out' } as any);
   const rec: any = await api.saveProfile({ name: 'w', role: 'world', host: 'h', port: 1, user: 'u', database: 'd', password: 'p' });
   await api.connect(rec.value.id);

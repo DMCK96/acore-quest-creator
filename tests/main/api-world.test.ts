@@ -16,7 +16,7 @@ async function setup(seed: (db: ReturnType<typeof forkDb>) => void = () => {}) {
   const session = createProjectSession(defaultProjectMeta('P', 'C:\\out'));
   // A second window onto the same project, never connected
   const make = () => createApi({ store: openStore(':memory:', box), openWorldDb: async () => db, openDevDb: async () => { throw new Error('x'); },
-    fs: { writeFile: async (p: string, t: string) => { written.set(p, t); }, ensureDir: async () => {}, listDir: async () => [...written.keys()].map((p) => p.split('\\').at(-1)!) },
+    fs: { writeFile: async (p: string, t: string) => { written.set(p, t); }, ensureDir: async () => {}, listDir: async () => [...written.keys()].map((p) => p.split(/[\\/]/).at(-1)!) },
     now: () => new Date('2026-10-03T12:00:00Z'), session, projects: {} as ProjectController });
   const api = make();
   const rec: any = await api.saveProfile({ name: 'w', role: 'world', host: 'h', port: 1, user: 'u', database: 'd', password: 'p' });
