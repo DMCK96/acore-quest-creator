@@ -323,6 +323,8 @@ export function WorldWorkspace({
   const followed = useRef<FoundSpawn | null>(null);
   // The part this view selected and made the focus: that focus is not followed back to it
   const reported = useRef<FocusPart | null>(null);
+  // The note the follow last put up, which the next focus takes back
+  const followNote = useRef<string | null>(null);
   useFocusFollow({
     focus: shared,
     lastCameraMove: () => lastCameraMove.current,
@@ -340,7 +342,16 @@ export function WorldWorkspace({
       const there = Math.hypot(spawn.x - placeRef.current.x, spawn.y - placeRef.current.y, spawn.z - placeRef.current.z) <= 1;
       bringIntoView(spawn, !there);
     },
-    note: setNote,
+    note: (text) => {
+      followNote.current = text;
+      setNote(text);
+    },
+    // Only the follow's own note: one another action left meanwhile stays
+    clearNote: () => {
+      const mine = followNote.current;
+      followNote.current = null;
+      if (mine !== null) setNote((shown) => (shown === mine ? null : shown));
+    },
     selected: () => {
       const part = reported.current;
       reported.current = null;

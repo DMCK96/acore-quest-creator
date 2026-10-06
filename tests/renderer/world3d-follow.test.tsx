@@ -135,6 +135,21 @@ describe('a focused NPC or object (Show in World and Go to)', () => {
     expect(screen.getByRole('button', { name: 'Back' })).toHaveProperty('disabled', true);
   });
 
+  it('takes its note back once a later focus is followed', async () => {
+    const empty = { questId: 60001, title: 'Q', spawns: [], capped: false, cut: 0 };
+    const placed = { questId: 60001, title: 'Q', spawns: [giver], capped: false, cut: 0 };
+    const list = vi.fn().mockResolvedValueOnce(okv([empty])).mockResolvedValue(okv([placed]));
+    const view = mount({}, list);
+    await waitFor(() => expect(worlds).toHaveLength(1));
+    view.rerender({ focus: quest(1) });
+    expect(await screen.findByText('Nothing of this quest is placed in the world yet.')).toBeTruthy();
+    view.rerender({ focus: quest(2) });
+    await waitFor(() => expect(screen.queryByText('Nothing of this quest is placed in the world yet.')).toBeNull());
+    // Another note is not the follow's to take back
+    view.rerender({ focus: part(99, 3) });
+    expect(await screen.findByText('NPC #99 has no spawn in the world yet.')).toBeTruthy();
+  });
+
   it('says the NPC has no spawn when one named NPC is not placed', async () => {
     const view = mount({});
     await waitFor(() => expect(worlds).toHaveLength(1));

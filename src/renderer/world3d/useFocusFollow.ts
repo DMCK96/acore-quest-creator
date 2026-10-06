@@ -19,6 +19,8 @@ export interface FocusFollow {
   select(spawn: { kind: 'creature' | 'object'; guid: number }): void;
   /** Says why the camera did not go anywhere */
   note(text: string): void;
+  /** Takes back the note an earlier focus left, which a newer focus makes stale */
+  clearNote?(): void;
   /** The part the view itself just selected and reported as the focus: a focus on it came from there and is not followed */
   selected?(): FocusPart | null;
 }
@@ -38,6 +40,7 @@ export function useFocusFollow(options: FocusFollow): void {
     const { focus, shown, selected } = latest.current;
     if (!shown || handled.current === focus.nonce) return;
     handled.current = focus.nonce;
+    latest.current.clearNote?.();
     const { questId, part } = focus;
     if (questId === null) return;
     const own = selected?.();
