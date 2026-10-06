@@ -16,6 +16,9 @@ import { WanderDialog } from './WanderDialog';
 import { PointDialog, type PointResult, type PointTarget } from './PointDialog';
 import { patrolOf } from '@core/map/patrol';
 import { RespawnDialog } from './RespawnDialog';
+import { EventDialog } from './EventDialog';
+import type { GameEvent } from '../controls/EventPicker';
+import type { SpawnEvents } from '@core/entities/model';
 import { GroupDialog } from './GroupDialog';
 import { PlaceDialog, type Chosen } from './PlaceDialog';
 import { useHistorySteps } from '../state/history-context';
@@ -74,6 +77,8 @@ const poolKind = (kind: 'creature' | 'object'): 'npc' | 'object' => (kind === 'o
 /** Spawns whose respawn time the dialog changes: what each is, its name, and its time when known */
 type RespawnTarget = { ref: SpawnRef; name: string; respawnSecs: number | null };
 const respawnTargetOf = (s: MenuSpawn): RespawnTarget => ({ ref: refOf(s), name: s.name, respawnSecs: s.respawnSecs });
+/** NPC spawns whose own game events the dialog changes, and what each follows now */
+type EventsTarget = { ref: SpawnRef; name: string; events: SpawnEvents };
 
 /** A spawn group open in the dialog: the members by name, and the other groups on its map */
 type GroupEdit = { group: SpawnGroup; names: Map<string, string>; groupsOnMap: { id: number; name: string }[]; events: { id: number; name: string }[]; nested: boolean };
@@ -103,6 +108,7 @@ export function useWorldMenu(deps: WorldMenuDeps): {
   /** A route point open in its dialog: whose route, its points as the view has them, and the point */
   const [point, setPoint] = useState<{ ref: SpawnRef; name: string; pathId: number; points: EditPoint[]; target: PointTarget } | null>(null);
   const [respawn, setRespawn] = useState<{ targets: RespawnTarget[] } | null>(null);
+  const [spawnEvents, setSpawnEvents] = useState<{ targets: EventsTarget[]; events: readonly GameEvent[] } | null>(null);
   const [groupEdit, setGroupEdit] = useState<GroupEdit | null>(null);
   const [drawing, setDrawing] = useState<{ guid: number; points: number } | null>(null);
   const drawingRef = useRef(drawing);
@@ -387,6 +393,13 @@ export function useWorldMenu(deps: WorldMenuDeps): {
         if (!action.spawns.every(still)) return;
         setRespawn({ targets: action.spawns.map(respawnTargetOf) });
         return;
+      case 'spawnEvents': {
+        if (!action.spawns.every(still)) return;
+        const read = await api?.gameEvents();
+        const targets = action.spawns.map((s): EventsTarget => ({ ref: refOf(s), name: s.name, events: s.spawnEvents ?? 'npc' }));
+        setSpawnEvents({ targets, events: read?.ok ? read.value : [] });
+        return;
+      }
       case 'groupSpawns': {
         if (!api) return;
         const id = await api.worldNewGroupId();
@@ -603,6 +616,25 @@ export function useWorldMenu(deps: WorldMenuDeps): {
           onRespawnAll={() => respawnGroup(groupEdit.group, groupEdit.names)}
           onClose={() => {
             setGroupEdit(null);
+            d.current.focusView();
+          }}
+        />
+      )}
+      {spawnEvents && (
+        <EventDialog
+          names={spawnEvents.targets.map((t) => t.name)}
+          events={spawnEvents.events}
+          // Spawns that follow different events start with nothing chosen
+          initial={spawnEvents.targets.every((t) => JSON.stringify(t.events) === JSON.stringify(spawnEvents.targets[0]!.events)) ? spawnEvents.targets[0]!.events : 'mixed'}
+          onApply={(to) => {
+            const { targets } = spawnEvents;
+            setSpawnEvents(null);
+            d.current.focusView();
+            const label = targets.length === 1 ? `Events of ${targets[0]!.name}` : `Events of ${targets.length} spawns`;
+            void commit(targets.map((t) => ({ kind: 'spawnEvents', spawn: t.ref, to })), label);
+          }}
+          onClose={() => {
+            setSpawnEvents(null);
             d.current.focusView();
           }}
         />

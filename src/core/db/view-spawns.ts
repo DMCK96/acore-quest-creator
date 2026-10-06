@@ -1,3 +1,5 @@
+import type { SpawnEvents } from '../entities/model';
+
 /**
  * Spawns as the 3D view draws them: where each stands and faces, which display it wears, how big it
  * is, and how it moves (a wander radius, or a patrol route). Read from the world database by
@@ -85,6 +87,8 @@ export interface ViewCreature {
   poolEvent?: PoolEvent | null;
   /** Seconds before it respawns once killed (`spawntimesecs`) */
   respawnSecs: number;
+  /** The game events it follows of its own, as the project sets them; absent follows its NPC (or the database) */
+  spawnEvents?: SpawnEvents;
 }
 
 export interface ViewObject {

@@ -11,6 +11,7 @@ import { PoolEvent, ViewCreature, ViewEvent, ViewObject, ViewPoint, ViewSpawns }
 import { WorldLayer } from '../../../../core/world/layer.js';
 import type { Movement } from '../../../../core/world/movement.js';
 import type { Placement } from '../../../../core/world/layer.js';
+import type { SpawnEvents } from '../../../../core/entities/model.js';
 import { BodyTexture, DisplayResolver, Look, ModelLook } from './DisplayResolver.js';
 import { creatureTransform, objectTransform, Transform } from './placement.js';
 import { moveRouteDrawing, routeObject, setBallSelected, wanderObject } from './paths.js';
@@ -48,6 +49,8 @@ export type SpawnInfo = {
   group: number | null;
   /** Seconds before it respawns */
   respawnSecs: number;
+  /** An NPC's own game events as the project sets them; absent follows its NPC */
+  spawnEvents?: SpawnEvents;
   /** An object's template type (3 is a chest); absent for an NPC or when it is not known */
   objectType?: number;
 };
@@ -541,9 +544,12 @@ class SpawnManager {
       const route = walks.pathId > 0 ? routes.get(walks.pathId) : undefined;
       return route ? { ...walks, path: route.map((p): ViewPoint => ({ x: p.x, y: p.y, z: p.z, carry: p.rest })) } : walks;
     };
+    // The layer's own events of a database spawn
+    const ownEvents = new globalThis.Map((this.#layer.spawnEvents ?? []).map((e) => [e.guid, e.current]));
     const creature = (c: ViewCreature): ViewCreature => {
       const at = placed('creature', c.guid);
-      return grouped('npc', routed(timed('creature', at ? { ...c, x: at.x, y: at.y, z: at.z, orientation: at.orientation } : c)));
+      const mine = ownEvents.has(c.guid) ? { ...c, spawnEvents: ownEvents.get(c.guid)! } : c;
+      return grouped('npc', routed(timed('creature', at ? { ...mine, x: at.x, y: at.y, z: at.z, orientation: at.orientation } : mine)));
     };
     const pending = (c: ViewCreature): ViewCreature => {
       const movement = this.#pendingMovements.get(c.guid);
@@ -560,7 +566,7 @@ class SpawnManager {
       (a): ViewCreature => ({
         guid: a.guid, entry: a.entry, name: a.name, map: a.map, x: a.placement.x, y: a.placement.y, z: a.placement.z, orientation: a.placement.orientation,
         displayId: a.look.displayId, scale: a.look.scale, wander: 0, path: null, pathId: 0, equipment: a.look.equipment, own: false, added: true, event: null, events: [], removedBy: [], preset: a.look.preset, group: null,
-        respawnSecs: a.respawnSecs ?? 300,
+        respawnSecs: a.respawnSecs ?? 300, ...(a.events !== undefined ? { spawnEvents: a.events } : {}),
       }),
     );
     const placedObjects = this.#layer.added.filter((a) => a.kind === 'gameobject').map(
@@ -638,7 +644,7 @@ class SpawnManager {
       const base = { kind, guid, entry: data.entry, name: data.name, own: data.own, added: data.added ?? false, map: data.map, group: data.group ?? null, respawnSecs: data.respawnSecs ?? 300 };
       if (kind === 'creature') {
         const c = data as ViewCreature;
-        return { ...base, pathId: c.pathId ?? 0, wander: c.wander, placement: { x: c.x, y: c.y, z: c.z, orientation: c.orientation, rotation: null } };
+        return { ...base, pathId: c.pathId ?? 0, wander: c.wander, placement: { x: c.x, y: c.y, z: c.z, orientation: c.orientation, rotation: null }, spawnEvents: c.spawnEvents ?? 'npc' };
       }
       const o = data as ViewObject;
       const objectType = o.objectType ?? -1;

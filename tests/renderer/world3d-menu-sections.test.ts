@@ -44,7 +44,7 @@ describe('a route point', () => {
 
 describe('the builder', () => {
   it('registers the sections in the spec order', () => {
-    expect(SECTIONS.map((s) => s.id)).toEqual(['busy', 'create', 'edit', 'loot', 'clipboard', 'coordinates', 'respawn', 'spawn-group', 'remove', 'movement', 'route-point', 'quest-parts', 'quest-spawns']);
+    expect(SECTIONS.map((s) => s.id)).toEqual(['busy', 'create', 'edit', 'loot', 'clipboard', 'coordinates', 'respawn', 'spawn-events', 'spawn-group', 'remove', 'movement', 'route-point', 'quest-parts', 'quest-spawns']);
   });
 
   it('runs only sections that apply, joins those of one group, and drops empty groups', () => {
@@ -108,14 +108,14 @@ describe('the ground', () => {
 describe('a spawn', () => {
   it('a database NPC can be edited too; offline it needs the database', () => {
     const world = buildMenu(on(npc()), context()).find((g) => g.id === 'world')!;
-    expect(world.items.map((i) => i.label)).toEqual(['Edit NPC…', 'Copy', 'Duplicate', 'Copy coordinates', 'Respawn time…']);
+    expect(world.items.map((i) => i.label)).toEqual(['Edit NPC…', 'Copy', 'Duplicate', 'Copy coordinates', 'Respawn time…', 'Event…']);
     expect(item(buildMenu(on(npc()), context({ connected: false })), 'Edit NPC…')!.disabledReason).toBe('Needs the world database');
     expect(item(buildMenu(on(hela), context({ connected: false })), 'Edit NPC…')!.action).toBeDefined();
   });
 
   it('a project NPC: edit first, and remove last', () => {
     const world = buildMenu(on(hela), context()).find((g) => g.id === 'world')!;
-    expect(world.items.map((i) => i.label)).toEqual(['Edit NPC…', 'Copy', 'Duplicate', 'Copy coordinates', 'Respawn time…', 'Remove']);
+    expect(world.items.map((i) => i.label)).toEqual(['Edit NPC…', 'Copy', 'Duplicate', 'Copy coordinates', 'Respawn time…', 'Event…', 'Remove']);
     expect(item(buildMenu(on(hela), context()), 'Edit NPC…')!.action).toEqual({ kind: 'editEntity', spawn: hela });
   });
 
@@ -238,5 +238,19 @@ describe('spawn groups', () => {
   it('offline, groups need the database', () => {
     const both = subjectOf({ ground: at, hit: { type: 'spawn', spawn: npc() }, selection: [npc(), npc({ guid: 2 })] }, store);
     expect(item(buildMenu(both, context({ connected: false })), 'Group these spawns…')!.disabledReason).toBe('Needs the world database');
+  });
+});
+
+describe('spawn events', () => {
+  it('on an NPC, or the NPCs of a selection, opens the event dialog; objects are left out', () => {
+    expect(item(buildMenu(on(npc()), context()), 'Event…')!.action).toEqual({ kind: 'spawnEvents', spawns: [npc()] });
+    const both = subjectOf({ ground: at, hit: { type: 'spawn', spawn: npc() }, selection: [npc(), npc({ guid: 80331 }), crate()] }, store);
+    expect(item(buildMenu(both, context()), 'Event of 2 spawns…')!.action).toEqual({ kind: 'spawnEvents', spawns: [npc(), npc({ guid: 80331 })] });
+    expect(item(buildMenu(on(crate()), context()), 'Event…')).toBeUndefined();
+  });
+
+  it('offline, a database spawn needs the database; a project one does not', () => {
+    expect(item(buildMenu(on(npc()), context({ connected: false })), 'Event…')!.disabledReason).toBe('Needs the world database');
+    expect(item(buildMenu(on(hela), context({ connected: false })), 'Event…')!.action).toBeDefined();
   });
 });

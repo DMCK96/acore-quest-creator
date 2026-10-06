@@ -1,5 +1,6 @@
 import type { Placement } from '@core/world/layer';
 import type { Movement } from '@core/world/movement';
+import type { SpawnEvents } from '@core/entities/model';
 
 /**
  * What the 3D view's editing hands its host: a whole placement or a whole route, never a change by
@@ -20,4 +21,6 @@ export type SpawnEdit =
   /** How an NPC moves: stands, wanders, or walks a path */
   | { kind: 'movement'; spawn: SpawnRef; to: Movement }
   /** Seconds before a spawn respawns */
-  | { kind: 'respawn'; spawn: SpawnRef; secs: number };
+  | { kind: 'respawn'; spawn: SpawnRef; secs: number }
+  /** The game events an NPC spawn follows of its own; 'npc' follows its NPC */
+  | { kind: 'spawnEvents'; spawn: SpawnRef; to: SpawnEvents };

@@ -84,6 +84,19 @@ describe('the Project changes modal', () => {
     expect(worldRevert).toHaveBeenCalledWith({ kind: 'movement', guid: 80330 });
   });
 
+  it('lists a spawn’s own events before and after, by name, and reverts them', async () => {
+    const events = { type: 'spawnEvents', guid: 80330, entry: 1423, name: 'Stormwind Guard', map: 0, drifted: false,
+      original: [{ eventEntry: '12', guid: '80330' }], current: { mode: 'except', events: [4, 12] } };
+    const worldRevert = vi.fn(async () => okv({ spawns: [], routes: [], added: [] }));
+    const gameEvents = vi.fn(async () => okv([{ id: 12, name: 'Darkmoon Faire' }, { id: 4, name: "Hallow's End" }]));
+    render(<ProjectChanges api={makeMockApi({ worldChanges: vi.fn(async () => okv([events])), worldRevert, gameEvents })} onLayer={vi.fn()} onClose={vi.fn()} />);
+    const row = (await screen.findByText(/Stormwind Guard · events/)).closest('tr')!;
+    expect(await within(row).findByText('only during Darkmoon Faire')).toBeInTheDocument();
+    expect(within(row).getByText("gone during Hallow's End, Darkmoon Faire")).toBeInTheDocument();
+    await userEvent.click(within(row).getByRole('button', { name: 'Revert events of Stormwind Guard' }));
+    expect(worldRevert).toHaveBeenCalledWith({ kind: 'spawnEvents', guid: 80330 });
+  });
+
   it('hands every layer the 3D view takes to the project context', async () => {
     vi.stubGlobal('fetch', async () => new Response(new Uint8Array([1]), { status: 200 }));
     const layer = { spawns: [{ ...spawn, type: undefined }], routes: [], added: [] };

@@ -10,7 +10,7 @@ import { useHistorySteps } from '../state/history-context';
 import type { EventFilter, PickedSpawn, SpawnStatus, SpawnVisibility } from './scene/spawn/SpawnManager';
 import type { ViewSpawns } from '@core/db/view-spawns';
 import { chooseZ, floorCandidates } from '@core/map/floors';
-import { EMPTY_WORLD, groupsOf, movementsOf, respawnsOf, type Placement, type WorldLayer } from '@core/world/layer';
+import { EMPTY_WORLD, groupsOf, movementsOf, respawnsOf, spawnEventsOf, type Placement, type WorldLayer } from '@core/world/layer';
 import type { SpawnEdit, SpawnRef } from './edits';
 import { ProjectChanges } from './ProjectChanges';
 import { useProjectEntities } from '../state/project-entities';
@@ -250,7 +250,7 @@ function WorldStage({
   const projectEntities = project?.entities;
   const setProjectLayer = useRef(project?.setLayer);
   setProjectLayer.current = project?.setLayer;
-  const changes = layer.spawns.length + layer.routes.length + layer.added.length + movementsOf(layer).length + respawnsOf(layer).length + groupsOf(layer).length
+  const changes = layer.spawns.length + layer.routes.length + layer.added.length + movementsOf(layer).length + respawnsOf(layer).length + groupsOf(layer).length + spawnEventsOf(layer).length
     + (projectEntities ? projectEntities.npcs.length + projectEntities.objects.length + projectEntities.items.length : 0);
   // Choosing an existing NPC or object to place, and the one being placed (each click on the ground puts one down)
   const [choosing, setChoosing] = useState(false);
@@ -416,6 +416,7 @@ function WorldStage({
         change.kind === 'place' ? await current.worldMoveSpawn(kind, change.spawn.guid, change.to)
         : change.kind === 'movement' ? await current.worldSetMovement(change.spawn.guid, change.to)
         : change.kind === 'respawn' ? await current.worldSetRespawn(kind, change.spawn.guid, change.secs)
+        : change.kind === 'spawnEvents' ? await current.worldSetSpawnEvents(change.spawn.guid, change.to)
         // A spawn put back by a redo keeps its guid; one taken away by an undo leaves the layer
         : change.kind === 'presence'
           ? change.present
