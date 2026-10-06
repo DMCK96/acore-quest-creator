@@ -4,7 +4,7 @@ import type { Placement, WorldLayer } from '@core/world/layer';
 import { IDLE, type Movement } from '@core/world/movement';
 import type { Role, RoleTarget } from '@core/modules/quest-roles';
 import type { World3D } from './world3d';
-import type { SpawnEdit, SpawnRef } from './edits';
+import type { EditPoint, SpawnEdit, SpawnRef } from './edits';
 import type { ProjectEntities } from '@core/entities/model';
 import type { At, MenuAction, MenuGroup, MenuSpawn, MenuTarget, QuestMenuInfo } from './menu/model';
 import { buildMenu, NEEDS_GROUND } from './menu/section';
@@ -13,6 +13,8 @@ import { clipEntries, copySpawns, duplicateOffset, entriesOf, layoutAt, pasteabl
 import { placementAt } from './placing';
 import { WorldContextMenu } from './WorldContextMenu';
 import { WanderDialog } from './WanderDialog';
+import { PointDialog, type PointResult, type PointTarget } from './PointDialog';
+import { patrolOf } from '@core/map/patrol';
 import { RespawnDialog } from './RespawnDialog';
 import { GroupDialog } from './GroupDialog';
 import { PlaceDialog, type Chosen } from './PlaceDialog';
@@ -98,6 +100,8 @@ export function useWorldMenu(deps: WorldMenuDeps): {
   const [menu, setMenu] = useState<{ groups: MenuGroup[]; at: { x: number; y: number } } | null>(null);
   const [place, setPlace] = useState<{ what: 'creature' | 'object'; at: At } | null>(null);
   const [wander, setWander] = useState<{ spawn: MenuSpawn } | null>(null);
+  /** A route point open in its dialog: whose route, its points as the view has them, and the point */
+  const [point, setPoint] = useState<{ ref: SpawnRef; name: string; pathId: number; points: EditPoint[]; target: PointTarget } | null>(null);
   const [respawn, setRespawn] = useState<{ targets: RespawnTarget[] } | null>(null);
   const [groupEdit, setGroupEdit] = useState<GroupEdit | null>(null);
   const [drawing, setDrawing] = useState<{ guid: number; points: number } | null>(null);
@@ -207,7 +211,7 @@ export function useWorldMenu(deps: WorldMenuDeps): {
 
   /** Whether a spawn is still there to act on; says so when it is not */
   const still = (spawn: MenuSpawn): boolean => {
-    if (d.current.world.current?.hasSpawn(spawn.kind, spawn.guid)) return true;
+    if (d.current.world.current?.spawnOf(spawn.kind, spawn.guid)) return true;
     d.current.setNote(NO_LONGER_HERE);
     return false;
   };
@@ -363,6 +367,22 @@ export function useWorldMenu(deps: WorldMenuDeps): {
         if (!still(action.spawn)) return;
         setWander({ spawn: action.spawn });
         return;
+      case 'pointSettings': {
+        const spawn = world.spawnOf('creature', action.guid);
+        const route = world.routeOf(action.guid);
+        const at = route?.points[action.index];
+        if (!spawn || !route || !at) {
+          setNote(NO_LONGER_HERE);
+          return;
+        }
+        // A project NPC's patrol is the project's; a route the database has keeps its row's columns on each point
+        const patrol = spawn.own ? patrolOf(d.current.entities, spawn.entry, spawn.guid) : null;
+        const target: PointTarget = patrol
+          ? { kind: 'patrol', patrol, index: action.index }
+          : { kind: 'waypoint', rest: (at.carry as Record<string, string | null> | undefined) ?? {}, index: action.index };
+        setPoint({ ref: refOf(spawn), name: spawn.name, pathId: route.pathId, points: route.points, target });
+        return;
+      }
       case 'respawn':
         if (!action.spawns.every(still)) return;
         setRespawn({ targets: action.spawns.map(respawnTargetOf) });
@@ -540,6 +560,26 @@ export function useWorldMenu(deps: WorldMenuDeps): {
           onClose={() => {
             d.current.world.current?.setPendingMovement(wander.spawn.guid, null);
             setWander(null);
+            d.current.focusView();
+          }}
+        />
+      )}
+      {point && (
+        <PointDialog
+          name={point.name}
+          target={point.target}
+          onApply={(result: PointResult) => {
+            const { ref, name, pathId, points, target } = point;
+            setPoint(null);
+            d.current.focusView();
+            // The points stay where they are; the patrol's, or the one point's columns, are what change
+            const next = points.map((p, i): EditPoint =>
+              result.kind === 'patrol' ? { ...p, carry: result.patrol.points[i] ?? p.carry } : i === target.index ? { ...p, carry: result.rest } : p,
+            );
+            void commit([{ kind: 'route', spawn: ref, pathId, points: next }], `Point ${target.index + 1} of ${name}`);
+          }}
+          onClose={() => {
+            setPoint(null);
             d.current.focusView();
           }}
         />

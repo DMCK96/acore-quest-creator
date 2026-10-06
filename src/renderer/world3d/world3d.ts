@@ -141,8 +141,8 @@ export interface World3D {
   groundAt(client: { x: number; y: number }): { x: number; y: number; z: number } | null;
   /** Where the pointer last was over the view, or null. */
   lastPointer(): { x: number; y: number } | null;
-  /** Whether a spawn is still in the view (loaded, though perhaps too far to be drawn). */
-  hasSpawn(kind: 'creature' | 'object', guid: number): boolean;
+  /** A spawn still in the view (loaded, though perhaps too far to be drawn), or null. */
+  spawnOf(kind: 'creature' | 'object', guid: number): SpawnInfo | null;
   /** A drawn NPC's route as the view has it, or null when it has none. */
   routeOf(guid: number): { pathId: number; points: { x: number; y: number; z: number; carry?: unknown }[] } | null;
   /** Stops drawing (while the world is hidden) or starts again; a hidden world costs nothing. */
@@ -659,7 +659,7 @@ export function createWorld3D(options: World3DOptions): World3D {
       return point ? { x: point.x, y: point.y, z: point.z } : null;
     },
     lastPointer: () => controls.lastPointer,
-    hasSpawn: (kind, guid) => manager.spawnInfo(kind, guid) !== null,
+    spawnOf: (kind, guid) => manager.spawnInfo(kind, guid),
     routeOf(guid) {
       const route = manager.spawnRoute(guid);
       return route ? { pathId: route.pathId, points: route.points } : null;

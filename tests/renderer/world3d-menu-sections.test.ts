@@ -4,7 +4,7 @@ import { buildMenu, type MenuSection } from '../../src/renderer/world3d/menu/sec
 import { SECTIONS } from '../../src/renderer/world3d/menu/sections';
 import { subjectOf, type MenuSubject } from '../../src/renderer/world3d/menu/subject';
 import type { MenuContext, MenuItem, MenuSpawn, MenuTarget } from '../../src/renderer/world3d/menu/model';
-import { EMPTY_ENTITIES, newNpc, newObject, type ProjectEntities } from '../../src/core/entities/model';
+import { EMPTY_ENTITIES, newNpc, newObject, newSpawn, type ProjectEntities } from '../../src/core/entities/model';
 
 const at = { x: 1, y: 2, z: 3 };
 const npc = (over: Partial<MenuSpawn> = {}): MenuSpawn => ({ kind: 'creature', guid: 80330, entry: 1423, name: 'Guard', own: false, added: false, pathId: 0, wander: 0, map: 0,
@@ -24,9 +24,27 @@ const flat = (groups: ReturnType<typeof buildMenu>): MenuItem[] => all(groups.fl
 const item = (groups: ReturnType<typeof buildMenu>, label: string) => flat(groups).find((i) => i.label === label);
 const labels = (groups: ReturnType<typeof buildMenu>) => groups.map((g) => [g.id, g.items.map((i) => i.label)]);
 
+describe('a route point', () => {
+  const point = (guid: number, s: ProjectEntities = store): MenuSubject => subjectOf({ ground: at, hit: { type: 'point', guid, index: 2 }, selection: [] }, s);
+  const patrolled: ProjectEntities = { ...store, npcs: [{ ...newNpc(12000001), name: 'Hela', spawns: [{ ...newSpawn(6000001) }] }] };
+
+  it('offers its settings, for the point right-clicked', () => {
+    expect(item(buildMenu(point(80330), context()), 'Point settings…')!.action).toEqual({ kind: 'pointSettings', guid: 80330, index: 2 });
+  });
+
+  it("of a route the database has needs the world database; a project NPC's patrol does not", () => {
+    expect(item(buildMenu(point(80330), context({ connected: false })), 'Point settings…')!.disabledReason).toBe('Needs the world database');
+    expect(item(buildMenu(point(6000001, patrolled), context({ connected: false })), 'Point settings…')!.action).toBeDefined();
+  });
+
+  it('is not offered while placing', () => {
+    expect(item(buildMenu(point(80330), context({ placing: true })), 'Point settings…')).toBeUndefined();
+  });
+});
+
 describe('the builder', () => {
   it('registers the sections in the spec order', () => {
-    expect(SECTIONS.map((s) => s.id)).toEqual(['busy', 'create', 'edit', 'loot', 'clipboard', 'coordinates', 'respawn', 'spawn-group', 'remove', 'movement', 'quest-parts', 'quest-spawns']);
+    expect(SECTIONS.map((s) => s.id)).toEqual(['busy', 'create', 'edit', 'loot', 'clipboard', 'coordinates', 'respawn', 'spawn-group', 'remove', 'movement', 'route-point', 'quest-parts', 'quest-spawns']);
   });
 
   it('runs only sections that apply, joins those of one group, and drops empty groups', () => {
@@ -181,7 +199,7 @@ describe('respawn time', () => {
 describe('a route point', () => {
   it('copies its coordinates, or says to right-click the ground', () => {
     const point = (ground: typeof at | null) => subjectOf({ ground, hit: { type: 'point', guid: 80330, index: 1 }, selection: [] }, store);
-    expect(labels(buildMenu(point(at), context()))).toEqual([['world', ['Copy coordinates']]]);
+    expect(labels(buildMenu(point(at), context()))).toEqual([['world', ['Copy coordinates']], ['movement', ['Point settings…']]]);
     expect(item(buildMenu(point(null), context()), 'Copy coordinates')!.disabledReason).toBe('Right-click the ground');
   });
 });

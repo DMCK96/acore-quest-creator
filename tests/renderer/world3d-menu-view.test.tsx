@@ -16,7 +16,7 @@ vi.mock('../../src/renderer/world3d/world3d', () => ({
       setWorldLayer: vi.fn(), setMode: vi.fn(), setPlacing: vi.fn(), cancelDrag: vi.fn(), setMarked: vi.fn(),
       setActive: vi.fn(), setScenery: vi.fn(), setTool: vi.fn(), setFalloff: vi.fn(), setPendingMovement: vi.fn(), spawnMovement: vi.fn(() => ({ type: 'idle', wander: 0, pathId: null })),
       startPath: vi.fn(), finishPath: vi.fn(), cancelPath: vi.fn(), undoPoint: vi.fn(), selectedSpawns: vi.fn(() => []), groundAt: vi.fn(() => ({ x: 50, y: 60, z: 7 })), lastPointer: vi.fn(() => null),
-      hasSpawn: vi.fn(() => true), routeOf: vi.fn(() => null),
+      spawnOf: vi.fn(() => ({})), routeOf: vi.fn(() => null),
       camera: () => ({ position: { x: 0, y: 0, z: 0 }, direction: { x: 1, y: 0, z: 0 } }),
       target: () => ({ x: 0, y: 0, z: 0 }), spawnStatus: () => ({ capped: { creatures: false, objects: false }, error: null }) };
     worlds.push(world);
@@ -159,7 +159,7 @@ describe('the right-click menu in the 3D view', () => {
 
   it('says so and does nothing when the right-clicked spawn has gone', async () => {
     const { api, world } = await view();
-    world.hasSpawn.mockReturnValue(false);
+    world.spawnOf.mockReturnValue(null);
     rightClick(world, { ground: at, hit: { type: 'spawn', spawn: guard }, selection: [guard] });
     await userEvent.click(screen.getByRole('menuitem', { name: 'Change wander distance…' }));
     expect(await screen.findByText('That spawn is no longer here')).toBeInTheDocument();

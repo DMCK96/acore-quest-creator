@@ -4,7 +4,7 @@ import { useProjectEntities } from '../state/project-entities';
 import { addZ, chooseZ, floorCandidates } from '@core/map/floors';
 import { addSpawn, moveMarker, questMarkers, questRoutes } from '@core/map/positions';
 import type { PointAction, Spawn } from '@core/entities/model';
-import { addAction, facingToward, insertPoint, nextActionId, removePoint, updateAction, updatePoint } from '@core/map/patrol';
+import { addAction, facingToward, insertPoint, newAction, nextActionId, removePoint, updateAction, updatePoint } from '@core/map/patrol';
 import type { FieldValue } from '@core/registry/types';
 import type { MapBox, MapInfo, OpenResult, QuestMapRef, SpawnDot } from '@shared/ipc';
 import { EntityPicker } from '../controls/EntityPicker';
@@ -55,17 +55,6 @@ interface Floors {
 type FloorResult = { floors: number[]; ground: number | null };
 
 /** A new action on a point, with its first choices filled in. */
-type MenuAction = 'say' | 'emote' | 'pose' | 'cast' | 'sound' | 'mount' | 'dismount';
-const DEFAULT_ACTIONS: { [K in MenuAction]: Omit<Extract<PointAction, { kind: K }>, 'id' | 'afterSecs'> } = {
-  say: { kind: 'say', lines: [{ text: '', style: 'say' }], chance: 100 },
-  emote: { kind: 'emote', emote: 3 },
-  pose: { kind: 'pose', emoteState: 68 },
-  cast: { kind: 'cast', spell: 0 },
-  sound: { kind: 'sound', sound: 0 },
-  mount: { kind: 'mount', creature: 0 },
-  dismount: { kind: 'dismount' },
-};
-
 type Target = { kind: 'npc' | 'object'; entry: number };
 /** What map clicks do: the modes a caller opens the map in, plus the moment after a placement. */
 type Mode = MapMode | { kind: 'placed'; target: Target; guid: number } | null;
@@ -388,7 +377,7 @@ export function QuestMapView({
         patrol.setSelected(null);
         return;
       default:
-        patrol.save(addAction(now, index, { id: nextActionId(point), afterSecs: 0, ...DEFAULT_ACTIONS[item] } as PointAction));
+        patrol.save(addAction(now, index, newAction(point, item)));
     }
   }
 

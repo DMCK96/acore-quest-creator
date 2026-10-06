@@ -1,12 +1,9 @@
 import type { Pace, Patrol } from '@core/entities/model';
-import { clearRoute, moveAction, removeAction, removePoint, setStartPace, updateAction, updatePoint } from '@core/map/patrol';
-import { PointActionForm } from './PointActionForm';
-import { NumberField, SelectField } from '../scripts/fields';
+import { clearRoute, removePoint, setStartPace } from '@core/map/patrol';
+import { PatrolPointFields } from './PatrolPointFields';
+import { SelectField } from '../scripts/fields';
 
 const START_PACES = [['walk', 'Walking'], ['run', 'Running']] as const;
-const PACES_FROM_HERE = [['keep', 'Keep pace'], ['walk', 'Walk from here'], ['run', 'Run from here']] as const;
-
-const degrees = (radians: number): number => Math.round((radians * 180) / Math.PI) % 360;
 
 /** The side panel while a new NPC's patrol is drawn: its points, and what the selected one does. */
 export function PatrolPanel({
@@ -49,36 +46,7 @@ export function PatrolPanel({
       </div>
       {point && selected !== null && (
         <section aria-label={`Point ${selected + 1}`} className="quest-map__point">
-          <NumberField label="Wait (seconds)" value={point.waitSecs} min={0}
-            onChange={(waitSecs) => onChange(updatePoint(patrol, selected, { waitSecs: Math.max(0, waitSecs) }))} />
-          <SelectField label="Pace from here" value={point.paceFromHere ?? 'keep'} options={PACES_FROM_HERE}
-            onChange={(v) => onChange(updatePoint(patrol, selected, { paceFromHere: v === 'keep' ? null : v }))} />
-          {point.facing === null ? (
-            <button type="button" className="entry-card__btn" onClick={() => onPickFacing(selected)}>
-              Set facing
-            </button>
-          ) : (
-            <p className="scene-hint">
-              <span>Facing {degrees(point.facing)}°</span>{' '}
-              <button type="button" className="entry-card__btn" onClick={() => onChange(updatePoint(patrol, selected, { facing: null }))}>
-                Clear
-              </button>
-            </p>
-          )}
-          {point.actions.map((action, k) => (
-            <PointActionForm
-              key={action.id}
-              idPrefix={`patrol-${selected}-${action.id}`}
-              action={action}
-              waitSecs={point.waitSecs}
-              first={k === 0}
-              last={k === point.actions.length - 1}
-              onChange={(next) => onChange(updateAction(patrol, selected, next))}
-              onMove={(by) => onChange(moveAction(patrol, selected, action.id, by))}
-              onRemove={() => onChange(removeAction(patrol, selected, action.id))}
-              onPickObject={() => onPickObject(selected)}
-            />
-          ))}
+          <PatrolPointFields idPrefix={`patrol-${selected}`} patrol={patrol} index={selected} onChange={onChange} onPickFacing={onPickFacing} onPickObject={onPickObject} />
           <button type="button" className="entry-card__btn entry-card__btn--danger"
             onClick={() => {
               onChange(removePoint(patrol, selected));

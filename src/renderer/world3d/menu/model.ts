@@ -70,6 +70,8 @@ export type MenuAction =
   | { kind: 'leaveGroup'; spawn: MenuSpawn }
   | { kind: 'startPath'; spawn: MenuSpawn; at: At }
   | { kind: 'wander'; spawn: MenuSpawn }
+  /** What an NPC does at one point of its route, changed in a dialog */
+  | { kind: 'pointSettings'; guid: number; index: number }
   | { kind: 'removePath'; spawn: MenuSpawn }
   | { kind: 'toggleRole'; role: Role; spawn: MenuSpawn; on: boolean }
   | { kind: 'newQuest'; spawn: MenuSpawn; after: boolean }

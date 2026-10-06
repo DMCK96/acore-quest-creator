@@ -34,7 +34,7 @@ Right-click a point for its actions:
 - **Use an object…**
 - **Insert point after**, **Remove point**
 
-Choose a point's button in the panel to edit its settings there.
+Choose a point's button in the panel to edit its settings there. In the World, right-click a point of the route and choose **Point settings…** for the same settings (the facing is typed in degrees there, and an object to use is picked on the quest map).
 
 :::note
 A fight pauses the patrol; the NPC carries on after combat. A new or changed patrol starts after a server restart.
