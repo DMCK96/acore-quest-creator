@@ -53,42 +53,21 @@ test('a new quest giver is made, placed and given a patrol with a line to say, a
   await npc.getByRole('button', { name: 'Done' }).click();
   const card = giver.getByRole('region', { name: 'Starts at 1' });
   await expect(card.getByText('Patrol Hela')).toBeVisible();
-  // The card's Place in world places in the 3D World; the quest map places from a click on it
-  await page.getByRole('button', { name: 'Map', exact: true }).click();
-
-  const map = page.getByRole('dialog', { name: 'Quest map' });
-  // Northshire: pick the map, then click the middle of the canvas.
-  await map.getByRole('combobox', { name: 'Map' }).selectOption({ label: 'Eastern Kingdoms' });
-  await map.getByRole('combobox', { name: 'Jump to' }).fill('Marshal McBride');
-  await map.getByRole('option', { name: /Marshal McBride/ }).first().click();
-  const canvas = map.locator('.quest-map__canvas');
-  const box = (await canvas.boundingBox())!;
-  const cx = box.x + box.width / 2;
-  const cy = box.y + box.height / 2;
-  await page.mouse.click(cx, cy);
-  await map.getByRole('button', { name: 'Add a spawn here for Patrol Hela' }).click();
-  await map.getByRole('region', { name: 'Selected position' }).getByRole('button', { name: 'Draw patrol' }).click();
-  await expect(map.getByRole('heading', { name: 'Patrol: Patrol Hela' })).toBeVisible();
-  // Above and left of the spawn: its label runs off to the right and takes clicks of its own.
-  await page.mouse.click(cx, cy - 80);
-  await expect(map.getByRole('button', { name: 'Point 1', exact: true })).toBeVisible();
-  await page.mouse.click(cx - 80, cy - 80);
-  await expect(map.getByRole('button', { name: 'Point 2', exact: true })).toBeVisible();
-  await page.mouse.click(cx - 80, cy);
-  await expect(map.getByRole('button', { name: 'Point 3', exact: true })).toBeVisible();
-
-  await map.locator('.quest-map__marker[title="Patrol Hela · patrol point 2"]').click({ button: 'right' });
-  await page.getByRole('menuitem', { name: 'Wait here…' }).click();
-  await map.getByLabel('Wait (seconds)').fill('8');
-  await map.locator('.quest-map__marker[title="Patrol Hela · patrol point 2"]').click({ button: 'right' });
-  await page.getByRole('menuitem', { name: 'Say something…' }).click();
-  await map.getByRole('group', { name: 'Says' }).getByLabel('Line 1').fill('All quiet here.');
-  await map.locator('.quest-map__marker[title="Patrol Hela · patrol point 2"]').click({ button: 'right' });
-  await page.getByRole('menuitem', { name: 'Hold a pose while waiting…' }).click();
+  // Drawing the route is clicking in the 3D World, which needs a game client and a GL view; here the
+  // spawn and its patrol (three points, a wait and a line at the second) are put into the project
+  // through the API, and everything after that is the app's own.
+  await page.evaluate(async () => {
+    const api = (globalThis as any).api;
+    const entities = (await api.projectEntities()).value;
+    const guid = (await api.allocateIds('creatureSpawn', 1)).value[0];
+    const point = (x: number, y: number, waitSecs: number, actions: unknown[]) => ({ x, y, z: 50, waitSecs, facing: null, paceFromHere: null, actions });
+    const say = { id: 'a1', afterSecs: 0, kind: 'say', lines: [{ text: 'All quiet here.', style: 'say' }], chance: 100 };
+    const patrol = { pathId: guid * 10, startPace: 'walk', points: [point(-8900, -160, 0, []), point(-8910, -160, 8, [say]), point(-8910, -150, 0, [])] };
+    entities.npcs[0].spawns = [{ guid, map: 0, x: -8902.59, y: -162.606, z: 50, o: 0, respawnSecs: 300, wander: 0, patrol, rotation: null, events: 'npc' }];
+    await api.putProjectEntities(entities);
+  });
   await page.screenshot({ path: 'test-results/giver-patrol.png' });
-  await map.getByRole('button', { name: 'Done' }).click();
-  await map.getByRole('button', { name: 'Close' }).click();
-  await expect(map).toHaveCount(0);
+  await page.keyboard.press('Escape');
 
   // The same NPC editor opens from NPCs, objects & items, with the patrol on its Placement tab.
   await page.getByRole('list', { name: 'Modules' }).getByRole('button', { name: /^NPCs, objects & items/ }).click();

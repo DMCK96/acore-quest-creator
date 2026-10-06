@@ -15,7 +15,6 @@ import { ModuleBox } from '../modules/ModuleBox';
 import { ModulePanel, PanelFrame } from '../modules/ModulePanel';
 import { ChangesView } from './ChangesView';
 import { TestInGameView } from './TestInGameView';
-import { QuestMapView } from '../map/QuestMapView';
 import { QuestHeader, type ReadinessChip } from './QuestHeader';
 import './QuestFlowView.css';
 
@@ -36,12 +35,11 @@ export function QuestFlowView({ store }: { store: AppStore }): React.JSX.Element
   const removeModule = store((s) => s.removeModule);
   const setValue = store((s) => s.setValue);
   const hasServerData = store((s) => Boolean(s.summary?.serverData?.dir));
-  const hasClient = store((s) => Boolean(s.summary?.clientDir));
   const backToChain = store((s) => s.backToChain);
   const questPools = store((s) => s.questPools);
   const names = useNameBook();
   const [menuOpen, setMenuOpen] = useState(false);
-  /** The NPC or object editor, open over whichever panel opened it; kept while the map is open. */
+  /** The NPC or object editor, open over whichever panel opened it. */
   const [editor, setEditor] = useState<EditorState | null>(null);
   const editorRef = useRef(editor);
   editorRef.current = editor;
@@ -55,10 +53,8 @@ export function QuestFlowView({ store }: { store: AppStore }): React.JSX.Element
       // Stepped aside for the World, whose Escape it is
       if (e.key !== 'Escape' || root.current?.closest('[hidden]')) return;
       const state = store.getState();
-      // The map closes like its Close button; the editor sits on top of the panel that opened it, so it
-      // closes before that panel. The apply confirmation sits over everything else, so it closes first.
+      // The editor sits on top of the panel that opened it, so it closes before that panel. The apply confirmation sits over everything else, so it closes first.
       if (state.pendingApply) state.cancelApply();
-      else if (state.openPanel === 'map') state.setOpenPanel(null);
       else if (editorRef.current) setEditor(null);
       else if (state.openPanel !== null) state.setOpenPanel(null);
       else void state.backToChain();
@@ -163,10 +159,7 @@ export function QuestFlowView({ store }: { store: AppStore }): React.JSX.Element
           <TestInGameView api={api} questId={open.questId} />
         </PanelFrame>
       )}
-      {openPanel === 'map' && (
-        <QuestMapView open={open} onChange={setValue} focusId={null} hasServerData={hasServerData} hasClient={hasClient} onClose={() => setOpenPanel(null)} />
-      )}
-      {openPanel !== null && openPanel !== 'changes' && openPanel !== 'test' && openPanel !== 'map' && (
+      {openPanel !== null && openPanel !== 'changes' && openPanel !== 'test' && (
         <ModulePanel
           key={openPanel}
           id={openPanel}
@@ -179,7 +172,7 @@ export function QuestFlowView({ store }: { store: AppStore }): React.JSX.Element
           onRemove={() => removeModule(openPanel)}
         />
       )}
-      {editor && openPanel !== 'map' && (
+      {editor && (
         <EntityEditorHost entities={project?.entities ?? EMPTY_ENTITIES} onChange={(next) => project?.setEntities(next)} quests={project?.quests ?? []} layer={project?.layer}
           state={editor} onTab={onEditorTab} onClose={closeEditor} hasServerData={hasServerData}
           onDelete={(kind, entry) => store.getState().deleteEntity(kind, entry)} />

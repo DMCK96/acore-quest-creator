@@ -4,7 +4,6 @@ import { EMOTES } from '../controls/game-data';
 import { EntityPicker } from '../controls/EntityPicker';
 import { SpellField } from '../combat/SpellField';
 import { NumberField, SelectField, TextField } from '../scripts/fields';
-import { useName } from '../state/names';
 
 const ONE_SHOT = ' (one-shot)';
 const EMOTE_OPTIONS = EMOTES.filter((e) => e.label.endsWith(ONE_SHOT)).map((e) => [String(e.value), e.label.slice(0, -ONE_SHOT.length)] as const);
@@ -27,11 +26,6 @@ function withValue(options: readonly (readonly [string, string])[], value: strin
   return options.some(([v]) => v === value) ? options : [...options, [value, `#${value}`] as const];
 }
 
-function ObjectName({ guid, entry }: { guid: number; entry: number }): React.JSX.Element {
-  const { name } = useName('gameobject', entry);
-  return <p className="scene-hint">Uses {name ?? `object #${entry}`} (spawn {guid}).</p>;
-}
-
 /** One thing a patrolling NPC does at a point: its own fields, when it happens, and its order. */
 export function PointActionForm({
   idPrefix,
@@ -41,7 +35,6 @@ export function PointActionForm({
   onChange,
   onMove,
   onRemove,
-  onPickObject,
   waitSecs,
 }: {
   idPrefix: string;
@@ -54,7 +47,6 @@ export function PointActionForm({
   onMove(by: -1 | 1): void;
   onRemove(): void;
   /** Picks another object to use on the map; absent where the view cannot pick one */
-  onPickObject?(): void;
 }): React.JSX.Element {
   function fields(): React.ReactNode {
     switch (action.kind) {
@@ -97,15 +89,7 @@ export function PointActionForm({
       case 'dismount':
         return <p className="scene-hint">Gets off its mount here.</p>;
       case 'useObject':
-        // The quest map picks a spawn on the map; elsewhere its spawn and object are typed and picked
-        return onPickObject ? (
-          <>
-            <ObjectName guid={action.guid} entry={action.entry} />
-            <button type="button" className="entry-card__btn" onClick={onPickObject}>
-              Pick another
-            </button>
-          </>
-        ) : (
+        return (
           <>
             <NumberField label="Spawn (guid)" value={action.guid} min={0} onChange={(guid) => onChange({ ...action, guid: Math.max(0, Math.round(guid)) })} />
             <EntityPicker id={`${idPrefix}-object`} label="Object" kind="gameobject" value={action.entry} onChange={(entry) => onChange({ ...action, entry })} />

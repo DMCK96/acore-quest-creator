@@ -20,9 +20,7 @@ vi.mock('../../src/renderer/world3d/world3d', () => ({
     return world;
   },
 }));
-vi.mock('../../src/renderer/map/LeafletMap', () => ({ LeafletMap: () => <div /> }));
 
-import { QuestMapView } from '../../src/renderer/map/QuestMapView';
 import { World3DView } from '../../src/renderer/world3d/World3DView';
 import { CHAIN_DRAG_TYPE, encodePart } from '../../src/renderer/world3d/chain-drop';
 
@@ -43,8 +41,7 @@ async function threeD(overrides: Record<string, unknown> = {}) {
     worldRevert: vi.fn(async () => okv(EMPTY)),
     ...overrides,
   });
-  render(<NamesProvider api={api}><QuestMapView open={sampleOpen()} onChange={vi.fn()} focusId={null} onClose={vi.fn()} hasClient /></NamesProvider>);
-  await userEvent.click(await screen.findByRole('button', { name: '3D view' }));
+  render(<NamesProvider api={api}><HistoryProvider store={createAppStore(api)}><World3DView map={0} start={{ x: 0, y: 0, z: 0 }} hasClient /></HistoryProvider></NamesProvider>);
   await waitFor(() => expect(worlds).toHaveLength(1));
   return { api, world: worlds[0] };
 }

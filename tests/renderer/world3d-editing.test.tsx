@@ -17,9 +17,12 @@ vi.mock('../../src/renderer/world3d/world3d', () => ({
     return world;
   },
 }));
-vi.mock('../../src/renderer/map/LeafletMap', () => ({ LeafletMap: () => <div /> }));
 
-import { MapWithStore } from './map-with-store';
+import { ProjectEntitiesProvider } from '../../src/renderer/state/project-entities';
+import { World3DView } from '../../src/renderer/world3d/World3DView';
+import { ownEdit } from '../../src/renderer/world3d/own-edit';
+import { ownViewSpawns } from '../../src/core/entities/view-spawns';
+import type { ProjectEntities } from '../../src/core/entities/model';
 import { HistoryProvider } from '../../src/renderer/state/history-context';
 import { createAppStore } from '../../src/renderer/state/app-store';
 import { WorldWorkspace } from '../../src/renderer/world3d/WorldWorkspace';
@@ -37,13 +40,16 @@ const open = () => { const base = sampleOpen(); return { ...base, aggregate: { .
 async function questMap(api = makeMockApi({ worldLayer: vi.fn(async () => okv(EMPTY)) }), steps = false) {
   clientHasEverything();
   const onChange = vi.fn();
-  const view = <MapWithStore open={open()} onChange={onChange} focusId={null} onClose={vi.fn()} hasClient />;
+  const entities = readEntities(open().aggregate.values);
+  const setEntities = (next: ProjectEntities) => onChange(ENTITIES_FIELD, writeEntities(next));
+  const store = { entities, setEntities, quests: [], layer: EMPTY, setLayer: () => {}, tracked: [], create: async () => ({ error: 'not here' }), remove: async () => null, adopt: async () => ({ error: 'not here' }), ensure: async () => null } as any;
+  const onOwnEdit = (edit: Parameters<typeof ownEdit>[1]) => { const next = ownEdit(entities, edit); if (next) setEntities(next); return next !== null; };
+  const view = <ProjectEntitiesProvider value={store}><World3DView map={0} start={{ x: -8900, y: -160, z: 82 }} hasClient own={ownViewSpawns(entities)} onOwnEdit={onOwnEdit} /></ProjectEntitiesProvider>;
   // With steps, the view runs under the app's history, as in the app
-  const store = createAppStore(api);
-  render(<NamesProvider api={api}>{steps ? <HistoryProvider store={store}>{view}</HistoryProvider> : view}</NamesProvider>);
-  await userEvent.click(await screen.findByRole('button', { name: '3D view' }));
+  const appStore = createAppStore(api);
+  render(<NamesProvider api={api}>{steps ? <HistoryProvider store={appStore}>{view}</HistoryProvider> : view}</NamesProvider>);
   await waitFor(() => expect(worlds).toHaveLength(1));
-  return { api, onChange, world: worlds[0], store };
+  return { api, onChange, world: worlds[0], store: appStore };
 }
 
 describe('editing in the quest map\'s 3D view', () => {

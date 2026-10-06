@@ -69,7 +69,7 @@ export function ConnectionFields({
             </div>
           )}
         </Field>
-        <Field id="conn-client-dir" label="Game client folder (optional)" errors={errors} help="The folder with Wow.exe. The map uses its zone art and minimap.">
+        <Field id="conn-client-dir" label="Game client folder (optional)" errors={errors} help="The folder with Wow.exe. The 3D view draws the world from it.">
           {(props) => (
             <div className="conn-field__row">
               <input {...props} value={world.clientDir} placeholder="e.g. E:\Games\World of Warcraft" onChange={(e) => setWorld({ clientDir: e.target.value })} />

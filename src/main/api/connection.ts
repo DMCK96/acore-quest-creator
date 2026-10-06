@@ -3,7 +3,6 @@ import type { WorldDb } from '../../core/db/world-db';
 import type { Availability } from '../../core/links/availability';
 import type { ItemStarter } from '../../core/links/context';
 import { registry } from '../../core/registry';
-import type { MapInfo } from '../../shared/ipc';
 import type { NavTile } from '../../core/game/navmesh';
 import type { ServerData } from '../server-data';
 import type { SpellIndex } from '../../core/game/spells';
@@ -47,8 +46,6 @@ export interface Session {
   looks?: Partial<Record<LookKind, Promise<DisplayIndex | FactionTemplateIndex | { reason: string }>>>;
   /** Parsed navmesh tiles by file name (null when missing or unreadable), most recent last. */
   navTiles?: Map<string, NavTile | null>;
-  /** The quest map's maps and zone names, read once per connection. */
-  mapInfo?: Promise<MapInfo[]>;
 }
 
 /** The live world connection: none until the first connect, replaced whole by each one after */
@@ -60,21 +57,20 @@ export interface Connection {
   connected(): Session;
   /** A connection whose schema can actually carry a quest: drift that blocks is refused */
   usable(): Session;
-  /** The folders the map was last told */
-  folders(): { dataDir: string | null; clientDir: string | null };
-  /** Tells the map new folders */
-  setFolders(next: { dataDir: string | null; clientDir: string | null }): void;
+  /** The game client folder the 3D view was last told */
+  clientDir(): string | null;
+  /** Tells the 3D view's file service a new game client folder */
+  setClientDir(next: string | null): void;
 }
 
 /** The connection a fresh API starts with: none */
 export function createConnection(deps: ApiDeps): Connection {
   let session: Session | null = null;
-  // The folders the map was last told, so a connect that fails part way can put them back.
-  let folders: { dataDir: string | null; clientDir: string | null } = { dataDir: null, clientDir: null };
-  const setFolders = (next: typeof folders): void => {
-    folders = next;
-    deps.onServerDataDir?.(next.dataDir);
-    deps.onClientDir?.(next.clientDir);
+  // The client folder last told, so a connect that fails part way can put it back.
+  let clientDir: string | null = null;
+  const setClientDir = (next: string | null): void => {
+    clientDir = next;
+    deps.onClientDir?.(next);
   };
 
   const connected = (): Session => {
@@ -107,7 +103,7 @@ export function createConnection(deps: ApiDeps): Connection {
     },
     connected,
     usable,
-    folders: () => folders,
-    setFolders,
+    clientDir: () => clientDir,
+    setClientDir,
   };
 }

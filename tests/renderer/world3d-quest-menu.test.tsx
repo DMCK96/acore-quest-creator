@@ -1,6 +1,5 @@
 // @vitest-environment jsdom
 import { ProjectEntitiesProvider } from '../../src/renderer/state/project-entities';
-import { storeOf } from './map-with-store';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { act, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
@@ -32,6 +31,9 @@ vi.mock('../../src/renderer/world3d/world3d', () => ({
 import { WorldWorkspace } from '../../src/renderer/world3d/WorldWorkspace';
 import { HistoryProvider } from '../../src/renderer/state/history-context';
 import { createAppStore } from '../../src/renderer/state/app-store';
+
+/** A project store over fixed entities, its changes going to `setEntities` */
+const storeOf = (entities: any, setEntities: (next: any) => void = () => {}) => ({ entities, setEntities, quests: [], layer: { spawns: [], routes: [], added: [] }, setLayer: () => {}, tracked: [], create: async () => ({ error: 'not here' }), remove: async () => null, adopt: async () => ({ error: 'not here' }), ensure: async () => null }) as any;
 
 const EMPTY = { spawns: [], routes: [], added: [] };
 const guard = { kind: 'creature' as const, guid: 80330, entry: 1423, name: 'Guard', own: false, added: false, pathId: 0, wander: 0, map: 0, placement: { x: 10, y: 0, z: 5, orientation: 1, rotation: null } };

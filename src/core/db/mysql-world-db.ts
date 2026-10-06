@@ -318,10 +318,6 @@ class MysqlWorldDb implements WorldDb {
     return max === null || max === undefined ? null : Number(max);
   }
 
-  async spawnsInBox(kind: SpawnKind, map: number, box: MapBox, limit: number): Promise<SpawnDot[]> {
-    return this.spawns(kind, 's.map = ? AND s.position_x BETWEEN ? AND ? AND s.position_y BETWEEN ? AND ?', [map, box.minX, box.maxX, box.minY, box.maxY], limit);
-  }
-
   async spawnsForView(map: number, box: MapBox, limit: number): Promise<{ creatures: ViewCreature[]; objects: ViewObject[] }> {
     const take = Math.max(0, Math.trunc(limit));
     const boxed = 's.map = ? AND s.position_x BETWEEN ? AND ? AND s.position_y BETWEEN ? AND ?';

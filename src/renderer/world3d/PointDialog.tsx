@@ -19,7 +19,7 @@ const RUN = 1;
 
 /**
  * What an NPC does at one point of its route. A project NPC's point has its wait, pace, facing and
- * actions, as on the quest map. A point of a route the database has has its wait, pace and facing (its
+ * actions. A point of a route the database has has its wait, pace and facing (its
  * `waypoint_data` delay, move type and orientation); a waypoint script it runs is named, not edited.
  */
 export function PointDialog({
@@ -67,7 +67,7 @@ export function PointDialog({
           }}
         >
           <p>What {name || 'this NPC'} does when it reaches this point of its route.</p>
-          {patrol && <PatrolPointFields idPrefix={`point-${target.index}`} patrol={patrol} index={target.index} onChange={setPatrol} canAdd />}
+          {patrol && <PatrolPointFields idPrefix={`point-${target.index}`} patrol={patrol} index={target.index} onChange={setPatrol} />}
           {settings && <WaypointFields settings={settings} onChange={setSettings} />}
           <div className="world3d__dialog-actions">
             <button type="button" className="btn" onClick={onClose}>

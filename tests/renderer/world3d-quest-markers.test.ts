@@ -42,7 +42,7 @@ describe('the quest positions the World draws', () => {
     expect(MARKER_KINDS).toEqual({ scenePoint: 'Scene step', escortPoint: 'Escort point', fightPoint: 'Fight: summoned adds', area: 'Area trigger', poi: 'Quest POI' });
   });
 
-  it('on a map: those on it, and those whose map is not known (drawn where the author is, as the quest map did)', () => {
+  it('on a map: those on it, and those whose map is not known (drawn where the author is)', () => {
     const markers = worldMarkers(values, store);
     expect(markersOnMap(markers, 0).map((m) => m.id).sort()).toEqual(['fight:12000001:r1:0', 'poi:0', 'scene:s1:0:at', 'scene:s1:1:point:0', 'scene:s2:0:at']);
     expect(markersOnMap(markers, 1).map((m) => m.id).sort()).toEqual(['area:s3', 'scene:s2:0:at']);

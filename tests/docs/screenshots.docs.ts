@@ -162,50 +162,8 @@ test.describe.serial('docs screenshots', () => {
     // A new NPC is named in the pickers, never "not found in your database".
     await expect(giver.getByText(/not found in your database/)).toHaveCount(0);
     await shot(page, 'quest-giver');
-  });
-
-  test('quest-map', async () => {
-    // The giver card's Place in world places in the 3D World; the quest map places from a click on it
-    await page.getByRole('button', { name: 'Map', exact: true }).click();
-    const map = page.getByRole('dialog', { name: 'Quest map' });
-    await map.getByRole('combobox', { name: 'Map' }).selectOption({ label: 'Eastern Kingdoms' });
-    await map.getByRole('combobox', { name: 'Jump to' }).fill('Marshal McBride');
-    await map.getByRole('option', { name: /Marshal McBride/ }).first().click();
-    const canvas = map.locator('.quest-map__canvas');
-    const box = (await canvas.boundingBox())!;
-    await page.mouse.click(box.x + box.width / 2, box.y + box.height / 2);
-    await map.getByRole('button', { name: 'Add a spawn here for Foreman Brask' }).click();
-    await expect(map.getByRole('region', { name: 'Selected position' })).toBeVisible();
-    await expect.poll(async () => Number(await canvas.getAttribute('data-dot-count'))).toBeGreaterThan(0);
-    await page.waitForTimeout(2000); // relief and imagery tiles
-    await shot(page, 'quest-map');
-  });
-
-  test('patrol', async () => {
-    const map = page.getByRole('dialog', { name: 'Quest map' });
-    const box = (await map.locator('.quest-map__canvas').boundingBox())!;
-    const cx = box.x + box.width / 2;
-    const cy = box.y + box.height / 2;
-    await map.getByRole('button', { name: 'Draw patrol' }).click();
-    await expect(map.getByRole('heading', { name: 'Patrol: Foreman Brask' })).toBeVisible();
-    // Above and left of the spawn: its label runs off to the right and takes clicks of its own.
-    await page.mouse.click(cx, cy - 80);
-    await expect(map.getByRole('button', { name: 'Point 1', exact: true })).toBeVisible();
-    await page.mouse.click(cx - 80, cy - 80);
-    await expect(map.getByRole('button', { name: 'Point 2', exact: true })).toBeVisible();
-    await page.mouse.click(cx - 80, cy);
-    await expect(map.getByRole('button', { name: 'Point 3', exact: true })).toBeVisible();
-    const point2 = map.locator('.quest-map__marker[title="Foreman Brask · patrol point 2"]');
-    await point2.click({ button: 'right' });
-    await page.getByRole('menuitem', { name: 'Say something…' }).click();
-    await map.getByRole('group', { name: 'Says' }).getByLabel('Line 1').fill('Where is that shipment?');
-    await point2.click({ button: 'right' });
-    await expect(page.getByRole('menuitem', { name: 'Wait here…' })).toBeVisible();
-    await shot(page, 'patrol');
     await page.keyboard.press('Escape');
-    await map.getByRole('button', { name: 'Done' }).click();
-    await map.getByRole('button', { name: 'Close' }).click();
-    await expect(page.getByRole('dialog', { name: 'Quest Giver' })).toHaveCount(0);
+    await expect(giver).toHaveCount(0);
   });
 
   test('objectives', async () => {

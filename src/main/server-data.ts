@@ -57,7 +57,7 @@ export async function loadServerData(dir: string, files: ServerDataFiles): Promi
 
 /**
  * The data folder on disk. With `listingTtlMs`, each folder's listing is reused: the map folders
- * hold thousands of files and the quest map asks for hundreds at a time, many of them absent. A name
+ * hold thousands of files and the 3D view asks for hundreds at a time, many of them absent. A name
  * not in the listing is looked for again once the listing is older than that, so files added later
  * still appear. Without it every read lists the folder, as connecting needs.
  */
@@ -110,5 +110,5 @@ export function createServerDataFiles(options: { listingTtlMs?: number; now?: ()
 
 export const nodeServerDataFiles: ServerDataFiles = createServerDataFiles();
 
-/** For the quest map's grid and navmesh reads: listings kept for a minute. */
+/** For the grid and navmesh reads: listings kept for a minute. */
 export const mapDataFiles: ServerDataFiles = createServerDataFiles({ listingTtlMs: 60_000 });

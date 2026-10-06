@@ -14,26 +14,18 @@ const radians = (degrees: number): number => ((((degrees % 360) + 360) % 360) * 
 
 /**
  * What one point of a project NPC's patrol does: how long it waits, its pace from there, the way it
- * faces, and its actions. The quest map picks the facing and an object to use by clicking the map; a
- * view that cannot has the facing typed in degrees, and the object's spawn and template typed and picked.
+ * faces, and its actions. The facing is typed in degrees, and an object to use by its spawn and template.
  */
 export function PatrolPointFields({
   idPrefix,
   patrol,
   index,
   onChange,
-  onPickFacing,
-  onPickObject,
-  canAdd = false,
 }: {
   idPrefix: string;
   patrol: Patrol;
   index: number;
   onChange(next: Patrol): void;
-  onPickFacing?(index: number): void;
-  onPickObject?(index: number): void;
-  /** Offers to add an action here (the quest map adds them from its point menu instead) */
-  canAdd?: boolean;
 }): React.JSX.Element | null {
   const point = patrol.points[index];
   if (!point) return null;
@@ -43,22 +35,7 @@ export function PatrolPointFields({
         onChange={(waitSecs) => onChange(updatePoint(patrol, index, { waitSecs: Math.max(0, waitSecs) }))} />
       <SelectField label="Pace from here" value={point.paceFromHere ?? 'keep'} options={PACES_FROM_HERE}
         onChange={(v) => onChange(updatePoint(patrol, index, { paceFromHere: v === 'keep' ? null : v }))} />
-      {onPickFacing ? (
-        point.facing === null ? (
-          <button type="button" className="entry-card__btn" onClick={() => onPickFacing(index)}>
-            Set facing
-          </button>
-        ) : (
-          <p className="scene-hint">
-            <span>Facing {degrees(point.facing)}°</span>{' '}
-            <button type="button" className="entry-card__btn" onClick={() => onChange(updatePoint(patrol, index, { facing: null }))}>
-              Clear
-            </button>
-          </p>
-        )
-      ) : (
-        <FacingField facing={point.facing} onChange={(facing) => onChange(updatePoint(patrol, index, { facing }))} />
-      )}
+      <FacingField facing={point.facing} onChange={(facing) => onChange(updatePoint(patrol, index, { facing }))} />
       {point.actions.map((action, k) => (
         <PointActionForm
           key={action.id}
@@ -70,15 +47,12 @@ export function PatrolPointFields({
           onChange={(next) => onChange(updateAction(patrol, index, next))}
           onMove={(by) => onChange(moveAction(patrol, index, action.id, by))}
           onRemove={() => onChange(removeAction(patrol, index, action.id))}
-          onPickObject={onPickObject ? () => onPickObject(index) : undefined}
         />
       ))}
-      {canAdd && (
-        <SelectField label="Actions" value="" options={NEW_ACTIONS}
-          onChange={(kind) => {
-            if (kind) onChange(addAction(patrol, index, newAction(point, kind)));
-          }} />
-      )}
+      <SelectField label="Actions" value="" options={NEW_ACTIONS}
+        onChange={(kind) => {
+          if (kind) onChange(addAction(patrol, index, newAction(point, kind)));
+        }} />
     </>
   );
 }

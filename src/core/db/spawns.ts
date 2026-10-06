@@ -1,4 +1,4 @@
-/** Existing spawns as the quest map shows them: dots in the world, found by map area or by entry. */
+/** Existing spawns as the 3D view shows them: dots in the world, found by map area or by entry. */
 
 export type SpawnKind = 'creature' | 'gameobject';
 
