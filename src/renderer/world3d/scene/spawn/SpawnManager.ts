@@ -296,6 +296,8 @@ class SpawnManager {
   /** Areas asked for and not removed since; a removal while asking drops the answer */
   #wanted = new globalThis.Map<number, number>();
   #requests = 0;
+  /** Rises with each redraw: an area still being drawn meanwhile missed it and is brought up to date */
+  #redraws = 0;
   #visibility: SpawnVisibility = { ...DEFAULT_VISIBILITY };
   /** Looks of edited existing entities, drawn on their database spawns */
   #looks: EntityLooks = new globalThis.Map();
@@ -393,12 +395,15 @@ class SpawnManager {
     this.#responses.set(areaId, { map, box, spawns: answer });
     this.status = { capped: { ...answer.capped }, error: null, events: eventsIn(this.#responses.values()) };
 
+    const redraws = this.#redraws;
     const group = await this.#draw(this.#overlay(answer, box, map));
     if (this.#wanted.get(areaId) !== request) {
       return null;
     }
 
     this.#areas.set(areaId, group);
+    // Own spawns, the layer or the shown events changed while it was drawn: what it draws is out of date
+    if (this.#redraws !== redraws) await this.#patch(group, this.#overlay(answer, box, map));
     return group;
   }
 
@@ -708,6 +713,7 @@ class SpawnManager {
 
   /** Redraws every loaded area from its last answer, without asking again */
   async #redraw() {
+    this.#redraws += 1;
     await Promise.all(
       [...this.#areas.entries()].map(([areaId, group]) => {
         const response = this.#responses.get(areaId);
