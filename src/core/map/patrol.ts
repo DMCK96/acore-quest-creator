@@ -38,24 +38,11 @@ export function movePoint(p: Patrol, index: number, at: At): Patrol {
   return withPoint(p, index, (point) => ({ ...point, x: at.x, y: at.y, z: at.z }));
 }
 
-export function removePoint(p: Patrol, index: number): Patrol {
-  return has(p, index) ? { ...p, points: p.points.filter((_, i) => i !== index) } : p;
-}
-
 export function updatePoint(p: Patrol, index: number, change: Partial<Pick<PatrolPoint, 'waitSecs' | 'facing' | 'paceFromHere'>>): Patrol {
   return withPoint(p, index, (point) => {
     const next = { ...point, ...change };
     return change.facing !== undefined && change.facing !== null ? waiting(next) : next;
   });
-}
-
-export function setStartPace(p: Patrol, pace: Pace): Patrol {
-  return { ...p, startPace: pace };
-}
-
-/** No points, but the same path id, so the next export still finds and deletes the old route. */
-export function clearRoute(p: Patrol): Patrol {
-  return { ...p, points: [] };
 }
 
 /** `a<n>` one above the highest such id on the point. */
@@ -111,31 +98,6 @@ export function moveAction(p: Patrol, index: number, actionId: string, by: -1 | 
 
 export function removeAction(p: Patrol, index: number, actionId: string): Patrol {
   return withPoint(p, index, (point) => ({ ...point, actions: point.actions.filter((a) => a.id !== actionId) }));
-}
-
-/** The facing from one point toward another: 0 is north (+x), a quarter turn is west (+y). */
-export function facingToward(from: { x: number; y: number }, to: { x: number; y: number }): number {
-  const angle = Math.atan2(to.y - from.y, to.x - from.x);
-  return angle < 0 ? angle + 2 * Math.PI : angle;
-}
-
-/** The segment of a closed route (the last point joins back to the first) nearest a point. */
-export function nearestSegment(route: readonly { x: number; y: number }[], at: { x: number; y: number }): number {
-  let best = 0;
-  let bestDistance = Infinity;
-  route.forEach((a, i) => {
-    const b = route[(i + 1) % route.length]!;
-    const dx = b.x - a.x;
-    const dy = b.y - a.y;
-    const length = dx * dx + dy * dy;
-    const t = length === 0 ? 0 : Math.max(0, Math.min(1, ((at.x - a.x) * dx + (at.y - a.y) * dy) / length));
-    const distance = Math.hypot(at.x - (a.x + t * dx), at.y - (a.y + t * dy));
-    if (distance < bestDistance) {
-      bestDistance = distance;
-      best = i;
-    }
-  });
-  return best;
 }
 
 export function patrolOf(entities: ProjectEntities, entry: number, guid: number): Patrol | null {

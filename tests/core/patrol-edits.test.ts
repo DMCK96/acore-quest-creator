@@ -1,8 +1,8 @@
 // tests/core/patrol-edits.test.ts
 import { describe, expect, it } from 'vitest';
 import {
-  addAction, addPoint, clearRoute, DEFAULT_POSE_WAIT, facingToward, insertPoint, moveAction, movePoint, nearestSegment,
-  newPatrol, nextActionId, patrolOf, removeAction, removePoint, setPatrol, setStartPace, updateAction, updatePoint,
+  addAction, addPoint, DEFAULT_POSE_WAIT, insertPoint, moveAction, movePoint,
+  newPatrol, nextActionId, patrolOf, removeAction, setPatrol, updateAction, updatePoint,
 } from '../../src/core/map/patrol';
 import { ENTITIES_FIELD, newNpc, newSpawn, readEntities, writeEntities, type PointAction } from '../../src/core/entities/model';
 import { POSES } from '../../src/core/patrol/poses';
@@ -17,12 +17,11 @@ describe('patrol edits', () => {
   it('starts empty, walking, with its path id', () => {
     expect(newPatrol(9000)).toEqual({ pathId: 9000, startPace: 'walk', points: [] });
   });
-  it('adds, inserts, moves and removes points', () => {
+  it('adds, inserts and moves points', () => {
     const p = insertPoint(route(), 1, C);
     expect(p.points.map((q) => q.z)).toEqual([1, 3, 2]);
     expect(p.points[1]).toEqual({ ...C, waitSecs: 0, facing: null, paceFromHere: null, actions: [] });
     expect(movePoint(p, 0, { x: 5, y: 5, z: 9 }).points[0]).toMatchObject({ x: 5, y: 5, z: 9 });
-    expect(removePoint(p, 1).points.map((q) => q.z)).toEqual([1, 2]);
   });
   it('sets wait, pace and facing, and a facing on a point with no wait makes it wait', () => {
     const p = updatePoint(route(), 0, { paceFromHere: 'run' });
@@ -31,10 +30,6 @@ describe('patrol edits', () => {
     expect(faced.points[1]).toMatchObject({ facing: 1.5, waitSecs: DEFAULT_POSE_WAIT });
     const waited = updatePoint(updatePoint(p, 1, { waitSecs: 4 }), 1, { facing: 2 });
     expect(waited.points[1]!.waitSecs).toBe(4);
-  });
-  it('changes the starting pace and clears the route but keeps its path id', () => {
-    expect(setStartPace(route(), 'run').startPace).toBe('run');
-    expect(clearRoute(setStartPace(route(), 'run'))).toEqual({ pathId: 9000, startPace: 'run', points: [] });
   });
   it('adds, replaces, reorders and removes actions', () => {
     let p = addAction(route(), 0, say);
@@ -53,17 +48,6 @@ describe('patrol edits', () => {
     const p = addAction(route(), 1, { id: 'a1', afterSecs: 0, kind: 'pose', emoteState: 68 });
     expect(p.points[1]!.waitSecs).toBe(DEFAULT_POSE_WAIT);
     expect(addAction(updatePoint(route(), 1, { waitSecs: 3 }), 1, { id: 'a1', afterSecs: 0, kind: 'pose', emoteState: 68 }).points[1]!.waitSecs).toBe(3);
-  });
-  it('faces toward a point: north is 0 and west is a quarter turn', () => {
-    expect(facingToward({ x: 0, y: 0 }, { x: 5, y: 0 })).toBeCloseTo(0);
-    expect(facingToward({ x: 0, y: 0 }, { x: 0, y: 5 })).toBeCloseTo(Math.PI / 2);
-    expect(facingToward({ x: 0, y: 0 }, { x: 0, y: -5 })).toBeCloseTo((3 * Math.PI) / 2);
-  });
-  it('finds the segment of a closed route nearest a point', () => {
-    const loop = [{ x: 0, y: 0 }, { x: 10, y: 0 }, { x: 10, y: 10 }];
-    expect(nearestSegment(loop, { x: 5, y: -1 })).toBe(0);
-    expect(nearestSegment(loop, { x: 11, y: 5 })).toBe(1);
-    expect(nearestSegment(loop, { x: 4, y: 5 })).toBe(2); // the closing segment, back to the spawn
   });
   it('reads and writes the patrol of one spawn', () => {
     const npc = { ...newNpc(12000001), spawns: [newSpawn(900), newSpawn(901)] };
