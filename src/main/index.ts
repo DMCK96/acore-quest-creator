@@ -202,7 +202,7 @@ const electronDialogs: Dialogs = {
 function createWindow(session: ProjectSession, recovery: Recovery, projects: ProjectController): void {
   const win = new BrowserWindow({
     width: 1280,
-    height: 800,
+    height: 880,
     // Smaller than this the quest editor and the 3D view's panels no longer fit beside each other
     minWidth: 720,
     minHeight: 500,
