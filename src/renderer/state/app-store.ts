@@ -12,6 +12,7 @@ import { createExportSlice } from './app/export';
 import { createProjectSlice } from './app/project';
 import { createHistorySlice } from './app/history';
 import { createFocusSlice } from './app/focus';
+import { createLinksEditSlice } from './app/links-edit';
 
 export type { AppState } from './app/types';
 
@@ -41,6 +42,7 @@ export function createAppStore(api: Api, opts: { saveDelayMs?: number } = {}): A
       ...createProjectSlice(args),
       ...createHistorySlice(args),
       ...createFocusSlice(args),
+      ...createLinksEditSlice(args),
     };
   });
 }

@@ -1,5 +1,5 @@
 import type { Edge } from '@xyflow/react';
-import type { CanvasNode } from '@shared/ipc';
+import type { CanvasNode, NodeLink } from '@shared/ipc';
 import type { ComponentId } from '@core/links/model';
 
 /**
@@ -16,14 +16,17 @@ export const EDGE_CLASS: Record<string, string> = {
   'start.smartai': 'edge--script',
 };
 
+/** What an edge carries: the link it draws, for its right-click menu */
+export type LinkEdge = Edge<Pick<NodeLink, 'component' | 'owner'>>;
+
 /**
  * Walks nodes and their links in canvas order, emitting one React Flow edge per link whose target
  * is also on the canvas. A link to a quest that has not been added yet has nothing to draw to, and
  * is instead reflected in that node's `offCanvasLinks` chip.
  */
-export function toFlowEdges(nodes: readonly CanvasNode[]): Edge[] {
+export function toFlowEdges(nodes: readonly CanvasNode[]): LinkEdge[] {
   const onCanvas = new Set(nodes.map((n) => n.questId));
-  const edges: Edge[] = [];
+  const edges: LinkEdge[] = [];
   for (const node of nodes) {
     for (const link of node.links) {
       if (!onCanvas.has(link.to)) continue;
@@ -33,6 +36,7 @@ export function toFlowEdges(nodes: readonly CanvasNode[]): Edge[] {
         target: String(link.to),
         className: EDGE_CLASS[link.component as ComponentId] ?? 'edge--turnin',
         animated: link.component === 'start.offeredStraightAway',
+        data: { component: link.component, owner: link.owner },
       });
     }
   }

@@ -1,0 +1,28 @@
+/* A link's right-click menu on the chain graph, on the app's frosted surface */
+.chain-link-menu {
+  position: fixed;
+  z-index: 2000;
+  min-width: 200px;
+  padding: 4px 0;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.45);
+}
+
+.chain-link-menu__item {
+  display: block;
+  width: 100%;
+  padding: 5px 12px;
+  text-align: left;
+  background: none;
+  border: 0;
+  color: var(--text);
+  font: inherit;
+  cursor: pointer;
+}
+
+.chain-link-menu__item:hover,
+.chain-link-menu__item:focus-visible {
+  background: var(--accent-soft);
+  outline: none;
+}

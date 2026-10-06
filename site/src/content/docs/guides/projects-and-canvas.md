@@ -16,6 +16,12 @@ After you connect, the app opens on the **World**. Your quests are in the **Ques
 
 Choose a card to preview the quest in a panel on the right: its giver, objectives, dialogue, rewards and more at a glance. The open quest's card lists its NPCs and objects (givers, enders and objectives); the one you selected in the World, or last went to, is marked. From the preview, **Edit quest** opens it, **Remove from canvas** takes it off the canvas (your database is not touched) and **Close preview** hides the panel.
 
+## Link quests
+
+Drag from the dot on the right of one quest's card to the dot on the left of another to make turning in the first unlock the second. The link is drawn at once and is one step you can [undo](/azeroth-world-editor/guides/undo/). A link is refused, with a message saying why, when it would lead a quest to itself, when the two quests are already linked, or when the second quest already unlocks after a different quest.
+
+Right-click a line for what you can do with it. **Remove link** takes away a turn-in link made this way. Other kinds of link, such as a quest offered straight away or a breadcrumb, show **Edit in the quest editor**, which opens the quest that holds the link.
+
 ## Find your way around
 
 - Drag the canvas to move around; scroll to zoom.

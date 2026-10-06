@@ -15,7 +15,9 @@ import '@xyflow/react/dist/style.css';
 import type { AppStore } from '../../state/app-store';
 import type { CanvasNode } from '@shared/ipc';
 import { QuestNodeCard } from '../QuestNodeCard';
-import { toFlowEdges } from '../canvas-edges';
+import { toFlowEdges, type LinkEdge } from '../canvas-edges';
+import { DRAG_LINK } from './chain-link';
+import { ChainLinkMenu } from './ChainLinkMenu';
 import { questParts, questRoles } from '@core/modules/quest-roles';
 import { giverName } from '@core/modules/summaries';
 import { EMPTY_ENTITIES } from '@core/entities/model';
@@ -40,10 +42,11 @@ interface QuestNodeData extends Record<string, unknown> {
   parts?: { key: string; name: string; focused: boolean }[];
 }
 
-function QuestFlowNode({ data }: { data: QuestNodeData }): React.JSX.Element {
+/** A quest's card between its handles: a link is dragged out of the right one into another's left */
+function QuestFlowNode({ data, isConnectable }: { data: QuestNodeData; isConnectable: boolean }): React.JSX.Element {
   return (
     <>
-      <Handle type="target" position={Position.Left} isConnectable={false} />
+      <Handle type="target" position={Position.Left} isConnectable={isConnectable} />
       <QuestNodeCard
         node={data.node}
         selected={data.selected}
@@ -55,7 +58,7 @@ function QuestFlowNode({ data }: { data: QuestNodeData }): React.JSX.Element {
         onRotation={data.onRotation}
         parts={data.parts}
       />
-      <Handle type="source" position={Position.Right} isConnectable={false} />
+      <Handle type="source" position={Position.Right} isConnectable={isConnectable} />
     </>
   );
 }
@@ -64,8 +67,9 @@ const nodeTypes: NodeTypes = { quest: QuestFlowNode };
 
 /**
  * The quest chain as a React Flow graph: one card per quest, the links between them, dragging,
- * panning and selecting. Needs a `ReactFlowProvider` above it; the selection is its host's, so the
- * host's tools can act on it.
+ * panning and selecting. A drag from one quest's right handle to another's left links them; a turn-in
+ * link is taken away from its right-click menu, any other kind is changed in the quest editor. Needs
+ * a `ReactFlowProvider` above it; the selection is its host's, so the host's tools can act on it.
  */
 export function ChainGraph({
   store,
@@ -94,6 +98,9 @@ export function ChainGraph({
   const projectEpoch = store((s) => s.projectEpoch);
   const questPools = store((s) => s.questPools);
   const focus = store((s) => s.focus);
+  const saving = store((s) => s.saving);
+  const linkQuests = store((s) => s.linkQuests);
+  const unlinkQuests = store((s) => s.unlinkQuests);
   const names = useNameBook();
   const entities = useProjectEntities()?.entities ?? EMPTY_ENTITIES;
   const openParts = useMemo(() => (open ? questParts(questRoles(open.aggregate.values)) : []), [open]);
@@ -104,6 +111,8 @@ export function ChainGraph({
   // is holding a reference to never get silently detached from a remount.
   const [ready, setReady] = useState(false);
   const flushTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // The right-clicked link's menu: where, and what it offers
+  const [linkMenu, setLinkMenu] = useState<{ at: { x: number; y: number }; label: string; run(): void } | null>(null);
 
   useEffect(() => {
     void loadNodes().then(() => setReady(true));
@@ -170,6 +179,18 @@ export function ChainGraph({
     void newQuest(position);
   };
 
+  const linkAction = (edge: LinkEdge): { label: string; run(): void } =>
+    edge.data?.component === DRAG_LINK
+      ? { label: 'Remove link', run: () => void unlinkQuests(Number(edge.source), Number(edge.target)) }
+      : {
+          label: 'Edit in the quest editor',
+          // The quest that holds the link, the one whose fields say it
+          run: () => {
+            const owner = edge.data?.owner ?? Number(edge.source);
+            void openQuest(owner).then((opened) => opened && store.getState().editQuest());
+          },
+        };
+
   return (
     <div className="chain-graph" onDoubleClick={handlePaneDoubleClick}>
       {ready && (
@@ -182,7 +203,13 @@ export function ChainGraph({
           className={multi ? 'canvas--multi' : undefined}
           zoomOnDoubleClick={false}
           defaultViewport={viewport}
-          nodesConnectable={false}
+          // No new link while a quest edit is on its way: the link edits a quest too
+          nodesConnectable={!saving}
+          onConnect={(connection) => void linkQuests(Number(connection.source), Number(connection.target))}
+          onEdgeContextMenu={(event, edge) => {
+            event.preventDefault();
+            setLinkMenu({ at: { x: event.clientX, y: event.clientY }, ...linkAction(edge as LinkEdge) });
+          }}
           // A click selects (Ctrl, Cmd or Shift adds); a drag moves without selecting. Nothing is deleted by key.
           multiSelectionKeyCode={MULTI_SELECT_KEYS}
           selectNodesOnDrag={false}
@@ -229,6 +256,7 @@ export function ChainGraph({
           <Controls showInteractive={false} />
         </ReactFlow>
       )}
+      {linkMenu && <ChainLinkMenu at={linkMenu.at} label={linkMenu.label} onPick={linkMenu.run} onClose={() => setLinkMenu(null)} />}
     </div>
   );
 }
