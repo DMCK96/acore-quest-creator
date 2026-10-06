@@ -71,4 +71,24 @@ describe('module editor store', () => {
     expect(store.getState().screen).toBe('preview');
     expect(store.getState().open?.questId).toBe(60001);
   });
+
+  // An edit made while the save before it was on its way was marked saved and never sent: a giver
+  // picked just after typing the title was lost from the export
+  it('sends an edit made while the save before it was on its way', async () => {
+    let answer!: () => void;
+    const updateQuest = vi.fn().mockImplementationOnce(() => new Promise((r) => (answer = () => r(okv(true))))).mockImplementation(async () => okv(true));
+    const api = makeMockApi({ openQuest: vi.fn(async () => okv(open)), updateQuest });
+    const store = createAppStore(api, { saveDelayMs: 10_000 });
+    await store.getState().openQuest(60001);
+    store.getState().editQuest();
+    store.getState().setValue('quest_template.LogTitle', 'Wolves!');
+    const first = store.getState().flushSave();
+    store.getState().setValue('quest_template.TimeAllowed', 60);
+    answer();
+    await first;
+    expect(store.getState().dirty).toBe(true);
+    await store.getState().flushSave();
+    expect(updateQuest).toHaveBeenCalledTimes(2);
+    expect(updateQuest.mock.calls[1]![0].values['quest_template.TimeAllowed']).toBe(60);
+  });
 });

@@ -191,7 +191,8 @@ export function createQuestSlice({ api, kit, set, get }: SliceArgs): QuestSlice 
       const issues = await api.validate(open.questId);
       set({
         saving: false,
-        dirty: false,
+        // An edit made while this save was on its way is not in it, and is still to send
+        dirty: get().open === open ? false : get().dirty,
         issues: issues.ok ? issues.value : get().issues,
         error: issues.ok ? get().error : issues.error.message,
       });
