@@ -9,8 +9,7 @@ type At = { x: number; y: number; z: number };
 
 /**
  * The open quest's markers for the World: those on the map shown, and a drag of one stored as one step of
- * the project's history, through the quest's field or the project's NPCs (a fight's summon point), as the
- * quest map stored it.
+ * the project's history, through the quest's field or the project's NPCs (a fight's summon point).
  */
 export function useQuestMarkers({ values, entities, map, change, setEntities, runStep }: {
   /** The open quest's values as last changed (null with no quest open: no markers) */
