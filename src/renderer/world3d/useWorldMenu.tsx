@@ -22,6 +22,7 @@ import type { SpawnEvents } from '@core/entities/model';
 import { GroupDialog } from './GroupDialog';
 import { PlaceDialog, type Chosen } from './PlaceDialog';
 import { useHistorySteps } from '../state/history-context';
+import { newSpawnGuid } from './spawn-guid';
 
 export const NO_LONGER_HERE = 'That spawn is no longer here';
 export const COPIED_COORDINATES = 'Copied .go xyz to the clipboard';
@@ -154,12 +155,12 @@ export function useWorldMenu(deps: WorldMenuDeps): {
     if (!api) return null;
     if (put.own) {
       if (!onOwnEdit) return null;
-      const ids = await api.allocateIds(put.kind === 'creature' ? 'creatureSpawn' : 'gameobjectSpawn', 1);
-      if (!ids.ok || ids.value.length === 0) {
-        setNote(ids.ok ? 'No free spawn ID could be found.' : ids.error.message);
+      const made = await newSpawnGuid(api, put.kind);
+      if ('error' in made) {
+        setNote(made.error);
         return null;
       }
-      const edit: SpawnEdit = { kind: 'presence', spawn: { kind: put.kind, guid: ids.value[0]!, entry: put.entry, own: true }, present: true, at: put.at, map };
+      const edit: SpawnEdit = { kind: 'presence', spawn: { kind: put.kind, guid: made.guid, entry: put.entry, own: true }, present: true, at: put.at, map };
       return onOwnEdit(edit) === false ? null : edit;
     }
     const result = await api.worldAddSpawn(put.kind === 'object' ? 'gameobject' : 'creature', put.entry, map, put.at);

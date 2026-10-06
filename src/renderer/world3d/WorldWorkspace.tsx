@@ -12,6 +12,7 @@ import { hasRole, toggleRole } from '@core/modules/quest-roles';
 import { useApi, useNameBook } from '../state/names';
 import { giverName } from '@core/modules/summaries';
 import { ownEdit } from './own-edit';
+import { newSpawnGuid } from './spawn-guid';
 import { chainOf, questMenuInfo } from './quest-context';
 import { OBJECTIVES_FULL } from './menu/section';
 import { WORLD_MAPS, worldMapById } from '@core/map/world-maps';
@@ -126,12 +127,12 @@ export function WorldWorkspace({
     if (!project || !api) return;
     let made: { kind: 'npc' | 'object'; entry: number } | null = null;
     await runStep(async () => {
-      const guid = await api.allocateIds(what === 'creature' ? 'creatureSpawn' : 'gameobjectSpawn', 1);
-      if (!guid.ok || guid.value.length === 0) {
-        setNote(guid.ok ? 'No free spawn ID could be found.' : guid.error.message);
+      const guid = await newSpawnGuid(api, what);
+      if ('error' in guid) {
+        setNote(guid.error);
         return;
       }
-      const spawn = { ...newSpawn(guid.value[0]!), map: mapRef.current, x: at.x, y: at.y, z: at.z, o: at.orientation, rotation: what === 'object' ? at.rotation : null };
+      const spawn = { ...newSpawn(guid.guid), map: mapRef.current, x: at.x, y: at.y, z: at.z, o: at.orientation, rotation: what === 'object' ? at.rotation : null };
       const kind = what === 'creature' ? 'npc' : 'object';
       const result = await project.create(kind, { spawns: [spawn] });
       if ('error' in result) setNote(result.error);

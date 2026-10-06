@@ -28,6 +28,7 @@ import { looksOf } from '@core/entities/view-spawns';
 import '../views/ProjectDialog.css';
 import './world3d.css';
 import { goToTarget } from './go-to-spawn';
+import { newSpawnGuid } from './spawn-guid';
 
 /** The camera's controls, as the help in the corner lists them. */
 const CONTROLS: [string, string][] = [
@@ -248,6 +249,8 @@ function WorldStage({
   const [changesOpen, setChangesOpen] = useState(false);
   const project = useProjectEntities();
   const projectEntities = project?.entities;
+  const projectEntitiesRef = useRef(projectEntities);
+  projectEntitiesRef.current = projectEntities;
   const setProjectLayer = useRef(project?.setLayer);
   setProjectLayer.current = project?.setLayer;
   const changes = layer.spawns.length + layer.routes.length + layer.added.length + movementsOf(layer).length + respawnsOf(layer).length + groupsOf(layer).length + spawnEventsOf(layer).length
@@ -443,10 +446,27 @@ function WorldStage({
       setNote(null);
       return true;
     };
-    // A click while placing: the spawn goes into the world layer, and is selected so it can be turned or moved at once
+    // A click while placing: the spawn goes into the world layer, and is selected so it can be turned or moved at once.
+    // The project's own NPC or object (which the database may not have yet) is given a spawn of its own instead
     const place = async ({ target, at }: PlaceRequest): Promise<void> => {
       const current = apiRef.current;
       if (!current) return;
+      const entities = projectEntitiesRef.current;
+      const own = onOwnEditRef.current && (target.kind === 'object' ? entities?.objects : entities?.npcs)?.find((e) => e.entry === target.entry);
+      if (own) {
+        const made = await newSpawnGuid(current, target.kind);
+        if (!live) return;
+        if ('error' in made) {
+          setNote(made.error);
+          return;
+        }
+        const spawn = { kind: target.kind, guid: made.guid, entry: target.entry, own: true };
+        if (!(await send({ kind: 'presence', spawn, present: true, at, map }))) return;
+        created?.select({ kind: target.kind, guid: made.guid });
+        setSelected({ ...spawn, name: own.name, added: false, pathId: 0, event: null, position: { x: at.x, y: at.y, z: at.z } });
+        setNote(null);
+        return;
+      }
       const kind = target.kind === 'object' ? 'gameobject' : 'creature';
       const result = await current.worldAddSpawn(kind, target.entry, map, at);
       if (!live) return;

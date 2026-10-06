@@ -5,6 +5,8 @@ import userEvent from '@testing-library/user-event';
 import { NamesProvider } from '../../src/renderer/state/names';
 import { createAppStore } from '../../src/renderer/state/app-store';
 import { HistoryProvider } from '../../src/renderer/state/history-context';
+import { ProjectEntitiesProvider } from '../../src/renderer/state/project-entities';
+import { EMPTY_ENTITIES, newNpc } from '../../src/core/entities/model';
 import { makeMockApi, okv, errv, sampleOpen } from './mock-api';
 
 const worlds = vi.hoisted(() => [] as any[]);
@@ -175,6 +177,50 @@ describe('dropping a quest’s NPC or object from the chain onto the 3D view', (
     await new Promise((r) => setTimeout(r, 20));
     expect(api.worldAddSpawn).not.toHaveBeenCalled();
     expect(api.historyBegin).not.toHaveBeenCalled();
+  });
+
+  describe('of the project’s own NPC, which the database does not have yet', () => {
+    const hela = { ...newNpc(12000001), name: 'Hela' };
+    async function ownView(allocateIds = vi.fn(async () => okv([900]))) {
+      clientHasEverything();
+      const api = makeMockApi({ worldLayer: vi.fn(async () => okv(EMPTY)), allocateIds });
+      const onOwnEdit = vi.fn(() => true);
+      const project = { entities: { ...EMPTY_ENTITIES, npcs: [hela] }, setEntities: vi.fn(), quests: [], layer: EMPTY, setLayer: vi.fn(), tracked: [], create: vi.fn(), remove: vi.fn(), adopt: vi.fn(), ensure: vi.fn(async () => null) } as any;
+      render(<NamesProvider api={api}><ProjectEntitiesProvider value={project}><HistoryProvider store={createAppStore(api)}>
+        <World3DView map={0} start={{ x: 0, y: 0, z: 0 }} hasClient onOwnEdit={onOwnEdit} />
+      </HistoryProvider></ProjectEntitiesProvider></NamesProvider>);
+      await waitFor(() => expect(worlds).toHaveLength(1));
+      return { api, world: worlds[0], onOwnEdit, stage: document.querySelector('.world3d__stage')! };
+    }
+
+    it('gives it a spawn of its own, with a new guid, as one step, and selects it', async () => {
+      const { api, world, onOwnEdit, stage } = await ownView();
+      drag('drop', stage, transfer(encodePart({ kind: 'creature', entry: 12000001 })));
+      await waitFor(() => expect(onOwnEdit).toHaveBeenCalled());
+      expect(api.allocateIds).toHaveBeenCalledWith('creatureSpawn', 1);
+      expect(onOwnEdit).toHaveBeenCalledWith({
+        kind: 'presence', spawn: { kind: 'creature', guid: 900, entry: 12000001, own: true }, present: true, map: 0, at: expect.objectContaining({ x: 10, y: 0, z: 2 }),
+      });
+      expect(api.worldAddSpawn).not.toHaveBeenCalled();
+      await waitFor(() => expect(world.select).toHaveBeenLastCalledWith({ kind: 'creature', guid: 900 }));
+      expect(await screen.findByText('Hela')).toBeTruthy();
+      expect(api.historyBegin).toHaveBeenCalledTimes(1);
+      expect(api.historyEnd).toHaveBeenCalledTimes(1);
+    });
+
+    it('places one with each click while placing it, too', async () => {
+      const { world, onOwnEdit } = await ownView();
+      world.options.onPlace({ target: { kind: 'creature', entry: 12000001 }, at });
+      await waitFor(() => expect(onOwnEdit).toHaveBeenCalledWith(expect.objectContaining({ kind: 'presence', spawn: expect.objectContaining({ guid: 900, own: true }), at })));
+    });
+
+    it('says why when no spawn guid could be had, and places nothing', async () => {
+      const { world, onOwnEdit, stage } = await ownView(vi.fn(async () => okv([])));
+      drag('drop', stage, transfer(encodePart({ kind: 'creature', entry: 12000001 })));
+      expect(await screen.findByText('No free spawn ID could be found.')).toBeTruthy();
+      expect(onOwnEdit).not.toHaveBeenCalled();
+      expect(world.select).not.toHaveBeenCalled();
+    });
   });
 
   it('says why a part with no template could not be placed', async () => {
