@@ -2,7 +2,7 @@ import { useRef, useState } from 'react';
 import type { Patrol } from '@core/entities/model';
 import { waypointSettings, withWaypointSettings, type WaypointSettings } from '@core/world/waypoint-point';
 import { trapTab } from '../components/trap-tab';
-import { FacingField, PatrolPointFields } from '../map/PatrolPointFields';
+import { FacingField, PatrolPointFields } from './PatrolPointFields';
 import { NumberField, SelectField } from '../scripts/fields';
 import '../views/ProjectDialog.css';
 

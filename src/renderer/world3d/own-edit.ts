@@ -2,7 +2,7 @@ import type { PatrolPoint } from '@core/entities/model';
 import { newPatrol, newPatrolPoint, patrolOf, setPatrol } from '@core/map/patrol';
 import { addSpawn, placeSpawn, removeSpawn, setSpawnEventSetting, setSpawnMovement, setSpawnRespawn } from '@core/map/positions';
 import type { ProjectEntities } from '@core/entities/model';
-import type { EditPoint, SpawnEdit } from '../world3d/edits';
+import type { EditPoint, SpawnEdit } from './edits';
 
 /**
  * Route points from the 3D view as a patrol's: each keeps the patrol point it carries (its wait,

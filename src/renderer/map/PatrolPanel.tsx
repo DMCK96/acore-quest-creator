@@ -1,6 +1,6 @@
 import type { Pace, Patrol } from '@core/entities/model';
 import { clearRoute, removePoint, setStartPace } from '@core/map/patrol';
-import { PatrolPointFields } from './PatrolPointFields';
+import { PatrolPointFields } from '../world3d/PatrolPointFields';
 import { SelectField } from '../scripts/fields';
 
 const START_PACES = [['walk', 'Walking'], ['run', 'Running']] as const;

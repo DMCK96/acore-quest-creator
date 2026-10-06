@@ -11,7 +11,7 @@ import { ownViewSpawns } from '@core/entities/view-spawns';
 import { hasRole, toggleRole } from '@core/modules/quest-roles';
 import { useApi, useNameBook } from '../state/names';
 import { giverName } from '@core/modules/summaries';
-import { ownEdit } from '../map/own-3d-edit';
+import { ownEdit } from './own-edit';
 import { chainOf, questMenuInfo } from './quest-context';
 import { OBJECTIVES_FULL } from './menu/section';
 import { WORLD_MAPS, worldMapById } from '@core/map/world-maps';

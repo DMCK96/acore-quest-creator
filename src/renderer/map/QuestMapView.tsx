@@ -14,7 +14,7 @@ import { PatrolPanel } from './PatrolPanel';
 import { PointMenu, type PointMenuItem } from './PointMenu';
 import { usePatrolMode } from './usePatrolMode';
 import { World3DView } from '../world3d/World3DView';
-import { ownEdit } from './own-3d-edit';
+import { ownEdit } from '../world3d/own-edit';
 import { ownViewSpawns } from '@core/entities/view-spawns';
 import { toggleRole } from '@core/modules/quest-roles';
 import { questMenuInfo } from '../world3d/quest-context';

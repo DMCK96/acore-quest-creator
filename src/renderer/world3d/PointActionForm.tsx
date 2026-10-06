@@ -111,7 +111,7 @@ export function PointActionForm({
   }
 
   return (
-    <fieldset aria-label={TITLES[action.kind]} className="quest-map__action">
+    <fieldset aria-label={TITLES[action.kind]} className="point-action">
       <legend>{TITLES[action.kind]}</legend>
       {fields()}
       {action.afterSecs > waitSecs && (

@@ -256,10 +256,3 @@
   margin: 4px 0;
   background: var(--border-soft);
 }
-
-.quest-map__action {
-  border: 1px solid var(--border-soft);
-  border-radius: 4px;
-  padding: 6px 8px;
-  margin: 6px 0;
-}

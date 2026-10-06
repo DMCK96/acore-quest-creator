@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { newNpc, newObject, newSpawn, type ProjectEntities } from '../../src/core/entities/model';
-import { ownEdit } from '../../src/renderer/map/own-3d-edit';
+import { ownEdit } from '../../src/renderer/world3d/own-edit';
 
 const values = (): ProjectEntities => ({
   npcs: [{ ...newNpc(12000001), name: 'Hela', spawns: [{ ...newSpawn(900), map: 0, x: 1, y: 1, z: 1 }] }],

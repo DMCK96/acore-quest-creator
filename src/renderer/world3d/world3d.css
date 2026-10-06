@@ -246,6 +246,14 @@
   margin-top: 1em;
 }
 
+/* One action of a patrol point (PointActionForm) */
+.point-action {
+  border: 1px solid var(--border-soft);
+  border-radius: 4px;
+  padding: 6px 8px;
+  margin: 6px 0;
+}
+
 .world-changes {
   width: min(52em, 100%);
 }
