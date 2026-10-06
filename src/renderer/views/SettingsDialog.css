@@ -24,10 +24,18 @@
   box-shadow: none;
 }
 
+/* The tabs, with the dialog's close button at the far end */
+.settings-dialog__bar {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 0.5rem;
+  border-bottom: 1px solid var(--glass-border);
+}
+
 .settings-tabs {
   display: flex;
   gap: 0.25rem;
-  border-bottom: 1px solid var(--glass-border);
 }
 
 .settings-tabs__tab {

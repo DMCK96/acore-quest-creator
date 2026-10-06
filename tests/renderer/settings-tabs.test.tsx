@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { createAppStore } from '../../src/renderer/state/app-store';
@@ -30,6 +30,16 @@ describe('Settings tabs', () => {
     expect(readPreferences().dockSide).toBe('right');
     await userEvent.click(screen.getByRole('radio', { name: /Under the world/i }));
     expect(readPreferences().dockSide).toBe('bottom');
+  });
+
+  it('has one Close button whichever tab is showing', async () => {
+    const onClose = vi.fn();
+    render(<SettingsDialog store={createAppStore(makeMockApi(), { saveDelayMs: 0 })} onClose={onClose} />);
+    expect(screen.getAllByRole('button', { name: 'Close' })).toHaveLength(1);
+    await userEvent.click(screen.getByRole('tab', { name: 'Preferences' }));
+    expect(screen.getAllByRole('button', { name: 'Close' })).toHaveLength(1);
+    await userEvent.click(screen.getByRole('button', { name: 'Close' }));
+    expect(onClose).toHaveBeenCalledTimes(1);
   });
 
   it('moves between tabs with the arrow keys', async () => {

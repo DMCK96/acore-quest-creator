@@ -18,7 +18,6 @@ export function ConnectionCard({
   submitLabel,
   submitDisabled = false,
   busy,
-  onClose,
   draft,
   onChange,
   errors,
@@ -37,8 +36,6 @@ export function ConnectionCard({
   submitLabel: string;
   submitDisabled?: boolean;
   busy: boolean;
-  /** Shows a close button in the corner. */
-  onClose?: () => void;
   draft: ConnectionDraft;
   onChange: (draft: ConnectionDraft) => void;
   errors: DraftErrors;
@@ -52,11 +49,6 @@ export function ConnectionCard({
           {logo ? <img className="conn-card__logo" src={logo} alt={title} /> : title}
         </h1>
         <p className="conn-card__subtitle">{subtitle}</p>
-        {onClose && (
-          <button type="button" className="btn btn--icon conn-card__close" aria-label="Close" onClick={onClose} disabled={busy}>
-            ✕
-          </button>
-        )}
       </div>
       {error && (
         <p className="conn-card__error" role="alert">

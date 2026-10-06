@@ -75,9 +75,6 @@ export function ConnectionSection({ store, onClose, setBusy: reportBusy }: Setti
       submitLabel={busy ? 'Saving…' : 'Save'}
       submitDisabled={!changed}
       busy={busy}
-      onClose={() => {
-        if (!busy) onClose();
-      }}
       draft={draft}
       onChange={setDraft}
       errors={errors}

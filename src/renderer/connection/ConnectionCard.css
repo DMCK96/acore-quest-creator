@@ -17,7 +17,6 @@
 }
 
 .conn-card__header {
-  position: relative;
   text-align: center;
 }
 
@@ -42,12 +41,6 @@
   margin: 0.35rem 0 0;
   font-size: 0.9rem;
   color: var(--text-muted);
-}
-
-.conn-card__close {
-  position: absolute;
-  top: -0.4rem;
-  right: -0.5rem;
 }
 
 .conn-card__error {

@@ -66,27 +66,33 @@ export function SettingsDialog({ store, onClose }: { store: AppStore; onClose: (
         tabIndex={-1}
         onKeyDown={(e) => trapTab(e, dialog.current)}
       >
-        <div className="settings-tabs" role="tablist" aria-label="Settings sections">
-          {SETTINGS_SECTIONS.map(({ id, title }, index) => (
-            <button
-              key={id}
-              ref={(el) => {
-                tabs.current[index] = el;
-              }}
-              type="button"
-              role="tab"
-              id={`settings-tab-${id}`}
-              aria-controls={`settings-panel-${id}`}
-              aria-selected={active === index}
-              tabIndex={active === index ? 0 : -1}
-              className="settings-tabs__tab"
-              disabled={busy}
-              onClick={() => setActive(index)}
-              onKeyDown={(e) => onTabKey(e, index)}
-            >
-              {title}
-            </button>
-          ))}
+        <div className="settings-dialog__bar">
+          <div className="settings-tabs" role="tablist" aria-label="Settings sections">
+            {SETTINGS_SECTIONS.map(({ id, title }, index) => (
+              <button
+                key={id}
+                ref={(el) => {
+                  tabs.current[index] = el;
+                }}
+                type="button"
+                role="tab"
+                id={`settings-tab-${id}`}
+                aria-controls={`settings-panel-${id}`}
+                aria-selected={active === index}
+                tabIndex={active === index ? 0 : -1}
+                className="settings-tabs__tab"
+                disabled={busy}
+                onClick={() => setActive(index)}
+                onKeyDown={(e) => onTabKey(e, index)}
+              >
+                {title}
+              </button>
+            ))}
+          </div>
+          {/* The dialog's, not a section's: every tab can be closed */}
+          <button type="button" className="btn btn--icon" aria-label="Close" onClick={close} disabled={busy}>
+            ✕
+          </button>
         </div>
         {SETTINGS_SECTIONS.map(({ id, Component }, index) => (
           <div key={id} role="tabpanel" id={`settings-panel-${id}`} aria-labelledby={`settings-tab-${id}`} hidden={active !== index}>
