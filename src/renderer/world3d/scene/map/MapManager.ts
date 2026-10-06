@@ -29,7 +29,6 @@ import MapLoader from './loader/MapLoader.js';
 import { MapAreaSpec, MapSpec } from './loader/types.js';
 import MapLight from './light/MapLight.js';
 import DbManager from '../db/DbManager.js';
-import SoundManager from '../sound/SoundManager.js';
 import { describeError, reportProblem } from '../diagnostics.js';
 
 const DEFAULT_VIEW_DISTANCE = 1277.0;
@@ -51,7 +50,6 @@ type MapManagerOptions = {
   /** Dressed NPCs' body texture builder, shared with every world that shares the texture manager */
   characterTexture?: CharacterTexture;
   dbManager?: DbManager;
-  soundManager?: SoundManager;
   viewDistance?: number;
   /** The drawn ground nearest below a point, for standing NPCs on it; see `SpawnManager` */
   groundBelow?(x: number, y: number, fromZ: number, distance: number): number | null;
@@ -85,7 +83,6 @@ class MapManager extends EventTarget {
   #liquidManager: LiquidManager;
   #spawnManager: SpawnManager;
   #dbManager: DbManager;
-  #soundManager: SoundManager;
 
   #mapLight: MapLight;
 
@@ -110,7 +107,6 @@ class MapManager extends EventTarget {
   // Areas that failed to load: left out, and not asked for again every frame
   #failedAreas = new Set<number>();
 
-  #ownedManagers = new Set<any>();
 
   constructor(options: MapManagerOptions) {
     super();
@@ -122,13 +118,6 @@ class MapManager extends EventTarget {
 
     this.#textureManager = options.textureManager ?? new TextureManager({ host: options.host });
     this.#dbManager = options.dbManager ?? new DbManager({ host: options.host });
-
-    if (options.soundManager) {
-      this.#soundManager = options.soundManager;
-    } else {
-      this.#soundManager = new SoundManager({ host: options.host, dbManager: this.#dbManager });
-      this.#ownedManagers.add(this.#soundManager);
-    }
 
     this.#loader = new MapLoader({ host: options.host });
 
@@ -441,12 +430,12 @@ class MapManager extends EventTarget {
     }
   }
 
+  /** Stops every worker this map started; managers it was handed (textures, tables) are left to their owner */
   dispose() {
-    for (const manager of this.#ownedManagers.values()) {
-      manager.dispose();
-    }
-
     this.#liquidManager.dispose();
+    this.#wmoManager.dispose();
+    this.#doodadManager.dispose();
+    this.#loader.dispose();
   }
 
   #cullGroups() {
@@ -469,19 +458,6 @@ class MapManager extends EventTarget {
     }
 
     const parentAreaTableRecord = this.#areaTableDb.getRecord(areaTableRecord.parentAreaId);
-
-    // Sound
-
-    const useParentZoneMusic =
-      areaTableRecord.zoneMusic === 0 &&
-      (areaTableRecord.flags & 0x40000000) !== 0 &&
-      !!parentAreaTableRecord;
-
-    const zoneMusic = useParentZoneMusic
-      ? parentAreaTableRecord.zoneMusic
-      : areaTableRecord.zoneMusic;
-
-    this.#soundManager.setZoneMusic(zoneMusic);
 
     // Event
 

@@ -54,7 +54,22 @@ compiler setting than this project's.
   - `model/shader/fragment.ts`: the four combiners upstream lacks (`Mod_Mod2xNA`, `Mod_AddNA`,
     `Add_Mod`, `Mod2x_Mod2x`); a model using one drew without its textures.
 
+## What is left out
+
+- Upstream's camera controls (`controls/`: `OrbitControls`, `MapControls`, `BaseOrbitControls`) are
+  not kept: the 3D view has its own camera (`../controls.ts`).
+- Upstream's sound (`sound/`, the zone music, and the `@tweenjs/tween.js` fades it used) is not
+  kept: an editor plays no music. `MapManager` no longer takes a sound manager.
+- Upstream's `index.ts`, which re-exported every class, is not kept: import each file directly.
+
 ## What is added
+
+- `worker/SceneWorkerController.ts` can be disposed (`dispose()`): its worker is stopped, and requests
+  still waiting never settle. `MapManager.dispose()` stops the map, building and model loaders'
+  workers; upstream left them running, so every change of map left them behind. The texture and
+  table managers are shared by every map (`sharedManagers` in `../world3d.ts`) and are not stopped.
+
+
 
 - `wmo/`: buildings (WMO), which upstream does not draw. `wmo/format` holds the building's root-file reader
   from `@wowserhq/format` 0.28.0 (MIT), copied because the 0.25.0 this code is written against lacks

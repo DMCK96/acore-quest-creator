@@ -189,6 +189,10 @@ class DoodadManager {
   }
 
   /** The model manager the doodads use, shared with the spawns so they animate together */
+  dispose() {
+    this.#modelManager.dispose();
+  }
+
   get modelManager() {
     return this.#modelManager;
   }

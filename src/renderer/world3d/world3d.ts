@@ -1,5 +1,7 @@
 import * as THREE from 'three';
-import { DbManager, MapManager, TextureManager, type SoundManager } from './scene';
+import DbManager from './scene/db/DbManager';
+import MapManager from './scene/map/MapManager';
+import TextureManager from './scene/texture/TextureManager';
 import { WorldControls, type ClickKeys, type Tool } from './controls';
 import { CharacterTexture } from './scene/character/CharacterTexture';
 import { getAssetUrl } from './scene/asset';
@@ -196,12 +198,6 @@ export const sharedManagers = (): NonNullable<typeof shared> => {
   }
   return shared;
 };
-
-/**
- * Wowser's sound manager plays each area's zone music, which an editor must not, and it throws when
- * disposed before any music has started. The map only ever asks it to set the zone's music.
- */
-const SILENT = { setZoneMusic() {}, dispose() {} } as unknown as SoundManager;
 
 /** Frees what a world drew; each step on its own, so one failing cannot stop the rest. */
 function release(root: THREE.Object3D): void {
@@ -553,7 +549,7 @@ export function createWorld3D(options: World3DOptions): World3D {
     const floors = manager.root.children.filter((group) => (group.name === 'terrain' || group.name === 'buildings') && reaches(group, x, y));
     return down.intersectObjects(floors, true)[0]?.point.z ?? null;
   };
-  const manager = new MapManager({ host: HOST, textureManager: textures, dbManager: databases, characterTexture, soundManager: SILENT, groundBelow });
+  const manager = new MapManager({ host: HOST, textureManager: textures, dbManager: databases, characterTexture, groundBelow });
   manager.addEventListener('area:change', (event) => {
     const name = (event as CustomEvent<{ areaName?: string }>).detail.areaName;
     if (name) options.onArea?.(name);

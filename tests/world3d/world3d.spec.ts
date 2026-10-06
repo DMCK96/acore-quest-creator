@@ -33,7 +33,7 @@ test.beforeAll(async () => {
     },
     // Only the harness is scanned for dependencies, not the whole app.
     // Listed up front: a dependency Vite finds late (the workers import some) reloads the page mid-test.
-    optimizeDeps: { entries: ['tests/world3d/harness.html'], include: ['three', '@tweenjs/tween.js', '@wowserhq/format', '@wowserhq/io'] },
+    optimizeDeps: { entries: ['tests/world3d/harness.html'], include: ['three', '@wowserhq/format', '@wowserhq/io'] },
     server: { port: 5199, strictPort: true, host: '127.0.0.1' },
   });
   await vite.listen();

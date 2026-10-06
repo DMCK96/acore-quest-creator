@@ -2,6 +2,9 @@
 import { WorkerResponse } from './types.js';
 import { RESPONSE_STATUS } from './const.js';
 
+/** What a disposed controller answers: a promise that never settles */
+const NEVER: Promise<never> = new Promise(() => {});
+
 class SceneWorkerController {
   #initialized = false;
   #initializeArgs: any[];
@@ -10,6 +13,7 @@ class SceneWorkerController {
   #initializingReject: (reason?: any) => void;
 
   #worker: Worker;
+  #disposed = false;
 
   #nextId = 0;
   #pending = new Map<number, { resolve: (value: any) => void; reject: (reason: any) => void }>();
@@ -24,6 +28,10 @@ class SceneWorkerController {
   }
 
   async request(func: string, ...args: any[]): Promise<any> {
+    if (this.#disposed) {
+      return NEVER;
+    }
+
     if (!this.#initialized) {
       if (this.#initializing) {
         await this.#initializing;
@@ -33,6 +41,20 @@ class SceneWorkerController {
     }
 
     return this.#request(func, args);
+  }
+
+  /**
+   * Stops the worker. Requests still waiting, and any made after, never settle: their callers are
+   * the world being left, so neither an answer nor an error has anywhere useful to go.
+   */
+  dispose() {
+    if (this.#disposed) {
+      return;
+    }
+
+    this.#disposed = true;
+    this.#worker.terminate();
+    this.#pending.clear();
   }
 
   #request(func: string, args: any[]): Promise<any> {
@@ -67,6 +89,9 @@ class SceneWorkerController {
 
   #handleResponse(response: WorkerResponse) {
     const promise = this.#pending.get(response.id);
+    if (!promise) {
+      return;
+    }
 
     if (response.status === RESPONSE_STATUS.STATUS_SUCCESS) {
       promise.resolve(response.value);

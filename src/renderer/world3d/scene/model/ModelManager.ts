@@ -58,6 +58,11 @@ class ModelManager {
     return this.#createModel(resources, look);
   }
 
+  /** Stops the loader's worker; the texture manager is shared, so it is left */
+  dispose() {
+    this.#loader.dispose();
+  }
+
   update(deltaTime: number, camera: THREE.Camera) {
     // Counts frames, for posing distant models only every few
     this.#frame += 1;

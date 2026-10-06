@@ -100,6 +100,11 @@ class WmoManager {
     return group;
   }
 
+  /** Stops the loader's worker; the texture and liquid managers belong to the map */
+  dispose() {
+    this.#loader.dispose();
+  }
+
   removeArea(areaId: number) {
     this.#areas.delete(areaId);
   }
