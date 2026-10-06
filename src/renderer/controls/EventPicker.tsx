@@ -25,7 +25,6 @@ export function EventPicker({
   onChange(ids: number[]): void;
 }): React.JSX.Element {
   const [query, setQuery] = useState<string | null>(null);
-  if (events.length === 0) return <p role="alert">No events in the database</p>;
   const needle = (query ?? '').trim().toLowerCase();
   const matching = events.filter((ev) => !needle || nameOf(ev).toLowerCase().includes(needle) || String(ev.id).includes(needle));
   const named = (eventId: number): string => {
@@ -50,30 +49,37 @@ export function EventPicker({
           ))}
         </div>
       )}
-      <label>
-        <span>{multiple ? 'Which events' : 'Which event'}</span>
-        <input
-          type="text"
-          role="combobox"
-          aria-label={multiple ? 'Which events' : 'Which event'}
-          aria-expanded="true"
-          aria-controls={`${id}-list`}
-          data-selection="on"
-          autoComplete="off"
-          placeholder="Search events"
-          value={shown}
-          onChange={(e) => setQuery(e.target.value)}
-        />
-      </label>
-      {chosen.length === 0 && <p role="alert">{multiple ? 'Choose at least one event' : 'Choose an event'}</p>}
-      <ul id={`${id}-list`} role="listbox" aria-label="Events" aria-multiselectable={multiple || undefined} className="event-picker__list">
-        {matching.map((ev) => (
-          <li key={ev.id} role="option" aria-selected={chosen.includes(ev.id)} onClick={() => pick(ev.id)}>
-            {nameOf(ev)}
-          </li>
-        ))}
-        {matching.length === 0 && <li aria-disabled="true">No event matches</li>}
-      </ul>
+      {/* Without the list (offline, or not read yet) what is chosen still shows, and can be taken off */}
+      {events.length === 0 ? (
+        <p role="alert">No events in the database</p>
+      ) : (
+        <>
+          <label>
+            <span>{multiple ? 'Which events' : 'Which event'}</span>
+            <input
+              type="text"
+              role="combobox"
+              aria-label={multiple ? 'Which events' : 'Which event'}
+              aria-expanded="true"
+              aria-controls={`${id}-list`}
+              data-selection="on"
+              autoComplete="off"
+              placeholder="Search events"
+              value={shown}
+              onChange={(e) => setQuery(e.target.value)}
+            />
+          </label>
+          {chosen.length === 0 && <p role="alert">{multiple ? 'Choose at least one event' : 'Choose an event'}</p>}
+          <ul id={`${id}-list`} role="listbox" aria-label="Events" aria-multiselectable={multiple || undefined} className="event-picker__list">
+            {matching.map((ev) => (
+              <li key={ev.id} role="option" aria-selected={chosen.includes(ev.id)} onClick={() => pick(ev.id)}>
+                {nameOf(ev)}
+              </li>
+            ))}
+            {matching.length === 0 && <li aria-disabled="true">No event matches</li>}
+          </ul>
+        </>
+      )}
     </div>
   );
 }

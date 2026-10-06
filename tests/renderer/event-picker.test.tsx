@@ -67,3 +67,13 @@ describe('the event rule field', () => {
     expect(options).toEqual(['As each spawn has it', 'Always', 'Only during…', 'Gone during…']);
   });
 });
+
+describe('the event picker without a list of events', () => {
+  it('still shows the events chosen, and can take them off', async () => {
+    const onChange = vi.fn();
+    render(<EventPicker id="t" events={[]} chosen={[12]} multiple onChange={onChange} />);
+    expect(screen.getByText('No events in the database')).toBeTruthy();
+    await userEvent.click(screen.getByRole('button', { name: 'Remove Event 12' }));
+    expect(onChange).toHaveBeenLastCalledWith([]);
+  });
+});
