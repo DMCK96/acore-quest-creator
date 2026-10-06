@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import type { GroupCheck, GroupMember, GroupMove, SpawnGroup } from '@shared/ipc';
 import { equalShare, memberKey } from '@core/world/groups';
 import { trapTab } from '../components/trap-tab';
+import { EventPicker } from '../controls/EventPicker';
 import '../views/ProjectDialog.css';
 
 /** How long after a change the group is checked again */
@@ -72,7 +73,6 @@ export function GroupDialog({
   const [adding, setAdding] = useState(false);
   const [eventMode, setEventMode] = useState<'always' | 'during' | 'except'>(group.event ? (group.event.during ? 'during' : 'except') : 'always');
   const [eventId, setEventId] = useState<number | null>(group.event?.id ?? null);
-  const [eventQuery, setEventQuery] = useState<string | null>(null);
 
   const nameOf = (m: GroupMember): string => {
     const known = names.get(memberKey(m));
@@ -88,9 +88,6 @@ export function GroupDialog({
   const pickedId = eventId;
   const choosing = !nested && eventMode !== 'always';
   const missingEvent = choosing && pickedId === null;
-  const chosenName = events.find((ev) => ev.id === pickedId);
-  const needle = (eventQuery ?? '').trim().toLowerCase();
-  const matching = events.filter((ev) => !needle || (ev.name || `Event ${ev.id}`).toLowerCase().includes(needle) || String(ev.id).includes(needle));
   const event = nested || eventMode === 'always' || pickedId === null ? null : { id: pickedId, during: eventMode === 'during' };
   const edited: SpawnGroup = { ...group, name: name.trim(), maxActive: numberOf(upAtOnce), members, event };
   const share = equalShare(members);
@@ -191,46 +188,7 @@ export function GroupDialog({
             </select>
           </label>
           {!nested && eventMode !== 'always' && (
-            <div className="scene-field">
-              <label>
-                <span>Which event</span>
-                <input
-                  type="text"
-                  role="combobox"
-                  aria-label="Which event"
-                  aria-expanded="true"
-                  aria-controls="group-event-list"
-                  data-selection="on"
-                  autoComplete="off"
-                  placeholder="Search events"
-                  value={eventQuery ?? (chosenName ? chosenName.name || `Event ${chosenName.id}` : pickedId !== null ? `Event ${pickedId}` : '')}
-                  onChange={(e) => setEventQuery(e.target.value)}
-                />
-              </label>
-              {events.length === 0 ? (
-                <p role="alert">No events in the database</p>
-              ) : (
-                <>
-                  {missingEvent && <p role="alert">Choose an event</p>}
-                  <ul id="group-event-list" role="listbox" aria-label="Events" className="world3d__group-dialog-events">
-                    {matching.map((ev) => (
-                      <li
-                        key={ev.id}
-                        role="option"
-                        aria-selected={ev.id === pickedId}
-                        onClick={() => {
-                          setEventId(ev.id);
-                          setEventQuery(null);
-                        }}
-                      >
-                        {ev.name || `Event ${ev.id}`}
-                      </li>
-                    ))}
-                    {matching.length === 0 && <li aria-disabled="true">No event matches</li>}
-                  </ul>
-                </>
-              )}
-            </div>
+            <EventPicker id="group-event" events={events} chosen={pickedId === null ? [] : [pickedId]} onChange={([id]) => setEventId(id ?? null)} />
           )}
           {nested && <p>Only a group that is not inside another can follow an event.</p>}
           <h3 className="world3d__group-dialog-heading">Members</h3>

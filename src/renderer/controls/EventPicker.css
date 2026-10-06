@@ -1,0 +1,18 @@
+.event-picker__list {
+  max-height: 9rem;
+  overflow-y: auto;
+  margin: 0.25rem 0 0;
+  padding: 0;
+  list-style: none;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+}
+
+.event-picker__list li {
+  padding: 0.25rem 0.5rem;
+  cursor: pointer;
+}
+
+.event-picker__list li[aria-selected='true'] {
+  font-weight: 600;
+}
