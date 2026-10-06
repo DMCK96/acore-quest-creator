@@ -51,6 +51,8 @@ export type SpawnInfo = {
   respawnSecs: number;
   /** An NPC's own game events as the project sets them; absent follows its NPC */
   spawnEvents?: SpawnEvents;
+  /** The game events an NPC is drawn by now: there only during these, gone during those */
+  eventsNow?: { during: ViewEvent[]; gone: ViewEvent[] };
   /** An object's template type (3 is a chest); absent for an NPC or when it is not known */
   objectType?: number;
 };
@@ -644,7 +646,7 @@ class SpawnManager {
       const base = { kind, guid, entry: data.entry, name: data.name, own: data.own, added: data.added ?? false, map: data.map, group: data.group ?? null, respawnSecs: data.respawnSecs ?? 300 };
       if (kind === 'creature') {
         const c = data as ViewCreature;
-        return { ...base, pathId: c.pathId ?? 0, wander: c.wander, placement: { x: c.x, y: c.y, z: c.z, orientation: c.orientation, rotation: null }, spawnEvents: c.spawnEvents === undefined ? 'npc' : c.spawnEvents };
+        return { ...base, pathId: c.pathId ?? 0, wander: c.wander, placement: { x: c.x, y: c.y, z: c.z, orientation: c.orientation, rotation: null }, spawnEvents: c.spawnEvents === undefined ? 'npc' : c.spawnEvents, eventsNow: { during: c.events, gone: c.removedBy } };
       }
       const o = data as ViewObject;
       const objectType = o.objectType ?? -1;

@@ -78,7 +78,7 @@ const poolKind = (kind: 'creature' | 'object'): 'npc' | 'object' => (kind === 'o
 type RespawnTarget = { ref: SpawnRef; name: string; respawnSecs: number | null };
 const respawnTargetOf = (s: MenuSpawn): RespawnTarget => ({ ref: refOf(s), name: s.name, respawnSecs: s.respawnSecs });
 /** NPC spawns whose own game events the dialog changes, and what each follows now */
-type EventsTarget = { ref: SpawnRef; name: string; events: SpawnEvents };
+type EventsTarget = { ref: SpawnRef; name: string; events: SpawnEvents; now: MenuSpawn['eventsNow'] };
 
 /** A spawn group open in the dialog: the members by name, and the other groups on its map */
 type GroupEdit = { group: SpawnGroup; names: Map<string, string>; groupsOnMap: { id: number; name: string }[]; events: { id: number; name: string }[]; nested: boolean };
@@ -397,7 +397,7 @@ export function useWorldMenu(deps: WorldMenuDeps): {
       case 'spawnEvents': {
         if (!action.spawns.every(still)) return;
         const read = await api?.gameEvents();
-        const targets = action.spawns.map((s): EventsTarget => ({ ref: refOf(s), name: s.name, events: s.spawnEvents === undefined ? 'npc' : s.spawnEvents }));
+        const targets = action.spawns.map((s): EventsTarget => ({ ref: refOf(s), name: s.name, events: s.spawnEvents === undefined ? 'npc' : s.spawnEvents, now: s.eventsNow }));
         setSpawnEvents({ targets, events: read?.ok ? read.value : [] });
         return;
       }
@@ -625,6 +625,8 @@ export function useWorldMenu(deps: WorldMenuDeps): {
         <EventDialog
           names={spawnEvents.targets.map((t) => t.name)}
           events={spawnEvents.events}
+          // What one spawn follows now; several may each follow something else
+          now={spawnEvents.targets.length === 1 ? spawnEvents.targets[0]!.now : null}
           // Spawns that follow different events start with nothing chosen
           initial={spawnEvents.targets.every((t) => JSON.stringify(t.events) === JSON.stringify(spawnEvents.targets[0]!.events)) ? spawnEvents.targets[0]!.events : 'mixed'}
           onApply={(to) => {

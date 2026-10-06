@@ -27,4 +27,13 @@ describe('the event dialog', () => {
     await userEvent.selectOptions(screen.getByLabelText('Event'), 'Always');
     expect(screen.getByRole('button', { name: 'Apply' })).toHaveProperty('disabled', false);
   });
+
+  it('says what one spawn follows now, a mix of both directions included', () => {
+    const now = { during: [{ id: 12, name: 'Darkmoon Faire' }], gone: [{ id: 24, name: 'Brewfest' }] };
+    const { unmount } = render(<EventDialog names={['Guard']} initial="npc" now={now} events={events} onApply={vi.fn()} onClose={vi.fn()} />);
+    expect(screen.getByText('Now: only during Darkmoon Faire, and gone during Brewfest. That mix is kept unless you choose something else.')).toBeTruthy();
+    unmount();
+    render(<EventDialog names={['Guard']} initial="npc" now={{ during: [], gone: [] }} events={events} onApply={vi.fn()} onClose={vi.fn()} />);
+    expect(screen.getByText('Now: always in the world.')).toBeTruthy();
+  });
 });

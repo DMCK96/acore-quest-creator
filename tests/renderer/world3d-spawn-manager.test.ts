@@ -596,7 +596,7 @@ describe('the world layer in the view', () => {
     const m = manager({ creatures: [creature(1, 1, { x: 0.5, y: 0.5, orientation: 2, wander: 4 })], objects: [], capped: { creatures: false, objects: false } });
     await m.loadArea(1, 0, box);
     expect(m.info('creature', 1)).toEqual({ kind: 'creature', guid: 1, entry: 1, name: 'n', own: false, added: false, pathId: 0, wander: 4, map: 0, group: null, respawnSecs: 300,
-      placement: { x: 0.5, y: 0.5, z: 0, orientation: 2, rotation: null }, spawnEvents: 'npc' });
+      placement: { x: 0.5, y: 0.5, z: 0, orientation: 2, rotation: null }, spawnEvents: 'npc', eventsNow: { during: [], gone: [] } });
     expect(m.info('creature', 99)).toBeNull();
   });
 
