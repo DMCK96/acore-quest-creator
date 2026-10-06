@@ -16,7 +16,6 @@ import { ModulePanel, PanelFrame } from '../modules/ModulePanel';
 import { ChangesView } from './ChangesView';
 import { TestInGameView } from './TestInGameView';
 import { QuestMapView } from '../map/QuestMapView';
-import { MapOpenerProvider, type MapRequest } from '../map/MapOpener';
 import { QuestHeader, type ReadinessChip } from './QuestHeader';
 import './QuestFlowView.css';
 
@@ -42,11 +41,6 @@ export function QuestFlowView({ store }: { store: AppStore }): React.JSX.Element
   const questPools = store((s) => s.questPools);
   const names = useNameBook();
   const [menuOpen, setMenuOpen] = useState(false);
-  /** What the map was opened to do, and the panel to go back to when it closes. */
-  const [mapRequest, setMapRequest] = useState<MapRequest | null>(null);
-  const [mapReturn, setMapReturn] = useState<typeof openPanel>(null);
-  const mapReturnRef = useRef(mapReturn);
-  mapReturnRef.current = mapReturn;
   /** The NPC or object editor, open over whichever panel opened it; kept while the map is open. */
   const [editor, setEditor] = useState<EditorState | null>(null);
   const editorRef = useRef(editor);
@@ -55,25 +49,16 @@ export function QuestFlowView({ store }: { store: AppStore }): React.JSX.Element
   const closeEditor = useCallback(() => setEditor(null), []);
   const onEditorTab = useCallback((tab: string) => setEditor((e) => (e ? { ...e, tab } : e)), []);
 
-  // A map closed any other way than its Close button (Escape, another panel) forgets why it was
-  // opened, so the next opening shows the map rather than placing or drawing on the first click.
-  useEffect(() => {
-    if (openPanel === 'map') return;
-    setMapRequest(null);
-    setMapReturn(null);
-  }, [openPanel]);
-
   // Escape closes the open panel first, and leaves the editor only when nothing is open.
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent): void => {
       // Stepped aside for the World, whose Escape it is
       if (e.key !== 'Escape' || root.current?.closest('[hidden]')) return;
       const state = store.getState();
-      // The map goes back to where it was opened from, like its Close button; the editor sits on top
-      // of the panel that opened it, so it closes before that panel.
-      // The apply confirmation sits over everything else, so it closes first.
+      // The map closes like its Close button; the editor sits on top of the panel that opened it, so it
+      // closes before that panel. The apply confirmation sits over everything else, so it closes first.
       if (state.pendingApply) state.cancelApply();
-      else if (state.openPanel === 'map') state.setOpenPanel(mapReturnRef.current);
+      else if (state.openPanel === 'map') state.setOpenPanel(null);
       else if (editorRef.current) setEditor(null);
       else if (state.openPanel !== null) state.setOpenPanel(null);
       else void state.backToChain();
@@ -110,12 +95,6 @@ export function QuestFlowView({ store }: { store: AppStore }): React.JSX.Element
       selected={openPanel === id} extra={id === 'behaviour' ? rotation : []} onOpen={() => setOpenPanel(id)} />
   );
 
-  const openMap = (request: MapRequest | string | null): void => {
-    setMapRequest(typeof request === 'string' || request === null ? { kind: 'focus', markerId: request } : request);
-    if (openPanel !== 'map') setMapReturn(openPanel === 'changes' || openPanel === 'test' ? null : openPanel);
-    setOpenPanel('map');
-  };
-
   const openEditor: OpenEditor = async (request) => {
     if (request.kind === 'npc' || request.kind === 'object' || request.kind === 'item') {
       // An existing one is brought into the project first
@@ -139,7 +118,6 @@ export function QuestFlowView({ store }: { store: AppStore }): React.JSX.Element
 
   return (
     <EntityEditorProvider open={openEditor}>
-    <MapOpenerProvider open={openMap}>
     <div ref={root} className="quest-flow">
       <div className="quest-flow__main">
         <button type="button" className="btn quest-flow__back" onClick={() => void backToChain()}>
@@ -186,20 +164,7 @@ export function QuestFlowView({ store }: { store: AppStore }): React.JSX.Element
         </PanelFrame>
       )}
       {openPanel === 'map' && (
-        <QuestMapView
-          key={JSON.stringify(mapRequest)}
-          open={open}
-          onChange={setValue}
-          focusId={mapRequest?.kind === 'focus' ? mapRequest.markerId : null}
-          mode={mapRequest && mapRequest.kind !== 'focus' ? mapRequest : null}
-          hasServerData={hasServerData}
-          hasClient={hasClient}
-          onClose={() => {
-            setMapRequest(null);
-            setOpenPanel(mapReturn);
-            setMapReturn(null);
-          }}
-        />
+        <QuestMapView open={open} onChange={setValue} focusId={null} hasServerData={hasServerData} hasClient={hasClient} onClose={() => setOpenPanel(null)} />
       )}
       {openPanel !== null && openPanel !== 'changes' && openPanel !== 'test' && openPanel !== 'map' && (
         <ModulePanel
@@ -220,7 +185,6 @@ export function QuestFlowView({ store }: { store: AppStore }): React.JSX.Element
           onDelete={(kind, entry) => store.getState().deleteEntity(kind, entry)} />
       )}
     </div>
-    </MapOpenerProvider>
     </EntityEditorProvider>
   );
 }

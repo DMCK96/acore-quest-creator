@@ -30,6 +30,8 @@ import { NEEDS_DATABASE } from './menu/section';
 import { readLastPlace, writeLastPlace } from './last-place';
 import { markWelcomeSeen, welcomeSeen } from './welcome-seen';
 import { Welcome } from './Welcome';
+import { useQuestMarkers } from './useQuestMarkers';
+import type { MarkerFocus } from './useMarkerView';
 import './world3d.css';
 
 export interface WorldWorkspaceProps {
@@ -58,7 +60,7 @@ export interface WorldWorkspaceProps {
   onFocusPart?(questId: number, part: FocusPart): void;
   /** Now, on the clock `focus.at` is read against (the store's `moment`) */
   now?: () => number;
-  /** An editor's Place in world, Draw patrol or a spawn's Show in World; each request is its own */
+  /** An editor's Place in world, Draw patrol, or a spawn's or quest position's Show in World; each request is its own */
   request?: WorldRequest & { nonce: number };
   /** Told when what an editor asked is done (placing stopped, the patrol drawn), so the editor comes back */
   onRequestEnd?(): void;
@@ -389,14 +391,55 @@ export function WorldWorkspace({
     }
   };
 
-  // An editor's request: placing starts, or the camera goes to the exact spawn (and its patrol is drawn)
-  const [placeRequest, setPlaceRequest] = useState<{ kind: 'creature' | 'object'; entry: number; name: string; nonce: number } | undefined>();
-  const [patrolRequest, setPatrolRequest] = useState<{ guid: number; name: string; nonce: number } | undefined>();
   const onRequestEndRef = useRef(onRequestEnd);
   onRequestEndRef.current = onRequestEnd;
+  // The open quest's positions (scene steps, escorts, fight summons, areas, POIs) drawn as markers
+  const markers = useQuestMarkers({
+    values, entities: storeRef, map: mapId, change, runStep,
+    setEntities: (next) => {
+      storeRef.current = next;
+      project?.setEntities(next);
+    },
+  });
+  const [markerFocus, setMarkerFocus] = useState<MarkerFocus | undefined>();
+  // The quest position an editor asked to see, until the author is done with it there
+  const [showing, setShowing] = useState<string | null>(null);
+  const endShowing = (): void => {
+    setShowing(null);
+    onRequestEndRef.current?.();
+  };
+  /** Show in World on a quest position: the camera goes to its marker, which is selected to drag */
+  const showMarker = (id: string): void => {
+    const marker = markers.all.find((m) => m.id === id);
+    const map = marker ? (marker.map ?? mapRef.current) : null;
+    if (!marker || map === null || !worldMapById(map)) {
+      setNote(marker ? `${marker.label} is on a map the 3D view does not draw.` : 'That position is not in the open quest.');
+      onRequestEndRef.current?.();
+      return;
+    }
+    jump({ x: marker.x, y: marker.y, z: marker.z }, map);
+    setMarkerFocus((was) => ({ id, nonce: (was?.nonce ?? 0) + 1 }));
+    setShowing(marker.label);
+  };
+  // A quest closed while one of its positions is shown: there is nothing left to show
+  const questOpen = quest !== undefined;
+  useEffect(() => {
+    if (!questOpen && showing !== null) endShowing();
+    // Only the quest closing ends it
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [questOpen]);
+
+  // An editor's request: placing starts, or the camera goes to the exact spawn (and its patrol is drawn) or quest position
+  const [placeRequest, setPlaceRequest] = useState<{ kind: 'creature' | 'object'; entry: number; name: string; nonce: number } | undefined>();
+  const [patrolRequest, setPatrolRequest] = useState<{ guid: number; name: string; nonce: number } | undefined>();
   useEffect(() => {
     const asked = request;
     if (!asked) return;
+    setShowing(null);
+    if (asked.kind === 'marker') {
+      showMarker(asked.id);
+      return;
+    }
     const kind = asked.kind === 'patrol' ? 'creature' : asked.kind === 'spawn' ? asked.spawn : asked.kind;
     const name = giverName({ kind: kind === 'object' ? 'gameobject' : 'creature', id: asked.entry }, namesRef.current, storeRef.current);
     if (asked.kind !== 'patrol' && asked.kind !== 'spawn') {
@@ -534,7 +577,18 @@ export function WorldWorkspace({
         placeRequest={placeRequest}
         patrolRequest={patrolRequest}
         onRequestEnd={() => onRequestEndRef.current?.()}
+        markers={markers.shown}
+        onMarkerMove={markers.move}
+        markerFocus={markerFocus}
       />
+      {showing && (
+        <p role="status" className="world3d__placing">
+          Showing {showing}: drag its handles to move it.
+          <button type="button" className="btn" onClick={endShowing}>
+            Done
+          </button>
+        </p>
+      )}
       {note && (
         <p className="world3d__note" role="status">
           {note}

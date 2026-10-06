@@ -130,6 +130,20 @@ The editors work in the World too. On a giver card, or under **Placement** in an
 
 Without a game client these are not offered.
 
+### The quest's positions
+
+While a quest is open, the World marks the places its scripts and fights use, each with a coloured pin and its name:
+
+- the place of a scene's **Move to**, **Spawn an NPC** or **Spawn an object** step (green),
+- each point of an **Escort** path (blue),
+- where a fight's **Summon adds** puts them (red),
+- an **Enter an area** scene's area, with a ring at its radius (purple),
+- the quest's POI outline from the map marker tables, drawn on the ground (orange; shown, not moved here).
+
+Click a pin to select it: a card names it, says what kind it is and where it is. Drag its handles to move it; let go along the ground and it lands on the server's floor there, as a moved spawn does. Each move is one undo step. **Esc** or **Deselect** lets it go. A position whose NPC has no spawn yet has no known map; it is drawn on the map you are on, and its card says so.
+
+In the quest editor, **Show in World** beside one of these positions steps the editor aside, takes the camera to it and selects it. **Done** brings the editor back. Without a game client it is not offered. Closing the quest takes its pins away.
+
 An NPC or object is the project's, and a quest uses it by naming it. The project's NPCs and objects are drawn and edited in the World whether or not a quest is open. A move, or a path you give one, stays with the NPC, whichever quest uses it.
 
 ### Spawn groups

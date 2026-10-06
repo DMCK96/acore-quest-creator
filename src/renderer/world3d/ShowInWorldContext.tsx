@@ -7,12 +7,14 @@ export type ShowInWorld = (target: ShowTarget) => void;
 
 /**
  * What an editor asks the World to do: place spawns of the project's NPC or object, draw (or edit) the
- * patrol of one of its NPC's spawns, or show one exact spawn.
+ * patrol of one of its NPC's spawns, show one exact spawn, or show one of the open quest's positions (a
+ * marker id, see `questMarkers`) to drag.
  */
 export type WorldRequest =
   | { kind: 'creature' | 'object'; entry: number }
   | { kind: 'patrol'; entry: number; guid: number }
-  | { kind: 'spawn'; spawn: 'creature' | 'object'; entry: number; guid: number };
+  | { kind: 'spawn'; spawn: 'creature' | 'object'; entry: number; guid: number }
+  | { kind: 'marker'; id: string };
 
 /** Asks the World; `onEnd` is told once the author is done there (placing stopped, the patrol is done) */
 export type PlaceInWorld = (request: WorldRequest, onEnd?: () => void) => void;
@@ -35,14 +37,15 @@ export function useShowInWorld(): ShowInWorld | null {
   return useContext(ShowInWorldContext);
 }
 
-/** The host's Place in world, or null where there is no World (no game client, or outside the app shell). */
+/** The host's Place in world (and its other requests), or null where there is no World (no game client, or outside the app shell). */
 export function usePlaceInWorld(): PlaceInWorld | null {
   return useContext(PlaceInWorldContext);
 }
 
 /**
  * For a modal over the World: whether it is stepped aside, and a Place in world that steps it aside while
- * the author works in the World (showing a spawn leaves it be) and brings it back once they are done.
+ * the author works in the World (showing a spawn leaves it be; a quest position is shown to be dragged, so
+ * it steps aside) and brings it back once they are done.
  */
 export function useAsideForWorld(): [aside: boolean, place: PlaceInWorld | null] {
   const outer = usePlaceInWorld();

@@ -11,7 +11,6 @@ import { ModuleBody } from '../../src/renderer/modules/ModuleBody';
 import { QuestFlowView } from '../../src/renderer/views/QuestFlowView';
 import type { AppStore } from '../../src/renderer/state/app-store';
 import { NamesProvider } from '../../src/renderer/state/names';
-import { MapOpenerProvider } from '../../src/renderer/map/MapOpener';
 import { EntityEditorProvider, type OpenEditor } from '../../src/renderer/entities/EntityEditorContext';
 import { EntityEditorHost, type EditorState } from '../../src/renderer/entities/EntityEditorHost';
 import userEvent from '@testing-library/user-event';
@@ -30,7 +29,7 @@ export async function mountBody(
   id: ModuleId,
   over: Record<string, FieldValue> = {},
   opts: {
-    api?: Api; onChange?: Mock; links?: QuestLinks | null; readOnly?: ReadOnlyReason[]; sharedItems?: Record<string, number[]>; openMap?: (request: any) => void; openEditor?: OpenEditor;
+    api?: Api; onChange?: Mock; links?: QuestLinks | null; readOnly?: ReadOnlyReason[]; sharedItems?: Record<string, number[]>; openEditor?: OpenEditor;
     /** The project store; by default read from `over`'s old `entities` field */
     entities?: ProjectEntities; quests?: ProjectQuestUse[]; setEntities?: Mock; tracked?: TrackedEntity[];
     /** The host's Show in World, given to the body as the app shell gives it */
@@ -53,13 +52,7 @@ export async function mountBody(
     <ProjectEntitiesProvider value={project}>
     <NamesProvider api={api}>
       <RewardTablesProvider api={api}>
-        {withEditor(opts.openMap ? (
-          <MapOpenerProvider open={opts.openMap}>
-            <ModuleBody id={id} open={sampleOpen({ questId: 60001, aggregate })} links={opts.links ?? null} onChange={onChange} onOpenQuest={vi.fn()} />
-          </MapOpenerProvider>
-        ) : (
-          <ModuleBody id={id} open={sampleOpen({ questId: 60001, aggregate })} links={opts.links ?? null} onChange={onChange} onOpenQuest={vi.fn()} />
-        ))}
+        {withEditor(<ModuleBody id={id} open={sampleOpen({ questId: 60001, aggregate })} links={opts.links ?? null} onChange={onChange} onOpenQuest={vi.fn()} />)}
       </RewardTablesProvider>
     </NamesProvider>
     </ProjectEntitiesProvider>,

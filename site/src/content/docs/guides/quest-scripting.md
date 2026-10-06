@@ -42,3 +42,5 @@ How an NPC fights is not a scene. That lives in the [combat wizard](/azeroth-wor
 - **Then**: the steps, in order. Each step can wait first. A **Say something** step takes the text to say; `$N` is replaced by the player's name.
 
 Use **Up**, **Down** and **Remove** to reorder or drop steps, and **Remove scene** to delete the whole scene.
+
+A step that names a place (where an NPC moves or appears, an escort's points, an area) takes X, Y, Z and facing, or the pasted output of `.gps`. **Show in World** beside it takes the World to that place, where you can drag it; see [the quest's positions](/azeroth-world-editor/guides/the-world/#the-quests-positions).
