@@ -35,6 +35,12 @@ describe('compileEntities', () => {
     expect(Number(spawn.rotation2)).toBeCloseTo(1, 5);
     expect(Number(spawn.rotation3)).toBeCloseTo(0, 5);
   });
+  it("keeps the other flag bits a new NPC's row already has when writing who sees it", () => {
+    const out = compile({ entities: { npcs: [{ ...npc, seenBy: 'dead' }], objects: [], items: [] },
+      context: { ...EMPTY_ENTITY_CONTEXT, creatures: [{ entry: '12000001', AIName: '', gossip_menu_id: '0', npcflag: '0', flags_extra: '64', type_flags: '4' }] } });
+    expect(out.inserts.creature_template![0]).toMatchObject({ flags_extra: '1088', type_flags: '4' });
+  });
+
   it('writes who sees a new NPC into its flags', () => {
     const one = (seenBy: 'living' | 'dead' | 'both') => compile({ entities: { npcs: [{ ...npc, seenBy }], objects: [], items: [] } }).inserts.creature_template![0]!;
     expect(one('dead')).toMatchObject({ flags_extra: '1024', type_flags: '0' });

@@ -33,7 +33,7 @@ export const ENTITY_KEYS: Record<string, readonly string[]> = {
  * spawns are deleted).
  */
 export interface EntityContext {
-  /** `creature_template` rows of the new NPCs' entries: entry, AIName, gossip_menu_id, npcflag. */
+  /** `creature_template` rows of the new NPCs' entries: entry, AIName, gossip_menu_id, npcflag, flags_extra, type_flags. */
   creatures: RawRow[];
   /** `gameobject_template` rows of the new objects' entries: entry, AIName. */
   gameobjects: RawRow[];
@@ -93,7 +93,7 @@ export async function readEntityContext(db: WorldDb, entities: ProjectEntities, 
   for (const row of addons) if (Number(row.path_id) > 0) pathIds.add(String(row.path_id));
   const waypointRows = await rowsOrNone(db, 'waypoint_data', { id: [...pathIds] });
   return {
-    creatures: pick(creatures, ['entry', 'AIName', 'gossip_menu_id', 'npcflag']),
+    creatures: pick(creatures, ['entry', 'AIName', 'gossip_menu_id', 'npcflag', 'flags_extra', 'type_flags']),
     gameobjects: pick(gameobjects, ['entry', 'AIName']),
     taggedCreatureSpawns: pick(taggedCreatureSpawns, ['guid', 'Comment']),
     taggedObjectSpawns: pick(taggedObjectSpawns, ['guid', 'Comment']),
