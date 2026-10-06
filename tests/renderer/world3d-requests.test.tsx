@@ -135,10 +135,28 @@ describe('the World workspace takes an editor’s request', () => {
     return { world: worlds.at(-1), onRequestEnd };
   }
 
-  it('shows the exact spawn asked for, by its guid', async () => {
-    const { world } = await workspace({ kind: 'spawn', spawn: 'creature', entry: 12000005, guid: 900, nonce: 1 });
+  // The editor that asked is stepped aside: the World says what it shows, and Done brings the editor back
+  it('shows the exact spawn asked for, by its guid, until Done', async () => {
+    const { world, onRequestEnd } = await workspace({ kind: 'spawn', spawn: 'creature', entry: 12000005, guid: 900, nonce: 1 });
     await waitFor(() => expect(world.select).toHaveBeenCalledWith({ kind: 'creature', guid: 900 }));
     expect(world.lookAt).toHaveBeenCalledWith(30, 40, 6, true);
+    expect(await screen.findByText(/Showing Hela\./)).toBeTruthy();
+    await userEvent.click(screen.getByRole('button', { name: 'Done' }));
+    expect(onRequestEnd).toHaveBeenCalledTimes(1);
+    expect(screen.queryByText(/Showing Hela/)).toBeNull();
+  });
+
+  it('says so, and ends at once, when the spawn to show is not there', async () => {
+    const { onRequestEnd } = await workspace({ kind: 'spawn', spawn: 'creature', entry: 12000005, guid: 901, nonce: 1 });
+    expect(await screen.findByText('That spawn is no longer in the project.')).toBeTruthy();
+    expect(onRequestEnd).toHaveBeenCalledTimes(1);
+  });
+
+  it('shows a quest or one of its NPCs asked for from an editor, until Done', async () => {
+    const { onRequestEnd } = await workspace({ kind: 'show', target: { questId: 60001, kind: 'creature', entry: 12000005 }, nonce: 1 });
+    expect(await screen.findByText(/Showing Hela\./)).toBeTruthy();
+    await userEvent.click(screen.getByRole('button', { name: 'Done' }));
+    expect(onRequestEnd).toHaveBeenCalledTimes(1);
   });
 
   it('goes to the spawn whose patrol is asked for and starts its path', async () => {

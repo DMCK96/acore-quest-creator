@@ -7,14 +7,16 @@ export type ShowInWorld = (target: ShowTarget) => void;
 
 /**
  * What an editor asks the World to do: place spawns of the project's NPC or object, draw (or edit) the
- * patrol of one of its NPC's spawns, show one exact spawn, or show one of the open quest's positions (a
- * marker id, see `questMarkers`) to drag.
+ * patrol of one of its NPC's spawns, show one exact spawn, show one of the open quest's positions (a
+ * marker id, see `questMarkers`) to drag, or show a quest or one of its NPCs or objects (Show in World
+ * and Go to from inside an editor, which the focus does).
  */
 export type WorldRequest =
   | { kind: 'creature' | 'object'; entry: number }
   | { kind: 'patrol'; entry: number; guid: number }
   | { kind: 'spawn'; spawn: 'creature' | 'object'; entry: number; guid: number }
-  | { kind: 'marker'; id: string };
+  | { kind: 'marker'; id: string }
+  | { kind: 'show'; target: ShowTarget };
 
 /** Asks the World; `onEnd` is told once the author is done there (placing stopped, the patrol is done) */
 export type PlaceInWorld = (request: WorldRequest, onEnd?: () => void) => void;
@@ -43,23 +45,22 @@ export function usePlaceInWorld(): PlaceInWorld | null {
 }
 
 /**
- * For a modal over the World: whether it is stepped aside, and a Place in world that steps it aside while
- * the author works in the World (showing a spawn leaves it be; a quest position is shown to be dragged, so
- * it steps aside) and brings it back once they are done.
+ * For a modal over the World: whether it is stepped aside, and a Place in world and a Show in World that
+ * step it aside while the author works or looks in the World (the modal would hide what the camera went
+ * to) and bring it back once they are done there.
  */
-export function useAsideForWorld(): [aside: boolean, place: PlaceInWorld | null] {
+export function useAsideForWorld(): [aside: boolean, place: PlaceInWorld | null, show: ShowInWorld | null] {
   const outer = usePlaceInWorld();
   const [aside, setAside] = useState(false);
-  const place = useMemo((): PlaceInWorld | null => outer && ((request, onEnd) => {
-    if (request.kind === 'spawn') {
-      outer(request, onEnd);
-      return;
-    }
-    setAside(true);
-    outer(request, () => {
-      setAside(false);
-      onEnd?.();
-    });
-  }), [outer]);
-  return [aside, place];
+  return useMemo(() => {
+    if (!outer) return [aside, null, null];
+    const place: PlaceInWorld = (request, onEnd) => {
+      setAside(true);
+      outer(request, () => {
+        setAside(false);
+        onEnd?.();
+      });
+    };
+    return [aside, place, (target) => place({ kind: 'show', target })];
+  }, [outer, aside]);
 }

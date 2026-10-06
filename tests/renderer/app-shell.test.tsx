@@ -346,6 +346,19 @@ describe('the app shell', () => {
       expect(screen.getByRole('dialog', { name: 'Quest Giver' })).toBeTruthy();
     });
 
+    it('Show in World steps the editor aside while the World shows the quest, and Done brings it back', async () => {
+      const store = await editing();
+      await waitFor(() => expect(created).toHaveLength(1));
+      const before = store.getState().focus.nonce;
+      await userEvent.click(within(screen.getByRole('dialog', { name: 'Edit quest' })).getByRole('button', { name: 'Show in World' }));
+      expect(screen.queryByRole('dialog', { name: 'Edit quest' })).toBeNull();
+      expect(store.getState().focus).toMatchObject({ questId: 60001, part: null, nonce: before + 1 });
+      expect(await screen.findByText(/Showing Wolves\./)).toBeTruthy();
+      await userEvent.click(screen.getByRole('button', { name: 'Done' }));
+      expect(await screen.findByRole('dialog', { name: 'Edit quest' })).toBeTruthy();
+      expect(screen.getByRole('dialog', { name: 'Quest Giver' })).toBeTruthy();
+    });
+
     it('is not offered without a game client', async () => {
       await editing(false);
       expect(within(screen.getByRole('dialog', { name: 'Quest Giver' })).getByText('Made with this quest.')).toBeTruthy();

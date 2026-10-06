@@ -58,16 +58,18 @@ export function AppShell({ store }: { store: AppStore }): React.JSX.Element {
     store.getState().setFocus(target.questId, 'kind' in target ? { kind: target.kind, entry: target.entry } : null, { again: true });
   }, [store]);
 
-  // Place in world, Draw patrol and a spawn's Show in World from an editor: the World does it, and the
-  // editor that asked is told once it is done. A request made before the last is done ends that one
+  // Place in world, Draw patrol and Show in World from an editor: the World does it, and the editor that
+  // asked is told once it is done. A request made before the last is done ends that one
   const [worldRequest, setWorldRequest] = useState<(WorldRequest & { nonce: number }) | undefined>();
   const requestEnd = useRef<(() => void) | undefined>(undefined);
   const placeInWorld = useCallback<PlaceInWorld>((request, onEnd) => {
     const before = requestEnd.current;
     requestEnd.current = onEnd;
     before?.();
+    // Showing a quest or its part is the focus's to do; the World says what it shows until Done
+    if (request.kind === 'show') showInWorld(request.target);
     setWorldRequest((was) => ({ ...request, nonce: (was?.nonce ?? 0) + 1 }));
-  }, []);
+  }, [showInWorld]);
   const endRequest = useCallback(() => {
     const end = requestEnd.current;
     requestEnd.current = undefined;

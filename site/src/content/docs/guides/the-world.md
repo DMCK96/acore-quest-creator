@@ -39,6 +39,8 @@ Two buttons do the same on demand:
 - **Show in World**, in the quest editor and in the graph preview, takes the World's camera to the quest.
 - **Go to _name_**, beside each giver, ender and objective that names an NPC or object with a spawn, takes the camera to that one's nearest spawn and selects it.
 
+Used from inside the quest editor (or an NPC or object editor), either one steps the editor aside so you can see what the camera went to, and the World says what it is showing; **Done** brings the editor back.
+
 Without the world database, both buttons find only your project's own NPCs and objects and the spawns you moved or placed in the World. For anything else they say *Needs the world database*.
 
 To move the camera:
@@ -125,7 +127,7 @@ On the ground, with a quest open:
 The editors work in the World too. On a giver card, or under **Placement** in an NPC or object editor:
 
 - **Place in world** steps the editor aside and places the NPC or object with each click on the ground, as **Place…** does. **Done** or **Esc** brings the editor back where it was.
-- **Show in World** beside a spawn takes the camera to that spawn and selects it.
+- **Show in World** beside a spawn steps the editor aside, takes the camera to that spawn and selects it. **Done** brings the editor back.
 - **Draw patrol** (or **Edit patrol**) goes to the spawn and starts its path; **Enter** finishes it and brings the editor back. See [patrols](/azeroth-world-editor/guides/patrols/).
 
 Without a game client these are not offered.

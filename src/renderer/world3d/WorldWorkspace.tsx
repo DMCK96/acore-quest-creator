@@ -23,7 +23,8 @@ import { FindDialog, type FindPreset, type FoundSpawn } from './FindDialog';
 import { TeleportDialog } from './TeleportDialog';
 import { QuestOrb } from '../components/QuestOrb';
 import { questPlace } from './quest-place';
-import { PlaceInWorldProvider, useAsideForWorld, type ShowTarget, type WorldRequest } from './ShowInWorldContext';
+import { PlaceInWorldProvider, ShowInWorldProvider, useAsideForWorld, type ShowTarget, type WorldRequest } from './ShowInWorldContext';
+import { questLabel } from '@core/links/drag-link';
 import { useFocusFollow } from './useFocusFollow';
 import type { FocusPart, FocusSlice } from '../state/app/focus';
 import { NEEDS_DATABASE } from './menu/section';
@@ -133,7 +134,7 @@ export function WorldWorkspace({
   // The NPC or object editor, opened from the right-click menu
   const [editor, setEditor] = useState<EditorState | null>(null);
   // The editor steps aside while the author places or draws in the world from it
-  const [editorAside, editorPlace] = useAsideForWorld();
+  const [editorAside, editorPlace, editorShow] = useAsideForWorld();
   const [note, setNote] = useState<string | null>(null);
 
   /** New NPC here… / New object here…: one project NPC or object with a spawn where it was asked for, as one step */
@@ -414,7 +415,7 @@ export function WorldWorkspace({
     },
   });
   const [markerFocus, setMarkerFocus] = useState<MarkerFocus | undefined>();
-  // The quest position an editor asked to see, until the author is done with it there
+  // What an editor asked to see (a quest position, a spawn, a quest or its part), until the author is done with it there
   const [showing, setShowing] = useState<string | null>(null);
   const endShowing = (): void => {
     setShowing(null);
@@ -431,7 +432,7 @@ export function WorldWorkspace({
     }
     jump({ x: marker.x, y: marker.y, z: marker.z }, map);
     setMarkerFocus((was) => ({ id, nonce: (was?.nonce ?? 0) + 1 }));
-    setShowing(marker.label);
+    setShowing(`${marker.label}: drag its handles to move it.`);
   };
   // A quest closed while one of its positions is shown: there is nothing left to show
   const questOpen = quest !== undefined;
@@ -441,7 +442,8 @@ export function WorldWorkspace({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [questOpen]);
 
-  // An editor's request: placing starts, or the camera goes to the exact spawn (and its patrol is drawn) or quest position
+  // An editor's request: placing starts, the camera goes to the exact spawn (and its patrol is drawn) or
+  // quest position, or (Show in World, which the focus does) the World says what it is showing
   const [placeRequest, setPlaceRequest] = useState<{ kind: 'creature' | 'object'; entry: number; name: string; nonce: number } | undefined>();
   const [patrolRequest, setPatrolRequest] = useState<{ guid: number; name: string; nonce: number } | undefined>();
   useEffect(() => {
@@ -450,6 +452,11 @@ export function WorldWorkspace({
     setShowing(null);
     if (asked.kind === 'marker') {
       showMarker(asked.id);
+      return;
+    }
+    if (asked.kind === 'show') {
+      const { target } = asked;
+      setShowing(`${'kind' in target ? giverName({ kind: target.kind, id: target.entry }, namesRef.current, storeRef.current) : questLabel(quest?.nodes ?? [], target.questId)}.`);
       return;
     }
     const kind = asked.kind === 'patrol' ? 'creature' : asked.kind === 'spawn' ? asked.spawn : asked.kind;
@@ -461,11 +468,12 @@ export function WorldWorkspace({
     const spawn = ownSpawnOf(storeRef.current, kind, asked.entry, asked.guid, name);
     if (!spawn || !worldMapById(spawn.map)) {
       setNote(spawn ? `${name} stands on a map the 3D view does not draw.` : 'That spawn is no longer in the project.');
-      if (asked.kind === 'patrol') onRequestEndRef.current?.();
+      onRequestEndRef.current?.();
       return;
     }
     find(spawn);
     if (asked.kind === 'patrol') setPatrolRequest((was) => ({ guid: spawn.guid, name, nonce: (was?.nonce ?? 0) + 1 }));
+    else setShowing(`${name}.`);
     // Only a new request is acted on
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [request?.nonce]);
@@ -595,7 +603,7 @@ export function WorldWorkspace({
       />
       {showing && (
         <p role="status" className="world3d__placing">
-          Showing {showing}: drag its handles to move it.
+          Showing {showing}
           <button type="button" className="btn" onClick={endShowing}>
             Done
           </button>
@@ -611,11 +619,13 @@ export function WorldWorkspace({
       )}
       {editor && project && (
         <PlaceInWorldProvider value={editorPlace}>
+        <ShowInWorldProvider value={editorShow}>
           <div className="modal-backdrop" hidden={editorAside}>
             <EntityEditorHost entities={project.entities} onChange={(next) => project.setEntities(next)} quests={project.quests} layer={project.layer}
               state={editor} onTab={(tab) => setEditor((was) => (was ? { ...was, tab } : was))} onClose={() => setEditor(null)}
               onDelete={(kind, entry) => project.remove(kind, entry)} />
           </div>
+        </ShowInWorldProvider>
         </PlaceInWorldProvider>
       )}
       <section className="world-place glass" aria-label="Place">
