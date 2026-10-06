@@ -5,6 +5,7 @@ import userEvent from '@testing-library/user-event';
 import { createAppStore } from '../../src/renderer/state/app-store';
 import { ChainDock } from '../../src/renderer/views/dock/ChainDock';
 import { CHAIN_DRAG_TYPE, encodePart } from '../../src/renderer/world3d/chain-drop';
+import { NamesProvider } from '../../src/renderer/state/names';
 import { makeMockApi, okv, sampleOpen, nodeOf } from './mock-api';
 
 const drift = { missingTables: [], unregistered: [], missingColumns: [], typeMismatches: [] };
@@ -19,7 +20,8 @@ async function chainDock(over: Record<string, any> = {}) {
   });
   const store = createAppStore(api, { saveDelayMs: 0 });
   await store.getState().connect(form);
-  render(<ChainDock store={store} />);
+  // The app hands the dock its api through the names provider, as App does
+  render(<NamesProvider api={api}><ChainDock store={store} /></NamesProvider>);
   return { api, store };
 }
 
@@ -81,6 +83,23 @@ describe('the chain dock', () => {
     fireEvent.dragStart(ender, { dataTransfer });
     expect(dataTransfer.setData).toHaveBeenCalledWith(CHAIN_DRAG_TYPE, encodePart({ kind: 'gameobject', entry: 77 }));
     expect(dataTransfer.effectAllowed).toBe('copy');
+  });
+
+  // A second spawn is allowed (the row still drags), so the mark is a warning, read from the quest's own spawn list
+  it('marks the open quest’s NPCs and objects already placed in the world', async () => {
+    const values = { 'quest_template.LogTitle': 'Wolves', creature_queststarter: [{ id: 1423 }], gameobject_questender: [{ id: 77 }] };
+    const guard = { kind: 'creature', guid: 80330, entry: 1423, name: 'Guard', map: 0, x: 1, y: 2, z: 3, role: 'giver' };
+    const questSpawnList = vi.fn(async () => okv([{ questId: 60001, title: 'Wolves', spawns: [guard], capped: false, cut: 0 }]));
+    const { store } = await chainDock({ questSpawnList, openQuest: async (id: number) => okv(sampleOpen({ questId: id, aggregate: { ...sampleOpen().aggregate, values } })) });
+    const card = (await screen.findAllByTestId('quest-node'))[0]!;
+    await store.getState().openQuest(60001);
+    const parts = await within(card).findByRole('list', { name: 'Parts' });
+    const giver = within(parts).getByText('NPC #1423').closest('li')!;
+    const ender = within(parts).getByText('Object #77').closest('li')!;
+    await waitFor(() => expect(within(giver).getByText('Placed')).toBeInTheDocument());
+    expect(within(ender).queryByText('Placed')).toBeNull();
+    expect(giver).toHaveAttribute('draggable', 'true');
+    expect(questSpawnList).toHaveBeenCalledWith([60001]);
   });
 
   it('places an added chain at the middle of the graph, not of the window', async () => {

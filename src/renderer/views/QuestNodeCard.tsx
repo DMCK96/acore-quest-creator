@@ -40,10 +40,11 @@ export function QuestNodeCard({
   node: CanvasNode;
   selected: boolean;
   /**
-   * The NPCs and objects with a part in the quest, listed on the open quest's card; the focused one is
-   * marked. Each is dragged out (onto the 3D view, to place it) as its `drag` data.
+   * The NPCs and objects with a part in the quest, listed on the open quest's card; the focused one and
+   * those already placed in the world are marked. Each is dragged out (onto the 3D view, to place it,
+   * or place another) as its `drag` data.
    */
-  parts?: { key: string; name: string; focused: boolean; drag: string }[];
+  parts?: { key: string; name: string; focused: boolean; placed?: boolean; drag: string }[];
   /** The quest rotation this quest is in, if any */
   rotation?: { name: string; daily: boolean } | null;
   /** The rotation tag's click: open the rotation */
@@ -135,14 +136,15 @@ export function QuestNodeCard({
               // nodrag: dragging the row carries the part out, and leaves the card where it is
               className="quest-card__part nodrag"
               aria-current={part.focused ? 'true' : undefined}
-              title="Drag onto the 3D view to place it"
+              title={part.placed ? 'Already placed in the world; drag onto the 3D view to place another' : 'Drag onto the 3D view to place it'}
               draggable
               onDragStart={(e) => {
                 e.dataTransfer.setData(CHAIN_DRAG_TYPE, part.drag);
                 e.dataTransfer.effectAllowed = 'copy';
               }}
             >
-              {part.name}
+              <span className="quest-card__part-name">{part.name}</span>
+              {part.placed && <span className="quest-card__placed">Placed</span>}
             </li>
           ))}
         </ul>

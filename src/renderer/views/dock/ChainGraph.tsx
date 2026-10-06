@@ -19,6 +19,7 @@ import { toFlowEdges, type LinkEdge } from '../canvas-edges';
 import { DRAG_LINK } from '@core/links/drag-link';
 import { encodePart } from '../../world3d/chain-drop';
 import { ChainLinkMenu } from './ChainLinkMenu';
+import { partKey, usePlacedParts } from './usePlacedParts';
 import { questParts, questRoles } from '@core/modules/quest-roles';
 import { giverName } from '@core/modules/summaries';
 import { EMPTY_ENTITIES } from '@core/entities/model';
@@ -40,7 +41,7 @@ interface QuestNodeData extends Record<string, unknown> {
   onAddChain: () => void;
   rotation: { name: string; daily: boolean } | null;
   onRotation: () => void;
-  parts?: { key: string; name: string; focused: boolean; drag: string }[];
+  parts?: { key: string; name: string; focused: boolean; placed: boolean; drag: string }[];
 }
 
 /** A quest's card between its handles: a link is dragged out of the right one into another's left */
@@ -108,6 +109,7 @@ export function ChainGraph({
   const names = useNameBook();
   const entities = useProjectEntities()?.entities ?? EMPTY_ENTITIES;
   const openParts = useMemo(() => (open ? questParts(questRoles(open.aggregate.values)) : []), [open]);
+  const placedParts = usePlacedParts(open?.questId ?? null, nodes);
 
   const { screenToFlowPosition, setViewport: setFlowViewport } = useReactFlow();
   // `<ReactFlow>` only honours `defaultViewport` at mount, so it stays unmounted until the saved
@@ -170,12 +172,14 @@ export function ChainGraph({
         const pool = poolOf.get(n.questId);
         if (pool) onRotation(pool.id);
       },
-      // The open quest's card lists its NPCs and objects, the one in focus marked; each drags onto the 3D view
+      // The open quest's card lists its NPCs and objects, the one in focus and the ones already placed
+      // marked; each drags onto the 3D view (again, for one placed: a second spawn is allowed)
       parts: open?.questId === n.questId
         ? openParts.map((t) => ({
-            key: `${t.kind}:${t.id}`,
+            key: partKey(t.kind, t.id),
             name: giverName(t, names, entities),
             focused: focus.questId === n.questId && focus.part?.kind === t.kind && focus.part.entry === t.id,
+            placed: placedParts.has(partKey(t.kind, t.id)),
             drag: encodePart({ kind: t.kind, entry: t.id }),
           }))
         : undefined,
