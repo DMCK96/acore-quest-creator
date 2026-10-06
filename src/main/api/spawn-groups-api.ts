@@ -3,13 +3,12 @@ import type { Issue } from '../../core/validate/validate';
 import { deleteGroup, dropGroupMember, dropMember, dropQuestMember, groupsOf, putGroup, revertGroup, type WorldLayer } from '../../core/world/layer';
 import { isQuestPool, memberKey } from '../../core/world/groups';
 import { databaseQuestFacts, projectQuestFacts, spawnsUnder } from '../world/groups-api';
-import type { GroupView } from '../../shared/ipc';
-import type { Api } from '../../shared/ipc';
+import type { GroupView, SpawnGroupsApi } from '../../shared/ipc';
 import type { Services } from './services';
 import { fail, run } from './errors';
 
 /** Spawn groups and quest rotations: reading, checking, saving and deleting them */
-export function createSpawnGroupsApi(s: Services): Pick<Api, 'worldGroup' | 'worldGroupSpawns' | 'worldGroupView' | 'worldGroupsOnMap' | 'worldNewGroupId' | 'questPools' | 'worldCheckGroup' | 'worldSetGroup' | 'worldDeleteGroup' | 'worldDropMember'> {
+export function createSpawnGroupsApi(s: Services): SpawnGroupsApi {
   const { deps, connected, quests, asOneStep, projectEntities } = s.ctx;
   const { pools, groupOf, checkGroup, motherToRead, renumberGroup, freeGroupId, spawnAt, groupSpots } = s.groups;
 

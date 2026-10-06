@@ -3,7 +3,7 @@ import type { Api } from './ipc';
 /**
  * The method names and channel names, with no runtime dependencies at all.
  *
- * This sits apart from `ipc.ts` because the preload imports it: a sandboxed preload script cannot
+ * This sits apart from `ipc/` because the preload imports it: a sandboxed preload script cannot
  * `require` anything from `node_modules`, so it must not reach code that pulls zod in. Everything
  * else should import these from `@shared/ipc`, which re-exports them.
  */

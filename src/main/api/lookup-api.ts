@@ -1,9 +1,8 @@
 import type { RawRow, RefKind } from '../../core/db/types';
 import { UnknownColumnError, UnknownTableError, type WorldDb } from '../../core/db/world-db';
 import { registry } from '../../core/registry';
-import type { SpellFactsResult } from '../../shared/ipc';
+import type { LookupApi, SpellFactsResult } from '../../shared/ipc';
 import { spellDetail, spellLabel } from '../../core/game/spells';
-import type { Api } from '../../shared/ipc';
 import type { Services } from './services';
 import { run } from './errors';
 import { ENTITY_SEARCH_LIMIT } from './server-files';
@@ -41,7 +40,7 @@ async function readRewardRow(
 }
 
 /** Searches and names: quests, NPCs, objects, items, spells, sounds, looks, rewards and events */
-export function createLookupApi(s: Services): Pick<Api, 'searchQuests' | 'searchEntities' | 'lookupNames' | 'rewardTables' | 'spellFacts' | 'gameEvents'> {
+export function createLookupApi(s: Services): LookupApi {
   const { connected, projectEntities } = s.ctx;
   const { spellsOf, soundsOf, questSortsOf, lookOf, isLookKind, lookHits } = s.files;
 

@@ -1,9 +1,9 @@
-import type { Api } from '../../shared/ipc';
+import type { HistoryApi } from '../../shared/ipc';
 import type { Services } from './services';
 import { run } from './errors';
 
 /** The project history: listing, undoing, redoing, jumping and grouping changes into one step */
-export function createHistoryApi(s: Services): Pick<Api, 'historyList' | 'historyUndo' | 'historyRedo' | 'historyJump' | 'historyBegin' | 'historyEnd'> {
+export function createHistoryApi(s: Services): HistoryApi {
   const { history, historyList } = s.ctx;
   const { travel, queued } = s.travel;
 

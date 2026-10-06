@@ -2,12 +2,12 @@ import { addSpawn, groupsOf, isAdded, moveSpawn, movementsOf, respawnsOf, revert
 import { groupDrifted } from '../world/groups-api';
 import { IDLE } from '../../core/world/movement';
 import { addedDrifted, countWalkers, routeWalkerName, movementDrifted, readMovement, readPlacement, readRespawn, readRoute, readTemplateLook, readWalkerEntries, respawnDrifted, routeDrifted, spawnDrifted } from '../world/world-api';
-import type { Api } from '../../shared/ipc';
+import type { WorldLayerApi } from '../../shared/ipc';
 import type { Services } from './services';
 import { fail, run } from './errors';
 
 /** The world layer: edits to the database's own spawns, routes, movement and respawn times, and placed spawns */
-export function createWorldLayerApi(s: Services): Pick<Api, 'worldLayer' | 'worldAddSpawn' | 'worldMoveSpawn' | 'worldRoute' | 'worldSetRoute' | 'worldSetMovement' | 'worldSetRespawn' | 'worldRevert' | 'worldChanges'> {
+export function createWorldLayerApi(s: Services): WorldLayerApi {
   const { deps, conn, connected, quests, projectEntities } = s.ctx;
 
   /** A route as the database has it, with how many spawns walk it; refused when it is gone */

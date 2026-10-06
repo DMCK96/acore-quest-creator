@@ -5,12 +5,12 @@ import { existingDrift } from '../../core/entities/existing';
 import { projectEntitiesSchema, type ProjectEntities } from '../../core/entities/model';
 import { itemFromRows, npcFromRows, objectFromRows } from '../../core/entities/from-rows';
 import { readExistingRows } from '../entities/existing';
-import type { Api } from '../../shared/ipc';
+import type { EntitiesApi } from '../../shared/ipc';
 import type { Services } from './services';
 import { fail, run } from './errors';
 
 /** The project's NPCs, objects and items: ids for new ones, templates to start from, and editing existing ones */
-export function createEntitiesApi(s: Services): Pick<Api, 'allocateIds' | 'entityTemplate' | 'itemColumns' | 'projectEntities' | 'putProjectEntities' | 'readExistingEntity' | 'existingDrift' | 'deleteEntity'> {
+export function createEntitiesApi(s: Services): EntitiesApi {
   const { deps, connected, quests, asOneStep, putEntities, projectEntities, exportSchema } = s.ctx;
 
   return {

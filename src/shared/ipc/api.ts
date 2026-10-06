@@ -1,0 +1,23 @@
+import type { ConnectionApi } from './connection';
+import type { LookupApi } from './lookup';
+import type { QuestsApi } from './quests';
+import type { MapApi } from './map';
+import type { EntitiesApi } from './entities';
+import type { WorldLayerApi } from './world-layer';
+import type { SpawnGroupsApi } from './spawn-groups';
+import type { HistoryApi } from './history';
+import type { ExportApi } from './export';
+import type { ProjectApi } from './project';
+
+/** Everything the renderer can ask the main process to do: every area's calls */
+export interface Api
+  extends ConnectionApi,
+    LookupApi,
+    QuestsApi,
+    MapApi,
+    EntitiesApi,
+    WorldLayerApi,
+    SpawnGroupsApi,
+    HistoryApi,
+    ExportApi,
+    ProjectApi {}

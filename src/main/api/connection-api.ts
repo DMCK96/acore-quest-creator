@@ -6,7 +6,7 @@ import { loadSchema } from '../../core/schema/load';
 import { SCRIPT_TABLES } from '../../core/scripts/context';
 import { ENTITY_TABLES } from '../../core/entities/context';
 import { loadServerData } from '../server-data';
-import type { Api } from '../../shared/ipc';
+import type { ConnectionApi } from '../../shared/ipc';
 import type { Services } from './services';
 import { fail, run } from './errors';
 import { NO_SERVER_DATA_FILES } from './server-files';
@@ -14,7 +14,7 @@ import { NO_SERVER_DATA_FILES } from './server-files';
 const REGISTRY_TABLES = registry.tables.map((t) => t.table);
 
 /** Connection profiles, and connecting to a world database */
-export function createConnectionApi(s: Services): Pick<Api, 'testConnection' | 'saveProfile' | 'listProfiles' | 'deleteProfile' | 'startupProfile' | 'connect' | 'chooseServerDataDir'> {
+export function createConnectionApi(s: Services): ConnectionApi {
   const { deps, conn } = s.ctx;
 
   return {

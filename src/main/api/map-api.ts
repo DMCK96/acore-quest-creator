@@ -2,11 +2,10 @@ import { SPAWN_VIEW_CAP } from '@core/db/view-spawns';
 import { rowsOrNone } from '../../core/links/context';
 import type { QuestAggregate } from '../../core/model/aggregate';
 import { movementsOf } from '../../core/world/layer';
-import type { QuestMapRef, QuestSpawn, QuestSpawnGroup, SpawnDot } from '../../shared/ipc';
+import type { MapApi, QuestMapRef, QuestSpawn, QuestSpawnGroup, SpawnDot } from '../../shared/ipc';
 import { floorsAt } from '../../core/game/navmesh';
 import { objectivesOf, relationOwners } from '../../core/entities/links';
 import { gridFileName, terrainHeight } from '../../core/game/terrain';
-import type { Api } from '../../shared/ipc';
 import type { Services } from './services';
 import { run } from './errors';
 
@@ -19,7 +18,7 @@ const FIND_SPAWNS_LIMIT = 300;
 const QUEST_SPAWNS_PER_ENTRY = 200;
 
 /** The quest map and the 3D view: ground, floors, maps, spawns near a place or of a quest, and new path ids */
-export function createMapApi(s: Services): Pick<Api, 'patrolPathId' | 'worldNewPathId' | 'groundHeight' | 'mapList' | 'mapFloors' | 'mapSpawns' | 'viewSpawns' | 'entitySpawns' | 'findSpawns' | 'spawnPlacement' | 'questMapRefs' | 'questSpawnList'> {
+export function createMapApi(s: Services): MapApi {
   const { deps, conn, connected, questOf, projectEntities, questEntities } = s.ctx;
   const { terrainAt, navTileAt, mapsOf } = s.files;
   const { spawnAt } = s.groups;

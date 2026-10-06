@@ -12,7 +12,7 @@ import { ENTITY_KEYS, ENTITY_TABLES } from '../../core/entities/context';
 import { relationOwners } from '../../core/entities/links';
 import { existingDrift } from '../../core/entities/existing';
 import { gmCommands } from '../../core/testing/gm';
-import type { Api } from '../../shared/ipc';
+import type { ExportApi } from '../../shared/ipc';
 import type { Services } from './services';
 import { fail, run } from './errors';
 import { KEY_COLUMNS, patchDate } from './patches';
@@ -23,7 +23,7 @@ const CREATURE_TABLE = 'creature_template';
 const QUEST_GIVER_BIT = 2;
 
 /** Exporting: the quest and project patches, previewing them, test commands, and applying to the dev database */
-export function createExportApi(s: Services): Pick<Api, 'previewChanges' | 'exportProject' | 'testCommands' | 'exportQuest' | 'applyToDev'> {
+export function createExportApi(s: Services): ExportApi {
   const { deps, connected, usable, quests, questOf, projectEntities, questEntities, exportSchema } = s.ctx;
   const { guardWrite, guardProject } = s.checks;
   const { projectPatch, patchFor } = s.patches;

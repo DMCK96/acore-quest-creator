@@ -20,12 +20,11 @@ import { compareTables } from '../../core/roundtrip/compare';
 import type { FidelityReport } from '../../core/roundtrip/verify';
 import { validateQuest } from '../../core/validate/validate';
 import { projectQuestFacts } from '../world/groups-api';
-import type { CanvasNode, NodeGroup, NodeLink, NodePosition, OpenResult, QuestLinks, StartBadge } from '../../shared/ipc';
+import type { CanvasNode, NodeGroup, NodeLink, NodePosition, OpenResult, QuestLinks, QuestsApi, StartBadge } from '../../shared/ipc';
 import { listIdsOf, taggedRows } from '../../core/scripts/context';
 import { foreignScenes, scenesFromRows } from '../../core/scripts/decompile';
 import { SCRIPTS_FIELD, readScenes, writeScenes, type QuestScene, type SceneOwner } from '../../core/scripts/model';
 import { objectivesOf, questRefs, questUses, relationOwners } from '../../core/entities/links';
-import type { Api } from '../../shared/ipc';
 import type { Services } from './services';
 import { fail, run } from './errors';
 import type { Session } from './connection';
@@ -77,7 +76,7 @@ function nameTarget(endpoint: Endpoint): [NameKind, number] | undefined {
 }
 
 /** Quests on the canvas: opening, making, laying out, linking, editing and checking them */
-export function createQuestsApi(s: Services): Pick<Api, 'openQuest' | 'addQuestChain' | 'newQuest' | 'listNodes' | 'moveNodes' | 'removeNode' | 'saveViewport' | 'questLinks' | 'updateQuest' | 'questScripts' | 'validate'> {
+export function createQuestsApi(s: Services): QuestsApi {
   const { deps, connected, usable, quests, asOneStep, questOf, placeAt, withProjectStarters, linksFor, projectEntities, refsFor, missingScriptTables } = s.ctx;
   const { issuesOf } = s.checks;
   const { importWithScenes } = s.patches;
