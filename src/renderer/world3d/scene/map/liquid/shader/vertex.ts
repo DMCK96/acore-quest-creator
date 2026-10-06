@@ -1,4 +1,3 @@
-// @ts-nocheck
 import {
   FUNCTION_CALCULATE_FOG_FACTOR,
   UNIFORM_FOG_PARAMS,

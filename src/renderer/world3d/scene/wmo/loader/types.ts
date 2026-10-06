@@ -1,5 +1,4 @@
-// @ts-nocheck
-import { LiquidSpec } from '../../map/loader/liquid.js';
+import type { LiquidSpec } from '../../map/loader/liquid.js';
 
 type WmoBatchSpec = {
   /** First index, and how many, in the group's index buffer */
@@ -36,4 +35,4 @@ type WmoSpec = {
   problems: string[];
 };
 
-export { WmoBatchSpec, WmoGroupSpec, WmoMaterialSpec, WmoSpec };
+export type { WmoBatchSpec, WmoGroupSpec, WmoMaterialSpec, WmoSpec };

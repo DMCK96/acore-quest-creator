@@ -1,4 +1,3 @@
-// @ts-nocheck
 import * as THREE from 'three';
 import TextureManager from '../texture/TextureManager.js';
 import { AssetHost, normalizePath } from '../asset.js';

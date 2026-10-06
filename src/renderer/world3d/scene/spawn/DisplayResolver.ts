@@ -1,4 +1,3 @@
-// @ts-nocheck
 /**
  * What an NPC's or object's display looks like: which model to draw, which skins fill its replaceable
  * texture slots, and which of its geosets show. Read from the game client's own tables (through the
@@ -146,7 +145,7 @@ class DisplayResolver {
   }
 
   /** A creature that is its own model, in up to three skins */
-  async #plain(display) {
+  async #plain(display: CreatureDisplayInfoRecord): Promise<ModelLook | null> {
     const model = (await this.#table('CreatureModelData'))?.getRecord(display.modelId);
     if (!model || !model.modelName) {
       return null;
@@ -155,7 +154,7 @@ class DisplayResolver {
     const path = modelPath(model.modelName);
     const folder = folderOf(model.modelName);
     const textures: Record<number, string> = {};
-    display.textureVariations.forEach((skin, i) => {
+    display.textureVariations.forEach((skin: string, i: number) => {
       if (skin) {
         textures[FIRST_SKIN_SLOT + i] = `${folder}\\${skin}.blp`;
       }

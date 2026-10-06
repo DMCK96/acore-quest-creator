@@ -1,4 +1,3 @@
-// @ts-nocheck
 /**
  * A building group's water, magma or slime (MLIQ) as a liquid spec, in the building's own space, to
  * be drawn with the same materials as the terrain's liquid.

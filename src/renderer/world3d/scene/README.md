@@ -18,8 +18,10 @@ picking, per-object transforms) and because the published package breaks under V
 its loader workers are found through `new URL('./worker.js', import.meta.url)`, which a pre-bundled
 dependency cannot resolve. Here the workers are the `.ts` files beside their loaders.
 
-Type checking is switched off for these files (`// @ts-nocheck`): they were written for a looser
-compiler setting than this project's.
+Type checking is switched off for upstream's own files (`// @ts-nocheck`): they were written for a
+looser compiler setting than this project's. The folders written or rewritten here are checked:
+`wmo/`, `map/liquid/`, `spawn/`, `character/`, `edit/`, `diagnostics.ts`, `model/animator-tracks.ts`.
+A file taken on here loses its `@ts-nocheck` in the same change.
 
 ## What differs from upstream
 

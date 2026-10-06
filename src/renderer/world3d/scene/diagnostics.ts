@@ -1,4 +1,3 @@
-// @ts-nocheck
 /**
  * What could not be loaded while a map streams in. Wowser's classes let one bad file (a model the
  * parser cannot read, a missing texture) fail a whole area; here the file is skipped, and told about

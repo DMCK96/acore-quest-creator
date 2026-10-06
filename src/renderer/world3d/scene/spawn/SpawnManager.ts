@@ -1,4 +1,3 @@
-// @ts-nocheck
 /**
  * The world's NPCs and objects in the 3D view: one group per loaded area (a 533-yard tile), like the
  * terrain, buildings and liquid. Each spawn is drawn with its display's model (or building), placed by
@@ -73,7 +72,7 @@ const movesKeyOf = (c: ViewCreature): string => JSON.stringify([c.x, c.y, c.z, c
 
 /** An NPC's route and wander circle, each knowing whose it is, hidden until its NPC's route is active */
 const movesOf = (creature: ViewCreature): THREE.Object3D[] =>
-  [routeObject(creature), wanderObject(creature)].filter(Boolean).map((shown) => {
+  [routeObject(creature), wanderObject(creature)].filter((shown): shown is NonNullable<typeof shown> => shown !== null).map((shown) => {
     shown.userData.guid = creature.guid;
     shown.visible = false;
     return shown;
@@ -124,6 +123,21 @@ type PickedSpawn = {
   event: { id: number; name: string } | null;
   position: { x: number; y: number; z: number };
 };
+
+/**
+ * What a drawn model (the vendored `Model`) offers beyond an `Object3D`: its attachment points, showing
+ * and hiding (which also stops it animating), and freeing what it holds. A building or marker has none.
+ */
+type DrawnModel = THREE.Object3D & {
+  attachmentObject?(point: number): THREE.Object3D | null;
+  show?(): void;
+  hide?(): void;
+  dispose?(): void;
+  material?: THREE.Material | THREE.Material[];
+};
+/** A drawn model that has attachment points, so it can hold weapons and wear helmets */
+type Holder = DrawnModel & { attachmentObject(point: number): THREE.Object3D | null };
+const canHold = (object: DrawnModel | null): object is Holder => typeof object?.attachmentObject === 'function';
 
 type SpawnManagerOptions = {
   resolver: DisplayResolver;
@@ -227,7 +241,7 @@ const boundsOf = (geometry: THREE.BufferGeometry): THREE.Box3 => {
   let bounds = vertexBounds.get(geometry);
   if (!bounds) {
     const position = geometry.getAttribute('position');
-    bounds = position ? new THREE.Box3().setFromBufferAttribute(position) : new THREE.Box3();
+    bounds = position ? new THREE.Box3().setFromBufferAttribute(position as THREE.BufferAttribute) : new THREE.Box3();
     vertexBounds.set(geometry, bounds);
   }
   return bounds;
@@ -703,7 +717,7 @@ class SpawnManager {
     const hit = new THREE.Vector3();
     const hits: { spawn: THREE.Object3D; distance: number; bounds: THREE.Box3 }[] = [];
     for (const group of this.#areas.values()) {
-      for (const name of ['creatures', 'objects']) {
+      for (const name of ['creatures', 'objects'] as const) {
         const kind = holderOf(group, name);
         if (!kind?.visible) continue;
         for (const spawn of kind.children) {
@@ -758,7 +772,7 @@ class SpawnManager {
           if (typeof ball.userData.point === 'number') points.push({ guid: shown.userData.guid, index: ball.userData.point, at: ball.position.clone() });
         }
       }
-      for (const name of ['creatures', 'objects']) {
+      for (const name of ['creatures', 'objects'] as const) {
         const kind = holderOf(group, name);
         if (!kind?.visible) continue;
         for (const spawn of kind.children) {
@@ -780,7 +794,7 @@ class SpawnManager {
       for (const shown of holderOf(group, 'paths')?.children ?? []) {
         if (shown.userData.guid === guid && shown.name === 'route') {
           shown.userData.previewed = true;
-          moveRouteDrawing(shown, { x: creature.x, y: creature.y, z: creature.z }, points);
+          moveRouteDrawing(shown as THREE.Group, { x: creature.x, y: creature.y, z: creature.z }, points);
         }
       }
     }
@@ -797,7 +811,7 @@ class SpawnManager {
         shown.userData.previewed = true;
         if (shown.name === 'route') {
           const points = this.#pendingRoutes.get(guid) ?? creature.path;
-          if (points?.length) moveRouteDrawing(shown, at, points);
+          if (points?.length) moveRouteDrawing(shown as THREE.Group, at, points);
         } else {
           // A wander circle is drawn round where the NPC stood: shifted by how far it has gone
           shown.position.set(at.x - creature.x, at.y - creature.y, at.z - creature.z);
@@ -828,14 +842,14 @@ class SpawnManager {
   cull(cameraPosition: THREE.Vector3, frustum?: THREE.Frustum) {
     let grounding = GROUNDS_PER_FRAME;
     for (const group of this.#areas.values()) {
-      for (const name of ['creatures', 'objects']) {
-        for (const spawn of holderOf(group, name)?.children ?? []) {
+      for (const name of ['creatures', 'objects'] as const) {
+        for (const spawn of (holderOf(group, name)?.children ?? []) as DrawnModel[]) {
           const near = this.#drawn(spawn, name, cameraPosition);
           // Drawn, as edits and outlines see it; shown only while the camera also looks at it
           spawn.userData.drawn = near;
           if (near && name === 'creatures' && grounding > 0 && this.#ground(spawn)) grounding -= 1;
           const seen = near && (!frustum || inView(spawn, frustum));
-          if (typeof spawn.show === 'function') {
+          if (spawn.show && spawn.hide) {
             if (seen) spawn.show();
             else spawn.hide();
           } else {
@@ -853,7 +867,7 @@ class SpawnManager {
           const marked = this.#marked.has(`${shown.userData.guid}:${ball.userData.point}`);
           if (marked !== (ball.userData.marked === true)) {
             ball.userData.marked = marked;
-            setBallSelected(ball, marked);
+            setBallSelected(ball as THREE.Mesh, marked);
           }
         }
       }
@@ -962,12 +976,14 @@ class SpawnManager {
    * again. An area not yet filled is filled whole.
    */
   async #patch(group: THREE.Group, spawns: ViewSpawns) {
-    const containers = { creature: holderOf(group, 'creatures'), object: holderOf(group, 'objects') };
+    const creatures = holderOf(group, 'creatures');
+    const objects = holderOf(group, 'objects');
     const paths = holderOf(group, 'paths');
-    if (!containers.creature || !containers.object || !paths) {
+    if (!creatures || !objects || !paths) {
       await this.#fill(group, spawns);
       return;
     }
+    const containers = { creature: creatures, object: objects };
     const fill = (group.userData.fill ?? 0) + 1;
     group.userData.fill = fill;
 
@@ -978,11 +994,11 @@ class SpawnManager {
       const wanted = new globalThis.Set<number>();
       for (const spawn of list) {
         wanted.add(spawn.guid);
-        const transform = kind === 'creature' ? creatureTransform(spawn) : objectTransform(spawn);
+        const transform = kind === 'creature' ? creatureTransform(spawn as ViewCreature) : objectTransform(spawn as ViewObject);
         const old = drawn.get(spawn.guid);
         if (old) this.#place(old, kind, spawn, transform);
         if (old && old.userData.lookKey === lookKeyOf(kind, spawn)) continue;
-        const resolve = kind === 'creature' ? () => this.#resolver.creature(spawn.displayId, spawn.preset ?? null) : () => this.#resolver.object(spawn.displayId);
+        const resolve = kind === 'creature' ? () => this.#resolver.creature(spawn.displayId, (spawn as ViewCreature).preset ?? null) : () => this.#resolver.object(spawn.displayId);
         drawing.push(this.#drawSpawn(kind, spawn, resolve, transform).then((made) => ({ container, made, old })));
       }
       for (const [guid, object] of drawn) {
@@ -1054,7 +1070,7 @@ class SpawnManager {
    * and materials, and the models' shared geometry and textures, are kept.
    */
   #release(root: THREE.Object3D) {
-    const owned: THREE.Object3D[] = [];
+    const owned: DrawnModel[] = [];
     root.traverse((object) => {
       if (object !== root) owned.push(object);
     });
@@ -1072,7 +1088,7 @@ class SpawnManager {
 
   /** One spawn's model or building, placed; a marker when it cannot be drawn */
   async #drawSpawn(kind: 'creature' | 'object', spawn: ViewCreature | ViewObject, resolve: () => Promise<Look | null>, transform: Transform) {
-    let drawn: THREE.Object3D | null = null;
+    let drawn: DrawnModel | null = null;
     let lookScale = 1;
     try {
       let look = await resolve();
@@ -1084,8 +1100,9 @@ class SpawnManager {
       if (look) {
         lookScale = look.scale;
         drawn = look.kind === 'building' ? await this.#createBuilding(look.path) : await this.#createModel(look);
-        if (look.kind === 'model' && look.attachments?.length && typeof drawn.attachmentObject === 'function') {
-          await Promise.all(look.attachments.map((worn) => this.#wear(drawn, worn)));
+        const holder = drawn;
+        if (look.kind === 'model' && look.attachments?.length && canHold(holder)) {
+          await Promise.all(look.attachments.map((worn) => this.#wear(holder, worn)));
         }
       } else if (spawn.displayId > 0) {
         this.#warnOnce(
@@ -1102,9 +1119,10 @@ class SpawnManager {
     }
 
     // Weapons in hand: main hand at attachment 1, off hand at 2; a ranged weapon is sheathed, not drawn
-    if (drawn && kind === 'creature' && typeof drawn.attachmentObject === 'function') {
+    const holder = drawn;
+    if (kind === 'creature' && canHold(holder)) {
       const [mainHand, offHand] = (spawn as ViewCreature).equipment ?? [0, 0, 0];
-      await Promise.all([[mainHand, 1], [offHand, 2]].map(([item, point]) => this.#hold(drawn, item, point)));
+      await Promise.all(([[mainHand, 1], [offHand, 2]] as const).map(([item, point]) => this.#hold(holder, item ?? 0, point)));
     }
 
     const object = drawn ?? this.#marker(kind);
@@ -1118,7 +1136,7 @@ class SpawnManager {
   }
 
   /** A worn model (a helmet, a shoulder pad) at its attachment point; one that cannot be drawn is left off */
-  async #wear(model, worn: { point: number; look: ModelLook }) {
+  async #wear(model: Holder, worn: { point: number; look: ModelLook }) {
     try {
       const point = model.attachmentObject(worn.point);
       if (point) point.add(await this.#createModel(worn.look));
@@ -1128,7 +1146,7 @@ class SpawnManager {
   }
 
   /** A weapon in one of a model's hands; one that cannot be drawn is left out (the resolver says why) */
-  async #hold(model, itemId: number, point: number) {
+  async #hold(model: Holder, itemId: number, point: number) {
     if (!(itemId > 0)) return;
     try {
       const look = await this.#resolver.weapon(itemId);
