@@ -77,3 +77,22 @@ describe('the project patch', () => {
     expect(questAt).toBeGreaterThan(npcAt);
   });
 });
+
+describe('spawn events in the project patch', () => {
+  it("writes a new NPC's spawn events, with a revert that takes them away", async () => {
+    const { api, written } = await setup();
+    const during = { ...hela, events: { mode: 'during' as const, events: [12] } };
+    await api.putProjectEntities({ ...EMPTY_ENTITIES, npcs: [during] });
+    const out: any = await api.exportProject();
+    expect(out.ok).toBe(true);
+    expect(out.value.sql).toMatch(/INSERT INTO `game_event_creature` \(`eventEntry`, `guid`\) VALUES \(12, 6000001\)/);
+    expect(written.get(out.value.revertPath)).toMatch(/DELETE FROM `game_event_creature` WHERE `guid` = 6000001/);
+  });
+
+  it('writes nothing for a new NPC that is always in the world and has no rows', async () => {
+    const { api } = await setup();
+    await api.putProjectEntities({ ...EMPTY_ENTITIES, npcs: [hela] });
+    const out: any = await api.exportProject();
+    expect(out.value.sql).not.toContain('game_event_creature');
+  });
+});

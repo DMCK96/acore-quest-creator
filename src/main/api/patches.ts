@@ -21,6 +21,8 @@ import { ENTITY_KEYS, readEntityContext } from '../../core/entities/context';
 import { objectivesOf, questItemsOf, relationOwners } from '../../core/entities/links';
 import { existingStatements, newLootIds } from '../../core/entities/existing';
 import { newOnly } from '../../core/entities/model';
+import { spawnEventPlan, spawnEventStatements } from '../../core/entities/spawn-events';
+import { npcSpawnGuids, spawnEventRows, spawnEventWarnings } from '../../core/entities/spawn-events-read';
 import type { ProjectQuest } from '../project/project-file';
 import type { ApiContext } from './context';
 import type { Session } from './connection';
@@ -130,6 +132,12 @@ export function createPatches(ctx: ApiContext) {
     // One given its first loot takes a free loot id when its entry is already someone else's list
     const loot = await newLootIds(live.db, store);
     const existing = existingStatements(store, givers, loot.ids);
+    // NPC spawns' game events: an existing NPC's rule covers every spawn the database has now
+    const dbGuids = new Map<number, number[]>();
+    for (const npc of store.npcs) if (npc.origin.kind === 'existing') dbGuids.set(npc.entry, await npcSpawnGuids(live.db, npc.entry));
+    const eventPlan = spawnEventPlan({ npcs: store.npcs, layer, dbGuids });
+    const events = spawnEventStatements(eventPlan, await spawnEventRows(live.db, eventPlan.map((p) => p.guid)));
+    const eventWarnings = await spawnEventWarnings(live.db, eventPlan, layer, new Map(store.npcs.map((n) => [n.entry, n.name || `NPC ${n.entry}`])));
     const of = (list: readonly PatchStatement[], kind: PatchStatement['kind']) => list.filter((st) => st.kind === kind);
     // Deletes first; the entities before the SmartAI rows that act on them; the world's edits last
     const apply = [
@@ -138,6 +146,7 @@ export function createPatches(ctx: ApiContext) {
       ...existing.apply,
       ...of(scriptRows, 'set-flag'), ...of(entityStatements, 'update'), ...of(scriptRows, 'update'), ...of(scriptRows, 'insert'),
       ...world.apply,
+      ...events.apply,
     ];
     // The revert takes away every row the entities part wrote, the last written first
     const keysOf = (table: string): readonly string[] => ENTITY_KEYS[table] ?? SCRIPT_KEYS[table] ?? [];
@@ -154,7 +163,8 @@ export function createPatches(ctx: ApiContext) {
     }
     revert.push(...existing.revert);
     revert.push(...world.revert);
-    return { apply, revert, schema, warnings: [...compiledEntities.warnings, ...scripts.compiled.warnings, ...loot.warnings], lootWarnings: loot.warnings };
+    revert.push(...events.revert);
+    return { apply, revert, schema, warnings: [...compiledEntities.warnings, ...scripts.compiled.warnings, ...loot.warnings, ...eventWarnings], lootWarnings: loot.warnings };
   }
 
   /**
