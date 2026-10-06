@@ -51,7 +51,7 @@ test('a version 3 project, an NPC made in the World and undone, and the project 
   await page.getByLabel('Server data folder (optional)').fill(DATA_DIR);
   await page.getByLabel('Game client folder (optional)').fill(CLIENT_DIR);
   await page.getByRole('button', { name: 'Save and connect' }).click();
-  await expect(page.getByRole('tab', { name: 'Quests' })).toBeVisible({ timeout: 30_000 });
+  await expect(page.getByRole('button', { name: 'Quests', exact: true })).toBeVisible({ timeout: 30_000 });
 
   // 1. The version 3 project: its quest's NPC is now the project's, used by the quest
   await app.evaluate(({ dialog }, p) => {
@@ -61,7 +61,7 @@ test('a version 3 project, an NPC made in the World and undone, and the project 
   await page.getByRole('dialog', { name: 'Project' }).getByRole('button', { name: 'Open…' }).click();
   await expect(page.getByRole('banner').getByRole('heading', { level: 1 })).toHaveText('Fixture v3');
 
-  await page.getByRole('tab', { name: 'Quests' }).click();
+  await page.getByRole('button', { name: 'Quests', exact: true }).click();
   // The fixture's card sits at the canvas origin, under the quest tools: a double-click opens it there too
   await page.getByTestId('quest-node').filter({ hasText: 'Fixture Wolves' }).dispatchEvent('dblclick');
   await page.getByRole('list', { name: 'Modules' }).getByRole('button', { name: /^NPCs, objects & items/ }).click();
@@ -69,7 +69,7 @@ test('a version 3 project, an NPC made in the World and undone, and the project 
   await page.keyboard.press('Escape');
   await page.getByRole('button', { name: '← Back to chain' }).click();
 
-  await page.getByRole('tab', { name: 'World' }).click();
+  // The world stays in view above the Quests dock
   // A project's first visit to the World greets it; Esc leaves the greeting
   const welcome = page.getByRole('dialog', { name: 'Welcome' });
   await expect(welcome).toBeVisible();

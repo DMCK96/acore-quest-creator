@@ -1,11 +1,13 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { ProjectEntitiesFromStore } from '../state/project-entities';
 import type { AppStore } from '../state/app-store';
-import { AppBar, type Workspace } from '../components/AppBar';
+import { AppBar } from '../components/AppBar';
 import { ErrorBanner } from '../components/ErrorBanner';
 import { HistoryNote } from '../components/HistoryNote';
 import { isTextField } from '../components/HistoryButtons';
-import { CanvasHome } from './CanvasHome';
+import { ChainDock } from './dock/ChainDock';
+import { DockLayout } from './dock/DockLayout';
+import { usePreferences } from '../preferences/usePreferences';
 import { WorldWorkspace } from '../world3d/WorldWorkspace';
 import { projectKey } from '../world3d/welcome-seen';
 import { ShowInWorldProvider, type ShowTarget } from '../world3d/ShowInWorldContext';
@@ -15,14 +17,15 @@ import { RecoveryDialog } from './RecoveryDialog';
 import './AppShell.css';
 
 /**
- * The app once connected: the app bar over two workspaces, the world in 3D (where it opens) and the
- * quest graph. Both stay mounted, so switching keeps the camera and the graph where they were; the
- * world stops drawing while the quests show.
+ * The app once connected: the app bar over the world in 3D, where the app opens, with the quest chain
+ * in a dock under or beside it. The world is never hidden, so opening and closing the dock keeps the
+ * camera where it was.
  */
 export function AppShell({ store }: { store: AppStore }): React.JSX.Element {
-  const [workspace, setWorkspace] = useState<Workspace>('world');
+  const [dockOpen, setDockOpen] = useState(false);
   const [showProject, setShowProject] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
+  const [prefs, updatePrefs] = usePreferences();
   const questsAsked = store((s) => s.questsAsked);
   const filePath = store((s) => s.project.filePath);
   const projectName = store((s) => s.project.name);
@@ -30,43 +33,30 @@ export function AppShell({ store }: { store: AppStore }): React.JSX.Element {
   const open = store((s) => s.open);
   const nodes = store((s) => s.nodes);
   const [goTo, setGoTo] = useState<{ map: number; x: number; y: number; z: number; nonce: number } | undefined>();
-  // A quest opened while the World was not shown, for the World to go to when it next is
-  const [follow, setFollow] = useState<{ questId: number; at: number } | undefined>();
   // Show in World / Go to, handed to the World
   const [showRequest, setShowRequest] = useState<{ target: ShowTarget; nonce: number } | undefined>();
-  const workspaceRef = useRef(workspace);
-  workspaceRef.current = workspace;
 
-  // When the author last picked a workspace, on the store's clock
-  const chosenAt = useRef(0);
-  const choose = useCallback(
-    (next: Workspace) => {
-      chosenAt.current = store.getState().moment();
-      setWorkspace(next);
-    },
-    [store],
-  );
+  // When the author last opened or closed the dock themselves, on the store's clock
+  const toggledAt = useRef(0);
+  const toggleDock = useCallback(() => {
+    toggledAt.current = store.getState().moment();
+    setDockOpen((was) => !was);
+  }, [store]);
 
-  // A quest opened from anywhere is previewed on the graph, so the quests come forward; but not for an
-  // open the author has since turned away from, by picking a workspace while it was on its way
+  // A quest opened from anywhere is previewed in the dock, so the dock opens; but not for an open the
+  // author has since turned away from, by closing the dock while it was on its way
   useEffect(() => {
-    // The quest lands with the moment its opening began; the World follows it later only if it is not
-    // what is shown now (a quest opened from the World itself is already in view)
-    const opened = store.getState().open;
-    if (questsAsked > 0 && opened && workspaceRef.current !== 'world') setFollow({ questId: opened.questId, at: questsAsked });
-    if (questsAsked > chosenAt.current) setWorkspace('quests');
-  }, [questsAsked, store]);
+    if (questsAsked > toggledAt.current) setDockOpen(true);
+  }, [questsAsked]);
 
-  const showInWorld = useCallback(
-    (target: ShowTarget) => {
-      choose('world');
-      setShowRequest((was) => ({ target, nonce: (was?.nonce ?? 0) + 1 }));
-    },
-    [choose],
-  );
+  const showInWorld = useCallback((target: ShowTarget) => {
+    setShowRequest((was) => ({ target, nonce: (was?.nonce ?? 0) + 1 }));
+  }, []);
 
-  // Unsaved work a crash left behind is offered once, as soon as the app is up.
+  // The project's name and quests are read as soon as the app is up, for the bar and the world, not only
+  // once the dock first opens. Unsaved work a crash left behind is offered once, then too.
   useEffect(() => {
+    void store.getState().loadNodes();
     void store.getState().loadRecoveries();
   }, [store]);
 
@@ -108,8 +98,8 @@ export function AppShell({ store }: { store: AppStore }): React.JSX.Element {
     <div className="app-shell">
       <AppBar
         store={store}
-        workspace={workspace}
-        onWorkspace={choose}
+        dockOpen={dockOpen}
+        onToggleDock={toggleDock}
         onOpenProject={() => setShowProject(true)}
         onOpenSettings={() => setShowSettings(true)}
       />
@@ -117,42 +107,45 @@ export function AppShell({ store }: { store: AppStore }): React.JSX.Element {
       <HistoryNote
         store={store}
         onShowQuest={(questId) => {
-          choose('quests');
+          setDockOpen(true);
           void store.getState().openQuest(questId);
         }}
         onShowPlace={(place) => {
-          choose('world');
           setGoTo((was) => ({ map: place.map, x: place.x, y: place.y, z: place.z, nonce: (was?.nonce ?? 0) + 1 }));
         }}
       />
-      <div className="app-shell__workspace" hidden={workspace !== 'world'}>
-        <WorldWorkspace
-          hasClient={hasClient}
-          active={workspace === 'world'}
-          projectKey={projectKey(filePath)}
-          // A project not saved yet is welcomed without its placeholder name
-          projectName={filePath ? projectName : ''}
-          onOpenSettings={() => setShowSettings(true)}
-          onShowQuests={() => choose('quests')}
-          onStartQuest={() => {
-            choose('quests');
-            void store.getState().newQuest();
-          }}
-          quest={open ? { open, nodes } : undefined}
-          goTo={goTo}
-          follow={follow}
-          showRequest={showRequest}
-          now={store.getState().moment}
-          onQuestField={(fieldId, value) => store.getState().setValue(fieldId, value)}
-          onNewQuest={(giver, previous) => {
-            // The NPC gives the new quest and takes it back; in a chain, it comes after the one that was
-            // open. The quest it makes brings the quests forward, so one that cannot be made leaves the world.
-            void store.getState().newQuestFrom(giver, previous);
-          }}
+      <div className="app-shell__body">
+        <DockLayout
+          open={dockOpen}
+          side={prefs.dockSide}
+          size={prefs.dockSize[prefs.dockSide]}
+          onSize={(size) => updatePrefs({ dockSize: { ...prefs.dockSize, [prefs.dockSide]: size } })}
+          main={
+            <WorldWorkspace
+              hasClient={hasClient}
+              projectKey={projectKey(filePath)}
+              // A project not saved yet is welcomed without its placeholder name
+              projectName={filePath ? projectName : ''}
+              onOpenSettings={() => setShowSettings(true)}
+              onShowQuests={() => setDockOpen(true)}
+              onStartQuest={() => {
+                setDockOpen(true);
+                void store.getState().newQuest();
+              }}
+              quest={open ? { open, nodes } : undefined}
+              goTo={goTo}
+              showRequest={showRequest}
+              now={store.getState().moment}
+              onQuestField={(fieldId, value) => store.getState().setValue(fieldId, value)}
+              onNewQuest={(giver, previous) => {
+                // The NPC gives the new quest and takes it back; in a chain, it comes after the one that was
+                // open. The quest it makes opens the dock.
+                void store.getState().newQuestFrom(giver, previous);
+              }}
+            />
+          }
+          dock={<ChainDock store={store} />}
         />
-      </div>
-      <div className="app-shell__workspace" hidden={workspace !== 'quests'}>
-        <CanvasHome store={store} />
       </div>
       {showProject && <ProjectDialog store={store} onClose={() => setShowProject(false)} />}
       {showSettings && <SettingsDialog store={store} onClose={() => setShowSettings(false)} />}

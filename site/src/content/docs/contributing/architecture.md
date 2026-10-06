@@ -33,7 +33,7 @@ Inside `src/core`, each feature has its own folder: `scripts` (quest scripting s
 
 ## The 3D view
 
-The app is built around the **World**: the game world in 3D, drawn from the user's own game client. It is where the app opens, and the quest tools are a second workspace beside it. The code is in `src/renderer/world3d/`.
+The app is built around the **World**: the game world in 3D, drawn from the user's own game client. It is where the app opens, and the quest chain is in a dock under or beside it (`src/renderer/views/dock/`: `DockLayout`, `ChainDock` and its `ChainGraph`). The code is in `src/renderer/world3d/`.
 
 ### How it is built
 

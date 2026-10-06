@@ -39,6 +39,10 @@ All three are optional.
 
 **Save** reconnects with the new details. It closes the open quest; your project stays open. If the connection fails, the error shows in the dialog and the app stays connected with the old details.
 
+## Preferences
+
+The **Preferences** tab holds how the app looks on this computer. **Quest dock** puts the **Quests** dock **Under the world** or **Beside the world**; each side remembers its own size. Preferences are kept on this computer, not in the project.
+
 ## Where the app keeps its data
 
 Connection details, recent projects, recovery copies and cached map tiles live in the app's data folder:

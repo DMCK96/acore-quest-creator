@@ -45,9 +45,9 @@ test('an existing NPC is edited from the giver card and exported with its revert
   await page.getByLabel('Server data folder (optional)').fill(serverDataDir());
   await page.getByLabel('Game client folder (optional)').fill(clientDir());
   await page.getByRole('button', { name: 'Save and connect' }).click();
-  await expect(page.getByRole('tab', { name: 'Quests' })).toBeVisible({ timeout: 30_000 });
+  await expect(page.getByRole('button', { name: 'Quests', exact: true })).toBeVisible({ timeout: 30_000 });
 
-  await page.getByRole('tab', { name: 'Quests' }).click();
+  await page.getByRole('button', { name: 'Quests', exact: true }).click();
   await page.getByRole('button', { name: 'New quest', exact: true }).click();
   await page.getByLabel('Quest title').fill('Ask the guard');
   await page.getByRole('list', { name: 'Modules' }).getByRole('button', { name: /^Quest Giver/ }).click();
@@ -67,7 +67,7 @@ test('an existing NPC is edited from the giver card and exported with its revert
   await page.keyboard.press('Escape');
   await page.getByRole('button', { name: '← Back to chain' }).click();
 
-  await page.getByRole('tab', { name: 'World' }).click();
+  // The world stays in view above the Quests dock
   const welcome = page.getByRole('dialog', { name: 'Welcome' });
   // A project's first visit to the World greets it; Esc leaves the greeting
   await expect(welcome).toBeVisible();

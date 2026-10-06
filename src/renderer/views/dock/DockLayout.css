@@ -8,8 +8,10 @@
 .dock-layout[data-side='bottom'] { flex-direction: column; }
 .dock-layout[data-side='right'] { flex-direction: row; }
 
+/* A flex box, so the main view inside it can grow to fill it. */
 .dock-layout__main {
   flex: 1 1 0;
+  display: flex;
   min-width: 0;
   min-height: 0;
   position: relative;

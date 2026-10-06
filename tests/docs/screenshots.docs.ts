@@ -106,13 +106,13 @@ test.describe.serial('docs screenshots', () => {
 
   test('canvas', async () => {
     await page.getByRole('button', { name: 'Connect', exact: true }).click();
-    // The app opens on the world, greeting a fresh profile; the quest graph is the Quests tab.
+    // The app opens on the world, greeting a fresh profile; the quest graph is in the Quests dock.
     await page.getByRole('button', { name: 'Just look around' }).click({ timeout: 30000 });
-    await page.getByRole('tab', { name: 'Quests' }).click();
+    await page.getByRole('button', { name: 'Quests', exact: true }).click();
     await expect(page.getByRole('button', { name: 'New quest', exact: true })).toBeVisible({ timeout: 30000 });
     await expect(page.getByText('Game client', { exact: true })).toBeVisible();
     await page.getByRole('button', { name: 'Add existing quest', exact: true }).click();
-    await page.getByRole('searchbox').fill('The Defias Brotherhood');
+    await page.getByRole('dialog', { name: 'Add existing quest chain' }).getByRole('searchbox').fill('The Defias Brotherhood');
     await page.getByRole('button', { name: /^The Defias Brotherhood \(\d+, level \d+\)$/ }).first().click();
     // The whole chain loads from the world DB before the preview opens.
     await expect(page.getByRole('complementary', { name: 'Quest preview' })).toBeVisible({ timeout: 30000 });
@@ -337,7 +337,6 @@ test.describe.serial('docs screenshots', () => {
 
   // The 3D world, with the quest built above still open, so the menu offers its quest items too
   test('world', async () => {
-    await page.getByRole('tab', { name: 'World' }).click();
     await page.getByRole('button', { name: 'Find…' }).click();
     const find = page.getByRole('dialog', { name: 'Find an NPC or object' });
     await find.getByRole('searchbox', { name: 'Find by name or ID' }).fill('Marshal McBride');

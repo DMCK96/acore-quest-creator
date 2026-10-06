@@ -177,7 +177,7 @@ describe("the app bar's settings button", () => {
   it('opens settings', async () => {
     const onOpenSettings = vi.fn();
     const store = createAppStore(makeMockApi());
-    render(<AppBar store={store} workspace="world" onWorkspace={() => {}} onOpenProject={() => {}} onOpenSettings={onOpenSettings} />);
+    render(<AppBar store={store} dockOpen={false} onToggleDock={() => {}} onOpenProject={() => {}} onOpenSettings={onOpenSettings} />);
     await userEvent.click(screen.getByRole('button', { name: 'Settings' }));
     expect(onOpenSettings).toHaveBeenCalled();
   });

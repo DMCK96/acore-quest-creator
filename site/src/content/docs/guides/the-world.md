@@ -5,7 +5,7 @@ sidebar:
   order: 0.5
 ---
 
-The **World** tab is where the app opens and where most work happens: the game world in 3D, drawn from your own game client. Walk it, place NPCs and objects that already exist, move them, draw the paths they walk, and tie them to the quest you have open. Changes to spawns that belong to no quest are kept as **world changes** and exported as a patch of their own.
+The **World** is where the app opens and where most work happens: the game world in 3D, drawn from your own game client. Walk it, place NPCs and objects that already exist, move them, draw the paths they walk, and tie them to the quest you have open. Changes to spawns that belong to no quest are kept as **world changes** and exported as a patch of their own.
 
 ![The World over Northshire Abbey, with Marshal McBride selected](../../../assets/screenshots/world.png)
 
@@ -30,11 +30,11 @@ The World needs the **game client folder**, set when you [connect](/azeroth-worl
 
 ### Following a quest
 
-Open a quest from the **Quests** tab and then switch to the World, and the camera is already there: it flies to the quest's giver, or its ender if it has no giver, or an objective if it has neither. If the quest has several, it picks the one nearest the camera on the current map. A quest with no spawns leaves the camera where it was. If you move the camera yourself before switching, it stays where you put it. **Back** takes you to where you were.
+Open a quest in the **Quests** dock and the camera goes there: it flies to the quest's giver, or its ender if it has no giver, or an objective if it has neither. If the quest has several, it picks the one nearest the camera on the current map. A quest with no spawns leaves the camera where it was. **Back** takes you to where you were.
 
 Two buttons do the same on demand:
 
-- **Show in World**, in the quest editor and in the graph preview, switches to the World and takes the camera to the quest.
+- **Show in World**, in the quest editor and in the graph preview, takes the World's camera to the quest.
 - **Go to _name_**, beside each giver, ender and objective that names an NPC or object with a spawn, takes the camera to that one's nearest spawn.
 
 Without the world database, both buttons find only your project's own NPCs and objects and the spawns you moved or placed in the World. For anything else they say *Needs the world database*.

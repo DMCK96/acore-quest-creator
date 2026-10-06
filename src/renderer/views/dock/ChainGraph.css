@@ -1,0 +1,61 @@
+.chain-graph {
+  position: absolute;
+  inset: 0;
+}
+
+.react-flow__minimap {
+  background: var(--glass-bg-strong) !important;
+  backdrop-filter: blur(var(--glass-blur));
+  border: 1px solid var(--glass-border);
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+}
+
+.react-flow__controls {
+  box-shadow: var(--glass-shadow) !important;
+  border: 1px solid var(--glass-border);
+  border-radius: var(--radius);
+  overflow: hidden;
+}
+
+.react-flow__controls-button {
+  background: var(--glass-bg-strong) !important;
+  border-bottom: 1px solid var(--border-soft) !important;
+  color: var(--text) !important;
+  fill: var(--text) !important;
+}
+
+.react-flow__controls-button:hover {
+  background: var(--border-soft) !important;
+}
+
+.react-flow__background {
+  background: var(--bg) !important;
+}
+
+/* React Flow puts the edge's own class on its `<g>`, one level above the path it draws, so every
+   rule below has to reach through it. */
+.react-flow__edge.edge--turnin .react-flow__edge-path {
+  stroke: var(--accent);
+}
+
+.react-flow__edge.edge--inlog .react-flow__edge-path {
+  stroke: var(--accent);
+  opacity: 0.55;
+}
+
+.react-flow__edge.edge--offer .react-flow__edge-path {
+  stroke: var(--accent);
+}
+
+.react-flow__edge.edge--breadcrumb .react-flow__edge-path {
+  stroke-dasharray: 6 4;
+}
+
+.react-flow__edge.edge--finishall .react-flow__edge-path {
+  stroke-width: 2;
+}
+
+.react-flow__edge.edge--script .react-flow__edge-path {
+  stroke-dasharray: 2 4;
+}

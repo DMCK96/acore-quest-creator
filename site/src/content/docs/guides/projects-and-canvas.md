@@ -5,7 +5,7 @@ sidebar:
   order: 1
 ---
 
-After you connect, the app opens on the **World**. Your quests are on the **Quests** tab, beside it at the top: the **canvas**, with every quest in your project as a card and lines showing which quest leads to which. Switching tabs keeps both where you left them.
+After you connect, the app opens on the **World**. Your quests are in the **Quests** dock: choose **Quests** in the top bar and it opens under the World (or beside it: see **Preferences** in [Settings](/azeroth-world-editor/reference/settings/)). It holds the **canvas**, with every quest in your project as a card and lines showing which quest leads to which. Drag the bar between the World and the dock to resize it. Opening a quest from anywhere opens the dock; opening and closing it keeps both where you left them. **Find a quest**, among the quest tools, searches the database for a quest to open.
 
 ![The canvas showing a chain of quests, each a card linked to the next](../../../assets/screenshots/canvas.png)
 

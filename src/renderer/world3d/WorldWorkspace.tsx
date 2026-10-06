@@ -371,12 +371,16 @@ export function WorldWorkspace({
   const valid = [typed.x, typed.y, typed.z].every((v) => v.trim() !== '') && Object.values(parsed).every(Number.isFinite);
 
   // Esc closes this workspace's own panels, the top one first; it never leaves the world. The view
-  // clears its own selection.
+  // clears its own selection. Only keys pressed in the world are its own: one pressed in the quest dock
+  // beside it, or in a dialog over the app, is left to that.
+  const section = useRef<HTMLElement | null>(null);
   const panels = useRef({ finding, teleporting, coordinates, welcoming, leaveWelcome, preset });
   panels.current = { finding, teleporting, coordinates, welcoming, leaveWelcome, preset };
   useEffect(() => {
     if (!active) return;
     const onKeyDown = (e: KeyboardEvent): void => {
+      const from = e.target instanceof Element ? e.target : null;
+      if (from && from !== document.body && !section.current?.contains(from)) return;
       if (e.key === 'ArrowLeft' && e.altKey && !e.ctrlKey && !e.metaKey && !e.shiftKey) {
         const el = e.target instanceof HTMLElement ? e.target : null;
         if (el && (el.isContentEditable || ['INPUT', 'TEXTAREA', 'SELECT'].includes(el.tagName))) return;
@@ -434,7 +438,7 @@ export function WorldWorkspace({
   );
 
   return (
-    <section className="world-workspace" aria-label="World">
+    <section ref={section} className="world-workspace" aria-label="World">
       <World3DView
         map={mapId}
         start={at}

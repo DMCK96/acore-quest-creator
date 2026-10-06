@@ -1,22 +1,52 @@
-.canvas-shell {
+/* The dock's body: the graph pane, with the open quest's preview beside it. The quest editor lies over both. */
+.chain-dock {
+  position: relative;
+  display: flex;
+  width: 100%;
+  height: 100%;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.chain-dock__pane {
+  flex: 1;
+  position: relative;
+  min-width: 0;
+}
+
+/* Top left over the graph: the quest actions on the same frosted card as the world's place card, and the
+   search unfolded under them. */
+.chain-dock__corner {
+  position: absolute;
+  top: 14px;
+  left: 14px;
+  bottom: 14px;
+  z-index: 5;
   display: flex;
   flex-direction: column;
-  flex: 1;
-  min-width: 0;
-  min-height: 0;
+  align-items: flex-start;
+  gap: 0.5rem;
+  max-width: calc(100% - 28px);
+  pointer-events: none;
 }
 
-.canvas-body {
-  position: relative;
+.chain-dock__corner > * {
+  pointer-events: auto;
+}
+
+.quest-tools {
   display: flex;
-  flex: 1;
-  min-height: 0;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  padding: 0.55rem 0.6rem;
 }
 
-.canvas-pane {
-  flex: 1;
-  position: relative;
-  min-width: 0;
+.chain-dock__find {
+  width: min(24rem, 100%);
+  min-height: 0;
+  overflow-y: auto;
+  padding: 0.6rem;
 }
 
 .canvas-empty {
@@ -62,18 +92,6 @@
   stroke-linecap: round;
   stroke-linejoin: round;
   filter: drop-shadow(0 1px 6px rgba(40, 28, 16, 0.6));
-}
-
-/* The quest actions, top left over the graph: the same frosted card as the world's place card. */
-.quest-tools {
-  position: absolute;
-  top: 14px;
-  left: 14px;
-  z-index: 5;
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.4rem;
-  padding: 0.55rem 0.6rem;
 }
 
 .canvas-empty__title {
@@ -135,61 +153,4 @@
   stroke: currentColor;
   stroke-width: 1.8;
   stroke-linecap: round;
-}
-
-.react-flow__minimap {
-  background: var(--glass-bg-strong) !important;
-  backdrop-filter: blur(var(--glass-blur));
-  border: 1px solid var(--glass-border);
-  border-radius: var(--radius-lg);
-  overflow: hidden;
-}
-
-.react-flow__controls {
-  box-shadow: var(--glass-shadow) !important;
-  border: 1px solid var(--glass-border);
-  border-radius: var(--radius);
-  overflow: hidden;
-}
-
-.react-flow__controls-button {
-  background: var(--glass-bg-strong) !important;
-  border-bottom: 1px solid var(--border-soft) !important;
-  color: var(--text) !important;
-  fill: var(--text) !important;
-}
-
-.react-flow__controls-button:hover {
-  background: var(--border-soft) !important;
-}
-
-.react-flow__background {
-  background: var(--bg) !important;
-}
-
-/* React Flow puts the edge's own class on its `<g>`, one level above the path it draws, so every
-   rule below has to reach through it. */
-.react-flow__edge.edge--turnin .react-flow__edge-path {
-  stroke: var(--accent);
-}
-
-.react-flow__edge.edge--inlog .react-flow__edge-path {
-  stroke: var(--accent);
-  opacity: 0.55;
-}
-
-.react-flow__edge.edge--offer .react-flow__edge-path {
-  stroke: var(--accent);
-}
-
-.react-flow__edge.edge--breadcrumb .react-flow__edge-path {
-  stroke-dasharray: 6 4;
-}
-
-.react-flow__edge.edge--finishall .react-flow__edge-path {
-  stroke-width: 2;
-}
-
-.react-flow__edge.edge--script .react-flow__edge-path {
-  stroke-dasharray: 2 4;
 }
