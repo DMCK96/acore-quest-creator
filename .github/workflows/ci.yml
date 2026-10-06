@@ -1,0 +1,40 @@
+# Checks every push and pull request: types, unit tests, a build, and the 3D view in a browser against
+# a fake game client. The release workflow runs the same checks before it builds installers.
+name: CI
+
+on:
+  push:
+    branches: ['**']
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - run: npm run typecheck
+      # The unit tests read table schemas from the Conquest of AzerothCore fork's base SQL; only
+      # that folder is fetched.
+      - uses: actions/checkout@v7
+        with:
+          repository: jealous-sound/azerothcore-wotlk-coa
+          path: coa
+          sparse-checkout: data/sql/base/db_world
+      - run: npm test
+        env:
+          ACQC_AC_SQL_DIR: ${{ github.workspace }}/coa/data/sql
+      - run: npx electron-vite build
+      - run: npx playwright install --with-deps chromium
+      - run: npm run test:world3d
