@@ -168,7 +168,7 @@ interface ViewProps {
   markerFocus?: MarkerFocus;
 }
 
-/** How often, and how many times, a patrol request looks for its NPC in the view while the world loads */
+/** How often, and how many times once the world has loaded its NPCs, a patrol request looks for its NPC in the view */
 const PATROL_LOOK_MS = 250;
 const PATROL_LOOKS = 120;
 
@@ -754,6 +754,8 @@ function WorldStage({
       const current = world.current;
       const info = current?.spawnOf('creature', guid);
       if (!current || !info) {
+        // A busy place's NPCs can take longer than the looks to load: the time only runs once they are in
+        if ((current?.spawnStatus().loading ?? 0) > 0) return;
         looks += 1;
         if (looks >= PATROL_LOOKS) {
           clearInterval(timer);

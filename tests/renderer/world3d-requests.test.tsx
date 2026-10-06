@@ -81,6 +81,25 @@ describe('the 3D view does what an editor asked', () => {
     expect(screen.queryByText(/Hela’s patrol/)).toBeNull();
   });
 
+  // A busy place's NPCs can take longer than the look's time limit to load; the NPC is in one of them
+  it('keeps looking for the NPC while the world is still loading its NPCs, then gives up once it is not', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    try {
+      let loading = 3;
+      const { world, onRequestEnd } = await view({ patrolRequest: { guid: 900, name: 'Hela', nonce: 1 } });
+      world.spawnStatus = () => ({ capped: { creatures: false, objects: false }, error: null, loading, events: [] });
+      act(() => vi.advanceTimersByTime(60_000));
+      expect(onRequestEnd).not.toHaveBeenCalled();
+      expect(screen.queryByText(/could not be found/)).toBeNull();
+      loading = 0;
+      act(() => vi.advanceTimersByTime(60_000));
+      expect(onRequestEnd).toHaveBeenCalledTimes(1);
+      expect(screen.getByText('Hela could not be found in the view.')).toBeTruthy();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it('leaves an NPC that already patrols to have its route edited, until Done', async () => {
     const { world, onRequestEnd } = await view({ patrolRequest: { guid: 900, name: 'Hela', nonce: 1 } });
     world.spawnOf.mockReturnValue(helaAt(80));
