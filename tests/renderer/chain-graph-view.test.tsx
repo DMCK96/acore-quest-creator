@@ -20,7 +20,7 @@ vi.mock('@xyflow/react', async (original) => {
 
 import { ChainDock } from '../../src/renderer/views/dock/ChainDock';
 
-describe('the chain graph across re-renders', () => {
+describe('the chain graph in the dock', () => {
   // A card without its measured size is hidden by React Flow until measured again, so a click
   // in that moment (the second click of a double-click) falls through to the pane
   it('keeps each card’s measured size on the nodes it hands React Flow', async () => {
@@ -32,5 +32,14 @@ describe('the chain graph across re-renders', () => {
     await act(async () => { await store.getState().loadNodes(); });
     const card = (flow.props!.nodes as Node[]).find((n) => n.id === '10')!;
     expect(card.measured).toEqual({ width: 240, height: 80 });
+  });
+
+  // React Flow's own floor (0.5) stops Fit view short: a chain of eight quests did not fit a dock beside the world
+  it('lets Fit view zoom out far enough for a long chain in a narrow dock', async () => {
+    const store = createAppStore(makeMockApi({ listNodes: async () => okv([nodeOf({ questId: 10, title: 'Wolves' })]) }), { saveDelayMs: 0 });
+    await store.getState().loadNodes();
+    render(<ChainDock store={store} />);
+    await screen.findAllByTestId('quest-node');
+    expect(flow.props!.minZoom).toBeLessThanOrEqual(0.2);
   });
 });

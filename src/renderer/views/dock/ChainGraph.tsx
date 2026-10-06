@@ -209,6 +209,8 @@ export function ChainGraph({
           // click is the open quest, which has its own highlight that the outline could contradict
           className={multi ? 'canvas--multi' : undefined}
           zoomOnDoubleClick={false}
+          // Below React Flow's floor of 0.5, so Fit view fits a long chain into a dock beside the world
+          minZoom={0.2}
           defaultViewport={viewport}
           // No new link while a quest edit is on its way: the link edits a quest too
           nodesConnectable={!saving}
