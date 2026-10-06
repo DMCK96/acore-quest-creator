@@ -65,6 +65,16 @@ describe('the spawn event plan', () => {
     expect(spawnEventPlan({ npcs: [hela], layer: EMPTY_WORLD, dbGuids: new Map() })).toEqual([{ guid: 6000001, entry: 12000001, rule: null }]);
   });
 
+  it("a new NPC's spawns placed in the 3D view follow it too, unless they have their own rule", () => {
+    const hela = { ...newNpc(12000001), events: during12, spawns: [newSpawn(6000001)] };
+    const layer: WorldLayer = { ...EMPTY_WORLD, added: [placed(90001, 12000001), placed(90002, 12000001, except4)] };
+    expect(spawnEventPlan({ npcs: [hela], layer, dbGuids: new Map() })).toEqual([
+      { guid: 6000001, entry: 12000001, rule: during12 },
+      { guid: 90001, entry: 12000001, rule: during12 },
+      { guid: 90002, entry: 12000001, rule: except4 },
+    ]);
+  });
+
   it('an existing NPC covers every database spawn and its placed ones; a layer edit or a placed spawn\'s own rule wins', () => {
     const layer: WorldLayer = {
       ...EMPTY_WORLD,
@@ -125,6 +135,8 @@ describe('an NPC\'s spawn facts', () => {
   it('counts every spawn and the ones with their own events', () => {
     const hela = { ...newNpc(12000001), spawns: [newSpawn(1), { ...newSpawn(2), events: null }] };
     expect(npcSpawnFacts(hela, EMPTY_WORLD, 0)).toEqual({ spawns: 2, overrides: 1 });
+    const helaPlaced: WorldLayer = { ...EMPTY_WORLD, added: [placed(90001, 12000001), placed(90002, 12000001, null)] };
+    expect(npcSpawnFacts(hela, helaPlaced, 0)).toEqual({ spawns: 4, overrides: 2 });
     const layer: WorldLayer = {
       ...EMPTY_WORLD,
       added: [placed(90001, 1423), placed(90002, 1423, null), placed(90003, 7)],

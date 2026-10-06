@@ -71,7 +71,7 @@ const own = (events: SpawnEvents | undefined): EventRule | undefined => (events 
 
 /**
  * Every NPC spawn whose events the patch decides, in order: each project NPC's spawns (a new one's own,
- * an existing one's database spawns and placed ones), then the world layer's edits and placed spawns of
+ * an existing one's database spawns, and either's spawns placed in the 3D view), then the world layer's edits and placed spawns of
  * NPCs the project does not hold. A spawn with no rule of its own takes its NPC's; one whose NPC
  * leaves its spawns as they are is left out.
  */
@@ -92,22 +92,15 @@ export function spawnEventPlan(input: {
   };
   const fallback = (npc: CustomNpc): EventRule | undefined => (npc.events === 'asIs' ? undefined : npc.events);
 
+  // Its own rule may be null (always there), which is still its own: only undefined follows the NPC
+  const either = (mine: EventRule | undefined, npc: CustomNpc): EventRule | undefined => (mine !== undefined ? mine : fallback(npc));
   for (const npc of npcs) {
     if (npc.origin.kind === 'new') {
-      for (const spawn of npc.spawns) {
-        // Its own rule may be null (always there), which is still its own: only undefined follows the NPC
-        const mine = own(spawn.events);
-        put(spawn.guid, npc.entry, mine !== undefined ? mine : fallback(npc));
-      }
-      continue;
+      for (const spawn of npc.spawns) put(spawn.guid, npc.entry, either(own(spawn.events), npc));
+    } else {
+      for (const guid of dbGuids.get(npc.entry) ?? []) put(guid, npc.entry, either(edits.get(guid), npc));
     }
-    const placedHere = placed.filter((a) => a.entry === npc.entry);
-    const guids = [...(dbGuids.get(npc.entry) ?? []), ...placedHere.map((a) => a.guid)];
-    for (const guid of guids) {
-      const edit = edits.get(guid);
-      const mine = edit !== undefined ? edit : own(placedHere.find((a) => a.guid === guid)?.events);
-      put(guid, npc.entry, mine !== undefined ? mine : fallback(npc));
-    }
+    for (const a of placed) if (a.entry === npc.entry) put(a.guid, npc.entry, either(own(a.events), npc));
   }
   for (const edit of spawnEventsOf(layer)) put(edit.guid, edit.entry, edit.current);
   for (const a of placed) put(a.guid, a.entry, own(a.events));
@@ -136,10 +129,11 @@ export function spawnEventStatements(
 
 /** How many spawns an NPC has (the database's and placed ones, for an existing NPC) and how many follow events of their own */
 export function npcSpawnFacts(npc: CustomNpc, layer: WorldLayer, existingSpawns: number): { spawns: number; overrides: number } {
-  if (npc.origin.kind === 'new') {
-    return { spawns: npc.spawns.length, overrides: npc.spawns.filter((s) => s.events !== 'npc').length };
-  }
   const placed = layer.added.filter((a) => a.kind === 'creature' && a.entry === npc.entry);
+  const placedOwn = placed.filter((a) => own(a.events) !== undefined).length;
+  if (npc.origin.kind === 'new') {
+    return { spawns: npc.spawns.length + placed.length, overrides: npc.spawns.filter((s) => s.events !== 'npc').length + placedOwn };
+  }
   const edits = spawnEventsOf(layer).filter((e) => e.entry === npc.entry);
-  return { spawns: existingSpawns + placed.length, overrides: edits.length + placed.filter((a) => own(a.events) !== undefined).length };
+  return { spawns: existingSpawns + placed.length, overrides: edits.length + placedOwn };
 }
