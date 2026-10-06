@@ -97,14 +97,18 @@ export function PointActionForm({
       case 'dismount':
         return <p className="scene-hint">Gets off its mount here.</p>;
       case 'useObject':
-        return (
+        // The quest map picks a spawn on the map; elsewhere its spawn and object are typed and picked
+        return onPickObject ? (
           <>
             <ObjectName guid={action.guid} entry={action.entry} />
-            {onPickObject && (
-              <button type="button" className="entry-card__btn" onClick={onPickObject}>
-                Pick another
-              </button>
-            )}
+            <button type="button" className="entry-card__btn" onClick={onPickObject}>
+              Pick another
+            </button>
+          </>
+        ) : (
+          <>
+            <NumberField label="Spawn (guid)" value={action.guid} min={0} onChange={(guid) => onChange({ ...action, guid: Math.max(0, Math.round(guid)) })} />
+            <EntityPicker id={`${idPrefix}-object`} label="Object" kind="gameobject" value={action.entry} onChange={(entry) => onChange({ ...action, entry })} />
           </>
         );
     }

@@ -6,7 +6,7 @@ import { NumberField, SelectField } from '../scripts/fields';
 const PACES_FROM_HERE = [['keep', 'Keep pace'], ['walk', 'Walk from here'], ['run', 'Run from here']] as const;
 const NEW_ACTIONS: readonly (readonly [NewPointAction | '', string])[] = [
   ['', 'Add an action…'], ['say', 'Say something'], ['emote', 'Play an emote'], ['pose', 'Hold a pose while waiting'],
-  ['cast', 'Cast a spell'], ['sound', 'Play a sound'], ['mount', 'Mount'], ['dismount', 'Dismount'],
+  ['cast', 'Cast a spell'], ['sound', 'Play a sound'], ['mount', 'Mount'], ['dismount', 'Dismount'], ['useObject', 'Use an object'],
 ];
 
 const degrees = (radians: number): number => Math.round((radians * 180) / Math.PI) % 360;
@@ -15,7 +15,7 @@ const radians = (degrees: number): number => ((((degrees % 360) + 360) % 360) * 
 /**
  * What one point of a project NPC's patrol does: how long it waits, its pace from there, the way it
  * faces, and its actions. The quest map picks the facing and an object to use by clicking the map; a
- * view that cannot leaves them out, and the facing is typed in degrees instead.
+ * view that cannot has the facing typed in degrees, and the object's spawn and template typed and picked.
  */
 export function PatrolPointFields({
   idPrefix,

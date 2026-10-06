@@ -67,10 +67,10 @@ export function nextActionId(point: PatrolPoint): string {
   return `a${highest + 1}`;
 }
 
-/** The actions a point can be given without picking anything on the map (using an object needs one) */
-export type NewPointAction = 'say' | 'emote' | 'pose' | 'cast' | 'sound' | 'mount' | 'dismount';
+/** The actions a point can be given */
+export type NewPointAction = 'say' | 'emote' | 'pose' | 'cast' | 'sound' | 'mount' | 'dismount' | 'useObject';
 
-/** Each new action as it starts: a line to fill in, a wave, sitting, and nothing chosen yet for the rest */
+/** Each new action as it starts: a line to fill in, a wave, sitting, and nothing chosen yet for the rest (an object to use is not exported until it is) */
 const NEW_ACTIONS: { [K in NewPointAction]: Omit<Extract<PointAction, { kind: K }>, 'id' | 'afterSecs'> } = {
   say: { kind: 'say', lines: [{ text: '', style: 'say' }], chance: 100 },
   emote: { kind: 'emote', emote: 3 },
@@ -79,6 +79,7 @@ const NEW_ACTIONS: { [K in NewPointAction]: Omit<Extract<PointAction, { kind: K 
   sound: { kind: 'sound', sound: 0 },
   mount: { kind: 'mount', creature: 0 },
   dismount: { kind: 'dismount' },
+  useObject: { kind: 'useObject', guid: 0, entry: 0 },
 };
 
 /** A new action of a kind for a point, at once when it arrives, with the next free id */
