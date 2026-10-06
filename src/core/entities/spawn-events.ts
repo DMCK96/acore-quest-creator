@@ -94,7 +94,11 @@ export function spawnEventPlan(input: {
 
   for (const npc of npcs) {
     if (npc.origin.kind === 'new') {
-      for (const spawn of npc.spawns) put(spawn.guid, npc.entry, own(spawn.events) ?? fallback(npc));
+      for (const spawn of npc.spawns) {
+        // Its own rule may be null (always there), which is still its own: only undefined follows the NPC
+        const mine = own(spawn.events);
+        put(spawn.guid, npc.entry, mine !== undefined ? mine : fallback(npc));
+      }
       continue;
     }
     const placedHere = placed.filter((a) => a.entry === npc.entry);

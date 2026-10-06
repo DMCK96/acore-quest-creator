@@ -60,6 +60,11 @@ describe('the spawn event plan', () => {
     ]);
   });
 
+  it('a new NPC\'s spawn set to always is always, not its NPC\'s rule', () => {
+    const hela = { ...newNpc(12000001), events: during12, spawns: [{ ...newSpawn(6000001), events: null }] };
+    expect(spawnEventPlan({ npcs: [hela], layer: EMPTY_WORLD, dbGuids: new Map() })).toEqual([{ guid: 6000001, entry: 12000001, rule: null }]);
+  });
+
   it('an existing NPC covers every database spawn and its placed ones; a layer edit or a placed spawn\'s own rule wins', () => {
     const layer: WorldLayer = {
       ...EMPTY_WORLD,
