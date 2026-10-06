@@ -89,7 +89,7 @@ class WmoManager {
       const building = result.value;
       // Already loaded for the instance: the furniture and props it places
       const { spec } = await this.#getResources(def.name);
-      if (spec.doodads) doodads.push(...interiorDoodads(def, spec.doodads));
+      if (spec.doodads) doodads.push(...interiorDoodads(def, spec.doodads, (name) => this.#warnUnusable(def.name, name)));
       building.position.set(def.position[0], def.position[1], def.position[2]);
       building.quaternion.set(def.rotation[0], def.rotation[1], def.rotation[2], def.rotation[3]);
       building.userData.placement = def.id;
@@ -115,6 +115,15 @@ class WmoManager {
   removeArea(areaId: number) {
     this.#areas.delete(areaId);
     this.#areaDoodads.delete(areaId);
+  }
+
+  /** Names each unusable doodad name once, with its building: the game leaves it out too, so the view says so only in the console */
+  #warnedUnusable = new Set<string>();
+  #warnUnusable(building: string, name: string) {
+    const key = `${building.toLowerCase()}|${name}`;
+    if (this.#warnedUnusable.has(key)) return;
+    this.#warnedUnusable.add(key);
+    console.warn(`3D view: building ${building} names a prop the client cannot have (${name}); left out`);
   }
 
   /** The furniture and props of an area's buildings, in the world; none before the area is had */

@@ -79,12 +79,14 @@ test('draws the terrain, and a model or texture that cannot be read costs the ar
   await open(page, 'azeroth', 0);
   await page.waitForFunction('window.__state.ready', null, { timeout: 45000 });
 
-  // Both broken props are reported by name, with where they failed, and so are the two of the house's
-  // furniture its placement shows (its default set's chair, and the keg of the set it picks)...
-  await expect.poll(async () => (await state(page)).problems.length).toBe(4);
-  for (const shown of [HOUSE_DOODADS.chair, HOUSE_DOODADS.keg]) expect(client.requested).toContain(`404 ${shown}`);
-  // ... but not the furniture of a set it does not pick
+  // Both broken props are reported by name, with where they failed...
+  await expect.poll(async () => (await state(page)).problems.length).toBe(2);
+  // ... and the house's furniture its placement shows is asked for (its default set's chair, and the keg
+  // of the set it picks), but not the furniture of a set it does not pick. Missing, they go to the
+  // console with the building, not the view: modded clients lack many by design, as with textures
+  await expect.poll(() => client.requested.filter((r) => r === `404 ${HOUSE_DOODADS.chair}` || r === `404 ${HOUSE_DOODADS.keg}`).length).toBe(2);
   expect(client.requested.some((r) => r.includes(HOUSE_DOODADS.stool))).toBe(false);
+  await expect.poll(() => warnings.filter((w) => /wmo.test.(chair|keg)\.m2 \(used by building World.wmo.test.house\.wmo\) could not be loaded/i.test(w)).length).toBe(2);
   const { problems } = await state(page);
   expect(problems.find((p) => p.includes(BAD_MODEL))).toMatch(/could not be loaded: Invalid typed array length/);
   expect(problems.find((p) => p.includes(MISSING_MODEL))).toMatch(/404/);

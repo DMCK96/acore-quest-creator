@@ -13,8 +13,8 @@ type MapDoodadDefSpec = {
   rotation: number[];
   /** Fixed precision: 1024 is full size */
   scale: number;
-  /** A building's own furniture or prop, shown and hidden with the buildings */
-  inside?: boolean;
+  /** The building whose furniture or prop it is, for one inside a building: shown and hidden with the buildings */
+  building?: string;
 };
 
 type MapObjDefSpec = {

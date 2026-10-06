@@ -25,9 +25,9 @@ const placement = (doodadSet: number, rotation = UPRIGHT) => ({ id: 77, name: 'h
 describe('a placed building\'s doodads', () => {
   it('are its default set, placed by the building, as .m2 models', () => {
     const placed = interiorDoodads(placement(0), doodads);
-    expect(placed.map((d) => [d.id, d.name, d.inside])).toEqual([
-      ['77:0', 'World\\Chair.m2', true],
-      ['77:1', 'World\\Table.m2', true],
+    expect(placed.map((d) => [d.id, d.name])).toEqual([
+      ['77:0', 'World\\Chair.m2'],
+      ['77:1', 'World\\Table.m2'],
     ]);
     expect(placed[0]!.position).toEqual([110, 200, 30]);
     // Full size is 1024, as the area's own doodads are given
@@ -49,5 +49,27 @@ describe('a placed building\'s doodads', () => {
   it('leave out a doodad with no name, and a set the building does not have', () => {
     expect(interiorDoodads(placement(2), doodads).map((d) => d.id)).toEqual(['77:0', '77:1']);
     expect(interiorDoodads(placement(9), doodads).map((d) => d.id)).toEqual(['77:0', '77:1']);
+  });
+});
+
+describe('a building\'s doodad names', () => {
+  it('leave out a name the client cannot have: an absolute path on someone\'s disk, or an extension alone', () => {
+    const odd: WmoDoodadsSpec = {
+      sets: [{ startIndex: 0, count: 4 }],
+      defs: [
+        { name: 'D:\\Ascension\\Ascension-Noggit\\world\\Bronzebeard\\window.m2', position: [0, 0, 0], rotation: UPRIGHT, scale: 1 },
+        { name: '.mdx', position: [0, 0, 0], rotation: UPRIGHT, scale: 1 },
+        { name: '/home/me/world/chair.mdx', position: [0, 0, 0], rotation: UPRIGHT, scale: 1 },
+        { name: 'World\\Chair.mdx', position: [0, 0, 0], rotation: UPRIGHT, scale: 1 },
+      ],
+    };
+    const skipped: string[] = [];
+    const placed = interiorDoodads(placement(0), odd, (name) => skipped.push(name));
+    expect(placed.map((d) => d.name)).toEqual(['World\\Chair.m2']);
+    expect(skipped).toEqual(['D:\\Ascension\\Ascension-Noggit\\world\\Bronzebeard\\window.m2', '.mdx', '/home/me/world/chair.mdx']);
+  });
+
+  it('say which building they belong to', () => {
+    expect(interiorDoodads(placement(0), doodads).every((d) => d.building === 'house.wmo')).toBe(true);
   });
 });
