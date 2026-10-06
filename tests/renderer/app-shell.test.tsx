@@ -288,6 +288,23 @@ describe('the app shell', () => {
     expect(world.lookAt.mock.calls.length).toBe(before);
   });
 
+  it('going to a part of the open quest with Find focuses it too', async () => {
+    const values = { 'quest_template.LogTitle': 'Wolves', creature_queststarter: [{ id: 1423 }] };
+    const guard = { kind: 'creature', guid: 80330, entry: 1423, name: 'Guard', map: 0, x: 500, y: 10, z: 20 };
+    const { store } = await shell({
+      openQuest: async () => okv(sampleOpen({ aggregate: { ...sampleOpen().aggregate, values } })),
+      searchEntities: vi.fn(async () => okv([{ id: 1423, name: 'Guard', detail: '' }])),
+      findSpawns: vi.fn(async () => okv({ spawns: [guard], capped: false })),
+    });
+    await waitFor(() => expect(created).toHaveLength(1));
+    await act(async () => { await store.getState().openQuest(60001); });
+    await userEvent.click(screen.getByRole('button', { name: 'Find…' }));
+    await userEvent.type(await screen.findByRole('searchbox', { name: 'Find by name or ID' }), 'guard');
+    await userEvent.click(await screen.findByRole('button', { name: /Guard/ }));
+    await userEvent.click((await screen.findAllByRole('button', { name: /^Go to spawn/ }))[0]!);
+    await waitFor(() => expect(store.getState().focus).toMatchObject({ questId: 60001, part: { kind: 'creature', entry: 1423 } }));
+  });
+
   describe('Place in world from the quest editor', () => {
     const values = { 'quest_template.LogTitle': 'Wolves', creature_queststarter: [{ id: 12000005 }] };
     async function editing(client = true) {

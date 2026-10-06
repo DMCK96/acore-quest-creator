@@ -32,7 +32,7 @@ The World needs the **game client folder**, set when you [connect](/azeroth-worl
 
 Open a quest in the **Quests** dock and the camera goes there: it flies to the quest's giver, or its ender if it has no giver, or an objective if it has neither. If the quest has several, it picks the one nearest the camera on the current map. A quest with no spawns leaves the camera where it was, and a note says nothing of it is placed yet. If you move the camera while the World is still finding the quest, it stays where you put it. **Back** takes you to where you were.
 
-Select a giver, ender or objective of the open quest in the World and it is marked on the quest's card in the dock, which lists the quest's NPCs and objects. The camera stays where it is.
+Select a giver, ender or objective of the open quest in the World, by clicking it or going to it with **Find…**, and it is marked on the quest's card in the dock, which lists the quest's NPCs and objects. The camera stays where it is.
 
 Two buttons do the same on demand:
 

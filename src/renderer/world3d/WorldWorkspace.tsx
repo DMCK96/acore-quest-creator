@@ -347,8 +347,8 @@ export function WorldWorkspace({
       return part;
     },
   });
-  /** An NPC or object selected here that plays a part in the open quest becomes the focus */
-  const selectSpawn = (spawn: PickedSpawn | null): void => {
+  /** An NPC or object selected here (by a click or by Find) that plays a part in the open quest becomes the focus */
+  const selectSpawn = (spawn: Pick<PickedSpawn, 'kind' | 'entry'> | null): void => {
     if (!spawn || !info || !onFocusPart) return;
     const part: FocusPart = { kind: spawn.kind === 'object' ? 'gameobject' : 'creature', entry: spawn.entry };
     if (!ROLES.some((role) => hasRole(info.roles, role, { kind: part.kind, id: part.entry }))) return;
@@ -371,6 +371,7 @@ export function WorldWorkspace({
     setFinding(false);
     jump({ x: spawn.x, y: spawn.y, z: spawn.z }, spawn.map);
     bringIntoView(spawn);
+    selectSpawn(spawn);
   };
   // A spawn group: the camera goes to the middle of its members, and its first spawn is focused
   const findGroup = (view: GroupView): void => {
