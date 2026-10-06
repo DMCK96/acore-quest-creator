@@ -1,4 +1,3 @@
-// @ts-nocheck
 /**
  * A building's group file (`name_000.wmo`): the geometry of one part. Read here, by hand, and not by
  * the parser package's reader, which builds typed arrays straight from the sizes a file states (so

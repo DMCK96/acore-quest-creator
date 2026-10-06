@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
-  EMPTY_WORLD, NEW_POINT_REST, addSpawn, deleteGroup, dropMember, groupsOf, hasWorldChanges, isAdded, moveSpawn, movementsOf, putGroup, respawnsOf, revertGroup, revertMovement, revertRespawn, revertRoute, revertSpawn, setMovement, setRespawn, setRoute, worldStatements,
+  EMPTY_WORLD, NEW_POINT_REST, addSpawn, deleteGroup, dropMember, groupsOf, hasWorldChanges, isAdded, moveSpawn, movementsOf, putGroup, respawnsOf, revertGroup, revertMovement, revertRespawn, revertRoute, revertSpawn, revertSpawnEvents, setMovement, setRespawn, setRoute, setSpawnEvents, spawnEventsOf, worldStatements,
   type Placement, type RoutePoint, type WorldAddedSpawn, type WorldMovementEdit, type WorldSpawnEdit,
 } from '../../../src/core/world/layer';
 import { IDLE } from '../../../src/core/world/movement';
@@ -427,5 +427,34 @@ describe('rotations and events in the patch', () => {
     expect(changed.apply).toContainEqual({ kind: 'delete', table: 'game_event_pool', key: { pool_entry: '32492' } });
     expect(changed.apply.some((s) => s.kind === 'insert' && s.table === 'game_event_pool')).toBe(false);
     expect(changed.revert).toContainEqual({ kind: 'insert', table: 'game_event_pool', row: eventRow });
+  });
+});
+
+describe("a spawn's events", () => {
+  const edit = { guid: 80330, entry: 1423, name: 'Stormwind Guard', map: 0, original: [{ eventEntry: '12', guid: '80330' }] };
+  const during4 = { mode: 'during' as const, events: [4] };
+
+  it('keeps the first original; Same as the NPC drops the edit', () => {
+    const once = setSpawnEvents(EMPTY_WORLD, edit, during4);
+    expect(spawnEventsOf(once)).toEqual([{ ...edit, current: during4 }]);
+    const twice = setSpawnEvents(once, { ...edit, original: [] }, null);
+    expect(spawnEventsOf(twice)).toEqual([{ ...edit, current: null }]);
+    expect(spawnEventsOf(setSpawnEvents(twice, edit, 'npc'))).toEqual([]);
+    expect(hasWorldChanges(once)).toBe(true);
+    expect(spawnEventsOf(revertSpawnEvents(once, 80330))).toEqual([]);
+  });
+
+  it("sets a placed spawn's own events instead of an edit", () => {
+    const look = { displayId: 1, scale: 1, equipment: [0, 0, 0] as [number, number, number], preset: null };
+    const placed = addSpawn(EMPTY_WORLD, { kind: 'creature', guid: 9, entry: 1423, name: 'G', map: 0, placement: { x: 0, y: 0, z: 0, orientation: 0, rotation: null }, look });
+    const next = setSpawnEvents(placed, { ...edit, guid: 9, original: [] }, during4);
+    expect(next.added[0]!.events).toEqual(during4);
+    expect(spawnEventsOf(next)).toEqual([]);
+    expect(setSpawnEvents(next, { ...edit, guid: 9, original: [] }, 'npc').added[0]).not.toHaveProperty('events');
+  });
+
+  it('is not written by the world patch: the spawn event writer owns those rows', () => {
+    const { apply } = worldStatements(setSpawnEvents(EMPTY_WORLD, edit, during4));
+    expect(apply.some((s) => s.table === 'game_event_creature')).toBe(false);
   });
 });

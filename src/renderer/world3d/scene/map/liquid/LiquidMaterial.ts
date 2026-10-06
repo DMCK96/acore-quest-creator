@@ -1,4 +1,3 @@
-// @ts-nocheck
 /**
  * The surface of one liquid type: its flipbook of textures, its tint and see-through-ness from the
  * light database, and whether it is lit (water) or glows (magma, slime).
@@ -133,4 +132,5 @@ class LiquidMaterial extends THREE.RawShaderMaterial {
 }
 
 export default LiquidMaterial;
-export { LIQUID_KIND, LiquidMaterial, LiquidTypeInfo };
+export { LIQUID_KIND, LiquidMaterial };
+export type { LiquidTypeInfo };

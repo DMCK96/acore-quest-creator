@@ -15,7 +15,7 @@ vi.mock('../../src/renderer/world3d/world3d', () => ({
   createWorld3D: (options: any) => {
     const world = { options, dispose: vi.fn(), lookAt: vi.fn(), setSpawnVisibility: vi.fn(), setOwnSpawns: vi.fn(), select: vi.fn(), selectSpawns: vi.fn(),
       setWorldLayer: vi.fn(), setMode: vi.fn(), setPlacing: vi.fn(), cancelDrag: vi.fn(), setMarked: vi.fn(), setActive: vi.fn(), setScenery: vi.fn(), setTool: vi.fn(),
-      setFalloff: vi.fn(), setPendingMovement: vi.fn(), cancelPath: vi.fn(), selectedSpawns: vi.fn(() => []), hasSpawn: vi.fn(() => true), routeOf: vi.fn(() => null),
+      setFalloff: vi.fn(), setPendingMovement: vi.fn(), cancelPath: vi.fn(), selectedSpawns: vi.fn(() => []), spawnOf: vi.fn(() => ({})), routeOf: vi.fn(() => null),
       camera: () => ({ position: { x: 0, y: 0, z: 0 }, direction: { x: 1, y: 0, z: 0 } }), target: () => ({ x: 0, y: 0, z: 0 }),
       spawnStatus: () => ({ capped: { creatures: false, objects: false }, error: null }) };
     worlds.push(world);
@@ -82,6 +82,19 @@ describe('the Project changes modal', () => {
     expect(within(row).getByText('wanders 5 yd')).toBeInTheDocument();
     await userEvent.click(within(row).getByRole('button', { name: 'Revert movement of Stormwind Guard' }));
     expect(worldRevert).toHaveBeenCalledWith({ kind: 'movement', guid: 80330 });
+  });
+
+  it('lists a spawn’s own events before and after, by name, and reverts them', async () => {
+    const events = { type: 'spawnEvents', guid: 80330, entry: 1423, name: 'Stormwind Guard', map: 0, drifted: false,
+      original: [{ eventEntry: '12', guid: '80330' }], current: { mode: 'except', events: [4, 12] } };
+    const worldRevert = vi.fn(async () => okv({ spawns: [], routes: [], added: [] }));
+    const gameEvents = vi.fn(async () => okv([{ id: 12, name: 'Darkmoon Faire' }, { id: 4, name: "Hallow's End" }]));
+    render(<ProjectChanges api={makeMockApi({ worldChanges: vi.fn(async () => okv([events])), worldRevert, gameEvents })} onLayer={vi.fn()} onClose={vi.fn()} />);
+    const row = (await screen.findByText(/Stormwind Guard · events/)).closest('tr')!;
+    expect(await within(row).findByText('only during Darkmoon Faire')).toBeInTheDocument();
+    expect(within(row).getByText("gone during Hallow's End, Darkmoon Faire")).toBeInTheDocument();
+    await userEvent.click(within(row).getByRole('button', { name: 'Revert events of Stormwind Guard' }));
+    expect(worldRevert).toHaveBeenCalledWith({ kind: 'spawnEvents', guid: 80330 });
   });
 
   it('hands every layer the 3D view takes to the project context', async () => {

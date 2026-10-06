@@ -35,6 +35,18 @@ describe('compileEntities', () => {
     expect(Number(spawn.rotation2)).toBeCloseTo(1, 5);
     expect(Number(spawn.rotation3)).toBeCloseTo(0, 5);
   });
+  it("keeps the other flag bits a new NPC's row already has when writing who sees it", () => {
+    const out = compile({ entities: { npcs: [{ ...npc, seenBy: 'dead' }], objects: [], items: [] },
+      context: { ...EMPTY_ENTITY_CONTEXT, creatures: [{ entry: '12000001', AIName: '', gossip_menu_id: '0', npcflag: '0', flags_extra: '64', type_flags: '4' }] } });
+    expect(out.inserts.creature_template![0]).toMatchObject({ flags_extra: '1088', type_flags: '4' });
+  });
+
+  it('writes who sees a new NPC into its flags', () => {
+    const one = (seenBy: 'living' | 'dead' | 'both') => compile({ entities: { npcs: [{ ...npc, seenBy }], objects: [], items: [] } }).inserts.creature_template![0]!;
+    expect(one('dead')).toMatchObject({ flags_extra: '1024', type_flags: '0' });
+    expect(one('both')).toMatchObject({ flags_extra: '0', type_flags: '2' });
+    expect(one('living')).toMatchObject({ flags_extra: '0', type_flags: '0' });
+  });
   it('makes an NPC that gives or takes the quest a quest giver', () => {
     expect(compile({ givers: [12000001] }).inserts.creature_template![0]!.npcflag).toBe('2');
     const flagged = compile({ entities: { npcs: [{ ...npc, gossip: true }], objects: [], items: [] } });
@@ -57,5 +69,10 @@ describe('compileEntities', () => {
       taggedObjectSpawns: [{ guid: '7000009', Comment: 'AQC q60001 obj9100001' }] } });
     expect(out.deletes.creature).toEqual([{ guid: '6000001' }, { guid: '6000009' }]);
     expect(out.deletes.gameobject).toEqual([{ guid: '7000001' }, { guid: '7000009' }]);
+  });
+  it('takes away the game events of a removed spawn, and leaves a current spawn\'s to the spawn event writer', () => {
+    const out = compile({ context: { ...EMPTY_ENTITY_CONTEXT,
+      taggedCreatureSpawns: [{ guid: '6000009', Comment: 'AQC q60001 npc12000001' }, { guid: '6000001', Comment: 'AQC q60001 npc12000001' }] } });
+    expect(out.deletes.game_event_creature).toEqual([{ guid: '6000009' }]);
   });
 });

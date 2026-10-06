@@ -1,4 +1,3 @@
-// @ts-nocheck
 /**
  * Where a spawn stands in the 3D view, and which tile of the map an area is. Server units are the
  * scene's (yards, X north, Y west, Z up), so positions need no conversion.

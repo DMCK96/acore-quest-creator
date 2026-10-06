@@ -24,6 +24,14 @@ describe('3D edits to the project’s own spawns', () => {
     expect(ownEdit(values(), { kind: 'respawn', spawn: { kind: 'object', guid: 950, entry: 13000001, own: true }, secs: 60 })).toBeNull();
   });
 
+  it('sets a project NPC spawn’s own events; none for an object or a spawn the project does not have', () => {
+    const during = { mode: 'during' as const, events: [12] };
+    expect(read(ownEdit(values(), { kind: 'spawnEvents', spawn: npcRef(900), to: during })).npcs[0]!.spawns[0]!.events).toEqual(during);
+    expect(read(ownEdit(values(), { kind: 'spawnEvents', spawn: npcRef(900), to: 'npc' })).npcs[0]!.spawns[0]!.events).toBe('npc');
+    expect(ownEdit(values(), { kind: 'spawnEvents', spawn: npcRef(999), to: during })).toBeNull();
+    expect(ownEdit(values(), { kind: 'spawnEvents', spawn: { kind: 'object', guid: 950, entry: 13000001, own: true }, to: during })).toBeNull();
+  });
+
   it('adds a spawn of an own NPC, and takes it away again', () => {
     const added = ownEdit(values(), { kind: 'presence', spawn: npcRef(901), present: true, at, map: 0 });
     expect(read(added).npcs[0]!.spawns.map((s) => [s.guid, s.x, s.o])).toEqual([[900, 1, 0], [901, 5, 1]]);

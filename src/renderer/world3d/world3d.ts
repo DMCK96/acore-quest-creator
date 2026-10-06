@@ -1,5 +1,7 @@
 import * as THREE from 'three';
-import { DbManager, MapManager, TextureManager, type SoundManager } from './scene';
+import DbManager from './scene/db/DbManager';
+import MapManager from './scene/map/MapManager';
+import TextureManager from './scene/texture/TextureManager';
 import { WorldControls, type ClickKeys, type Tool } from './controls';
 import { CharacterTexture } from './scene/character/CharacterTexture';
 import { getAssetUrl } from './scene/asset';
@@ -21,7 +23,7 @@ import type { SpawnInfo } from './scene/spawn/SpawnManager';
 
 /**
  * The 3D world: the game's own terrain, props and models for one map, read from the client's
- * archives through `acqc-wow://`, drawn with Three.js by Wowser's scene classes. World units are
+ * archives through `awe-wow://`, drawn with Three.js by Wowser's scene classes. World units are
  * the server's (yards, X north, Y west, Z up), so a spawn's `position_x/y/z` is its place here.
  */
 
@@ -139,8 +141,8 @@ export interface World3D {
   groundAt(client: { x: number; y: number }): { x: number; y: number; z: number } | null;
   /** Where the pointer last was over the view, or null. */
   lastPointer(): { x: number; y: number } | null;
-  /** Whether a spawn is still in the view (loaded, though perhaps too far to be drawn). */
-  hasSpawn(kind: 'creature' | 'object', guid: number): boolean;
+  /** A spawn still in the view (loaded, though perhaps too far to be drawn), or null. */
+  spawnOf(kind: 'creature' | 'object', guid: number): SpawnInfo | null;
   /** A drawn NPC's route as the view has it, or null when it has none. */
   routeOf(guid: number): { pathId: number; points: { x: number; y: number; z: number; carry?: unknown }[] } | null;
   /** Stops drawing (while the world is hidden) or starts again; a hidden world costs nothing. */
@@ -196,12 +198,6 @@ export const sharedManagers = (): NonNullable<typeof shared> => {
   }
   return shared;
 };
-
-/**
- * Wowser's sound manager plays each area's zone music, which an editor must not, and it throws when
- * disposed before any music has started. The map only ever asks it to set the zone's music.
- */
-const SILENT = { setZoneMusic() {}, dispose() {} } as unknown as SoundManager;
 
 /** Frees what a world drew; each step on its own, so one failing cannot stop the rest. */
 function release(root: THREE.Object3D): void {
@@ -553,7 +549,7 @@ export function createWorld3D(options: World3DOptions): World3D {
     const floors = manager.root.children.filter((group) => (group.name === 'terrain' || group.name === 'buildings') && reaches(group, x, y));
     return down.intersectObjects(floors, true)[0]?.point.z ?? null;
   };
-  const manager = new MapManager({ host: HOST, textureManager: textures, dbManager: databases, characterTexture, soundManager: SILENT, groundBelow });
+  const manager = new MapManager({ host: HOST, textureManager: textures, dbManager: databases, characterTexture, groundBelow });
   manager.addEventListener('area:change', (event) => {
     const name = (event as CustomEvent<{ areaName?: string }>).detail.areaName;
     if (name) options.onArea?.(name);
@@ -663,7 +659,7 @@ export function createWorld3D(options: World3DOptions): World3D {
       return point ? { x: point.x, y: point.y, z: point.z } : null;
     },
     lastPointer: () => controls.lastPointer,
-    hasSpawn: (kind, guid) => manager.spawnInfo(kind, guid) !== null,
+    spawnOf: (kind, guid) => manager.spawnInfo(kind, guid),
     routeOf(guid) {
       const route = manager.spawnRoute(guid);
       return route ? { pathId: route.pathId, points: route.points } : null;

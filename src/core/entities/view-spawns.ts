@@ -31,6 +31,7 @@ export function ownViewSpawns(entities: { npcs: readonly CustomNpc[]; objects: r
       preset: null,
       group: null,
       respawnSecs: spawn.respawnSecs,
+      spawnEvents: spawn.events,
     })),
   );
 

@@ -1,4 +1,6 @@
 import { MODELLED_ITEM_COLUMNS, itemFromRow } from './item-columns';
+import { seenByOf } from './visibility';
+import { npcEventsOf } from './spawn-events';
 import {
   NPC_TYPE_VALUE, OBJECT_TYPE_VALUE, RANK_VALUE, newItem, newNpc, newObject,
   type CustomItem, type CustomNpc, type CustomObject, type EntityLock, type LootRow, type OriginalRows, type Page,
@@ -62,7 +64,9 @@ export function npcFromRows(entry: number, rows: OriginalRows, counts: ExistingC
     name: row.name ?? '', subname: row.subname ?? '',
     minLevel: numberOf(row.minlevel, 1), maxLevel: numberOf(row.maxlevel, 1), faction: numberOf(row.faction, 35),
     rank: nameOf(RANK_VALUE, numberOf(row.rank), 'normal'), type: nameOf(NPC_TYPE_VALUE, numberOf(row.type), 'none'),
-    questGiver: (flags & 2) !== 0, gossip: (flags & 1) !== 0,
+    questGiver: (flags & 2) !== 0, gossip: (flags & 1) !== 0, seenBy: seenByOf(row),
+    // Read from its spawns' rows when they were read; a project saved before then leaves them as they are
+    events: rows.creature ? npcEventsOf(rows.creature.map((r) => numberOf(r.guid)), rows.game_event_creature ?? []) : 'asIs',
     healthModifier: numberOf(row.HealthModifier, 1), damageModifier: numberOf(row.DamageModifier, 1),
     displayId: model ? numberOf(model.CreatureDisplayID) : numberOf(row.modelid1), scale: numberOf(model?.DisplayScale, 1),
     equipment: { mainHand: numberOf(gear?.ItemID1), offHand: numberOf(gear?.ItemID2), ranged: numberOf(gear?.ItemID3) },

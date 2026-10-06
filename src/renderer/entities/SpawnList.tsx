@@ -1,8 +1,10 @@
-import type { Spawn } from '@core/entities/model';
+import type { Spawn, SpawnEvents } from '@core/entities/model';
 import { newSpawn } from '@core/entities/model';
 import { NumberField } from '../scripts/fields';
 import { PositionInput } from '../scripts/PositionInput';
 import { useMapOpener } from '../map/MapOpener';
+import type { GameEvent } from '../controls/EventPicker';
+import { EventRuleField } from './EventRuleField';
 
 /** A spawn with a route to walk: it patrols instead of wandering. */
 const patrols = (spawn: Spawn): boolean => (spawn.patrol?.points.length ?? 0) >= 2;
@@ -15,6 +17,7 @@ export function SpawnList({
   wanders,
   onChange,
   allocate,
+  eventChoices,
 }: {
   idPrefix: string;
   /** Whose spawns these are, for their markers on the quest map. */
@@ -25,6 +28,8 @@ export function SpawnList({
   onChange(next: Spawn[]): void;
   /** A fresh guid for a new spawn, or null when none could be had. */
   allocate(): Promise<number | null>;
+  /** An NPC's spawns can follow game events of their own: the events the database has */
+  eventChoices?: readonly GameEvent[];
 }): React.JSX.Element {
   const openMap = useMapOpener();
   const set = (i: number, spawn: Spawn): void => onChange(spawns.map((s, j) => (j === i ? spawn : s)));
@@ -60,6 +65,10 @@ export function SpawnList({
               onChange={(p, map) => set(i, { ...spawn, ...p, map: map ?? spawn.map })}
             />
             <NumberField label="Respawn (seconds)" value={spawn.respawnSecs} min={0} onChange={(respawnSecs) => set(i, { ...spawn, respawnSecs: Math.round(respawnSecs) })} />
+            {eventChoices && (
+              <EventRuleField id={`${idPrefix}-spawn-${spawn.guid}-events`} events={eventChoices} value={spawn.events} inherit="Same as the NPC"
+                onChange={(events) => set(i, { ...spawn, events: events as SpawnEvents })} />
+            )}
             {wanders && !patrols(spawn) && (
               <NumberField label="Wander (yards)" value={spawn.wander} min={0} onChange={(wander) => set(i, { ...spawn, wander })} />
             )}

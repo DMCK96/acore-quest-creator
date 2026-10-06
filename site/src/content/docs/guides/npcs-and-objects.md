@@ -46,7 +46,7 @@ If the database has changed the NPC's rows since you first edited it, **Project 
 
 The editor has tabs:
 
-- **Basics**: name, title (the line under the name), minimum and maximum level, and faction. Faction buttons such as **Stormwind** set a common one in a click.
+- **Basics**: name, title (the line under the name), minimum and maximum level, and faction. Faction buttons such as **Stormwind** set a common one in a click. Under **Visibility**, set who sees it and when it is in the world (see [Visibility](#visibility) below).
 - **Look & gear**: how the NPC looks. Type a creature under **Look like…** to borrow its appearance. Tick **and its weapons** to borrow its weapons too, or **and its level, faction and rank** to borrow those. **Other ways** lets you browse models by name or type a display ID. **Scale** makes it bigger or smaller. Under **Weapons** you can pick main hand, off hand and ranged items yourself; armour always comes with the look.
 
 :::note[Weapons only need a display]
@@ -54,7 +54,14 @@ An NPC holds a weapon by its item's display alone, so any item works, even one y
 :::
 - **Fight**: how it fights. See the [combat wizard](/azeroth-world-editor/guides/combat-wizard/).
 - **Loot**: what it drops. See [Loot](/azeroth-world-editor/guides/loot/).
-- **Placement**: where it stands. **Add spawn**, then either paste the output of the in-game `.gps` command or place it on the [quest map](/azeroth-world-editor/guides/quest-map/).
+- **Placement**: where it stands. **Add spawn**, then either paste the output of the in-game `.gps` command or place it on the [quest map](/azeroth-world-editor/guides/quest-map/). Each spawn has its own **Event**, which starts as **Same as the NPC**.
+
+### Visibility
+
+- **Seen by**: **Living players** (the default), **Dead players only**, or **Living and dead players**. A spirit healer is seen only by dead players. This is part of the NPC itself, so it applies to every spawn of that NPC. A spirit healer or spirit guide in the database is always dead-only, and the choice is locked.
+- **Event**: when its spawns are in the world. **Always**, **Only during…** or **Gone during…**, then pick one or more game events by name. A spawn that follows several events is there while any of them runs (or gone while any of them runs). Every spawn follows this unless it has its own event, set on the **Placement** tab or with **Event…** in the [3D view's right-click menu](/azeroth-world-editor/guides/the-world/#the-right-click-menu). For an NPC the database already has whose spawns follow different events, **As each spawn has it** leaves them as they are.
+
+An NPC that gives quests but is seen only by dead players gets a warning, since living players could not take or hand in its quests. The export warns when an event is not in the database, and when a spawn follows events of its own while also in a [spawn group](/azeroth-world-editor/guides/spawn-groups/) that follows an event, since the server applies both.
 
 ## The object editor
 

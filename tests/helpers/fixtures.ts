@@ -26,7 +26,7 @@ const LOOKUP_TABLES = [
   // Spawn groups: the server's pools (3D view).
   'pool_template', 'pool_creature', 'pool_gameobject', 'pool_pool',
   // Quest rotations and pools that follow a game event
-  'game_event', 'game_event_pool',
+  'game_event', 'game_event_pool', 'game_event_creature',
 ] as const;
 
 /** An empty in-memory world DB whose tables carry the fork's real DDL. */

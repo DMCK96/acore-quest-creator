@@ -1,4 +1,3 @@
-// @ts-nocheck
 /**
  * How NPCs move, drawn in the 3D view: a patrol route as a line from the spawn through each point and
  * back to the first, with a ball at each point and an arrow along each leg; a wander circle at the
@@ -41,10 +40,10 @@ const materialsFor = (own: boolean) => {
 
 type Point = { x: number; y: number; z: number };
 
-let selectedMaterial = null;
+let selectedMaterial: THREE.MeshBasicMaterial | null = null;
 
 /** An arrow along each leg that has a length, from each stop to the next */
-const addArrows = (group, stops, mesh) => {
+const addArrows = (group: THREE.Group, stops: THREE.Vector3[], mesh: THREE.Material) => {
   for (let i = 0; i + 1 < stops.length; i++) {
     const direction = stops[i + 1].clone().sub(stops[i]);
     if (direction.lengthSq() === 0) {

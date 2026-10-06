@@ -4,16 +4,16 @@ import { WORLD_MAPS, worldMapById, worldMapDirectory } from '../../src/core/map/
 
 describe('client file addresses', () => {
   it('names the client path a url asks for', () => {
-    expect(parseAssetUrl('acqc-wow://file/world/maps/azeroth/azeroth.wdt')).toBe('world/maps/azeroth/azeroth.wdt');
-    expect(parseAssetUrl('acqc-wow://file/dbfilesclient/map.dbc?x=1')).toBe('dbfilesclient/map.dbc');
-    expect(parseAssetUrl('acqc-wow://file/creature/a%20b/c.m2')).toBe('creature/a b/c.m2');
+    expect(parseAssetUrl('awe-wow://file/world/maps/azeroth/azeroth.wdt')).toBe('world/maps/azeroth/azeroth.wdt');
+    expect(parseAssetUrl('awe-wow://file/dbfilesclient/map.dbc?x=1')).toBe('dbfilesclient/map.dbc');
+    expect(parseAssetUrl('awe-wow://file/creature/a%20b/c.m2')).toBe('creature/a b/c.m2');
   });
   it('refuses another scheme, an empty path, a path that climbs out and a broken escape', () => {
-    expect(parseAssetUrl('acqc-map://tile/0/6/1/1.png')).toBeNull();
-    expect(parseAssetUrl('acqc-wow://file/')).toBeNull();
-    expect(parseAssetUrl('acqc-wow://file/../secret')).toBeNull();
-    expect(parseAssetUrl('acqc-wow://file/a/..%5Cb')).toBeNull();
-    expect(parseAssetUrl('acqc-wow://file/%E0%A4%A')).toBeNull();
+    expect(parseAssetUrl('awe-map://tile/0/6/1/1.png')).toBeNull();
+    expect(parseAssetUrl('awe-wow://file/')).toBeNull();
+    expect(parseAssetUrl('awe-wow://file/../secret')).toBeNull();
+    expect(parseAssetUrl('awe-wow://file/a/..%5Cb')).toBeNull();
+    expect(parseAssetUrl('awe-wow://file/%E0%A4%A')).toBeNull();
   });
   it('round-trips a path', () => {
     expect(parseAssetUrl(assetUrl('world/maps/a b/c.adt'))).toBe('world/maps/a b/c.adt');

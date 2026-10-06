@@ -29,7 +29,6 @@ import MapLoader from './loader/MapLoader.js';
 import { MapAreaSpec, MapSpec } from './loader/types.js';
 import MapLight from './light/MapLight.js';
 import DbManager from '../db/DbManager.js';
-import SoundManager from '../sound/SoundManager.js';
 import { describeError, reportProblem } from '../diagnostics.js';
 
 const DEFAULT_VIEW_DISTANCE = 1277.0;
@@ -51,7 +50,6 @@ type MapManagerOptions = {
   /** Dressed NPCs' body texture builder, shared with every world that shares the texture manager */
   characterTexture?: CharacterTexture;
   dbManager?: DbManager;
-  soundManager?: SoundManager;
   viewDistance?: number;
   /** The drawn ground nearest below a point, for standing NPCs on it; see `SpawnManager` */
   groundBelow?(x: number, y: number, fromZ: number, distance: number): number | null;
@@ -85,7 +83,6 @@ class MapManager extends EventTarget {
   #liquidManager: LiquidManager;
   #spawnManager: SpawnManager;
   #dbManager: DbManager;
-  #soundManager: SoundManager;
 
   #mapLight: MapLight;
 
@@ -110,7 +107,6 @@ class MapManager extends EventTarget {
   // Areas that failed to load: left out, and not asked for again every frame
   #failedAreas = new Set<number>();
 
-  #ownedManagers = new Set<any>();
 
   constructor(options: MapManagerOptions) {
     super();
@@ -122,13 +118,6 @@ class MapManager extends EventTarget {
 
     this.#textureManager = options.textureManager ?? new TextureManager({ host: options.host });
     this.#dbManager = options.dbManager ?? new DbManager({ host: options.host });
-
-    if (options.soundManager) {
-      this.#soundManager = options.soundManager;
-    } else {
-      this.#soundManager = new SoundManager({ host: options.host, dbManager: this.#dbManager });
-      this.#ownedManagers.add(this.#soundManager);
-    }
 
     this.#loader = new MapLoader({ host: options.host });
 
@@ -214,6 +203,7 @@ class MapManager extends EventTarget {
   /** Shows or hides buildings and doodads; a hidden kind is not drawn and not hit by a click */
   setScenery(scenery: { buildings: boolean; doodads: boolean }) {
     this.#scenery = { ...scenery };
+    this.#doodadManager.setInteriors(scenery.buildings);
   }
 
   setSpawnVisibility(visibility: SpawnVisibility) {
@@ -441,12 +431,12 @@ class MapManager extends EventTarget {
     }
   }
 
+  /** Stops every worker this map started; managers it was handed (textures, tables) are left to their owner */
   dispose() {
-    for (const manager of this.#ownedManagers.values()) {
-      manager.dispose();
-    }
-
     this.#liquidManager.dispose();
+    this.#wmoManager.dispose();
+    this.#doodadManager.dispose();
+    this.#loader.dispose();
   }
 
   #cullGroups() {
@@ -469,19 +459,6 @@ class MapManager extends EventTarget {
     }
 
     const parentAreaTableRecord = this.#areaTableDb.getRecord(areaTableRecord.parentAreaId);
-
-    // Sound
-
-    const useParentZoneMusic =
-      areaTableRecord.zoneMusic === 0 &&
-      (areaTableRecord.flags & 0x40000000) !== 0 &&
-      !!parentAreaTableRecord;
-
-    const zoneMusic = useParentZoneMusic
-      ? parentAreaTableRecord.zoneMusic
-      : areaTableRecord.zoneMusic;
-
-    this.#soundManager.setZoneMusic(zoneMusic);
 
     // Event
 
@@ -601,10 +578,13 @@ class MapManager extends EventTarget {
       let wmoGroup: THREE.Group;
       let liquidGroup: THREE.Group;
       try {
-        [terrainGroup, doodadGroup, wmoGroup, liquidGroup] = await Promise.all([
+        [terrainGroup, [wmoGroup, doodadGroup], liquidGroup] = await Promise.all([
           this.#terrainManager.getArea(areaId, newArea),
-          this.#doodadManager.getArea(areaId, newArea),
-          this.#wmoManager.getArea(areaId, newArea),
+          // Buildings first: the doodads include the furniture and props inside them
+          this.#wmoManager.getArea(areaId, newArea).then(async (buildings) => {
+            const doodadDefs = [...newArea.doodadDefs, ...this.#wmoManager.doodadsOf(areaId)];
+            return [buildings, await this.#doodadManager.getArea(areaId, { ...newArea, doodadDefs })] as const;
+          }),
           // Liquid that cannot be drawn must not cost the area its terrain
           this.#liquidManager.getArea(areaId, newArea).catch((error) => {
             console.warn(`3D view: the liquid of area ${areaId} could not be drawn: ${describeError(error)}`);

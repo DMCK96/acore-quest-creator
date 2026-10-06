@@ -1,4 +1,3 @@
-// @ts-nocheck
 /**
  * A building batch's surface, lit by the map's own light (the sun and ambient terrain uses) and fogged
  * like the terrain. A group's baked colours (MOCV) are light added to the ambient, not the whole of

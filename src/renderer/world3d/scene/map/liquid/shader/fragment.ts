@@ -1,4 +1,3 @@
-// @ts-nocheck
 import { FUNCTION_APPLY_FOG, UNIFORM_FOG_COLOR, VARIABLE_FOG_FACTOR } from '../../../shader/fog.js';
 import { composeShader } from '../../../shader/util.js';
 

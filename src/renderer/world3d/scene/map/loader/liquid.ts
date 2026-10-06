@@ -12,6 +12,7 @@
  * the repository root.
  */
 import { MAP_CHUNK_HEIGHT } from '@wowserhq/format';
+import { findAdtChunk } from './adt-chunks.js';
 
 /** Liquid tiles per chunk side; a chunk's liquid grid has one more vertex than that per side */
 const LIQUID_TILES = 8;
@@ -56,27 +57,7 @@ type LiquidInstance = {
 };
 
 /** The MH2O chunk's data as offsets into the area file, or null when the area has no liquid */
-const findMh2o = (view: DataView) => {
-  // MVER (12 bytes), then MHDR: its tag and size (8), then its data, which offsets are relative to
-  const mhdrData = 20;
-  if (view.byteLength < mhdrData + 44) {
-    return null;
-  }
-
-  const mh2oOffset = view.getUint32(mhdrData + 40, true);
-  if (mh2oOffset === 0) {
-    return null;
-  }
-
-  const chunkStart = mhdrData + mh2oOffset;
-  if (chunkStart + 8 > view.byteLength) {
-    return null;
-  }
-
-  const size = view.getUint32(chunkStart + 4, true);
-  const dataStart = chunkStart + 8;
-  return { dataStart, dataEnd: Math.min(dataStart + size, view.byteLength) };
-};
+const findMh2o = (view: DataView) => findAdtChunk(view, 'mh2o');
 
 /** Every liquid instance (layer) of every chunk of an area file; empty when it has none */
 const readLiquidInstances = (areaData: ArrayBuffer): LiquidInstance[] => {

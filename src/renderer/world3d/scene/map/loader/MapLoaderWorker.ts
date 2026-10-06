@@ -14,6 +14,7 @@ import {
 } from './util.js';
 import { MapAreaSpec, TerrainSpec } from './types.js';
 import { createLiquidSpecs, readLiquidInstances } from './liquid.js';
+import { readObjDefDoodadSets } from './adt-chunks.js';
 import { AssetHost, loadAsset, normalizePath } from '../../asset.js';
 import SceneWorker from '../../worker/SceneWorker.js';
 
@@ -45,6 +46,7 @@ class MapLoaderWorker extends SceneWorker {
 
     const areaData = await loadAsset(this.#host, areaPath);
     const area = new MapArea(map.layerSplatDepth).load(areaData);
+    const doodadSets = readObjDefDoodadSets(areaData);
 
     const buffers = new Set<ArrayBuffer>();
 
@@ -101,11 +103,13 @@ class MapLoaderWorker extends SceneWorker {
         rotation: def.rotation,
         scale: def.scale,
       })),
-      objDefs: area.objDefs.map((def) => ({
+      objDefs: area.objDefs.map((def, i) => ({
         id: def.id,
         name: def.name,
         position: def.position,
         rotation: def.rotation,
+        // Read from the file: the published parser drops it
+        doodadSet: doodadSets[i] ?? 0,
       })),
     };
 

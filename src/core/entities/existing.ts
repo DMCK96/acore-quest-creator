@@ -1,9 +1,12 @@
 import { fightIsEmpty } from '../combat/model';
-import type { RawRow, Where } from '../db/types';
-import { UnknownColumnError, UnknownTableError, type WorldDb } from '../db/world-db';
+import type { RawRow } from '../db/types';
+import type { WorldDb } from '../db/world-db';
 import type { PatchStatement } from '../export/build-patch';
 import { ITEM_SLOT_BLOCKS, itemRow } from './item-columns';
 import { itemFromRows, npcFromRows } from './from-rows';
+import { seenByColumns, seenByOf } from './visibility';
+import { npcSpawnGuids, spawnEventRows } from './spawn-events-read';
+import { rowsOrNone } from '../db/rows-or-none';
 import {
   existingOnly, NPC_TYPE_VALUE, OBJECT_TYPE_VALUE, RANK_VALUE,
   type CustomItem, type CustomNpc, type CustomObject, type LootRow, type OriginalRows, type Page, type ProjectEntities, type StoredOrigin,
@@ -151,6 +154,8 @@ function npcStatements(out: Statements, npc: CustomNpc, origin: Existing, givers
       HealthModifier: text(n.healthModifier), DamageModifier: text(n.damageModifier), npcflag: text(flags),
       AIName: !fightLocked && !fightIsEmpty(n.fight) ? 'SmartAI' : (original.AIName ?? ''),
       lootid: text(lootId),
+      // Written only when changed: absent on an NPC saved before it could be set, its flags stay as they are
+      ...(n.seenBy && n.seenBy !== seenByOf(original) ? seenByColumns(n.seenBy, original) : {}),
     };
   };
   const asRead = npcFromRows(npc.entry, origin.original, { sharedLoot: origin.sharedLoot, spawnCount: origin.spawnCount });
@@ -220,15 +225,6 @@ export function existingStatements(store: ProjectEntities, givers: readonly numb
 type Kind = 'npc' | 'object' | 'item';
 type RowReader = Pick<WorldDb, 'selectRows'>;
 
-/** A table's rows, or none when the table or a column of the query is not in this database */
-async function rowsOrNone(db: RowReader, table: string, where: Where): Promise<Row[]> {
-  try {
-    return await db.selectRows(table, where);
-  } catch (error) {
-    if (error instanceof UnknownTableError || error instanceof UnknownColumnError) return [];
-    throw error;
-  }
-}
 
 /** The rows of a page chain starting at `first`, following `NextPageID` */
 async function pageRows(db: RowReader, first: number): Promise<Row[]> {
@@ -259,7 +255,14 @@ export async function readOriginalRows(db: RowReader, kind: Kind, entry: number)
       rowsOrNone(db, 'creature_equip_template', { CreatureID: key, ID: '1' }),
       lootid > 0 ? rowsOrNone(db, 'creature_loot_template', { Entry: text(lootid) }) : Promise.resolve([]),
     ]);
-    return { creature_template: template, creature_template_model: models, creature_equip_template: equip, creature_loot_template: loot };
+    // Its spawns and their game event rows: what its event rule is read from
+    const guids = await npcSpawnGuids(db, entry);
+    const events = [...(await spawnEventRows(db, guids)).values()].flat()
+      .sort((a, b) => num(a.guid) - num(b.guid) || num(a.eventEntry) - num(b.eventEntry));
+    return {
+      creature_template: template, creature_template_model: models, creature_equip_template: equip, creature_loot_template: loot,
+      creature: guids.map((g) => ({ guid: text(g) })), game_event_creature: events,
+    };
   }
   if (kind === 'object') {
     const template = await rowsOrNone(db, 'gameobject_template', { entry: key });
@@ -292,6 +295,21 @@ export function sameRows(a: readonly Row[], b: readonly RawRow[]): boolean {
  * rows are read again as `readOriginalRows` read them and compared table by table. The Project changes
  * badge and the export's warning both come from here, so they always agree.
  */
+/**
+ * A table's rows then and now, as drift compares them. Spawns coming and going are not the NPC's rows
+ * (the patch does not write them), so the spawn list is not compared, and spawn events only for the
+ * spawns both lists have.
+ */
+function comparable(table: string, was: OriginalRows, now: OriginalRows): [Row[], Row[]] {
+  if (table === 'creature') return [[], []];
+  if (table !== 'game_event_creature') return [was[table] ?? [], (now[table] ?? []) as Row[]];
+  const guidsOf = (rows: OriginalRows) => new Set((rows.creature ?? []).map((r) => r.guid));
+  const before = guidsOf(was);
+  const after = guidsOf(now);
+  const both = (rows: Row[]) => rows.filter((r) => before.has(r.guid ?? null) && after.has(r.guid ?? null));
+  return [both(was[table] ?? []), both((now[table] ?? []) as Row[])];
+}
+
 export async function existingDrift(db: RowReader, store: ProjectEntities): Promise<{ kind: Kind; entry: number; name: string }[]> {
   const edited = existingOnly(store);
   const all = [
@@ -304,7 +322,8 @@ export async function existingDrift(db: RowReader, store: ProjectEntities): Prom
     if (entity.origin.kind !== 'existing') continue;
     const was = entity.origin.original;
     const now = await readOriginalRows(db, kind, entity.entry);
-    const changed = !now || [...new Set([...Object.keys(was), ...Object.keys(now)])].some((table) => !sameRows(was[table] ?? [], now[table] ?? []));
+    // A project saved before a table was read has none of it, which is not a change
+    const changed = !now || Object.keys(was).some((table) => !sameRows(...comparable(table, was, now)));
     if (changed) drifted.push({ kind, entry: entity.entry, name: entity.name || String(entity.entry) });
   }
   return drifted;

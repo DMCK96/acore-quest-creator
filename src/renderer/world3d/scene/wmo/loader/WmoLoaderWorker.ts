@@ -1,17 +1,19 @@
-// @ts-nocheck
 import { MapObj } from '../format/MapObj.js';
 import { parseGroup, WmoGroupData } from '../format/group.js';
 import { WmoGroupSpec, WmoSpec } from './types.js';
 import SceneWorker from '../../worker/SceneWorker.js';
 import { AssetHost, loadAsset } from '../../asset.js';
 import { createBuildingLiquidSpec } from './liquid.js';
+import type { LiquidSpec } from '../../map/loader/liquid.js';
+
+const messageOf = (error: unknown): string => (error instanceof Error ? error.message : String(error));
 
 type WmoLoaderWorkerOptions = {
   host: AssetHost;
 };
 
 class WmoLoaderWorker extends SceneWorker {
-  #host: AssetHost;
+  #host!: AssetHost;
 
   initialize(options: WmoLoaderWorkerOptions) {
     this.#host = options.host;
@@ -24,7 +26,7 @@ class WmoLoaderWorker extends SceneWorker {
 
     const basePath = path.replace(/\.wmo$/i, '');
     const problems: string[] = [];
-    const liquids = [];
+    const liquids: LiquidSpec[] = [];
 
     // A group that is missing or broken is left out; the rest of the building still draws
     const groups = await Promise.all(
@@ -39,12 +41,12 @@ class WmoLoaderWorker extends SceneWorker {
               const liquid = createBuildingLiquidSpec(group.liquid, root.flags);
               if (liquid) liquids.push(liquid);
             } catch (error) {
-              problems.push(`${groupPath} water: ${error.message}`);
+              problems.push(`${groupPath} water: ${messageOf(error)}`);
             }
           }
           return this.#createGroupSpec(group);
         } catch (error) {
-          problems.push(`${groupPath}: ${error.message}`);
+          problems.push(`${groupPath}: ${messageOf(error)}`);
           return null;
         }
       }),
@@ -56,18 +58,23 @@ class WmoLoaderWorker extends SceneWorker {
         blend: material.blend,
         textures: material.textures,
       })),
-      groups: groups.filter((group) => group !== null && group.indices.length > 0),
+      groups: groups.filter((group): group is WmoGroupSpec => group !== null && group.indices.length > 0),
       liquids,
       problems,
+      doodads: {
+        sets: root.doodadSets.map(({ startIndex, count }) => ({ startIndex, count })),
+        defs: root.doodadDefs,
+      },
     };
 
     const transfer = new Set<ArrayBuffer>();
     for (const group of spec.groups) {
-      transfer.add(group.positions.buffer);
-      transfer.add(group.indices.buffer);
-      if (group.normals) transfer.add(group.normals.buffer);
-      if (group.uvs) transfer.add(group.uvs.buffer);
-      if (group.colors) transfer.add(group.colors.buffer);
+      // Each array is the worker's own copy (`Float32Array.from` and the like), never a shared buffer
+      transfer.add(group.positions.buffer as ArrayBuffer);
+      transfer.add(group.indices.buffer as ArrayBuffer);
+      if (group.normals) transfer.add(group.normals.buffer as ArrayBuffer);
+      if (group.uvs) transfer.add(group.uvs.buffer as ArrayBuffer);
+      if (group.colors) transfer.add(group.colors.buffer as ArrayBuffer);
     }
     for (const liquid of liquids) {
       transfer.add(liquid.vertexBuffer);
@@ -77,7 +84,7 @@ class WmoLoaderWorker extends SceneWorker {
     return [spec, [...transfer]];
   }
 
-  #createGroupSpec(group: WmoGroupData): WmoGroupSpec {
+  #createGroupSpec(group: WmoGroupData): WmoGroupSpec | null {
     const vertices = group.vertices;
     if (!vertices || !group.indices) {
       return null;
@@ -87,7 +94,7 @@ class WmoLoaderWorker extends SceneWorker {
     const positions = Float32Array.from(vertices);
 
     // Baked lighting is stored blue-green-red-alpha
-    let colors: Uint8Array = null;
+    let colors: Uint8Array | null = null;
     if (group.colors && group.colors.length >= (positions.length / 3) * 4) {
       colors = new Uint8Array(group.colors.length);
       for (let i = 0; i + 3 < colors.length; i += 4) {

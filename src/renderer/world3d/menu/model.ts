@@ -60,6 +60,8 @@ export type MenuAction =
   | { kind: 'copyCoordinates'; at: At }
   /** How long the spawns take to respawn, asked for in a dialog */
   | { kind: 'respawn'; spawns: MenuSpawn[] }
+  /** Which game events NPC spawns follow of their own, asked for in a dialog */
+  | { kind: 'spawnEvents'; spawns: MenuSpawn[] }
   /** A new spawn group of these spawns, made in a dialog */
   | { kind: 'groupSpawns'; spawns: MenuSpawn[] }
   /** A spawn group's members and chances, changed in a dialog */
@@ -70,6 +72,8 @@ export type MenuAction =
   | { kind: 'leaveGroup'; spawn: MenuSpawn }
   | { kind: 'startPath'; spawn: MenuSpawn; at: At }
   | { kind: 'wander'; spawn: MenuSpawn }
+  /** What an NPC does at one point of its route, changed in a dialog */
+  | { kind: 'pointSettings'; guid: number; index: number }
   | { kind: 'removePath'; spawn: MenuSpawn }
   | { kind: 'toggleRole'; role: Role; spawn: MenuSpawn; on: boolean }
   | { kind: 'newQuest'; spawn: MenuSpawn; after: boolean }

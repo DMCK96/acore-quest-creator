@@ -2,7 +2,7 @@ import { isDeepStrictEqual } from 'node:util';
 import { fieldById } from '../../core/registry';
 import { moduleById, ownerOf } from '../../core/modules/catalog';
 import type { ModuleId } from '../../core/modules/model';
-import { groupsOf, movementsOf, respawnsOf, type WorldLayer, type WorldRouteEdit } from '../../core/world/layer';
+import { groupsOf, movementsOf, respawnsOf, spawnEventsOf, type WorldLayer, type WorldRouteEdit } from '../../core/world/layer';
 import type { HistoryPart, QuestEdit, StepPlace, StepSummary } from '../../shared/history';
 import type { HistoryStep } from './history';
 
@@ -81,7 +81,13 @@ function worldChanges(before: WorldLayer, after: WorldLayer): WorldChange[] {
     const was = addedBefore.get(key);
     if (isDeepStrictEqual(was, s)) continue;
     const at = s.placement;
-    out.push({ text: was ? `Moved ${s.name}` : `Placed ${s.name}`, where: { map: s.map, x: at.x, y: at.y, z: at.z, spawn: { kind: s.kind, guid: s.guid } } });
+    // A spawn placed before says what about it changed
+    const what = !was ? `Placed ${s.name}`
+      : !isDeepStrictEqual(was.placement, s.placement) ? `Moved ${s.name}`
+      : was.respawnSecs !== s.respawnSecs ? `Respawn time of ${s.name}`
+      : !isDeepStrictEqual(was.events, s.events) ? `Events of ${s.name}`
+      : `Changed ${s.name}`;
+    out.push({ text: what, where: { map: s.map, x: at.x, y: at.y, z: at.z, spawn: { kind: s.kind, guid: s.guid } } });
   }
   for (const [key, s] of addedBefore) {
     if (addedAfter.has(key)) continue;
@@ -118,6 +124,14 @@ function worldChanges(before: WorldLayer, after: WorldLayer): WorldChange[] {
     out.push({ text: `Respawn time of ${r.name}`, where: null });
   }
   for (const [key, r] of respawnsBefore) if (!respawnsAfter.has(key)) out.push({ text: `Reverted respawn time of ${r.name}`, where: null });
+
+  const eventsBefore = keyed(spawnEventsOf(before), (e) => String(e.guid));
+  const eventsAfter = keyed(spawnEventsOf(after), (e) => String(e.guid));
+  for (const [key, e] of eventsAfter) {
+    if (isDeepStrictEqual(eventsBefore.get(key), e)) continue;
+    out.push({ text: `Events of ${e.name}`, where: null });
+  }
+  for (const [key, e] of eventsBefore) if (!eventsAfter.has(key)) out.push({ text: `Reverted events of ${e.name}`, where: null });
 
   const groupsBefore = keyed(groupsOf(before), (g) => String(g.id));
   const groupsAfter = keyed(groupsOf(after), (g) => String(g.id));

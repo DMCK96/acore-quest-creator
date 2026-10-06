@@ -61,6 +61,20 @@ describe('describeStep', () => {
     expect(world({ respawns: [resp, { ...resp, guid: 2 }] }).label).toBe('World: 2 changes');
   });
 
+  it('names a placed spawn’s change by what changed: where it stands, its respawn time, or its events', () => {
+    const placed = { kind: 'creature' as const, guid: 7, entry: 1423, name: 'Guard', map: 0, placement: at, look: { displayId: 1, scale: 1, equipment: [0, 0, 0] as [number, number, number], preset: null } };
+    const changed = (after: object) => describeStep(step([{ kind: 'world', before: { ...EMPTY_WORLD, added: [placed] }, after: { ...EMPTY_WORLD, added: [{ ...placed, ...after }] } }])).label;
+    expect(changed({ placement: { ...at, x: 9 } })).toBe('Moved Guard');
+    expect(changed({ respawnSecs: 60 })).toBe('Respawn time of Guard');
+    expect(changed({ events: null })).toBe('Events of Guard');
+  });
+
+  it('names spawn event steps', () => {
+    const ev = { guid: 80330, entry: 1423, name: 'Stormwind Guard', map: 0, original: [], current: null };
+    expect(describeStep(step([{ kind: 'world', before: EMPTY_WORLD, after: { ...EMPTY_WORLD, spawnEvents: [ev] } }])).label).toBe('Events of Stormwind Guard');
+    expect(describeStep(step([{ kind: 'world', before: { ...EMPTY_WORLD, spawnEvents: [ev] }, after: EMPTY_WORLD }])).label).toBe('Reverted events of Stormwind Guard');
+  });
+
   it('names world changes from the layer\'s difference and says where', () => {
     const guard = { kind: 'creature' as const, guid: 80330, entry: 1423, name: 'Stormwind Guard', map: 0, original: at, current: { ...at, x: 9 } };
     expect(describeStep(step([{ kind: 'world', before: EMPTY_WORLD, after: { ...EMPTY_WORLD, spawns: [guard] } }])))

@@ -56,7 +56,7 @@ Keys work once the view has been clicked. The **?** in the bottom right lists ev
 
 ## What is shown
 
-The **Layers** card turns parts of the world on and off: **Buildings**, **Trees & props**, **NPCs**, **Objects** and **Paths**. With buildings hidden, clicks land on the ground under them.
+The **Layers** card turns parts of the world on and off: **Buildings**, **Trees & props**, **NPCs**, **Objects** and **Paths**. Buildings are drawn with their furniture and props (the tables and barrels in an inn), which hide with them. With buildings hidden, clicks land on the ground under them.
 
 **Event** draws the world during one game event: its NPCs and objects appear, and those it takes away go. **No event** is the everyday world; **All events** shows every spawn the database has.
 
@@ -84,8 +84,9 @@ Right-click (without dragging) for a menu about what is under the cursor: a rout
 ### Place, copy and paste
 
 - **Place NPC here…** and **Place object here…**: pick an existing NPC or object, and one is put down where you right-clicked, facing you, on the server's floor. **Place…** in the Layers card places one with each click instead, until **Esc**.
-- **Copy**, **Paste here** and **Duplicate** (also **Ctrl+C**, **Ctrl+V** and **Ctrl+D**): a copied group keeps its layout and facing. **Ctrl+V** pastes under the cursor, and Duplicate puts the copy beside the original. A paste copies what a spawn is, how it faces, its respawn time and how far it wanders. It does not copy a path: a pasted NPC that walked a path stands still, and you draw it a new one.
+- **Copy**, **Paste here** and **Duplicate** (also **Ctrl+C**, **Ctrl+V** and **Ctrl+D**): a copied group keeps its layout and facing. **Ctrl+V** pastes under the cursor, and Duplicate puts the copy beside the original. A paste copies what a spawn is, how it faces, its respawn time, how far it wanders and an NPC's own game events. It does not copy a path: a pasted NPC that walked a path stands still, and you draw it a new one.
 - **Respawn time…**: how long a spawn takes to come back after it dies or is despawned, in minutes and seconds. It starts from the spawn's current time. With several spawns selected the item reads **Respawn time of _n_ spawns…** and sets them all; if they differ the boxes start empty. It works on any spawn, a new one, one you placed, or one the database already has.
+- **Event…**: which game events NPC spawns follow of their own: **Same as the NPC**, **Always**, **Only during…** or **Gone during…** one or more events. For one spawn the dialog first says what it follows now, including a spawn the database has both appearing during some events and gone during others, which is kept unless you choose something else. With several NPCs selected the item reads **Event of _n_ spawns…**; if they differ nothing is chosen at first. Objects are left out. The NPC's own setting is in the [NPC editor](/azeroth-world-editor/guides/npcs-and-objects/#visibility).
 - **Remove**: takes away a spawn you placed. Spawns already in the database are not deleted.
 - **Copy coordinates**: puts `.go xyz` with the place's X, Y, Z and map on the clipboard, ready to paste in game.
 
@@ -96,6 +97,7 @@ Placing, pasting and removing are undone with **Ctrl+Z** like any other change.
 - **Start path here**: with one NPC selected that has no route, right-click the ground where its path should begin. Each click then adds the next point. **Enter** or **Esc** finishes, **Ctrl+Z** takes back the last point, and **Cancel path** puts everything back. A path needs at least two points.
 - **Change wander distance…**: how far the NPC roams from where it stands, 0 to 100 yards. Its circle follows what you type.
 - **Remove path**: the NPC stands still. A path the database already has is left in place for any other NPC that walks it.
+- **Point settings…** (right-click a point of a shown route): what the NPC does there. On a route the database has: how long it waits, whether it walks or runs on from there, and the way it faces; a waypoint script the point already runs is named and kept. On your own NPC's patrol: the same, plus its actions (saying a line, an emote, a pose, a spell, a sound, mounting), as on the quest map. **Apply** is one undo step.
 
 These work for any NPC, whether the database has it or you made it.
 

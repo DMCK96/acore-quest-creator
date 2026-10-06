@@ -6,6 +6,7 @@ import type { EntityContext } from './context';
 import { itemRow, MODELLED_ITEM_COLUMNS } from './item-columns';
 import { MOVEMENT_TYPE } from '../world/movement';
 import { NPC_TYPE_VALUE, OBJECT_TYPE_VALUE, RANK_VALUE, type LootRow, type Patrol, type Page, type ProjectEntities } from './model';
+import { seenByColumns } from './visibility';
 
 /**
  * New NPCs and objects to template and spawn rows, in the same shape as compiled scripts so one
@@ -125,6 +126,8 @@ export function compileEntities(input: {
       entry: text(npc.entry), name: npc.name, subname: npc.subname, minlevel: text(npc.minLevel), maxlevel: text(npc.maxLevel),
       faction: text(npc.faction), npcflag: text(npcflag), rank: text(RANK_VALUE[npc.rank]), type: text(NPC_TYPE_VALUE[npc.type]),
       HealthModifier: text(npc.healthModifier), DamageModifier: text(npc.damageModifier), unit_class: text(UNIT_CLASS),
+      // Who sees it, every other flag bit as its row already has them
+      ...seenByColumns(npc.seenBy ?? 'living', existing ?? {}),
       // A fight or things to do on its patrol run on SmartAI; otherwise keep what quest scripting may have set.
       AIName: fightIsEmpty(npc.fight) && !hasPointActions(npc) ? (existing?.AIName ?? '') : 'SmartAI', gossip_menu_id: existing?.gossip_menu_id ?? '0',
       // Creature loot is looked up by `lootid`; the NPC's own entry keeps its loot rows its own.
@@ -231,6 +234,9 @@ export function compileEntities(input: {
   add('creature_template_model', sorted(entities.npcs.map((n) => n.entry)).map((e) => ({ CreatureID: text(e), Idx: '0' })));
   add('creature_equip_template', sorted(entities.npcs.map((n) => n.entry)).map((e) => ({ CreatureID: text(e), ID: '1' })));
   add('creature', sorted(creatureGuids).map((g) => ({ guid: text(g) })));
+  // A removed spawn's game events go with it; a current spawn's are the spawn event writer's (spawn-events.ts)
+  const currentGuids = new Set(entities.npcs.flatMap((n) => n.spawns.map((s) => s.guid)));
+  add('game_event_creature', sorted([...creatureGuids].filter((g) => !currentGuids.has(g))).map((g) => ({ guid: text(g) })));
   add('gameobject_template', sorted(entities.objects.map((o) => o.entry)).map((e) => ({ entry: text(e) })));
   add('gameobject', sorted(objectGuids).map((g) => ({ guid: text(g) })));
   add('item_template', sorted(entities.items.map((i) => i.entry)).map((e) => ({ entry: text(e) })));

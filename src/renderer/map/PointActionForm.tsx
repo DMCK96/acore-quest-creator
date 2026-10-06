@@ -53,7 +53,8 @@ export function PointActionForm({
   onChange(next: PointAction): void;
   onMove(by: -1 | 1): void;
   onRemove(): void;
-  onPickObject(): void;
+  /** Picks another object to use on the map; absent where the view cannot pick one */
+  onPickObject?(): void;
 }): React.JSX.Element {
   function fields(): React.ReactNode {
     switch (action.kind) {
@@ -99,9 +100,11 @@ export function PointActionForm({
         return (
           <>
             <ObjectName guid={action.guid} entry={action.entry} />
-            <button type="button" className="entry-card__btn" onClick={onPickObject}>
-              Pick another
-            </button>
+            {onPickObject && (
+              <button type="button" className="entry-card__btn" onClick={onPickObject}>
+                Pick another
+              </button>
+            )}
           </>
         );
     }

@@ -1,4 +1,3 @@
-// @ts-nocheck
 import SceneWorkerController from '../../worker/SceneWorkerController.js';
 import { WmoSpec } from './types.js';
 import { AssetHost } from '../../asset.js';

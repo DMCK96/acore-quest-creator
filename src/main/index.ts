@@ -12,6 +12,7 @@ import { seedEnvProfiles } from './env-profiles';
 import { mapDataFiles, nodeServerDataFiles } from './server-data';
 import { createClientImagery, nodeClientFs } from './client-imagery';
 import { ASSET_SCHEME, parseAssetUrl } from '../core/client/asset-url';
+import { MAP_TILE_SCHEME } from '../core/client/schemes';
 import { createMapTiles, parseTileUrl, type MapTiles } from './map-tiles';
 import { createSecretBox } from './secret-box';
 import { moveProfileFromOldName } from './profile-move';
@@ -68,15 +69,15 @@ const unknownError = (error: unknown): { ok: false; error: ApiError } => ({
 });
 
 // The quest map's relief tiles come from the main process; the scheme must be known before `ready`.
-// The 3D view reads the game client's files through `acqc-wow`; its loaders run in workers, which need CORS.
+// The 3D view reads the game client's files through `awe-wow`; its loaders run in workers, which need CORS.
 protocol.registerSchemesAsPrivileged([
-  { scheme: 'acqc-map', privileges: { standard: true, secure: true, supportFetchAPI: true } },
+  { scheme: MAP_TILE_SCHEME, privileges: { standard: true, secure: true, supportFetchAPI: true } },
   { scheme: ASSET_SCHEME, privileges: { standard: true, secure: true, supportFetchAPI: true, corsEnabled: true } },
 ]);
 
-/** Serves `acqc-map://tile/...` from the tile service; anything else is not found. */
+/** Serves `awe-map://tile/...` from the tile service; anything else is not found. */
 function registerMapTiles(tiles: MapTiles): void {
-  protocol.handle('acqc-map', async (request) => {
+  protocol.handle(MAP_TILE_SCHEME, async (request) => {
     const address = parseTileUrl(request.url);
     if (!address) return new Response(null, { status: 404 });
     const png = await tiles.tile(address.map, address.zoom, address.tx, address.ty);
@@ -84,7 +85,7 @@ function registerMapTiles(tiles: MapTiles): void {
   });
 }
 
-/** Serves `acqc-wow://file/<client path>` from the game client's archives; a missing file is a 404. */
+/** Serves `awe-wow://file/<client path>` from the game client's archives; a missing file is a 404. */
 function registerClientFiles(tiles: MapTiles): void {
   const missing = new Set<string>();
   protocol.handle(ASSET_SCHEME, async (request) => {
@@ -201,7 +202,7 @@ const electronDialogs: Dialogs = {
 function createWindow(session: ProjectSession, recovery: Recovery, projects: ProjectController): void {
   const win = new BrowserWindow({
     width: 1280,
-    height: 800,
+    height: 880,
     // Smaller than this the quest editor and the 3D view's panels no longer fit beside each other
     minWidth: 720,
     minHeight: 500,

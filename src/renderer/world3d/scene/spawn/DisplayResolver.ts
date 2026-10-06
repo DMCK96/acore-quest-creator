@@ -1,4 +1,3 @@
-// @ts-nocheck
 /**
  * What an NPC's or object's display looks like: which model to draw, which skins fill its replaceable
  * texture slots, and which of its geosets show. Read from the game client's own tables (through the
@@ -7,6 +6,7 @@
  */
 import { ClientDb } from '@wowserhq/format';
 import { CreatureDisplayInfoRecord, CreatureModelDataRecord, GameObjectDisplayInfoRecord } from '../db/records.js';
+import { modelPath } from '../asset.js';
 import { ViewPreset } from '../../../../core/db/view-spawns.js';
 import { ITEM_REGIONS, Region, itemTextureFiles } from '../character/composite.js';
 import { OUTFIT_SLOTS, OutfitSlot, PAINT_ORDER, SHAPE_ORDER, applyItemGeosets } from '../character/outfit.js';
@@ -97,8 +97,6 @@ const SHIELD_INVENTORY_TYPE = 14;
 /** The replaceable slot a display's first skin fills; the next two fill the slots after it */
 const FIRST_SKIN_SLOT = 11;
 
-/** A model file as the client stores it: `.mdx` and `.mdl` names are read as `.m2` */
-const modelPath = (name: string) => name.replace(/\.(mdx|mdl)$/i, '.m2');
 
 /** The folder part of a client path, without its trailing backslash */
 const folderOf = (path: string) => {
@@ -146,7 +144,7 @@ class DisplayResolver {
   }
 
   /** A creature that is its own model, in up to three skins */
-  async #plain(display) {
+  async #plain(display: CreatureDisplayInfoRecord): Promise<ModelLook | null> {
     const model = (await this.#table('CreatureModelData'))?.getRecord(display.modelId);
     if (!model || !model.modelName) {
       return null;
@@ -155,7 +153,7 @@ class DisplayResolver {
     const path = modelPath(model.modelName);
     const folder = folderOf(model.modelName);
     const textures: Record<number, string> = {};
-    display.textureVariations.forEach((skin, i) => {
+    display.textureVariations.forEach((skin: string, i: number) => {
       if (skin) {
         textures[FIRST_SKIN_SLOT + i] = `${folder}\\${skin}.blp`;
       }

@@ -1,4 +1,3 @@
-// @ts-nocheck
 /**
  * Water, magma and slime on the map's areas: one mesh per liquid type per area, sharing one material
  * per type. Types come from LiquidType.dbc, so a client's own types (CoA has several) draw as it
@@ -40,7 +39,7 @@ class LiquidManager {
   #dbManager: DbManager;
   #mapLight: MapLight;
 
-  #types: Promise<Map<number, LiquidTypeInfo>>;
+  #types: Promise<Map<number, LiquidTypeInfo>> | null = null;
   #materials = new globalThis.Map<number, Promise<LiquidMaterial>>();
   #loadedMaterials = new Set<LiquidMaterial>();
   #areas = new globalThis.Map<number, THREE.Group>();

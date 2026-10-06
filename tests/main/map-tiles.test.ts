@@ -31,9 +31,9 @@ function setup() {
 
 describe('map tiles', () => {
   it('parses tile addresses', () => {
-    expect(parseTileUrl('acqc-map://tile/0/6/32/48.png')).toEqual({ map: 0, zoom: 6, tx: 32, ty: 48 });
-    expect(parseTileUrl('acqc-map://tile/0/9/1/1.png')).toBeNull();
-    expect(parseTileUrl('acqc-map://tile/x/6/1/1.png')).toBeNull();
+    expect(parseTileUrl('awe-map://tile/0/6/32/48.png')).toEqual({ map: 0, zoom: 6, tx: 32, ty: 48 });
+    expect(parseTileUrl('awe-map://tile/0/9/1/1.png')).toBeNull();
+    expect(parseTileUrl('awe-map://tile/x/6/1/1.png')).toBeNull();
   });
   it('draws a grid at full zoom and nothing where there is no grid', async () => {
     const { tiles } = setup();

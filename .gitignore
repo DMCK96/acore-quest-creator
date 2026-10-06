@@ -8,3 +8,5 @@ test-results/
 *.tsbuildinfo
 .env
 internal_docs/
+.vscode/
+projects/

@@ -6,7 +6,7 @@ import userEvent from '@testing-library/user-event';
 import { NpcEditor } from '../../src/renderer/entities/npc/NpcEditor';
 import { NamesProvider } from '../../src/renderer/state/names';
 import { makeMockApi, okv } from './mock-api';
-import { newNpc, type CustomNpc } from '../../src/core/entities/model';
+import { newNpc, newSpawn, type CustomNpc } from '../../src/core/entities/model';
 import type { Api } from '@shared/ipc';
 
 let current: CustomNpc = newNpc(12000001);
@@ -191,5 +191,48 @@ describe('NPC editor', () => {
     expect(document.activeElement).toBe(screen.getByRole('tab', { name: 'Basics' }));
     await userEvent.keyboard('{ArrowLeft}');
     expect(screen.getByRole('tab', { name: 'Placement' })).toHaveAttribute('aria-selected', 'true');
+  });
+});
+
+describe('NPC visibility', () => {
+  const events = [{ id: 12, name: 'Darkmoon Faire' }, { id: 4, name: "Hallow's End" }];
+  function Visible({ start }: { start: CustomNpc }) {
+    const [npc, setNpc] = useState(start);
+    current = npc;
+    return <NpcEditor npc={npc} onChange={(n) => { current = n; setNpc(n); }} allocateSpawn={async () => 900} events={events} />;
+  }
+
+  it('sets who sees it, for every spawn, saying how many', async () => {
+    render(<Visible start={{ ...newNpc(12000001), spawns: [newSpawn(1), newSpawn(2)] }} />);
+    expect(screen.getByText('Applies to every spawn of this NPC (all 2).')).toBeTruthy();
+    await userEvent.selectOptions(screen.getByLabelText('Seen by'), 'Dead players only');
+    expect(current.seenBy).toBe('dead');
+  });
+
+  it('a spirit healer is only seen by dead players, and says why', () => {
+    const healer = { ...newNpc(6491), seenBy: 'dead' as const, origin: { kind: 'existing' as const, original: { creature_template: [{ entry: '6491', npcflag: '16384' }] }, sharedLoot: 0, spawnCount: 1, locked: [] } } as CustomNpc;
+    render(<NpcEditor npc={healer} onChange={vi.fn()} allocateSpawn={async () => null} events={events} existing={{ sharedLoot: 0, spawnCount: 1, locked: [] }} />);
+    expect(screen.getByLabelText('Seen by')).toHaveProperty('disabled', true);
+    expect(screen.getByText('A spirit healer or spirit guide is only seen by dead players.')).toBeTruthy();
+  });
+
+  it('sets the events every spawn follows, several at once, and counts the spawns with their own', async () => {
+    render(<Visible start={{ ...newNpc(12000001), spawns: [newSpawn(1), { ...newSpawn(2), events: null }] }} />);
+    expect(screen.getByText('Every spawn follows this unless it has its own event (1 does).')).toBeTruthy();
+    await userEvent.selectOptions(screen.getByLabelText('Event'), 'Only during…');
+    expect(current.events).toBeNull();
+    await userEvent.click(screen.getByRole('option', { name: 'Darkmoon Faire' }));
+    await userEvent.click(screen.getByRole('option', { name: "Hallow's End" }));
+    expect(current.events).toEqual({ mode: 'during', events: [4, 12] });
+  });
+
+  it('gives a spawn on the Placement tab its own events', async () => {
+    render(<Visible start={{ ...newNpc(12000001), spawns: [newSpawn(6000001)] }} />);
+    await tab('Placement');
+    const row = screen.getByRole('tabpanel', { name: 'Placement' });
+    await userEvent.selectOptions(within(row).getByLabelText('Event'), 'Always');
+    expect(current.spawns[0]!.events).toBeNull();
+    await userEvent.selectOptions(within(row).getByLabelText('Event'), 'Same as the NPC');
+    expect(current.spawns[0]!.events).toBe('npc');
   });
 });

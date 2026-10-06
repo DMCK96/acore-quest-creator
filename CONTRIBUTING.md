@@ -45,7 +45,7 @@ More: [Architecture](https://dmck96.github.io/azeroth-world-editor/contributing/
 
 The app opens on the World, and most new work touches it. The decisions to keep:
 
-- **Files come from the user's client**, served by the main process at `acqc-wow://`. Never commit game files; tests build their own.
+- **Files come from the user's client**, served by the main process at `awe-wow://`. Never commit game files; tests build their own.
 - **World units are the server's** (yards, X north, Y west, Z up), with no conversion between a spawn's row and its place in the scene.
 - **React drives the scene only through the `World3D` interface** in `world3d/world3d.ts`; components never reach into Three.js objects.
 - **Every gesture is one undo step**, kept by the main process. The view keeps no history of its own. An action that cannot be undone is a bug.

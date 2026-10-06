@@ -3,7 +3,7 @@ import { writeFileSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createServer, type ViteDevServer } from 'vite';
-import { BAD_MODEL, LAVA_MAP, MISSING_MODEL, START, startFakeClient, type FakeClient } from './fake-client';
+import { BAD_MODEL, HOUSE_DOODADS, LAVA_MAP, MISSING_MODEL, START, startFakeClient, type FakeClient } from './fake-client';
 
 /**
  * The real 3D code (Three.js, the vendored Wowser scene, its workers) in a real browser, reading a
@@ -33,7 +33,7 @@ test.beforeAll(async () => {
     },
     // Only the harness is scanned for dependencies, not the whole app.
     // Listed up front: a dependency Vite finds late (the workers import some) reloads the page mid-test.
-    optimizeDeps: { entries: ['tests/world3d/harness.html'], include: ['three', '@tweenjs/tween.js', '@wowserhq/format', '@wowserhq/io'] },
+    optimizeDeps: { entries: ['tests/world3d/harness.html'], include: ['three', '@wowserhq/format', '@wowserhq/io'] },
     server: { port: 5199, strictPort: true, host: '127.0.0.1' },
   });
   await vite.listen();
@@ -81,6 +81,12 @@ test('draws the terrain, and a model or texture that cannot be read costs the ar
 
   // Both broken props are reported by name, with where they failed...
   await expect.poll(async () => (await state(page)).problems.length).toBe(2);
+  // ... and the house's furniture its placement shows is asked for (its default set's chair, and the keg
+  // of the set it picks), but not the furniture of a set it does not pick. Missing, they go to the
+  // console with the building, not the view: modded clients lack many by design, as with textures
+  await expect.poll(() => client.requested.filter((r) => r === `404 ${HOUSE_DOODADS.chair}` || r === `404 ${HOUSE_DOODADS.keg}`).length).toBe(2);
+  expect(client.requested.some((r) => r.includes(HOUSE_DOODADS.stool))).toBe(false);
+  await expect.poll(() => warnings.filter((w) => /wmo.test.(chair|keg)\.m2 \(used by building World.wmo.test.house\.wmo\) could not be loaded/i.test(w)).length).toBe(2);
   const { problems } = await state(page);
   expect(problems.find((p) => p.includes(BAD_MODEL))).toMatch(/could not be loaded: Invalid typed array length/);
   expect(problems.find((p) => p.includes(MISSING_MODEL))).toMatch(/404/);

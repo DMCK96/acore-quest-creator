@@ -29,4 +29,7 @@ const loadAsset = async (host: AssetHost, path: string) => {
  */
 const normalizePath = (path: string) => path.trim().toLowerCase().replaceAll(/\\/g, '/');
 
-export { AssetHost, getAssetUrl, loadAsset, normalizePath };
+/** A model file as the client stores it: `.mdx` and `.mdl` names are read as `.m2` */
+const modelPath = (name: string) => name.replace(/\.(mdx|mdl)$/i, '.m2');
+
+export { AssetHost, getAssetUrl, loadAsset, modelPath, normalizePath };

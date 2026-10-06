@@ -70,6 +70,24 @@ describe('existingStatements', () => {
     expect(revert).toContainEqual({ kind: 'insert', table: 'item_template', row: { entry: '2589', name: 'Linen Cloth', class: '7', subclass: '5', displayid: '7426', Quality: '1', holy_res: '0' } });
   });
 
+  it('writes Seen by into flags_extra and type_flags, keeping their other bits; leaves them alone when unchanged or not set', () => {
+    const flagged = npcFromRows(1423, { ...rows, creature_template: [{ ...template, flags_extra: '64', type_flags: '4' }] }, { sharedLoot: 0, spawnCount: 3 });
+    const row = (npc: typeof guard) => (existingStatements(store(npc), []).apply.find((s) => s.kind === 'insert' && s.table === 'creature_template') as any).row;
+    expect(row({ ...flagged, seenBy: 'dead' })).toMatchObject({ flags_extra: '1088', type_flags: '4' });
+    expect(row(flagged)).toMatchObject({ flags_extra: '64', type_flags: '4' });
+    const saved = { ...flagged };
+    delete (saved as any).seenBy;
+    expect(row({ ...saved, minLevel: 60 })).toMatchObject({ flags_extra: '64', type_flags: '4' });
+  });
+
+  it('leaves a ghost-only NPC saved before Seen by existed as it is', () => {
+    const ghost = npcFromRows(1423, { ...rows, creature_template: [{ ...template, flags_extra: '1024' }] }, { sharedLoot: 0, spawnCount: 1 });
+    const saved = { ...ghost };
+    delete (saved as any).seenBy;
+    const out = (existingStatements(store({ ...saved, minLevel: 60 }), []).apply.find((s) => s.kind === 'insert' && s.table === 'creature_template') as any).row;
+    expect(out.flags_extra).toBe('1024');
+  });
+
   it('writes nothing for new entities', () => {
     expect(existingStatements({ ...EMPTY_ENTITIES, npcs: [{ ...guard, origin: { kind: 'new' } }] }, [])).toEqual({ apply: [], revert: [] });
   });
@@ -216,5 +234,50 @@ describe('a new loot id for an existing NPC or chest', () => {
     const { ids } = await newLootIds(db, withLoot);
     expect(ids.get('object:2843')).toBe(5001);
     expect((existingStatements(withLoot, [], ids).apply.find((s) => s.kind === 'insert' && s.table === 'gameobject_template') as any).row.Data1).toBe('5001');
+  });
+});
+
+describe("an existing NPC's spawn events in its rows", () => {
+  const fixture = async () => {
+    const { forkDb } = await import('../helpers/fixtures');
+    const db = forkDb();
+    db.insert('creature_template', template);
+    db.insert('creature', { guid: '80330', id1: '1423', map: '0' });
+    db.insert('game_event_creature', { eventEntry: '12', guid: '80330' });
+    return db;
+  };
+
+  it('reads its spawns and their event rows with its other rows', async () => {
+    const { readOriginalRows } = await import('../../src/core/entities/existing');
+    const read = await readOriginalRows(await fixture(), 'npc', 1423);
+    expect(read!.creature).toEqual([{ guid: '80330' }]);
+    expect(read!.game_event_creature).toEqual([{ eventEntry: '12', guid: '80330' }]);
+  });
+
+  it('does not count tables a project saved before they were read as drift', async () => {
+    const db = await fixture();
+    const { readOriginalRows } = await import('../../src/core/entities/existing');
+    const read = (await readOriginalRows(db, 'npc', 1423))!;
+    const older = { ...read };
+    delete (older as any).creature;
+    delete (older as any).game_event_creature;
+    const npc = npcFromRows(1423, older, { sharedLoot: 0, spawnCount: 1 });
+    expect(await existingDrift(db, store(npc))).toEqual([]);
+  });
+
+  it('does not count a spawn added or taken away as drift, but does count a spawn\'s events changing', async () => {
+    const db = await fixture();
+    const { readOriginalRows } = await import('../../src/core/entities/existing');
+    const npc = npcFromRows(1423, (await readOriginalRows(db, 'npc', 1423))!, { sharedLoot: 0, spawnCount: 1 });
+    db.insert('creature', { guid: '80331', id1: '1423', map: '0' });
+    db.insert('game_event_creature', { eventEntry: '4', guid: '80331' });
+    expect(await existingDrift(db, store(npc))).toEqual([]);
+    db.insert('game_event_creature', { eventEntry: '7', guid: '80330' });
+    expect(await existingDrift(db, store(npc))).toEqual([{ kind: 'npc', entry: 1423, name: 'Stormwind Guard' }]);
+  });
+
+  it('writes no event rows for an NPC exported unedited', () => {
+    const { apply } = existingStatements(store(), []);
+    expect(apply.some((s) => s.table === 'game_event_creature')).toBe(false);
   });
 });

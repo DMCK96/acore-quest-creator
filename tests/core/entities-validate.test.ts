@@ -9,6 +9,11 @@ const codes = (npcs: unknown[], objects: unknown[] = [], dbNames = new Map<strin
 describe('entity validation', () => {
   it('accepts a complete NPC', () => expect(codes([good])).toEqual([]));
   it('needs a name and a model', () => expect(codes([{ ...good, name: ' ', displayId: 0 }])).toEqual([['ENTITY_NO_NAME', 'error'], ['ENTITY_NO_MODEL', 'error']]));
+  it('warns when a quest giver is seen only by dead players', () => {
+    expect(codes([{ ...good, questGiver: true, seenBy: 'dead' }])).toEqual([['ENTITY_GHOST_GIVER', 'warning']]);
+    expect(codes([{ ...good, questGiver: true, seenBy: 'both' }])).toEqual([]);
+    expect(codes([{ ...good, questGiver: false, seenBy: 'dead' }])).toEqual([]);
+  });
   it('checks levels', () => expect(codes([{ ...good, minLevel: 5, maxLevel: 3 }])).toEqual([['ENTITY_LEVELS', 'error']]));
   it('warns about unplaced and unmoved spawns', () => {
     expect(codes([{ ...good, spawns: [] }])).toEqual([['ENTITY_NO_SPAWN', 'warning']]);

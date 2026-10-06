@@ -11,7 +11,8 @@ export type MenuSubject =
   | { type: 'ground'; at: At | null; selection: MenuSpawn[] }
   /** `stored`: the project holds its NPC or object (made here, or an existing one brought in) */
   | { type: 'spawn'; target: NpcSpawn | ObjectSpawn; stored: boolean; info: MenuSpawn; at: At | null; selection: MenuSpawn[] }
-  | { type: 'routePoint'; guid: number; index: number; at: At | null };
+  /** `own`: the route is a project NPC's patrol, not one the database has */
+  | { type: 'routePoint'; guid: number; index: number; own: boolean; at: At | null };
 
 /**
  * A drawn spawn as an entity: its origin is the stored one when the project holds the entry (made
@@ -52,5 +53,6 @@ export function subjectOf(target: MenuTarget, store: ProjectEntities): MenuSubje
   const { hit, ground, selection } = target;
   if (!hit) return { type: 'ground', at: ground, selection };
   if (hit.type === 'spawn') return { type: 'spawn', target: spawnedEntityOf(hit.spawn, store), stored: storedOf(hit.spawn, store), info: hit.spawn, at: ground, selection };
-  return { type: 'routePoint', guid: hit.guid, index: hit.index, at: ground };
+  const own = store.npcs.some((n) => n.spawns.some((s) => s.guid === hit.guid));
+  return { type: 'routePoint', guid: hit.guid, index: hit.index, own, at: ground };
 }

@@ -54,6 +54,27 @@ const patrolSchema = z.object({
   points: z.array(patrolPointSchema),
 });
 
+/** Who sees an NPC: the living (the default), only the dead (a spirit healer), or both */
+export const SEEN_BY = ['living', 'dead', 'both'] as const;
+export type SeenBy = (typeof SEEN_BY)[number];
+
+/**
+ * The game events a spawn follows: in the world only during any of them, or gone during any of them;
+ * null when it is always in the world. A spawn's `game_event_creature` rows, one per event.
+ */
+export const eventRuleSchema = z
+  .object({
+    mode: z.enum(['during', 'except']),
+    // Each event once, in order: the rows are one per event, and a rule compares by its list
+    events: z.array(int.positive()).min(1).transform((ids) => [...new Set(ids)].sort((a, b) => a - b)),
+  })
+  .nullable();
+export type EventRule = z.infer<typeof eventRuleSchema>;
+/** An NPC's rule for its spawns; 'asIs' leaves each spawn's events as the database has them */
+export type NpcEvents = EventRule | 'asIs';
+/** A spawn's own rule; 'npc' follows its NPC's */
+export type SpawnEvents = EventRule | 'npc';
+
 const spawnSchema = z.object({
   guid: int,
   map: int,
@@ -67,6 +88,8 @@ const spawnSchema = z.object({
   patrol: patrolSchema.nullable().default(null),
   // An object's whole rotation (x, y, z, w), set when it is tilted in the 3D view; null turns it by `o` alone
   rotation: z.tuple([num, num, num, num]).nullable().default(null),
+  // Added with NPC visibility; 'npc' keeps spawns saved before then following their NPC
+  events: z.union([eventRuleSchema, z.literal('npc')]).default('npc'),
 });
 
 export const RANK_VALUE = { normal: 0, elite: 1, rareElite: 2, boss: 3, rare: 4 } as const;
@@ -110,7 +133,7 @@ const NEW_ORIGIN = { kind: 'new' } as const;
 
 const lootSchema = z.object({ item: int, chance: num, min: int, max: int, questOnly: z.boolean() });
 
-const npcSchema = z.object({
+const npcFields = z.object({
   entry: int,
   name: z.string(),
   subname: z.string(),
@@ -134,7 +157,21 @@ const npcSchema = z.object({
   equipment: z.object({ mainHand: int, offHand: int, ranged: int }).default({ mainHand: 0, offHand: 0, ranged: 0 }),
   // Added with editing existing entities; anything saved before then was made in the project.
   origin: originSchema.default(NEW_ORIGIN),
+  // Added with NPC visibility. Absent: who sees it is as the database has it
+  seenBy: z.enum(SEEN_BY).optional(),
+  // Added with NPC visibility; 'asIs' leaves every spawn's events as they are
+  events: z.union([eventRuleSchema, z.literal('asIs')]).default('asIs'),
 });
+
+/**
+ * An NPC saved before visibility existed has no rule: a new one never wrote any event rows, so it is
+ * always in the world; an existing one leaves its spawns' rows as they are.
+ */
+const npcSchema = z.preprocess((raw) => {
+  if (typeof raw !== 'object' || raw === null || 'events' in raw) return raw;
+  const origin = (raw as { origin?: { kind?: unknown } }).origin;
+  return origin?.kind === 'existing' ? raw : { ...raw, events: null };
+}, npcFields);
 
 const pageSchema = z.object({ id: int, text: z.string() });
 
@@ -295,6 +332,8 @@ export function newNpc(entry: number): CustomNpc {
     fight: null,
     equipment: { mainHand: 0, offHand: 0, ranged: 0 },
     origin: { kind: 'new' },
+    seenBy: 'living',
+    events: null,
   };
 }
 
@@ -303,7 +342,7 @@ export function newObject(entry: number): CustomObject {
 }
 
 export function newSpawn(guid: number): Spawn {
-  return { guid, map: 0, x: 0, y: 0, z: 0, o: 0, respawnSecs: 300, wander: 0, patrol: null, rotation: null };
+  return { guid, map: 0, x: 0, y: 0, z: 0, o: 0, respawnSecs: 300, wander: 0, patrol: null, rotation: null, events: 'npc' };
 }
 
 /** A new item starts as a quest item: most are things the player is asked to collect. */

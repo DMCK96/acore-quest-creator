@@ -158,6 +158,16 @@ describe('project file: the world layer', () => {
     expect(parseProject(JSON.stringify(raw)).world.groups![0]!.event).toBeNull();
   });
 
+  it("keeps spawn event edits and placed spawns' events through a save and reopen, and writes none when there are none", () => {
+    const full = {
+      ...world,
+      added: [{ ...world.added[0]!, events: { mode: 'except' as const, events: [7] } }, world.added[1]!],
+      spawnEvents: [{ guid: 80330, entry: 1423, name: 'Stormwind Guard', map: 0, original: [{ eventEntry: '12', guid: '80330' }], current: { mode: 'during' as const, events: [4, 12] } }],
+    };
+    expect(parseProject(serializeProject(doc({ world: full }))).world).toEqual(full);
+    expect(JSON.parse(serializeProject(doc({ world }))).world).not.toHaveProperty('spawnEvents');
+  });
+
   it('writes no respawns or groups for a layer without any, as before', () => {
     const saved = JSON.parse(serializeProject(doc({ world }))).world;
     expect(saved).not.toHaveProperty('respawns');

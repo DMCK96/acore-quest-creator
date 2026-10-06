@@ -1,4 +1,4 @@
-import { newSpawn, type ProjectEntities } from '../entities/model';
+import { newSpawn, type ProjectEntities, type SpawnEvents } from '../entities/model';
 import type { FieldValue } from '../registry/types';
 import { movePoint, newPatrol, setPatrol } from './patrol';
 import type { Movement } from '../world/movement';
@@ -277,6 +277,14 @@ export function setSpawnRespawn(entities: ProjectEntities, kind: 'npc' | 'object
   }
   const objects = timed(entities.objects);
   return objects ? { ...entities, objects } : null;
+}
+
+/** One of the project's own NPC spawns' own game events ('npc' follows its NPC); null when the project does not have it */
+export function setSpawnEventSetting(entities: ProjectEntities, entry: number, guid: number, to: SpawnEvents): EntitiesEdit {
+  const owner = entities.npcs.find((n) => n.entry === entry);
+  if (!owner || !owner.spawns.some((s) => s.guid === guid)) return null;
+  const npcs = entities.npcs.map((n) => (n === owner ? { ...n, spawns: n.spawns.map((s) => (s.guid === guid ? { ...s, events: to } : s)) } : n));
+  return { ...entities, npcs };
 }
 
 /**

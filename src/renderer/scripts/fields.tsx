@@ -56,17 +56,19 @@ export function SelectField<T extends string>({
   label,
   value,
   options,
+  disabled,
   onChange,
 }: {
   label: string;
   value: T;
   options: readonly (readonly [T, string])[];
+  disabled?: boolean;
   onChange(v: T): void;
 }): React.JSX.Element {
   return (
     <label className="scene-field">
       <span>{label}</span>
-      <select value={value} onChange={(e) => onChange(e.target.value as T)}>
+      <select value={value} disabled={disabled} onChange={(e) => onChange(e.target.value as T)}>
         {options.map(([v, text]) => (
           <option key={v} value={v}>
             {text}

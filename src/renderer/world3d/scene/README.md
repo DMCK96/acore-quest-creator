@@ -18,8 +18,10 @@ picking, per-object transforms) and because the published package breaks under V
 its loader workers are found through `new URL('./worker.js', import.meta.url)`, which a pre-bundled
 dependency cannot resolve. Here the workers are the `.ts` files beside their loaders.
 
-Type checking is switched off for these files (`// @ts-nocheck`): they were written for a looser
-compiler setting than this project's.
+Type checking is switched off for upstream's own files (`// @ts-nocheck`): they were written for a
+looser compiler setting than this project's. The folders written or rewritten here are checked:
+`wmo/`, `map/liquid/`, `spawn/`, `character/`, `edit/`, `diagnostics.ts`, `model/animator-tracks.ts`.
+A file taken on here loses its `@ts-nocheck` in the same change.
 
 ## What differs from upstream
 
@@ -54,7 +56,28 @@ compiler setting than this project's.
   - `model/shader/fragment.ts`: the four combiners upstream lacks (`Mod_Mod2xNA`, `Mod_AddNA`,
     `Add_Mod`, `Mod2x_Mod2x`); a model using one drew without its textures.
 
+## What is left out
+
+- Upstream's camera controls (`controls/`: `OrbitControls`, `MapControls`, `BaseOrbitControls`) are
+  not kept: the 3D view has its own camera (`../controls.ts`).
+- Upstream's sound (`sound/`, the zone music, and the `@tweenjs/tween.js` fades it used) is not
+  kept: an editor plays no music. `MapManager` no longer takes a sound manager.
+- Upstream's `index.ts`, which re-exported every class, is not kept: import each file directly.
+
 ## What is added
+
+- Furniture and props inside buildings (WMO doodad sets): `wmo/format/io/root.ts` reads `MODD`
+  and `MapObj` its sets and doodads; `map/loader/adt-chunks.ts` reads each placement's doodad set
+  from `MODF`, which @wowserhq/format reads and drops. `wmo/doodads.ts` places a building's default
+  set and its placement's set in the world, and `MapManager` hands them to the `DoodadManager` with
+  the area's own doodads (batched and culled the same way), tagged `inside` so they hide with the
+  buildings (`DoodadManager.setInteriors`).
+- `worker/SceneWorkerController.ts` can be disposed (`dispose()`): its worker is stopped, and requests
+  still waiting never settle. `MapManager.dispose()` stops the map, building and model loaders'
+  workers; upstream left them running, so every change of map left them behind. The texture and
+  table managers are shared by every map (`sharedManagers` in `../world3d.ts`) and are not stopped.
+
+
 
 - `wmo/`: buildings (WMO), which upstream does not draw. `wmo/format` holds the building's root-file reader
   from `@wowserhq/format` 0.28.0 (MIT), copied because the 0.25.0 this code is written against lacks

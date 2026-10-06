@@ -1,10 +1,10 @@
-// @ts-nocheck
 import * as THREE from 'three';
 import TextureManager from '../texture/TextureManager.js';
 import { AssetHost, normalizePath } from '../asset.js';
 import WmoLoader from './loader/WmoLoader.js';
 import { WmoGroupSpec, WmoMaterialSpec, WmoSpec } from './loader/types.js';
-import { MapAreaSpec } from '../map/loader/types.js';
+import { MapAreaSpec, MapDoodadDefSpec } from '../map/loader/types.js';
+import { interiorDoodads } from './doodads.js';
 import { describeError, reportProblem } from '../diagnostics.js';
 import MapLight from '../map/light/MapLight.js';
 import WmoMaterial from './WmoMaterial.js';
@@ -54,6 +54,8 @@ class WmoManager {
   #loaded = new globalThis.Map<string, WmoResources>();
   #loading = new globalThis.Map<string, Promise<WmoResources>>();
   #areas = new globalThis.Map<number, THREE.Group>();
+  /** Each area's buildings' furniture and props, in the world, for the doodads to draw */
+  #areaDoodads = new globalThis.Map<number, MapDoodadDefSpec[]>();
 
   constructor(options: WmoManagerOptions) {
     this.#textureManager = options.textureManager;
@@ -70,6 +72,7 @@ class WmoManager {
 
     const defs = area.objDefs ?? [];
     const results = await Promise.allSettled(defs.map((def) => this.#getInstance(def.name)));
+    const doodads: MapDoodadDefSpec[] = [];
 
     for (let i = 0; i < defs.length; i++) {
       const result = results[i];
@@ -84,6 +87,9 @@ class WmoManager {
       }
 
       const building = result.value;
+      // Already loaded for the instance: the furniture and props it places
+      const { spec } = await this.#getResources(def.name);
+      if (spec.doodads) doodads.push(...interiorDoodads(def, spec.doodads, (name) => this.#warnUnusable(def.name, name)));
       building.position.set(def.position[0], def.position[1], def.position[2]);
       building.quaternion.set(def.rotation[0], def.rotation[1], def.rotation[2], def.rotation[3]);
       building.userData.placement = def.id;
@@ -96,12 +102,33 @@ class WmoManager {
     }
 
     this.#areas.set(areaId, group);
+    this.#areaDoodads.set(areaId, doodads);
 
     return group;
   }
 
+  /** Stops the loader's worker; the texture and liquid managers belong to the map */
+  dispose() {
+    this.#loader.dispose();
+  }
+
   removeArea(areaId: number) {
     this.#areas.delete(areaId);
+    this.#areaDoodads.delete(areaId);
+  }
+
+  /** Names each unusable doodad name once, with its building: the game leaves it out too, so the view says so only in the console */
+  #warnedUnusable = new Set<string>();
+  #warnUnusable(building: string, name: string) {
+    const key = `${building.toLowerCase()}|${name}`;
+    if (this.#warnedUnusable.has(key)) return;
+    this.#warnedUnusable.add(key);
+    console.warn(`3D view: building ${building} names a prop the client cannot have (${name}); left out`);
+  }
+
+  /** The furniture and props of an area's buildings, in the world; none before the area is had */
+  doodadsOf(areaId: number): MapDoodadDefSpec[] {
+    return this.#areaDoodads.get(areaId) ?? [];
   }
 
   /** One placement of a building, outside any area (an object whose display is a building) */

@@ -43,6 +43,10 @@ export function entityIssues(input: {
     if ('minLevel' in entity && (entity.minLevel < 1 || entity.minLevel > entity.maxLevel)) {
       add('error', 'ENTITY_LEVELS', 'its minimum level must be at least 1 and no higher than its maximum.');
     }
+    // Living players cannot see it, so cannot take or hand in its quests
+    if ('seenBy' in entity && entity.seenBy === 'dead' && entity.questGiver) {
+      add('warning', 'ENTITY_GHOST_GIVER', 'it gives quests but only dead players see it; set Seen by to living players, or living and dead.');
+    }
     // An existing one already stands where the database has it, and its name is its own
     const existing = entity.origin.kind === 'existing';
     if (!existing && entity.spawns.length === 0) add('warning', 'ENTITY_NO_SPAWN', 'nothing places it in the world yet; add a spawn.');
