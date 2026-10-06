@@ -29,12 +29,15 @@ import '../views/ProjectDialog.css';
 import './world3d.css';
 import { goToTarget } from './go-to-spawn';
 import { newSpawnGuid } from './spawn-guid';
+import type { WorldMarker } from './quest-markers';
+import { useMarkerView, type MarkerFocus } from './useMarkerView';
+import { MarkerCard } from './MarkerCard';
 
 /** The camera's controls, as the help in the corner lists them. */
 const CONTROLS: [string, string][] = [
   ['Right-drag', 'Look around'],
   ['Tab', 'Switch between Camera and Select'],
-  ['Left-click', 'Select an NPC, an object or a point of a shown route'],
+  ['Left-click', 'Select an NPC, an object, a point of a shown route or a quest position'],
   ['Left-drag', 'Camera: orbit round the point under the cursor. Select: select with a box'],
   ['Shift-click', 'Camera: add a point to the selected NPC’s route. Select: add to the selection'],
   ['Ctrl-click', 'Select: take from the selection'],
@@ -157,6 +160,12 @@ interface ViewProps {
   patrolRequest?: { guid: number; name: string; nonce: number };
   /** Told when what an editor asked is done: placing stopped, or the patrol drawn or left */
   onRequestEnd?(): void;
+  /** The open quest's positions on this map, drawn as markers to select and drag */
+  markers?: readonly WorldMarker[];
+  /** Told where a marker was dragged to */
+  onMarkerMove?(id: string, to: { x: number; y: number; z: number }): void;
+  /** A marker to select, once its world is there (the host takes the camera to it) */
+  markerFocus?: MarkerFocus;
 }
 
 /** How often, and how many times, a patrol request looks for its NPC in the view while the world loads */
@@ -227,7 +236,7 @@ class Contained extends Component<{ children: ReactNode }, { failure: string | n
 
 function WorldStage({
   map, start, hasClient, own, onSelect, onOwnEdit, focus, showArea = true, onArea, onPlaceChange, quest, chainIds, onQuestRole, onNewQuest, onShowSpawns,
-  onCreateEntity, onEditEntity, onSetLootable, onGoToSpawn, placeRequest, patrolRequest, onRequestEnd,
+  onCreateEntity, onEditEntity, onSetLootable, onGoToSpawn, placeRequest, patrolRequest, onRequestEnd, markers, onMarkerMove, markerFocus,
 }: ViewProps): React.JSX.Element {
   const container = useRef<HTMLDivElement>(null);
   const world = useRef<World3D | null>(null);
@@ -406,6 +415,9 @@ function WorldStage({
   });
   const menuRef = useRef(menu);
   menuRef.current = menu;
+  const markerView = useMarkerView({ world, markers, focus: markerFocus, onMove: onMarkerMove });
+  const markerViewRef = useRef(markerView);
+  markerViewRef.current = markerView;
 
   useEffect(() => {
     const element = container.current;
@@ -419,6 +431,7 @@ function WorldStage({
     setSummary(null);
     setNote(null);
     setPlacing(null);
+    markerViewRef.current.clear();
     let live = true;
     // One gesture's edits go to the main process one after another: each answer is a whole new
     // layer, so an earlier, slower answer must never replace a later one
@@ -607,6 +620,7 @@ function WorldStage({
             // A gesture waiting for the floor holds undo, so Ctrl+Z takes it back rather than the step before
             onGestureStart: () => holdRef.current(),
             onPlaceEnd: () => live && setPlacing(null),
+            ...markerViewRef.current.options,
             spawns: async (spawnMap, box) => {
               const current = apiRef.current;
               if (!current) return { error: 'the app is not connected' };
@@ -622,6 +636,7 @@ function WorldStage({
           if (ownRef.current) created.setOwnSpawns(ownRef.current);
           if (placingRef.current) created.setPlacing({ kind: placingRef.current.kind, entry: placingRef.current.entry });
           if (groupSpawnsRef.current.size > 0) created.setGroupSpawns(groupSpawnsRef.current);
+          markerViewRef.current.attach(created);
           world.current = created;
           bringIntoViewRef.current();
           void apiRef.current?.worldLayer().then((result) => live && result.ok && applyLayer(result.value));
@@ -1020,7 +1035,8 @@ function WorldStage({
           </p>
         </section>
       )}
-      {!unavailable && !selected && !several && note && (
+      {!unavailable && markerView.selected && <MarkerCard marker={markerView.selected} note={note} onClose={markerView.clear} />}
+      {!unavailable && !selected && !several && !markerView.selected && note && (
         <p role="status" className="world3d__edit-note">
           {note}
         </p>
