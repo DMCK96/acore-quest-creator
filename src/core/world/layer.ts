@@ -1,4 +1,5 @@
 import type { PatchStatement } from '../export/build-patch';
+import type { EventRule, SpawnEvents } from '../entities/model';
 import type { ViewPreset } from '../db/view-spawns';
 import type { SpawnGroup } from './groups';
 import { MOVEMENT_TYPE, sameMovement, type Movement } from './movement';
@@ -65,6 +66,8 @@ export interface WorldAddedSpawn {
   look: WorldLook;
   /** Seconds before it respawns; a spawn made in the game's 300 when absent */
   respawnSecs?: number;
+  /** An NPC's own game events; absent or 'npc' follows its NPC */
+  events?: SpawnEvents;
 }
 
 /** How an NPC moves, changed in the view: wander, movement type and its spawn's own path */
@@ -97,6 +100,20 @@ export interface WorldRespawnEdit {
   current: number;
 }
 
+/**
+ * The game events a database NPC spawn follows of its own, changed in the view. `original` is its
+ * `game_event_creature` rows at the first edit; the spawn event writer (`entities/spawn-events.ts`),
+ * not the world patch, writes the rows.
+ */
+export interface WorldEventEdit {
+  guid: number;
+  entry: number;
+  name: string;
+  map: number;
+  original: Record<string, string | null>[];
+  current: EventRule;
+}
+
 export interface WorldLayer {
   spawns: WorldSpawnEdit[];
   routes: WorldRouteEdit[];
@@ -108,6 +125,8 @@ export interface WorldLayer {
   respawns?: WorldRespawnEdit[];
   /** Spawn groups (the server's pools); a project saved before there were any has none */
   groups?: SpawnGroup[];
+  /** Database NPC spawns' own game events; a project saved before they could be changed has none */
+  spawnEvents?: WorldEventEdit[];
 }
 
 export const EMPTY_WORLD: WorldLayer = { spawns: [], routes: [], added: [] };
@@ -116,6 +135,7 @@ export const movementsOf = (layer: WorldLayer): WorldMovementEdit[] => layer.mov
 
 export const respawnsOf = (layer: WorldLayer): WorldRespawnEdit[] => layer.respawns ?? [];
 export const groupsOf = (layer: WorldLayer): SpawnGroup[] => layer.groups ?? [];
+export const spawnEventsOf = (layer: WorldLayer): WorldEventEdit[] => layer.spawnEvents ?? [];
 
 /** Whether the layer holds anything to export */
 export const hasWorldChanges = (layer: WorldLayer): boolean =>
