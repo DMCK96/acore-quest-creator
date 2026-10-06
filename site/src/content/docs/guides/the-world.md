@@ -56,7 +56,7 @@ Keys work once the view has been clicked. The **?** in the bottom right lists ev
 
 ## What is shown
 
-The **Layers** card turns parts of the world on and off: **Buildings**, **Trees & props**, **NPCs**, **Objects** and **Paths**. With buildings hidden, clicks land on the ground under them.
+The **Layers** card turns parts of the world on and off: **Buildings**, **Trees & props**, **NPCs**, **Objects** and **Paths**. Buildings are drawn with their furniture and props (the tables and barrels in an inn), which hide with them. With buildings hidden, clicks land on the ground under them.
 
 **Event** draws the world during one game event: its NPCs and objects appear, and those it takes away go. **No event** is the everyday world; **All events** shows every spawn the database has.
 

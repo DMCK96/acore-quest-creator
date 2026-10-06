@@ -6,11 +6,15 @@ type MapSpec = {
 };
 
 type MapDoodadDefSpec = {
-  id: number;
+  /** The placement's unique id; a building's own doodad is its building's id and its index (`12345:7`) */
+  id: number | string;
   name: string;
   position: number[];
   rotation: number[];
+  /** Fixed precision: 1024 is full size */
   scale: number;
+  /** A building's own furniture or prop, shown and hidden with the buildings */
+  inside?: boolean;
 };
 
 type MapObjDefSpec = {
@@ -18,6 +22,8 @@ type MapObjDefSpec = {
   name: string;
   position: number[];
   rotation: number[];
+  /** Which of the building's doodad sets this placement shows beside its default set (0) */
+  doodadSet: number;
 };
 
 type TerrainLayerSpec = {

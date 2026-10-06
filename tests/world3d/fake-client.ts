@@ -26,6 +26,12 @@ export const TILE = { areaX: 48, areaY: 32, file: 'world/maps/azeroth/azeroth_32
 export const START = { x: -8949.95, y: -132.49, z: 83.5 };
 export const BAD_MODEL = 'World\\bad\\bad.m2';
 export const MISSING_MODEL = 'World\\missing\\missing.m2';
+/**
+ * The house's furniture: its default set has a chair, and of its two other sets the placement picks
+ * the second (a keg), never the first (a stool). The client has none of them, so each one asked for is
+ * reported missing.
+ */
+export const HOUSE_DOODADS = { chair: 'world/wmo/test/chair.m2', stool: 'world/wmo/test/stool.m2', keg: 'world/wmo/test/keg.m2' };
 
 const tileNorth = CORNER - TILE.areaX * GRID;
 const tileWest = CORNER - TILE.areaY * GRID;
@@ -61,7 +67,7 @@ function terrainChunk(row: number, col: number): Buffer {
   return chunk('MCNK', Buffer.concat([header, body]));
 }
 
-/** One placement of the house, at the camera's target. */
+/** One placement of the house, at the camera's target, showing its doodad set 2 beside its default set. */
 function building(): Buffer {
   const out = Buffer.alloc(64);
   out.writeUInt32LE(0, 0);
@@ -69,6 +75,7 @@ function building(): Buffer {
   out.writeFloatLE(CORNER - START.y, 8);
   out.writeFloatLE(START.z - 3.5, 12);
   out.writeFloatLE(CORNER - START.x, 16);
+  out.writeUInt16LE(2, 58);
   return out;
 }
 
@@ -79,9 +86,7 @@ function adt(): Buffer {
     Buffer.concat([u32(nameId), u32(id), f32(CORNER - START.y), f32(84), f32(CORNER - START.x), f32(0), f32(0), f32(0), Buffer.from([0, 4, 0, 0])]);
   const chunks: Buffer[] = [];
   for (let row = 0; row < 16; row++) for (let col = 0; col < 16; col++) chunks.push(terrainChunk(row, col));
-  return Buffer.concat([
-    chunk('MVER', u32(18)),
-    chunk('MHDR', Buffer.alloc(64)),
+  const beforeModf = [
     chunk('MCIN', Buffer.alloc(4096)),
     chunk('MTEX', Buffer.from('tileset\\grass.blp\0tileset\\garbage.blp\0tileset\\raw.blp\0')),
     chunk('MMDX', names),
@@ -89,9 +94,11 @@ function adt(): Buffer {
     chunk('MDDF', Buffer.concat([doodad(0, 1), doodad(1, 2)])),
     chunk('MWMO', Buffer.from(`${HOUSE}\0`)),
     chunk('MWID', u32(0)),
-    chunk('MODF', building()),
-    ...chunks,
-  ]);
+  ];
+  // MHDR says where MODF is, from the start of its own 64 bytes of data, as the game finds it
+  const header = Buffer.alloc(64);
+  header.writeUInt32LE(64 + beforeModf.reduce((sum, c) => sum + c.length, 0), 32);
+  return Buffer.concat([chunk('MVER', u32(18)), chunk('MHDR', header), ...beforeModf, chunk('MODF', building()), ...chunks]);
 }
 
 /** A map whose one tile is covered by magma, above the terrain everywhere. */
@@ -261,6 +268,23 @@ function houseRoot(): Buffer {
   };
   const group = Buffer.alloc(32);
   const names = Buffer.from('house\0');
+  // Doodad sets: the default (a chair), then a stool's, then a keg's; each 32 bytes
+  const set = (name: string, start: number): Buffer => {
+    const mods = Buffer.alloc(32);
+    mods.write(name, 0, 'latin1');
+    mods.writeUInt32LE(start, 20);
+    mods.writeUInt32LE(1, 24);
+    return mods;
+  };
+  const doodadNames = ['World\\wmo\\test\\chair.mdx', 'World\\wmo\\test\\stool.mdx', 'World\\wmo\\test\\keg.mdx'];
+  const doodadAt = (index: number): Buffer => {
+    const modd = Buffer.alloc(40);
+    modd.writeUInt32LE(doodadNames.slice(0, index).reduce((sum, n) => sum + n.length + 1, 0), 0);
+    modd.writeFloatLE(index * 2, 4); // a little apart, inside the house
+    modd.writeFloatLE(1, 28); // upright
+    modd.writeFloatLE(1, 32); // full size
+    return modd;
+  };
   return Buffer.concat([
     chunk('MVER', u32(17)),
     chunk('MOHD', mohd),
@@ -268,6 +292,9 @@ function houseRoot(): Buffer {
     chunk('MOMT', Buffer.concat([material(0), material(brick.length)])),
     chunk('MOGN', names),
     chunk('MOGI', Buffer.concat([group, group, group, group])),
+    chunk('MODS', Buffer.concat([set('Set_$DefaultGlobal', 0), set('Set_Stool', 1), set('Set_Keg', 2)])),
+    chunk('MODN', Buffer.from(doodadNames.map((n) => `${n}\0`).join(''))),
+    chunk('MODD', Buffer.concat([doodadAt(0), doodadAt(1), doodadAt(2)])),
   ]);
 }
 

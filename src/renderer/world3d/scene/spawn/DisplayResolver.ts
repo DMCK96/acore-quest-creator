@@ -6,6 +6,7 @@
  */
 import { ClientDb } from '@wowserhq/format';
 import { CreatureDisplayInfoRecord, CreatureModelDataRecord, GameObjectDisplayInfoRecord } from '../db/records.js';
+import { modelPath } from '../asset.js';
 import { ViewPreset } from '../../../../core/db/view-spawns.js';
 import { ITEM_REGIONS, Region, itemTextureFiles } from '../character/composite.js';
 import { OUTFIT_SLOTS, OutfitSlot, PAINT_ORDER, SHAPE_ORDER, applyItemGeosets } from '../character/outfit.js';
@@ -96,8 +97,6 @@ const SHIELD_INVENTORY_TYPE = 14;
 /** The replaceable slot a display's first skin fills; the next two fill the slots after it */
 const FIRST_SKIN_SLOT = 11;
 
-/** A model file as the client stores it: `.mdx` and `.mdl` names are read as `.m2` */
-const modelPath = (name: string) => name.replace(/\.(mdx|mdl)$/i, '.m2');
 
 /** The folder part of a client path, without its trailing backslash */
 const folderOf = (path: string) => {

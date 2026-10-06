@@ -45,6 +45,39 @@ describe('a building root file', () => {
     expect(root.groupInfo.map((g) => g.name)).toEqual(['dam']);
   });
 
+  it('reads its doodad sets and the doodads they draw from, in the building\'s space', () => {
+    const set = (name: string, start: number, count: number): Buffer => {
+      const mods = Buffer.alloc(32);
+      mods.write(name, 0, 'latin1');
+      mods.writeUInt32LE(start, 20);
+      mods.writeUInt32LE(count, 24);
+      return mods;
+    };
+    const doodad = (nameOffset: number, flags: number, at: number[], rotation: number[], scale: number): Buffer => {
+      const modd = Buffer.alloc(40);
+      modd.writeUInt32LE(((flags << 24) | nameOffset) >>> 0, 0);
+      at.forEach((v, i) => modd.writeFloatLE(v, 4 + i * 4));
+      rotation.forEach((v, i) => modd.writeFloatLE(v, 16 + i * 4));
+      modd.writeFloatLE(scale, 32);
+      return modd;
+    };
+    const chair = 'world\\chair.mdx\0';
+    const root = load(
+      chunk('MODS', Buffer.concat([set('Set_$DefaultGlobal', 0, 1), set('Set_Party', 1, 1)])),
+      chunk('MODN', Buffer.from(`${chair}world\\table.mdx\0`)),
+      // The first doodad has flags in its top byte, which are not part of its name's offset
+      chunk('MODD', Buffer.concat([doodad(0, 0x10, [1, 2, 3], [0, 0, 0, 1], 1), doodad(chair.length, 0, [4, 5, 6], [0, 0, 1, 0], 2)])),
+    );
+    expect(root.doodadSets).toEqual([
+      { name: 'Set_$DefaultGlobal', startIndex: 0, count: 1 },
+      { name: 'Set_Party', startIndex: 1, count: 1 },
+    ]);
+    expect(root.doodadDefs).toEqual([
+      { name: 'world\\chair.mdx', position: [1, 2, 3], rotation: [0, 0, 0, 1], scale: 1 },
+      { name: 'world\\table.mdx', position: [4, 5, 6], rotation: [0, 0, 1, 0], scale: 2 },
+    ]);
+  });
+
   it('without a group name table still loads, its groups unnamed', () => {
     const root = load(chunk('MOTX', Buffer.from('a.blp\0')), chunk('MOMT', material(0, 0)), chunk('MOGI', groupInfo(0)));
     expect(root.groupInfo).toHaveLength(1);

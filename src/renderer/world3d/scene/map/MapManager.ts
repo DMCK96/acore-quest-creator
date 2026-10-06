@@ -203,6 +203,7 @@ class MapManager extends EventTarget {
   /** Shows or hides buildings and doodads; a hidden kind is not drawn and not hit by a click */
   setScenery(scenery: { buildings: boolean; doodads: boolean }) {
     this.#scenery = { ...scenery };
+    this.#doodadManager.setInteriors(scenery.buildings);
   }
 
   setSpawnVisibility(visibility: SpawnVisibility) {
@@ -577,10 +578,13 @@ class MapManager extends EventTarget {
       let wmoGroup: THREE.Group;
       let liquidGroup: THREE.Group;
       try {
-        [terrainGroup, doodadGroup, wmoGroup, liquidGroup] = await Promise.all([
+        [terrainGroup, [wmoGroup, doodadGroup], liquidGroup] = await Promise.all([
           this.#terrainManager.getArea(areaId, newArea),
-          this.#doodadManager.getArea(areaId, newArea),
-          this.#wmoManager.getArea(areaId, newArea),
+          // Buildings first: the doodads include the furniture and props inside them
+          this.#wmoManager.getArea(areaId, newArea).then(async (buildings) => {
+            const doodadDefs = [...newArea.doodadDefs, ...this.#wmoManager.doodadsOf(areaId)];
+            return [buildings, await this.#doodadManager.getArea(areaId, { ...newArea, doodadDefs })] as const;
+          }),
           // Liquid that cannot be drawn must not cost the area its terrain
           this.#liquidManager.getArea(areaId, newArea).catch((error) => {
             console.warn(`3D view: the liquid of area ${areaId} could not be drawn: ${describeError(error)}`);

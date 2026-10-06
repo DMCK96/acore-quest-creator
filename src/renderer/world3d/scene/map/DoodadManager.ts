@@ -25,9 +25,13 @@ class DoodadManager {
   #loadedAreas = new Map<number, THREE.Group>();
   #areaBounds = new Map<number, THREE.Sphere>();
 
-  #doodads = new Map<number, Model>();
+  /** By placement id; a building's own doodads by its building's id and their index */
+  #doodads = new Map<number | string, Model>();
   #doodadDefs = new Map<number, MapDoodadDefSpec[]>();
-  #doodadRefs = new Map<number, number>();
+  #doodadRefs = new Map<number | string, number>();
+
+  /** Whether the furniture and props inside buildings show: they hide with the buildings */
+  #interiors = true;
 
   /** A cull decides by the camera alone: while it stands still and no area came or went, it is skipped */
   #view = new ViewChange();
@@ -72,7 +76,7 @@ class DoodadManager {
       areaGroup.userData.allHidden = false;
 
       for (const doodad of areaGroup.children as Model[]) {
-        if (!areaVisible) {
+        if (!areaVisible || (doodad.userData.inside && !this.#interiors)) {
           doodad.hide();
           continue;
         }
@@ -141,6 +145,14 @@ class DoodadManager {
     return null;
   }
 
+  /** Shows or hides the furniture and props inside buildings, which go with the buildings */
+  setInteriors(show: boolean) {
+    if (show === this.#interiors) return;
+    this.#interiors = show;
+    // A cull decides, whether the camera moved or not
+    this.#view.mark();
+  }
+
   /** Hides every doodad, which stops its animation until a cull shows it again; an area once */
   hideAll() {
     for (const areaGroup of this.#loadedAreas.values()) {
@@ -201,7 +213,7 @@ class DoodadManager {
     this.#modelManager.update(deltaTime, camera);
   }
 
-  #refDoodad(refId: number) {
+  #refDoodad(refId: number | string) {
     let refCount = this.#doodadRefs.get(refId) || 0;
 
     refCount++;
@@ -211,7 +223,7 @@ class DoodadManager {
     return refCount;
   }
 
-  #derefDoodad(refId: number) {
+  #derefDoodad(refId: number | string) {
     let refCount = this.#doodadRefs.get(refId);
 
     // Unknown ref
@@ -270,6 +282,8 @@ class DoodadManager {
       model.frustumCulled = false;
       // For its batch (see DoodadBatch)
       model.userData.path = def.name;
+      // Inside a building: shown and hidden with the buildings
+      model.userData.inside = def.inside === true;
 
       model.position.set(def.position[0], def.position[1], def.position[2]);
       model.quaternion.set(def.rotation[0], def.rotation[1], def.rotation[2], def.rotation[3]);

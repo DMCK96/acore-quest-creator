@@ -26,6 +26,12 @@ type WmoMaterialSpec = {
   textures: string[];
 };
 
+/** A building's furniture and props: its doodad sets, and the doodads they draw from, in its own space */
+type WmoDoodadsSpec = {
+  sets: { startIndex: number; count: number }[];
+  defs: { name: string; position: number[]; rotation: number[]; scale: number }[];
+};
+
 type WmoSpec = {
   materials: WmoMaterialSpec[];
   groups: WmoGroupSpec[];
@@ -33,6 +39,7 @@ type WmoSpec = {
   liquids: LiquidSpec[];
   /** What could not be read: a group file that is missing or broken */
   problems: string[];
+  doodads: WmoDoodadsSpec;
 };
 
-export type { WmoBatchSpec, WmoGroupSpec, WmoMaterialSpec, WmoSpec };
+export type { WmoBatchSpec, WmoDoodadsSpec, WmoGroupSpec, WmoMaterialSpec, WmoSpec };

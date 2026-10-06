@@ -3,7 +3,7 @@ import { writeFileSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createServer, type ViteDevServer } from 'vite';
-import { BAD_MODEL, LAVA_MAP, MISSING_MODEL, START, startFakeClient, type FakeClient } from './fake-client';
+import { BAD_MODEL, HOUSE_DOODADS, LAVA_MAP, MISSING_MODEL, START, startFakeClient, type FakeClient } from './fake-client';
 
 /**
  * The real 3D code (Three.js, the vendored Wowser scene, its workers) in a real browser, reading a
@@ -79,8 +79,12 @@ test('draws the terrain, and a model or texture that cannot be read costs the ar
   await open(page, 'azeroth', 0);
   await page.waitForFunction('window.__state.ready', null, { timeout: 45000 });
 
-  // Both broken props are reported by name, with where they failed...
-  await expect.poll(async () => (await state(page)).problems.length).toBe(2);
+  // Both broken props are reported by name, with where they failed, and so are the two of the house's
+  // furniture its placement shows (its default set's chair, and the keg of the set it picks)...
+  await expect.poll(async () => (await state(page)).problems.length).toBe(4);
+  for (const shown of [HOUSE_DOODADS.chair, HOUSE_DOODADS.keg]) expect(client.requested).toContain(`404 ${shown}`);
+  // ... but not the furniture of a set it does not pick
+  expect(client.requested.some((r) => r.includes(HOUSE_DOODADS.stool))).toBe(false);
   const { problems } = await state(page);
   expect(problems.find((p) => p.includes(BAD_MODEL))).toMatch(/could not be loaded: Invalid typed array length/);
   expect(problems.find((p) => p.includes(MISSING_MODEL))).toMatch(/404/);

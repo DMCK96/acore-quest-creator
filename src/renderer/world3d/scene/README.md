@@ -66,6 +66,12 @@ A file taken on here loses its `@ts-nocheck` in the same change.
 
 ## What is added
 
+- Furniture and props inside buildings (WMO doodad sets): `wmo/format/io/root.ts` reads `MODD`
+  and `MapObj` its sets and doodads; `map/loader/adt-chunks.ts` reads each placement's doodad set
+  from `MODF`, which @wowserhq/format reads and drops. `wmo/doodads.ts` places a building's default
+  set and its placement's set in the world, and `MapManager` hands them to the `DoodadManager` with
+  the area's own doodads (batched and culled the same way), tagged `inside` so they hide with the
+  buildings (`DoodadManager.setInteriors`).
 - `worker/SceneWorkerController.ts` can be disposed (`dispose()`): its worker is stopped, and requests
   still waiting never settle. `MapManager.dispose()` stops the map, building and model loaders'
   workers; upstream left them running, so every change of map left them behind. The texture and

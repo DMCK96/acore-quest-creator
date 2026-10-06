@@ -61,6 +61,10 @@ class WmoLoaderWorker extends SceneWorker {
       groups: groups.filter((group): group is WmoGroupSpec => group !== null && group.indices.length > 0),
       liquids,
       problems,
+      doodads: {
+        sets: root.doodadSets.map(({ startIndex, count }) => ({ startIndex, count })),
+        defs: root.doodadDefs,
+      },
     };
 
     const transfer = new Set<ArrayBuffer>();

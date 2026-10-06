@@ -41,12 +41,21 @@ const mods = io.array(io.struct({
     count: num.uint32le,
     pad: num.uint32le,
 }));
+// Added here: the building's doodads (MODD), each named by an offset into MODN in its low 24 bits
+const modd = io.array(io.struct({
+    nameIndex: num.uint32le,
+    position: io.array(num.float32le, { size: 3 }),
+    rotation: io.array(num.float32le, { size: 4 }),
+    scale: num.float32le,
+    color: imvec,
+}));
 const rootChunks = {
     MVER: mver,
     MOHD: mohd,
     MOMT: momt,
     MOGI: mogi,
     MODS: mods,
+    MODD: modd,
 };
 const rootChunk = io.tlv(io.string({ size: 4, reverse: true, terminate: false }), num.uint32le, rootChunks);
 const root: any = io.array(rootChunk);
