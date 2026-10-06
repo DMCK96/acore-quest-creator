@@ -7,7 +7,7 @@ export type ShowInWorld = (target: ShowTarget) => void;
 
 const ShowInWorldContext = createContext<ShowInWorld | null>(null);
 
-/** Gives everything inside the host's way to switch to the World and take the camera to a quest or one of its NPCs or objects. */
+/** Gives everything inside the host's way to take the World's camera to a quest or one of its NPCs or objects (by focusing it). */
 export function ShowInWorldProvider({ value, children }: { value: ShowInWorld | null; children: ReactNode }): React.JSX.Element {
   return <ShowInWorldContext.Provider value={value}>{children}</ShowInWorldContext.Provider>;
 }

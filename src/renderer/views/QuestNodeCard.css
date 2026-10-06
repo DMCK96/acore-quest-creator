@@ -55,6 +55,30 @@
   margin-top: 0.4em;
 }
 
+.quest-card__parts {
+  list-style: none;
+  margin: 0.45em 0 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.15em;
+  font-size: 0.78em;
+  color: var(--text-muted);
+}
+
+.quest-card__part {
+  padding: 0.1em 0.4em;
+  border-radius: var(--radius);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.quest-card__part[aria-current='true'] {
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+
 .chip--start {
   background: var(--accent-soft);
   color: var(--accent);

@@ -52,6 +52,21 @@ describe('the chain dock', () => {
     expect(screen.queryByRole('searchbox', { name: 'Search quests' })).toBeNull();
   });
 
+  it('lists the open quest\'s NPCs and objects on its card, the focused one marked', async () => {
+    const values = { 'quest_template.LogTitle': 'Wolves', creature_queststarter: [{ id: 1423 }], gameobject_questender: [{ id: 77 }] };
+    const { store } = await chainDock({ openQuest: async (id: number) => okv(sampleOpen({ questId: id, aggregate: { ...sampleOpen().aggregate, values } })) });
+    const card = (await screen.findAllByTestId('quest-node'))[0]!;
+    expect(within(card).queryByRole('list', { name: 'Parts' })).toBeNull();
+    await store.getState().openQuest(60001);
+    const parts = await within(card).findByRole('list', { name: 'Parts' });
+    const giver = within(parts).getByText('NPC #1423').closest('li')!;
+    const ender = within(parts).getByText('Object #77').closest('li')!;
+    expect(giver).not.toHaveAttribute('aria-current');
+    store.getState().setFocus(60001, { kind: 'creature', entry: 1423 });
+    await waitFor(() => expect(giver).toHaveAttribute('aria-current', 'true'));
+    expect(ender).not.toHaveAttribute('aria-current');
+  });
+
   it('places an added chain at the middle of the graph, not of the window', async () => {
     const { api } = await chainDock();
     await screen.findAllByTestId('quest-node');

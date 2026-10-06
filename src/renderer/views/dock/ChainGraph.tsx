@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState, type Dispatch, type SetStateAction } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type Dispatch, type SetStateAction } from 'react';
 import {
   Background,
   Controls,
@@ -16,6 +16,11 @@ import type { AppStore } from '../../state/app-store';
 import type { CanvasNode } from '@shared/ipc';
 import { QuestNodeCard } from '../QuestNodeCard';
 import { toFlowEdges } from '../canvas-edges';
+import { questParts, questRoles } from '@core/modules/quest-roles';
+import { giverName } from '@core/modules/summaries';
+import { EMPTY_ENTITIES } from '@core/entities/model';
+import { useNameBook } from '../../state/names';
+import { useProjectEntities } from '../../state/project-entities';
 import './ChainGraph.css';
 
 /** Drags and pans are queued locally and flushed together after the user pauses. */
@@ -32,6 +37,7 @@ interface QuestNodeData extends Record<string, unknown> {
   onAddChain: () => void;
   rotation: { name: string; daily: boolean } | null;
   onRotation: () => void;
+  parts?: { key: string; name: string; focused: boolean }[];
 }
 
 function QuestFlowNode({ data }: { data: QuestNodeData }): React.JSX.Element {
@@ -47,6 +53,7 @@ function QuestFlowNode({ data }: { data: QuestNodeData }): React.JSX.Element {
         onAddChain={data.onAddChain}
         rotation={data.rotation}
         onRotation={data.onRotation}
+        parts={data.parts}
       />
       <Handle type="source" position={Position.Right} isConnectable={false} />
     </>
@@ -86,6 +93,10 @@ export function ChainGraph({
   const addQuestChain = store((s) => s.addQuestChain);
   const projectEpoch = store((s) => s.projectEpoch);
   const questPools = store((s) => s.questPools);
+  const focus = store((s) => s.focus);
+  const names = useNameBook();
+  const entities = useProjectEntities()?.entities ?? EMPTY_ENTITIES;
+  const openParts = useMemo(() => (open ? questParts(questRoles(open.aggregate.values)) : []), [open]);
 
   const { screenToFlowPosition, setViewport: setFlowViewport } = useReactFlow();
   // `<ReactFlow>` only honours `defaultViewport` at mount, so it stays unmounted until the saved
@@ -141,6 +152,14 @@ export function ChainGraph({
         const pool = poolOf.get(n.questId);
         if (pool) onRotation(pool.id);
       },
+      // The open quest's card lists its NPCs and objects, the one in focus marked
+      parts: open?.questId === n.questId
+        ? openParts.map((t) => ({
+            key: `${t.kind}:${t.id}`,
+            name: giverName(t, names, entities),
+            focused: focus.questId === n.questId && focus.part?.kind === t.kind && focus.part.entry === t.id,
+          }))
+        : undefined,
     } satisfies QuestNodeData,
   }));
 

@@ -29,7 +29,11 @@ vi.mock('../../src/renderer/world3d/world3d', () => ({
 
 import { WorldWorkspace } from '../../src/renderer/world3d/WorldWorkspace';
 
-type Props = { active?: boolean; follow?: { questId: number; at: number }; now?: () => number; showRequest?: { target: any; nonce: number } };
+type Focus = { questId: number | null; part: { kind: 'creature' | 'gameobject'; entry: number } | null; nonce: number; at: number };
+type Props = { focus?: Focus; now?: () => number };
+/** A focus set at moment 10, after the clock's start */
+const quest = (nonce = 1): Focus => ({ questId: 60001, part: null, nonce, at: 10 });
+const part = (entry: number, nonce = 1): Focus => ({ questId: 60001, part: { kind: 'creature', entry }, nonce, at: 10 });
 
 const giver = { kind: 'creature', guid: 6000001, entry: 12000001, name: 'Hela', map: 1, x: 500, y: 0, z: 0, role: 'giver' };
 let api: ReturnType<typeof makeMockApi>;
@@ -41,13 +45,13 @@ function mount(first: Props, questSpawnList?: any) {
     questSpawnList: questSpawnList ?? (vi.fn(async () => okv([{ questId: 60001, title: 'Q', spawns: [giver], capped: false, cut: 0 }])) as any) });
   const value = { entities: EMPTY_ENTITIES, setEntities: vi.fn(), quests: [], layer: { spawns: [], routes: [], added: [] }, setLayer: vi.fn(), tracked: [],
     create: vi.fn(async () => ({ error: 'no' })), remove: vi.fn(async () => null), adopt: vi.fn(async () => ({ error: 'no' })), ensure: vi.fn(async () => null) };
-  // The clock stays where the test puts it: by default before any quest was opened
+  // The clock stays where the test puts it: by default before any focus was set
   const now = first.now ?? (() => 0);
   const ui = (props: Props) => (
     <NamesProvider api={api}>
       <ProjectEntitiesProvider value={value}>
         <WorldWorkspace hasClient projectKey="p" projectName="P" onOpenSettings={vi.fn()} onShowQuests={vi.fn()} onStartQuest={vi.fn()}
-          active={props.active} follow={props.follow} now={props.now ?? now} showRequest={props.showRequest} />
+          focus={props.focus} now={props.now ?? now} />
       </ProjectEntitiesProvider>
     </NamesProvider>
   );
@@ -66,105 +70,100 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
-describe('following a newly opened quest', () => {
-  it('follows a quest opened while the World was hidden, when the World is next shown', async () => {
-    const view = mount({ active: false, follow: { questId: 60001, at: 10 } });
+describe('following the focus', () => {
+  it('goes to a newly focused quest', async () => {
+    const view = mount({});
     await waitFor(() => expect(worlds).toHaveLength(1));
-    view.rerender({ active: true, follow: { questId: 60001, at: 10 } });
+    view.rerender({ focus: quest() });
     await waitFor(() => expect(api.questSpawnList).toHaveBeenCalledWith([60001]));
     await waitFor(() => expect(screen.getByRole('button', { name: 'Back' })).toHaveProperty('disabled', false));
     // The camera went to the giver, on its map
     await waitFor(() => expect(worlds.at(-1).options.map).toBe(1));
   });
 
-  it('drops the follow when the camera moved after the quest was opened', { timeout: 8000 }, async () => {
-    const view = mount({ active: true, now: () => 20 });
+  it('leaves the camera where the author moved it after the focus was set', { timeout: 8000 }, async () => {
+    const view = mount({ now: () => 20 });
     await waitFor(() => expect(worlds).toHaveLength(1));
     // The author flies the camera at moment 20: the view reports where it rests on its next check
     worlds[0].target = () => ({ x: 40, y: 2, z: 3 });
     await waitFor(() => expect(readLastPlace().x).toBe(40), { timeout: 3000 });
-    view.rerender({ active: false, follow: { questId: 60001, at: 10 } });
-    view.rerender({ active: true, follow: { questId: 60001, at: 10 } });
+    view.rerender({ focus: quest() });
     await new Promise((r) => setTimeout(r, 50));
     expect(api.questSpawnList).not.toHaveBeenCalled();
+    expect(worlds).toHaveLength(1);
+    expect(screen.getByRole('button', { name: 'Back' })).toHaveProperty('disabled', true);
   });
 
-  it('keeps the follow when the camera only settled while the World was hidden', { timeout: 8000 }, async () => {
-    const view = mount({ active: false, follow: { questId: 60001, at: 10 }, now: () => 20 });
+  it('still selects a focused NPC in view when the author moved the camera, and does not move it', { timeout: 8000 }, async () => {
+    const near = { ...giver, map: 0, x: 100, y: 2, z: 3 };
+    const view = mount({ now: () => 20 }, vi.fn(async () => okv([{ questId: 60001, title: 'Q', spawns: [near], capped: false, cut: 0 }])));
     await waitFor(() => expect(worlds).toHaveLength(1));
-    // A smooth jump comes to rest off the place it was sent to after the author switched away
     worlds[0].target = () => ({ x: 40, y: 2, z: 3 });
     await waitFor(() => expect(readLastPlace().x).toBe(40), { timeout: 3000 });
-    view.rerender({ active: true, follow: { questId: 60001, at: 10 } });
-    await waitFor(() => expect(api.questSpawnList).toHaveBeenCalledWith([60001]));
+    view.rerender({ focus: part(12000001) });
+    await waitFor(() => expect(worlds[0].select).toHaveBeenCalledWith({ kind: 'creature', guid: 6000001 }));
+    expect(worlds[0].lookAt).not.toHaveBeenCalledWith(100, 2, 4, true);
+    expect(screen.getByRole('button', { name: 'Back' })).toHaveProperty('disabled', true);
   });
 
-  it('records nothing for a quest opened while the World is shown', async () => {
-    const view = mount({ active: true });
+  it('follows each focus once', async () => {
+    const view = mount({});
     await waitFor(() => expect(worlds).toHaveLength(1));
-    view.rerender({ active: true, follow: { questId: 60001, at: 10 } });
-    await new Promise((r) => setTimeout(r, 50));
-    expect(api.questSpawnList).not.toHaveBeenCalled();
-  });
-
-  it('follows only once', async () => {
-    const view = mount({ active: false, follow: { questId: 60001, at: 10 } });
-    await waitFor(() => expect(worlds).toHaveLength(1));
-    view.rerender({ active: true, follow: { questId: 60001, at: 10 } });
+    view.rerender({ focus: quest() });
     await waitFor(() => expect(api.questSpawnList).toHaveBeenCalledTimes(1));
-    view.rerender({ active: false, follow: { questId: 60001, at: 10 } });
-    view.rerender({ active: true, follow: { questId: 60001, at: 10 } });
+    view.rerender({ focus: quest() });
     await new Promise((r) => setTimeout(r, 50));
     expect(api.questSpawnList).toHaveBeenCalledTimes(1);
   });
 });
 
-describe('Show in World and Go to', () => {
-  it('goes to the NPC asked for', async () => {
-    const view = mount({ active: true });
+describe('a focused NPC or object (Show in World and Go to)', () => {
+  it('goes to the NPC asked for, and selects it', async () => {
+    const view = mount({});
     await waitFor(() => expect(worlds).toHaveLength(1));
-    view.rerender({ active: true, showRequest: { target: { questId: 60001, kind: 'creature', entry: 12000001 }, nonce: 1 } });
+    view.rerender({ focus: part(12000001) });
     await waitFor(() => expect(worlds.at(-1).options.map).toBe(1));
     expect(screen.getByRole('button', { name: 'Back' })).toHaveProperty('disabled', false);
+    await waitFor(() => expect(worlds.at(-1).select).toHaveBeenCalledWith({ kind: 'creature', guid: 6000001 }));
   });
 
   it('says so when nothing of the quest is placed', async () => {
-    const view = mount({ active: true }, vi.fn(async () => okv([{ questId: 60001, title: 'Q', spawns: [], capped: false, cut: 0 }])));
+    const view = mount({}, vi.fn(async () => okv([{ questId: 60001, title: 'Q', spawns: [], capped: false, cut: 0 }])));
     await waitFor(() => expect(worlds).toHaveLength(1));
-    view.rerender({ active: true, showRequest: { target: { questId: 60001 }, nonce: 1 } });
+    view.rerender({ focus: quest() });
     expect(await screen.findByText('Nothing of this quest is placed in the world yet.')).toBeTruthy();
     expect(screen.getByRole('button', { name: 'Back' })).toHaveProperty('disabled', true);
   });
 
   it('says the NPC has no spawn when one named NPC is not placed', async () => {
-    const view = mount({ active: true });
+    const view = mount({});
     await waitFor(() => expect(worlds).toHaveLength(1));
-    view.rerender({ active: true, showRequest: { target: { questId: 60001, kind: 'creature', entry: 99 }, nonce: 1 } });
+    view.rerender({ focus: part(99) });
     expect(await screen.findByText('NPC #99 has no spawn in the world yet.')).toBeTruthy();
   });
 
   it('says why the spawns could not be read while connected', async () => {
-    const view = mount({ active: true }, vi.fn(async () => ({ ok: false, error: { code: 'QUERY', message: 'Lost connection' } })));
+    const view = mount({}, vi.fn(async () => ({ ok: false, error: { code: 'QUERY', message: 'Lost connection' } })));
     await waitFor(() => expect(worlds).toHaveLength(1));
-    view.rerender({ active: true, showRequest: { target: { questId: 60001 }, nonce: 1 } });
+    view.rerender({ focus: quest() });
     expect(await screen.findByText('Could not read the quest’s spawns: Lost connection')).toBeTruthy();
   });
 
   it('says the world database is needed when the quest’s spawns cannot be read', async () => {
-    const view = mount({ active: true }, vi.fn(async () => ({ ok: false, error: { code: 'NOT_CONNECTED', message: 'Connect to a world database first.' } })));
+    const view = mount({}, vi.fn(async () => ({ ok: false, error: { code: 'NOT_CONNECTED', message: 'Connect to a world database first.' } })));
     await waitFor(() => expect(worlds).toHaveLength(1));
-    view.rerender({ active: true, showRequest: { target: { questId: 60001 }, nonce: 1 } });
+    view.rerender({ focus: quest() });
     expect(await screen.findByText('Needs the world database')).toBeTruthy();
     expect(screen.queryByText('Connect to a world database first.')).toBeNull();
   });
 
   it('offline, goes to a spawn of the project or the layer, and says the database is needed for any other', async () => {
     const offline = vi.fn(async () => okv([{ questId: 60001, title: 'Q', spawns: [giver], capped: false, cut: 0, offline: true }]));
-    const view = mount({ active: true }, offline);
+    const view = mount({}, offline);
     await waitFor(() => expect(worlds).toHaveLength(1));
-    view.rerender({ active: true, showRequest: { target: { questId: 60001, kind: 'creature', entry: 99 }, nonce: 1 } });
+    view.rerender({ focus: part(99) });
     expect(await screen.findByText('Needs the world database')).toBeTruthy();
-    view.rerender({ active: true, showRequest: { target: { questId: 60001, kind: 'creature', entry: 12000001 }, nonce: 2 } });
+    view.rerender({ focus: part(12000001, 2) });
     await waitFor(() => expect(worlds.at(-1).options.map).toBe(1));
   });
 });

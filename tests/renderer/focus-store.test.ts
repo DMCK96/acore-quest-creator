@@ -21,6 +21,15 @@ describe('focus', () => {
     expect(s.getState().focus.at).toBeGreaterThan(first.at);
   });
 
+  it('asked again, the same focus is a new one', () => {
+    const s = make();
+    s.getState().setFocus(7);
+    const first = s.getState().focus;
+    s.getState().setFocus(7, null, { again: true });
+    expect(s.getState().focus).toMatchObject({ questId: 7, part: null, nonce: 2 });
+    expect(s.getState().focus.at).toBeGreaterThan(first.at);
+  });
+
   it('opening a quest focuses it and clears the part', async () => {
     const s = make();
     s.getState().setFocus(7, { kind: 'creature', entry: 1 });

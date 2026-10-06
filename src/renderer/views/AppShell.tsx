@@ -33,9 +33,8 @@ export function AppShell({ store }: { store: AppStore }): React.JSX.Element {
   const hasClient = store((s) => Boolean(s.summary?.clientDir));
   const open = store((s) => s.open);
   const nodes = store((s) => s.nodes);
+  const focus = store((s) => s.focus);
   const [goTo, setGoTo] = useState<{ map: number; x: number; y: number; z: number; nonce: number } | undefined>();
-  // Show in World / Go to, handed to the World
-  const [showRequest, setShowRequest] = useState<{ target: ShowTarget; nonce: number } | undefined>();
 
   // When the author last opened or closed the dock themselves, on the store's clock
   const toggledAt = useRef(0);
@@ -50,9 +49,12 @@ export function AppShell({ store }: { store: AppStore }): React.JSX.Element {
     if (questsAsked > toggledAt.current) setDockOpen(true);
   }, [questsAsked]);
 
+  // Show in World / Go to: the quest, or one of its NPCs or objects, becomes the focus, which the World
+  // follows; asked twice, it goes there twice
   const showInWorld = useCallback((target: ShowTarget) => {
-    setShowRequest((was) => ({ target, nonce: (was?.nonce ?? 0) + 1 }));
-  }, []);
+    setDockOpen(true);
+    store.getState().setFocus(target.questId, 'kind' in target ? { kind: target.kind, entry: target.entry } : null, { again: true });
+  }, [store]);
 
   // The project's name and quests are read as soon as the app is up, for the bar and the world, not only
   // once the dock first opens. Unsaved work a crash left behind is offered once, then too.
@@ -135,7 +137,8 @@ export function AppShell({ store }: { store: AppStore }): React.JSX.Element {
               }}
               quest={open ? { open, nodes } : undefined}
               goTo={goTo}
-              showRequest={showRequest}
+              focus={focus}
+              onFocusPart={(questId, part) => store.getState().setFocus(questId, part)}
               now={store.getState().moment}
               onQuestField={(fieldId, value) => store.getState().setValue(fieldId, value)}
               onNewQuest={(giver, previous) => {

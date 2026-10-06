@@ -30,12 +30,14 @@ The World needs the **game client folder**, set when you [connect](/azeroth-worl
 
 ### Following a quest
 
-Open a quest in the **Quests** dock and the camera goes there: it flies to the quest's giver, or its ender if it has no giver, or an objective if it has neither. If the quest has several, it picks the one nearest the camera on the current map. A quest with no spawns leaves the camera where it was. **Back** takes you to where you were.
+Open a quest in the **Quests** dock and the camera goes there: it flies to the quest's giver, or its ender if it has no giver, or an objective if it has neither. If the quest has several, it picks the one nearest the camera on the current map. A quest with no spawns leaves the camera where it was, and a note says nothing of it is placed yet. If you move the camera while the World is still finding the quest, it stays where you put it. **Back** takes you to where you were.
+
+Select a giver, ender or objective of the open quest in the World and it is marked on the quest's card in the dock, which lists the quest's NPCs and objects. The camera stays where it is.
 
 Two buttons do the same on demand:
 
 - **Show in World**, in the quest editor and in the graph preview, takes the World's camera to the quest.
-- **Go to _name_**, beside each giver, ender and objective that names an NPC or object with a spawn, takes the camera to that one's nearest spawn.
+- **Go to _name_**, beside each giver, ender and objective that names an NPC or object with a spawn, takes the camera to that one's nearest spawn and selects it.
 
 Without the world database, both buttons find only your project's own NPCs and objects and the spawns you moved or placed in the World. For anything else they say *Needs the world database*.
 

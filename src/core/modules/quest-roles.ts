@@ -42,6 +42,12 @@ export function questRoles(values: Values): QuestRoles {
   return { givers: givers('start'), enders: givers('end'), objectives: objectiveRows(values).map(targetOf) };
 }
 
+/** Every NPC and object with a part in the quest, once each: givers, then enders, then objectives */
+export function questParts(roles: QuestRoles): RoleTarget[] {
+  const all = [...roles.givers, ...roles.enders, ...roles.objectives].filter((t): t is RoleTarget => t !== null);
+  return all.filter((t, i) => all.findIndex((u) => same(t, u)) === i);
+}
+
 export function hasRole(roles: QuestRoles, role: Role, target: RoleTarget): boolean {
   const list = role === 'giver' ? roles.givers : role === 'ender' ? roles.enders : roles.objectives;
   return list.some((t) => t !== null && same(t, target));

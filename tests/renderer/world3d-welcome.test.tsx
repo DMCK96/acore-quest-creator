@@ -110,13 +110,4 @@ describe('the welcome', () => {
     expect(screen.queryByRole('dialog', { name: 'Welcome' })).toBeNull();
     expect(seen()).toEqual(['C:\w\north.aqc']);
   });
-
-  it('waits for a project opened while the world is hidden, and greets it when shown', async () => {
-    clientHasEverything();
-    const { rerender } = render(<WorldWorkspace {...props({ active: false })} />);
-    await waitFor(() => expect(created).toHaveLength(1));
-    expect(screen.queryByRole('dialog', { name: 'Welcome' })).toBeNull();
-    rerender(<WorldWorkspace {...props({ active: true })} />);
-    expect(await screen.findByRole('dialog', { name: 'Welcome' })).toBeInTheDocument();
-  });
 });

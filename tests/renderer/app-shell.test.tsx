@@ -3,12 +3,12 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 
-const created = vi.hoisted(() => [] as { options: any; dispose: ReturnType<typeof vi.fn>; setActive: ReturnType<typeof vi.fn> }[]);
+const created = vi.hoisted(() => [] as { options: any; dispose: ReturnType<typeof vi.fn>; setActive: ReturnType<typeof vi.fn>; lookAt: ReturnType<typeof vi.fn> }[]);
 vi.mock('../../src/renderer/world3d/world3d', () => ({
   createWorld3D: (options: any) => {
     const world = {
       options, setOwnSpawns: vi.fn(), setWorldLayer: vi.fn(), setMarked: vi.fn(),
-      dispose: vi.fn(), cancelPath: vi.fn(), lookAt: vi.fn(), setSpawnVisibility: vi.fn(), setActive: vi.fn(), setScenery: vi.fn(), setTool: vi.fn(), setFalloff: vi.fn(), target: () => ({ x: 0, y: 0, z: 0 }),
+      dispose: vi.fn(), cancelPath: vi.fn(), lookAt: vi.fn(), select: vi.fn(), setSpawnVisibility: vi.fn(), setActive: vi.fn(), setScenery: vi.fn(), setTool: vi.fn(), setFalloff: vi.fn(), target: () => ({ x: 0, y: 0, z: 0 }),
       spawnStatus: () => ({ capped: { creatures: false, objects: false }, error: null, loading: 0 }),
     };
     created.push(world);
@@ -18,6 +18,7 @@ vi.mock('../../src/renderer/world3d/world3d', () => ({
 
 import { createAppStore } from '../../src/renderer/state/app-store';
 import { AppShell } from '../../src/renderer/views/AppShell';
+import { NamesProvider } from '../../src/renderer/state/names';
 import { DEFAULT_PREFERENCES, writePreferences } from '../../src/renderer/preferences/store';
 import { makeMockApi, okv, sampleOpen, nodeOf } from './mock-api';
 
@@ -37,7 +38,8 @@ async function shell(over: Record<string, any> = {}, client = true) {
   });
   const store = createAppStore(api, { saveDelayMs: 0 });
   await store.getState().connect(form);
-  render(<AppShell store={store} />);
+  // The app gives the world its api through the names provider, as App does
+  render(<NamesProvider api={api}><AppShell store={store} /></NamesProvider>);
   await waitFor(() => expect(store.getState().project.name).not.toBe(''));
   return { api, store };
 }
@@ -248,6 +250,42 @@ describe('the app shell', () => {
     expect(values.creature_queststarter).toEqual([{ id: 1423 }]);
     expect(values.creature_questender).toEqual([{ id: 1423 }]);
     await waitFor(() => expect(dock()).not.toBeNull());
+  });
+
+  it('takes the world to a quest opened in the dock', async () => {
+    const giver = { kind: 'creature', guid: 80330, entry: 1423, name: 'Guard', map: 0, x: 500, y: 10, z: 20, role: 'giver' };
+    const { store } = await shell({ questSpawnList: vi.fn(async () => okv([{ questId: 60001, title: 'Wolves', spawns: [giver], capped: false, cut: 0 }])) });
+    await waitFor(() => expect(created).toHaveLength(1));
+    await act(async () => { await store.getState().openQuest(60001); });
+    await waitFor(() => expect(created[0]!.lookAt).toHaveBeenCalledWith(500, 10, 20));
+    expect(screen.getByRole('button', { name: 'Back' })).toHaveProperty('disabled', false);
+  });
+
+  it('Show in World takes the world to the focused quest again', async () => {
+    const giver = { kind: 'creature', guid: 80330, entry: 1423, name: 'Guard', map: 0, x: 500, y: 10, z: 20, role: 'giver' };
+    const questSpawnList = vi.fn(async () => okv([{ questId: 60001, title: 'Wolves', spawns: [giver], capped: false, cut: 0 }]));
+    const { store } = await shell({ questSpawnList });
+    await waitFor(() => expect(created).toHaveLength(1));
+    await act(async () => { await store.getState().openQuest(60001); });
+    await waitFor(() => expect(questSpawnList).toHaveBeenCalledTimes(1));
+    await userEvent.click(within(dock()!).getByRole('button', { name: 'Show in World' }));
+    await waitFor(() => expect(questSpawnList).toHaveBeenCalledTimes(2));
+  });
+
+  it('selecting a part of the open quest in the world focuses it, without moving the camera', async () => {
+    const values = { 'quest_template.LogTitle': 'Wolves', creature_queststarter: [{ id: 1423 }] };
+    const { store } = await shell({ openQuest: async () => okv(sampleOpen({ aggregate: { ...sampleOpen().aggregate, values } })) });
+    await waitFor(() => expect(created).toHaveLength(1));
+    await act(async () => { await store.getState().openQuest(60001); });
+    const world = created[0]!;
+    const before = world.lookAt.mock.calls.length;
+    const pick = (entry: number) => ({ kind: 'creature', guid: 80330, entry, name: 'Guard', own: false, added: false, pathId: 0, event: null, position: { x: 1, y: 2, z: 3 } });
+    act(() => world.options.onSelect(pick(4000)));
+    expect(store.getState().focus.part).toBeNull();
+    act(() => world.options.onSelect(pick(1423)));
+    expect(store.getState().focus).toMatchObject({ questId: 60001, part: { kind: 'creature', entry: 1423 } });
+    await new Promise((r) => setTimeout(r, 20));
+    expect(world.lookAt.mock.calls.length).toBe(before);
   });
 
   it('leaves the open quest alone when the new quest cannot be made', async () => {

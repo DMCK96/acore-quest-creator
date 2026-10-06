@@ -169,6 +169,8 @@ export interface FocusTarget {
   event: { id: number; name: string } | null;
   /** One placed in the 3D view */
   added: boolean;
+  /** Selected where the camera is, without moving it, and only while it is in view; by default the camera goes close to it */
+  stay?: boolean;
   /** Told apart from an earlier focus on the same spawn, which is to be done again */
   nonce: number;
 }
@@ -287,19 +289,22 @@ function WorldStage({
     setLayer(storeLayer);
     world.current?.setWorldLayer(storeLayer);
   }, [storeLayer]);
-  /** Takes the camera close to the pending focus and selects it, with the layers that would hide it on */
+  /** Takes the camera close to the pending focus and selects it, with the layers that would hide it on; one to `stay` is only selected, while it is in view */
   const bringIntoView = (): void => {
     const target = pendingFocus.current;
     const current = world.current;
     if (!target || !current) return;
     pendingFocus.current = null;
+    if (target.stay && !current.spawnOf(target.kind, target.guid)) return;
     // An event spawn is shown by drawing the world during its event (all events already show it)
-    setLayers((l) => ({
-      ...l,
-      [target.kind === 'creature' ? 'creatures' : 'objects']: true,
-      ...(target.event && l.events !== 'all' && l.events !== target.event.id ? { events: target.event.id, eventName: target.event.name } : {}),
-    }));
-    current.lookAt(target.x, target.y, target.z + 1, true);
+    if (!target.stay) {
+      setLayers((l) => ({
+        ...l,
+        [target.kind === 'creature' ? 'creatures' : 'objects']: true,
+        ...(target.event && l.events !== 'all' && l.events !== target.event.id ? { events: target.event.id, eventName: target.event.name } : {}),
+      }));
+      current.lookAt(target.x, target.y, target.z + 1, true);
+    }
     current.select({ kind: target.kind, guid: target.guid });
     setSelected({
       kind: target.kind, guid: target.guid, entry: target.entry, name: target.name, own: false, added: target.added, pathId: 0,

@@ -16,16 +16,19 @@ export interface FocusSlice {
     /** The `moment()` of the change that set this focus; 0 before any. */
     at: number;
   };
-  /** Moves the focus; asking for the focus already held does nothing. */
-  setFocus(questId: number | null, part?: FocusPart | null): void;
+  /**
+   * Moves the focus; asking for the focus already held does nothing, unless it is asked for `again`
+   * (Show in World asked twice for the same quest is two requests).
+   */
+  setFocus(questId: number | null, part?: FocusPart | null, options?: { again?: boolean }): void;
 }
 
 export function createFocusSlice({ set, get }: SliceArgs): FocusSlice {
   return {
     focus: { questId: null, part: null, nonce: 0, at: 0 },
-    setFocus(questId, part = null) {
+    setFocus(questId, part = null, options) {
       const { focus } = get();
-      if (focus.questId === questId && focus.part?.kind === part?.kind && focus.part?.entry === part?.entry) return;
+      if (!options?.again && focus.questId === questId && focus.part?.kind === part?.kind && focus.part?.entry === part?.entry) return;
       set({ focus: { questId, part, nonce: focus.nonce + 1, at: get().moment() } });
     },
   };

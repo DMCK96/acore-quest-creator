@@ -34,9 +34,12 @@ export function QuestNodeCard({
   onAddChain,
   rotation,
   onRotation,
+  parts,
 }: {
   node: CanvasNode;
   selected: boolean;
+  /** The NPCs and objects with a part in the quest, listed on the open quest's card; the focused one is marked */
+  parts?: { key: string; name: string; focused: boolean }[];
   /** The quest rotation this quest is in, if any */
   rotation?: { name: string; daily: boolean } | null;
   /** The rotation tag's click: open the rotation */
@@ -120,6 +123,15 @@ export function QuestNodeCard({
           </span>
         )}
       </div>
+      {parts && parts.length > 0 && (
+        <ul className="quest-card__parts" aria-label="Parts">
+          {parts.map((part) => (
+            <li key={part.key} className="quest-card__part" aria-current={part.focused ? 'true' : undefined}>
+              {part.name}
+            </li>
+          ))}
+        </ul>
+      )}
       {node.offCanvasLinks > 0 && (
         <button
           type="button"
