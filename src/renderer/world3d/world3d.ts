@@ -145,8 +145,6 @@ export interface World3D {
   spawnOf(kind: 'creature' | 'object', guid: number): SpawnInfo | null;
   /** A drawn NPC's route as the view has it, or null when it has none. */
   routeOf(guid: number): { pathId: number; points: { x: number; y: number; z: number; carry?: unknown }[] } | null;
-  /** Stops drawing (while the world is hidden) or starts again; a hidden world costs nothing. */
-  setActive(active: boolean): void;
   /** The point the camera looks at and turns round. */
   target(): { x: number; y: number; z: number };
   dispose(): void;
@@ -587,9 +585,8 @@ export function createWorld3D(options: World3DOptions): World3D {
   const clock = new THREE.Clock();
   let frame = 0;
   let ready = false;
-  let running = true;
   const tick = (): void => {
-    if (disposed || !running) return;
+    if (disposed) return;
     frame = requestAnimationFrame(tick);
     const delta = clock.getDelta();
     try {
@@ -663,17 +660,6 @@ export function createWorld3D(options: World3DOptions): World3D {
     routeOf(guid) {
       const route = manager.spawnRoute(guid);
       return route ? { pathId: route.pathId, points: route.points } : null;
-    },
-    setActive(active) {
-      if (active === running || disposed) return;
-      running = active;
-      if (active) {
-        // The time spent hidden is not one long frame
-        clock.getDelta();
-        frame = requestAnimationFrame(tick);
-      } else {
-        cancelAnimationFrame(frame);
-      }
     },
     target: () => ({ x: controls.target.x, y: controls.target.y, z: controls.target.z }),
     camera() {

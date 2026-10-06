@@ -3,12 +3,12 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 
-const created = vi.hoisted(() => [] as { options: any; dispose: ReturnType<typeof vi.fn>; setActive: ReturnType<typeof vi.fn>; lookAt: ReturnType<typeof vi.fn> }[]);
+const created = vi.hoisted(() => [] as { options: any; dispose: ReturnType<typeof vi.fn>; lookAt: ReturnType<typeof vi.fn> }[]);
 vi.mock('../../src/renderer/world3d/world3d', () => ({
   createWorld3D: (options: any) => {
     const world = {
       options, setOwnSpawns: vi.fn(), setWorldLayer: vi.fn(), setMarked: vi.fn(),
-      dispose: vi.fn(), cancelPath: vi.fn(), lookAt: vi.fn(), select: vi.fn(), setSpawnVisibility: vi.fn(), setActive: vi.fn(), setScenery: vi.fn(), setTool: vi.fn(), setFalloff: vi.fn(), target: () => ({ x: 0, y: 0, z: 0 }),
+      dispose: vi.fn(), cancelPath: vi.fn(), lookAt: vi.fn(), select: vi.fn(), setSpawnVisibility: vi.fn(), setScenery: vi.fn(), setTool: vi.fn(), setFalloff: vi.fn(), target: () => ({ x: 0, y: 0, z: 0 }),
       spawnStatus: () => ({ capped: { creatures: false, objects: false }, error: null, loading: 0 }),
     };
     created.push(world);
@@ -105,7 +105,6 @@ describe('the app shell', () => {
     for (const name of ['New quest', 'Add existing quest', 'Fit view']) expect(within(tools).getByRole('button', { name })).toBeInTheDocument();
     expect(screen.getByRole('region', { name: 'World' })).toBeVisible();
     expect(created).toHaveLength(1);
-    expect(created[0]!.setActive).not.toHaveBeenCalledWith(false);
   });
 
   it('toggles the dock from the keyboard', async () => {

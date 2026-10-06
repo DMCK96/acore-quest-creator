@@ -124,8 +124,6 @@ interface ViewProps {
   onOwnEdit?(edit: SpawnEdit): boolean | void;
   /** A spawn to bring into view: the camera goes close to it and it is selected. Its map is `map`. */
   focus?: FocusTarget;
-  /** False while the view is hidden: the world stops drawing until it is shown again. True by default. */
-  active?: boolean;
   /** Whether the view labels the area itself; a host that names it elsewhere turns this off. True by default. */
   showArea?: boolean;
   /** Told the name of the area the camera is over, and null while a new world starts. */
@@ -212,7 +210,7 @@ class Contained extends Component<{ children: ReactNode }, { failure: string | n
 }
 
 function WorldStage({
-  map, start, hasClient, own, onSelect, onOwnEdit, focus, active = true, showArea = true, onArea, onPlaceChange, quest, chainIds, onQuestRole, onNewQuest, onShowSpawns,
+  map, start, hasClient, own, onSelect, onOwnEdit, focus, showArea = true, onArea, onPlaceChange, quest, chainIds, onQuestRole, onNewQuest, onShowSpawns,
   onCreateEntity, onEditEntity, onSetLootable, onGoToSpawn,
 }: ViewProps): React.JSX.Element {
   const container = useRef<HTMLDivElement>(null);
@@ -237,8 +235,6 @@ function WorldStage({
   onAreaRef.current = onArea;
   const onPlaceChangeRef = useRef(onPlaceChange);
   onPlaceChangeRef.current = onPlaceChange;
-  const activeRef = useRef(active);
-  activeRef.current = active;
   // A spawn to bring into view; kept until the world that is to show it is there (a map switch builds a new one)
   const pendingFocus = useRef<FocusTarget | null>(null);
   // The world layer as the main process last gave it, drawn over the database
@@ -341,7 +337,6 @@ function WorldStage({
     world,
     api,
     map,
-    active,
     send: (change) => sendRef.current(change),
     takeLayer: (next) => takeLayer(next),
     setNote,
@@ -558,7 +553,6 @@ function WorldStage({
           created.setScenery(sceneryOf(layersRef.current));
           created.setTool(layersRef.current.tool);
           created.setFalloff({ on: layersRef.current.falloff, radius: layersRef.current.falloffRadius });
-          if (!activeRef.current) created.setActive(false);
           if (looksRef.current.size > 0) created.setLooks(looksRef.current);
           if (ownRef.current) created.setOwnSpawns(ownRef.current);
           if (groupSpawnsRef.current.size > 0) created.setGroupSpawns(groupSpawnsRef.current);
@@ -661,11 +655,6 @@ function WorldStage({
     setSummary(null);
     onSelectRef.current?.(null);
   }
-
-  // A hidden view stops drawing
-  useEffect(() => {
-    world.current?.setActive(active);
-  }, [active]);
 
   // Where the camera rests, told to the host once it has moved far enough to matter
   useEffect(() => {

@@ -31,7 +31,6 @@ export interface WorldMenuDeps {
   world: React.RefObject<World3D | null>;
   api: Api | null;
   map: number;
-  active: boolean;
   /** Sends an edit as the view sends any: the quest's own to the quest, the rest to the world layer, in order; whether it was kept */
   send(edit: SpawnEdit): Promise<boolean>;
   takeLayer(layer: WorldLayer): void;
@@ -116,7 +115,7 @@ export function useWorldMenu(deps: WorldMenuDeps): {
   const [marked, setMarked] = useState(false);
 
   // A menu belongs to the world it was opened on
-  useEffect(() => setMenu(null), [deps.map, deps.active]);
+  useEffect(() => setMenu(null), [deps.map]);
   // A path being drawn, and quest marks, belong to their world: a new map's world starts without them
   useEffect(() => {
     setDrawing(null);
