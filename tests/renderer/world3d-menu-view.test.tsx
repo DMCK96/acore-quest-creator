@@ -285,6 +285,19 @@ describe('the right-click menu in the 3D view', () => {
     expect(vi.mocked(api.worldSetMovement).mock.invocationCallOrder[0]!).toBeLessThan(vi.mocked(api.historyEnd).mock.invocationCallOrder[0]!);
   });
 
+  it('a pasted NPC gets the copied spawn’s own game events in the same step', async () => {
+    const { api, world } = await view({ worldSetSpawnEvents: vi.fn(async () => okv(EMPTY)) });
+    const gone = { ...guard, spawnEvents: { mode: 'except' as const, events: [24] } };
+    world.selectedSpawns.mockReturnValue([gone]);
+    rightClick(world, { ground: at, hit: { type: 'spawn', spawn: gone }, selection: [gone] });
+    await userEvent.click(screen.getByRole('menuitem', { name: 'Copy' }));
+    rightClick(world, { ground: { x: 100, y: 0, z: 0 }, hit: null, selection: [] });
+    await userEvent.click(screen.getByRole('menuitem', { name: 'Paste here (1)' }));
+    await waitFor(() => expect(api.worldSetSpawnEvents).toHaveBeenCalledWith(90001, { mode: 'except', events: [24] }));
+    await waitFor(() => expect(api.historyEnd).toHaveBeenCalledTimes(1));
+    expect(api.historyBegin).toHaveBeenCalledTimes(1);
+  });
+
   it('Group these spawns makes a new group of the selection, saved as one step', async () => {
     const { api, world } = await view({ worldNewGroupId: vi.fn(async () => okv(900001)), worldCheckGroup: vi.fn(async () => okv({ reasons: [], notes: [] })), worldSetGroup: vi.fn(async () => okv(EMPTY)) });
     const other = { ...guard, guid: 80331, entry: 68, name: 'Other' };

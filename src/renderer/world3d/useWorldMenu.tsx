@@ -67,7 +67,7 @@ export interface WorldMenuDeps {
   entities: ProjectEntities;
 }
 
-type Put = { kind: 'creature' | 'object'; entry: number; own: boolean; at: Placement; respawnSecs?: number; wander?: number };
+type Put = { kind: 'creature' | 'object'; entry: number; own: boolean; at: Placement; respawnSecs?: number; wander?: number; spawnEvents?: SpawnEvents };
 
 const refOf = (s: { kind: 'creature' | 'object'; guid: number; entry: number; own: boolean }): SpawnRef => ({ kind: s.kind, guid: s.guid, entry: s.entry, own: s.own });
 const plural = (n: number, one: string): string => `${n} ${one}${n === 1 ? '' : 's'}`;
@@ -182,6 +182,7 @@ export function useWorldMenu(deps: WorldMenuDeps): {
         done.push(edit);
         if (put.respawnSecs !== undefined && put.respawnSecs !== 300) await d.current.send({ kind: 'respawn', spawn: edit.spawn, secs: put.respawnSecs });
         if (put.kind === 'creature' && put.wander !== undefined && put.wander > 0) await d.current.send({ kind: 'movement', spawn: edit.spawn, to: { type: 'wander', wander: put.wander, pathId: null } });
+        if (put.kind === 'creature' && put.spawnEvents !== undefined && put.spawnEvents !== 'npc') await d.current.send({ kind: 'spawnEvents', spawn: edit.spawn, to: put.spawnEvents });
       }
     }, label);
     const world = d.current.world.current;
@@ -195,7 +196,7 @@ export function useWorldMenu(deps: WorldMenuDeps): {
     const { map } = d.current;
     const ok = pasteable(entries);
     if (ok.entries.length === 0) return;
-    const laid = await Promise.all(layoutAt(ok.entries, at, map).map(async (l) => ({ kind: l.entry.kind, entry: l.entry.entry, own: l.entry.own, at: await floored(l.at), respawnSecs: l.entry.respawnSecs, wander: l.entry.wander })));
+    const laid = await Promise.all(layoutAt(ok.entries, at, map).map(async (l) => ({ kind: l.entry.kind, entry: l.entry.entry, own: l.entry.own, at: await floored(l.at), respawnSecs: l.entry.respawnSecs, wander: l.entry.wander, spawnEvents: l.entry.spawnEvents })));
     await putAll(laid, laid.length === 1 ? `${verb} a spawn` : `${verb} ${laid.length} spawns`);
   };
 

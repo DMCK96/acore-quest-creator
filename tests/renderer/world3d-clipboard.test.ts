@@ -14,6 +14,11 @@ describe('the 3D view’s clipboard', () => {
     expect([b!.respawnSecs, b!.wander]).toEqual([300, 0]);
   });
 
+  it('keeps an NPC spawn’s own game events; one that follows its NPC, or an object, keeps none', () => {
+    const [a, b, c] = entriesOf([spawn(1, 0, 0, { spawnEvents: null }), spawn(2, 0, 0, { spawnEvents: 'npc' }), spawn(3, 0, 0, { kind: 'object' })]);
+    expect([a!.spawnEvents, b!.spawnEvents, c!.spawnEvents]).toEqual([null, 'npc', 'npc']);
+  });
+
   it('keeps each spawn’s offset from the group’s centre, and its facing and turn', () => {
     const entries = copySpawns([spawn(1, 0, 0), spawn(2, 10, 0, { kind: 'object', placement: { x: 10, y: 0, z: 10, orientation: 0.5, rotation: [0, 0, 1, 0] } })]);
     expect(entries.map((e) => [e.dx, e.dy, e.orientation, e.rotation])).toEqual([[-5, 0, 0.5, null], [5, 0, 0.5, [0, 0, 1, 0]]]);

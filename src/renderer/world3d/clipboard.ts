@@ -1,4 +1,5 @@
 import type { Placement } from '@core/world/layer';
+import type { SpawnEvents } from '@core/entities/model';
 import type { SpawnInfo } from './scene/spawn/SpawnManager';
 
 /**
@@ -22,6 +23,8 @@ export interface ClipEntry {
   respawnSecs: number;
   /** Its wander circle in yards; 0 for none, and for an NPC that walks a path */
   wander: number;
+  /** An NPC's own game events; 'npc' follows its NPC (and an object's is always that) */
+  spawnEvents: SpawnEvents;
 }
 
 let entries: ClipEntry[] = [];
@@ -48,6 +51,7 @@ export function entriesOf(spawns: readonly SpawnInfo[]): ClipEntry[] {
     rotation: s.placement.rotation,
     respawnSecs: s.respawnSecs,
     wander: s.pathId > 0 ? 0 : s.wander,
+    spawnEvents: s.kind === 'creature' && s.spawnEvents !== undefined ? s.spawnEvents : 'npc',
   }));
 }
 
