@@ -35,7 +35,7 @@
 - **Givers and objectives.** Choose who offers and takes back a quest, and what the player must kill, use, collect or explore.
 - **Quest scripting.** Describe what happens around a quest as scenes: an NPC speaks on accept, a talk option gives credit, an escort walks a path.
 - **Combat wizard.** Design how an NPC fights, from one ability to a boss with phases, adds and health thresholds.
-- **New NPCs and objects.** Pick how they look, their faction and weapons; make readable books and notes, and chests with loot.
+- **New NPCs and objects.** Pick how they look, their faction and weapons, who sees them (the living, only the dead like a spirit healer, or both) and the game events their spawns follow; make readable books and notes, and chests with loot.
 - **Quest map.** Place spawns on the world map with the game's zone art, snap them to the ground and draw patrol routes with actions at each point.
 - **Test in game.** Get the GM commands to reload and try a quest on your test server.
 - **Export.** Review every change, then export an SQL patch or apply it to a dev database. Your live world database is only ever read.
