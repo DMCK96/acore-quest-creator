@@ -52,7 +52,7 @@ async function questMap(api = makeMockApi({ worldLayer: vi.fn(async () => okv(EM
   return { api, onChange, world: worlds[0], store: appStore };
 }
 
-describe('editing in the quest map\'s 3D view', () => {
+describe('editing in the 3D view', () => {
   it('turns an own NPC\'s placement into a quest edit', async () => {
     const { onChange, world } = await questMap();
     world.options.onGesture([place(true, 900, 12000001)]);
