@@ -62,7 +62,13 @@ export type SeenBy = (typeof SEEN_BY)[number];
  * The game events a spawn follows: in the world only during any of them, or gone during any of them;
  * null when it is always in the world. A spawn's `game_event_creature` rows, one per event.
  */
-export const eventRuleSchema = z.object({ mode: z.enum(['during', 'except']), events: z.array(int).min(1) }).nullable();
+export const eventRuleSchema = z
+  .object({
+    mode: z.enum(['during', 'except']),
+    // Each event once, in order: the rows are one per event, and a rule compares by its list
+    events: z.array(int.positive()).min(1).transform((ids) => [...new Set(ids)].sort((a, b) => a - b)),
+  })
+  .nullable();
 export type EventRule = z.infer<typeof eventRuleSchema>;
 /** An NPC's rule for its spawns; 'asIs' leaves each spawn's events as the database has them */
 export type NpcEvents = EventRule | 'asIs';
@@ -127,7 +133,7 @@ const NEW_ORIGIN = { kind: 'new' } as const;
 
 const lootSchema = z.object({ item: int, chance: num, min: int, max: int, questOnly: z.boolean() });
 
-const npcSchema = z.object({
+const npcFields = z.object({
   entry: int,
   name: z.string(),
   subname: z.string(),
@@ -156,6 +162,16 @@ const npcSchema = z.object({
   // Added with NPC visibility; 'asIs' leaves every spawn's events as they are
   events: z.union([eventRuleSchema, z.literal('asIs')]).default('asIs'),
 });
+
+/**
+ * An NPC saved before visibility existed has no rule: a new one never wrote any event rows, so it is
+ * always in the world; an existing one leaves its spawns' rows as they are.
+ */
+const npcSchema = z.preprocess((raw) => {
+  if (typeof raw !== 'object' || raw === null || 'events' in raw) return raw;
+  const origin = (raw as { origin?: { kind?: unknown } }).origin;
+  return origin?.kind === 'existing' ? raw : { ...raw, events: null };
+}, npcFields);
 
 const pageSchema = z.object({ id: int, text: z.string() });
 

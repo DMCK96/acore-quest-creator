@@ -40,14 +40,32 @@ describe('NPC visibility fields', () => {
     delete (saved.spawns as Record<string, unknown>[])[0]!.events;
     const [npc] = readProjectEntities({ npcs: [saved], objects: [], items: [] }).npcs;
     expect(npc!.seenBy).toBeUndefined();
-    expect(npc!.events).toBe('asIs');
+    expect(npc!.events).toBeNull();
     expect(npc!.spawns[0]!.events).toBe('npc');
   });
 
   it('keeps a rule with several events and refuses one with none', () => {
     const during = { ...newNpc(1), events: { mode: 'during', events: [12, 4] } };
-    expect(readProjectEntities({ npcs: [during], objects: [], items: [] }).npcs[0]!.events).toEqual({ mode: 'during', events: [12, 4] });
+    expect(readProjectEntities({ npcs: [during], objects: [], items: [] }).npcs[0]!.events).toEqual({ mode: 'during', events: [4, 12] });
     const empty = { ...newNpc(1), events: { mode: 'except', events: [] } };
     expect(readProjectEntities({ npcs: [empty], objects: [], items: [] }).npcs).toEqual([]);
+  });
+});
+
+describe('event rule ids', () => {
+  it('keeps each event once, in order, and refuses ids that are not events', () => {
+    const one = (events: unknown) => readProjectEntities({ npcs: [{ ...newNpc(1), events: { mode: 'during', events } }], objects: [], items: [] }).npcs;
+    expect(one([12, 3, 12])[0]!.events).toEqual({ mode: 'during', events: [3, 12] });
+    expect(one([0])).toEqual([]);
+    expect(one([-4])).toEqual([]);
+  });
+
+  it('a new NPC saved before visibility existed is always in the world; an existing one leaves its spawns as they are', () => {
+    const made = { ...newNpc(1) } as Record<string, unknown>;
+    delete made.events;
+    const existing = { ...made, entry: 2, origin: { kind: 'existing', original: {}, sharedLoot: 0, spawnCount: 0, locked: [] } };
+    const [n, e] = readProjectEntities({ npcs: [made, existing], objects: [], items: [] }).npcs;
+    expect(n!.events).toBeNull();
+    expect(e!.events).toBe('asIs');
   });
 });
