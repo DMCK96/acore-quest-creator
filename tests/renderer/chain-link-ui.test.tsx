@@ -91,6 +91,15 @@ describe('linking quests in the store', () => {
     expect(vi.mocked(api.listNodes).mock.calls.length).toBeGreaterThan(reads);
   });
 
+  // The World follows the focus: a link made while a quest is open must not fly it to the other one and back
+  it('leaves the focus on the quest that was open', async () => {
+    const { store } = await connected();
+    await store.getState().openQuest(10);
+    const before = store.getState().focus;
+    expect(await store.getState().linkQuests(10, 11)).toBe(true);
+    expect(store.getState().focus).toEqual(before);
+  });
+
   it('refuses a target whose prerequisite is a quest not on the graph, writing nothing', async () => {
     const { api, store } = await connected({ openQuest: async (id: number) => okv(questOf(id, id === 11 ? { [PREV]: 500 } : {})) });
     expect(await store.getState().linkQuests(10, 11)).toBe(false);

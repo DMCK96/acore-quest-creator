@@ -14,7 +14,8 @@ export function createLinksEditSlice({ set, get }: SliceArgs): LinksEditSlice {
   /**
    * Edits quest `questId` as one step: it is opened when it is not the open quest, `work` makes its
    * edits through `setValue` (false: it made none), and the quest that was open is opened again
-   * after, on the screen it was on. True when the edits reached the project.
+   * after, on the screen it was on. With a quest open the focus stays on it throughout, so the World
+   * does not fly to the edited quest and back. True when the edits reached the project.
    */
   async function editQuest(questId: number, label: string, work: (values: Record<string, FieldValue>) => boolean): Promise<boolean> {
     const was = get().open?.questId ?? null;
@@ -24,14 +25,14 @@ export function createLinksEditSlice({ set, get }: SliceArgs): LinksEditSlice {
     await get().historyStep(async () => {
       if (get().open?.questId !== questId) {
         // A failed open shows why; one another open overtook leaves that one be
-        if (!(await get().openQuest(questId))) return;
+        if (!(await get().openQuest(questId, undefined, { keepFocus: was !== null }))) return;
         switched = true;
       }
       edited = work(get().open!.aggregate.values);
     }, label, { questId });
     // The step sent the edit and redrew the graph; a failed send is left dirty with its error shown
     const landed = edited && !get().dirty;
-    if (switched && was !== null && (await get().openQuest(was))) set({ screen });
+    if (switched && was !== null && (await get().openQuest(was, undefined, { keepFocus: true }))) set({ screen });
     return landed;
   }
 

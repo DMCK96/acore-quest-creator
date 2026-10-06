@@ -17,8 +17,11 @@ export interface QuestSlice {
   saving: boolean;
   dirty: boolean;
   links: QuestLinks | null;
-  /** Loads a quest into the preview; false when it failed or a newer open replaced it. */
-  openQuest(id: number, position?: NodePosition): Promise<boolean>;
+  /**
+   * Loads a quest into the preview and focuses it; false when it failed or a newer open replaced it.
+   * `keepFocus` opens it only to work on it, leaving the focus (and so the World) where it was.
+   */
+  openQuest(id: number, position?: NodePosition, options?: { keepFocus?: boolean }): Promise<boolean>;
   /** Adds the quest and every quest chained to it to the canvas, then opens the one picked. */
   addQuestChain(id: number, position?: NodePosition): Promise<void>;
   newQuest(position?: NodePosition): Promise<void>;
@@ -51,7 +54,7 @@ export function createQuestSlice({ api, kit, set, get }: SliceArgs): QuestSlice 
     saving: false,
     dirty: false,
     links: null,
-    async openQuest(id, position) {
+    async openQuest(id, position, options) {
       const token = ++kit.openToken;
       const asked = ++kit.clock;
       const result = position === undefined ? await api.openQuest(id) : await api.openQuest(id, position);
@@ -69,7 +72,7 @@ export function createQuestSlice({ api, kit, set, get }: SliceArgs): QuestSlice 
         error: null,
         dirty: false,
       });
-      get().setFocus(id);
+      if (!options?.keepFocus) get().setFocus(id);
       await get().loadNodes();
       await get().loadLinks();
       return true;
