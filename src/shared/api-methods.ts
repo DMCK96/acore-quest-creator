@@ -72,6 +72,7 @@ export const API_METHODS = [
   'exportProject',
   'worldSetMovement',
   'worldSetRespawn',
+  'worldSetSpawnEvents',
   'worldNewPathId',
   'questSpawnList',
   'entitySpawns',

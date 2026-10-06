@@ -2,6 +2,8 @@ import { useEffect, useRef, useState } from 'react';
 import type { Api, ApiError, Movement, Placement, RoutePoint, WorldChange, WorldLayer } from '@shared/ipc';
 import type { SpawnLocation } from '@core/entities/entity';
 import { isQuestPool } from '@core/world/groups';
+import type { EventRule } from '@core/entities/model';
+import { ruleOfRows } from '@core/entities/spawn-events';
 import { trapTab } from '../components/trap-tab';
 import { useProjectEntities } from '../state/project-entities';
 import { EDIT_NEEDS_DATABASE, EntityList, editableWith } from '../entities/EntityList';
@@ -70,6 +72,7 @@ export function ProjectChanges({
       : change.type === 'movement' ? { kind: 'movement', guid: change.guid }
       : change.type === 'respawn' ? { kind: 'respawn', spawnKind: change.kind, guid: change.guid }
       : change.type === 'group' ? { kind: 'group', id: change.id }
+      : change.type === 'spawnEvents' ? { kind: 'spawnEvents', guid: change.guid }
       : { kind: 'spawn', spawnKind: change.kind, guid: change.guid },
     );
     if (!result.ok) {
@@ -139,7 +142,7 @@ export function ProjectChanges({
             </thead>
             <tbody>
               {changes.map((change) => (
-                <ChangeRow key={change.type === 'route' ? `route:${change.pathId}` : change.type === 'movement' ? `movement:${change.guid}` : change.type === 'respawn' ? `respawn:${change.kind}:${change.guid}` : change.type === 'group' ? `group:${change.id}` : `${change.type}:${change.kind}:${change.guid}`} change={change} eventNames={eventNames} onRevert={() => void revert(change)} />
+                <ChangeRow key={change.type === 'route' ? `route:${change.pathId}` : change.type === 'movement' ? `movement:${change.guid}` : change.type === 'respawn' ? `respawn:${change.kind}:${change.guid}` : change.type === 'group' ? `group:${change.id}` : change.type === 'spawnEvents' ? `spawnEvents:${change.guid}` : `${change.type}:${change.kind}:${change.guid}`} change={change} eventNames={eventNames} onRevert={() => void revert(change)} />
               ))}
             </tbody>
           </table>
@@ -236,6 +239,27 @@ function ChangeRow({ change, eventNames, onRevert }: { change: WorldChange; even
         <td>{change.current} s</td>
         <td>
           <button type="button" className="btn" aria-label={`Revert respawn of ${name}`} onClick={onRevert}>
+            Revert
+          </button>
+        </td>
+      </tr>
+    );
+  }
+  if (change.type === 'spawnEvents') {
+    const name = change.name || `NPC ${change.entry}`;
+    const said = (rule: EventRule | 'custom'): string =>
+      rule === 'custom' ? 'its own mix'
+      : rule === null ? 'always'
+      : `${rule.mode === 'during' ? 'only during' : 'gone during'} ${rule.events.map((id) => eventNames.get(id) ?? `event ${id}`).join(', ')}`;
+    return (
+      <tr>
+        <td>
+          {name} · events · spawn {change.guid} {drift}
+        </td>
+        <td>{said(ruleOfRows(change.original))}</td>
+        <td>{said(change.current)}</td>
+        <td>
+          <button type="button" className="btn" aria-label={`Revert events of ${name}`} onClick={onRevert}>
             Revert
           </button>
         </td>

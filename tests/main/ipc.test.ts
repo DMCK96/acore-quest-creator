@@ -11,7 +11,7 @@ describe('parseRequest', () => {
       'openQuest', 'previewChanges', 'questLinks', 'removeNode', 'rewardTables', 'updateQuest', 'saveProfile', 'saveViewport', 'searchQuests', 'searchEntities', 'startupProfile',
       'testConnection', 'validate', 'questScripts', 'testCommands', 'groundHeight', 'spellFacts', 'mapList', 'mapFloors', 'mapSpawns', 'viewSpawns', 'entitySpawns', 'findSpawns', 'spawnPlacement', 'questMapRefs', 'allocateIds', 'entityTemplate', 'itemColumns',
       'patrolPathId', 'renameProject', 'newProject', 'openProject', 'saveProject', 'saveProjectAs', 'recentProjects', 'forgetRecent', 'recoveries', 'restoreRecovery', 'discardRecovery',
-      'projectEntities', 'putProjectEntities', 'deleteEntity', 'readExistingEntity', 'existingDrift', 'worldLayer', 'worldMoveSpawn', 'worldAddSpawn', 'worldRoute', 'worldSetRoute', 'worldRevert', 'worldChanges', 'exportProject', 'worldSetMovement', 'worldSetRespawn', 'worldNewPathId', 'questSpawnList',
+      'projectEntities', 'putProjectEntities', 'deleteEntity', 'readExistingEntity', 'existingDrift', 'worldLayer', 'worldMoveSpawn', 'worldAddSpawn', 'worldRoute', 'worldSetRoute', 'worldRevert', 'worldChanges', 'exportProject', 'worldSetMovement', 'worldSetRespawn', 'worldSetSpawnEvents', 'worldNewPathId', 'questSpawnList',
       'worldGroup', 'worldGroupView', 'worldGroupSpawns', 'worldGroupsOnMap', 'worldNewGroupId', 'worldCheckGroup', 'worldSetGroup', 'worldDeleteGroup', 'worldDropMember', 'questPools', 'gameEvents',
       'historyList', 'historyUndo', 'historyRedo', 'historyJump', 'historyBegin', 'historyEnd',
     ].sort());

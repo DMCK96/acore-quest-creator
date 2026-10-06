@@ -2,7 +2,9 @@ import type { RawRow, SchemaInfo } from '../../core/db/types';
 import type { WorldDb } from '../../core/db/world-db';
 import { spawnEntryColumn } from '../../core/db/spawns';
 import { pickPreset } from '../../core/db/view-spawns';
-import type { Placement, RoutePoint, WorldAddedSpawn, WorldLook, WorldMovementEdit, WorldRespawnEdit, WorldRouteEdit, WorldSpawnEdit, WorldSpawnKind } from '../../core/world/layer';
+import type { Placement, RoutePoint, WorldAddedSpawn, WorldEventEdit, WorldLook, WorldMovementEdit, WorldRespawnEdit, WorldRouteEdit, WorldSpawnEdit, WorldSpawnKind } from '../../core/world/layer';
+import { spawnEventRows } from '../../core/entities/spawn-events-read';
+import { sameRows } from '../../core/entities/existing';
 import { movementOfRow, sameMovement, type Movement } from '../../core/world/movement';
 
 /**
@@ -216,6 +218,20 @@ export async function readRespawn(db: WorldDb, kind: WorldSpawnKind, guid: numbe
   const template = kind === 'creature' ? 'creature_template' : 'gameobject_template';
   const [named] = await db.selectRows(template, { entry: String(entry) });
   return { entry, name: named?.name ?? '', map: num(row.map), secs: num(row.spawntimesecs) };
+}
+
+/** An NPC spawn's own game event rows with its entry, name and map; null when the spawn is gone */
+export async function readSpawnEvents(db: WorldDb, guid: number): Promise<{ entry: number; name: string; map: number; rows: Record<string, string | null>[] } | null> {
+  const spawn = await readRespawn(db, 'creature', guid);
+  if (!spawn) return null;
+  const rows = ((await spawnEventRows(db, [guid])).get(guid) ?? []).sort((a, b) => Number(a.eventEntry) - Number(b.eventEntry));
+  return { entry: spawn.entry, name: spawn.name, map: spawn.map, rows };
+}
+
+/** Whether the database no longer holds a spawn's original game event rows */
+export async function spawnEventsDrifted(db: WorldDb, edit: WorldEventEdit): Promise<boolean> {
+  const now = await readSpawnEvents(db, edit.guid);
+  return !now || !sameRows(edit.original, now.rows);
 }
 
 /** Whether the database no longer holds a spawn's original respawn time */

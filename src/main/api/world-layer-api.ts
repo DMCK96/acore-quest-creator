@@ -1,7 +1,7 @@
-import { addSpawn, groupsOf, isAdded, moveSpawn, movementsOf, respawnsOf, revertGroup, revertMovement, revertRespawn, revertRoute, revertSpawn, setMovement, setRespawn, setRoute, type RoutePoint, type WorldLayer } from '../../core/world/layer';
+import { addSpawn, groupsOf, isAdded, moveSpawn, movementsOf, respawnsOf, revertGroup, revertMovement, revertRespawn, revertRoute, revertSpawn, revertSpawnEvents, setMovement, setRespawn, setRoute, setSpawnEvents, spawnEventsOf, type RoutePoint, type WorldLayer } from '../../core/world/layer';
 import { groupDrifted } from '../world/groups-api';
 import { IDLE } from '../../core/world/movement';
-import { addedDrifted, countWalkers, routeWalkerName, movementDrifted, readMovement, readPlacement, readRespawn, readRoute, readTemplateLook, readWalkerEntries, respawnDrifted, routeDrifted, spawnDrifted } from '../world/world-api';
+import { addedDrifted, countWalkers, routeWalkerName, movementDrifted, readMovement, readPlacement, readRespawn, readRoute, readSpawnEvents, readTemplateLook, readWalkerEntries, respawnDrifted, routeDrifted, spawnDrifted, spawnEventsDrifted } from '../world/world-api';
 import type { WorldLayerApi } from '../../shared/ipc';
 import type { Services } from './services';
 import { fail, run } from './errors';
@@ -183,6 +183,30 @@ export function createWorldLayerApi(s: Services): WorldLayerApi {
         return next;
       }),
 
+    worldSetSpawnEvents: (guid, to) =>
+      run(async () => {
+        const db = connected().db;
+        const knownIn = (layer: WorldLayer) => spawnEventsOf(layer).find((e) => e.guid === guid);
+        // A spawn placed in the view carries its own events; the database does not have it
+        const placedIn = (layer: WorldLayer) => isAdded(layer, 'creature', guid);
+        const start = deps.session.world.get();
+        let read = knownIn(start) || placedIn(start) ? null : await readSpawnEvents(db, guid);
+        let layer = deps.session.world.get();
+        let known = knownIn(layer);
+        if (!known && !read && !placedIn(layer)) {
+          read = await readSpawnEvents(db, guid);
+          layer = deps.session.world.get();
+          known = knownIn(layer);
+        }
+        if (!known && !read && !placedIn(layer)) throw fail('BAD_REQUEST', `Spawn ${guid} is no longer in the database.`);
+        const edit = known ?? (read
+          ? { guid, entry: read.entry, name: read.name, map: read.map, original: read.rows }
+          : { guid, entry: 0, name: '', map: 0, original: [] });
+        const next = setSpawnEvents(layer, edit, to);
+        deps.session.world.put(next);
+        return next;
+      }),
+
     worldRevert: (target) =>
       run(async () => {
         const layer = deps.session.world.get();
@@ -191,11 +215,12 @@ export function createWorldLayerApi(s: Services): WorldLayerApi {
           : target.kind === 'route' ? revertRoute(layer, target.pathId)
           : target.kind === 'respawn' ? revertRespawn(layer, target.spawnKind, target.guid)
           : target.kind === 'group' ? revertGroup(layer, target.id)
+          : target.kind === 'spawnEvents' ? revertSpawnEvents(layer, target.guid)
           : revertMovement(layer, target.guid);
         const changed =
           next.spawns.length !== layer.spawns.length || next.routes.length !== layer.routes.length || next.added.length !== layer.added.length ||
           movementsOf(next).length !== movementsOf(layer).length || respawnsOf(next).length !== respawnsOf(layer).length ||
-          groupsOf(next).length !== groupsOf(layer).length;
+          groupsOf(next).length !== groupsOf(layer).length || spawnEventsOf(next).length !== spawnEventsOf(layer).length;
         if (changed) deps.session.world.put(next);
         return next;
       }),
@@ -213,6 +238,7 @@ export function createWorldLayerApi(s: Services): WorldLayerApi {
           )),
           ...(await Promise.all(respawnsOf(layer).map(async (r) => ({ ...r, type: 'respawn' as const, drifted: await respawnDrifted(db, r) })))),
           ...(await Promise.all(groupsOf(layer).map(async (g) => ({ ...g, type: 'group' as const, drifted: await groupDrifted(db, g) })))),
+          ...(await Promise.all(spawnEventsOf(layer).map(async (e) => ({ ...e, type: 'spawnEvents' as const, drifted: await spawnEventsDrifted(db, e) })))),
         ];
       }),
   };

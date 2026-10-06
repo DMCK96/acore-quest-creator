@@ -345,6 +345,25 @@ describe('movement through the API', () => {
     const back: any = await api.worldRevert({ kind: 'respawn', spawnKind: 'creature', guid: 80330 });
     expect(back.value.respawns).toEqual([]);
   });
+
+  it("reads a spawn's events once, records the change, lists it and reverts it", async () => {
+    const { api, db } = await setup(world);
+    db.insert('game_event_creature', { eventEntry: '12', guid: '80330' });
+    const out: any = await api.worldSetSpawnEvents(80330, { mode: 'except', events: [4] });
+    expect(out.value.spawnEvents).toEqual([{ guid: 80330, entry: 1423, name: 'Stormwind Guard', map: 0, original: [{ eventEntry: '12', guid: '80330' }], current: { mode: 'except', events: [4] } }]);
+    expect(((await api.worldChanges()) as any).value).toContainEqual(expect.objectContaining({ type: 'spawnEvents', guid: 80330, drifted: false }));
+    db.insert('game_event_creature', { eventEntry: '7', guid: '80330' });
+    expect(((await api.worldChanges()) as any).value.find((c: any) => c.type === 'spawnEvents').drifted).toBe(true);
+    const back: any = await api.worldRevert({ kind: 'spawnEvents', guid: 80330 });
+    expect(back.value.spawnEvents).toEqual([]);
+  });
+
+  it("Same as the NPC takes a spawn's own events away", async () => {
+    const { api } = await setup(world);
+    await api.worldSetSpawnEvents(80330, null);
+    const out: any = await api.worldSetSpawnEvents(80330, 'npc');
+    expect(out.value.spawnEvents ?? []).toEqual([]);
+  });
 });
 
 describe('the spawns a quest uses', () => {

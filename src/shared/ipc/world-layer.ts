@@ -1,10 +1,11 @@
-import type { Placement, RoutePoint, WorldAddedSpawn, WorldLayer, WorldMovementEdit, WorldRespawnEdit, WorldRouteEdit, WorldSpawnEdit, WorldSpawnKind } from '@core/world/layer';
+import type { Placement, RoutePoint, WorldAddedSpawn, WorldEventEdit, WorldLayer, WorldMovementEdit, WorldRespawnEdit, WorldRouteEdit, WorldSpawnEdit, WorldSpawnKind } from '@core/world/layer';
+import type { SpawnEvents } from '@core/entities/model';
 import type { Movement } from '@core/world/movement';
 import type { SpawnGroup } from '@core/world/groups';
 import type { Result } from './result';
 
 export type { Movement } from '@core/world/movement';
-export type { Placement, RoutePoint, WorldAddedSpawn, WorldLayer, WorldMovementEdit, WorldRespawnEdit, WorldRouteEdit, WorldSpawnEdit, WorldSpawnKind } from '@core/world/layer';
+export type { Placement, RoutePoint, WorldAddedSpawn, WorldEventEdit, WorldLayer, WorldMovementEdit, WorldRespawnEdit, WorldRouteEdit, WorldSpawnEdit, WorldSpawnKind } from '@core/world/layer';
 
 /** One world layer entry as the World changes list shows it, and whether the database has moved off its original since. */
 export type WorldChange =
@@ -17,7 +18,9 @@ export type WorldChange =
   /** A database spawn's respawn time; `drifted` when the database's no longer matches its original */
   | (WorldRespawnEdit & { type: 'respawn'; drifted: boolean })
   /** A spawn group; `drifted` when the database's pool no longer matches its original (or, for a new one, now has its id) */
-  | (SpawnGroup & { type: 'group'; drifted: boolean });
+  | (SpawnGroup & { type: 'group'; drifted: boolean })
+  /** A database NPC spawn's own game events; `drifted` when the database's rows no longer match its original */
+  | (WorldEventEdit & { type: 'spawnEvents'; drifted: boolean });
 
 /** What a world revert takes back: one spawn, one route, or one NPC's movement. */
 export type WorldRevertTarget =
@@ -25,7 +28,8 @@ export type WorldRevertTarget =
   | { kind: 'route'; pathId: number }
   | { kind: 'movement'; guid: number }
   | { kind: 'respawn'; spawnKind: WorldSpawnKind; guid: number }
-  | { kind: 'group'; id: number };
+  | { kind: 'group'; id: number }
+  | { kind: 'spawnEvents'; guid: number };
 
 /** The world layer: edits to the database's own spawns, routes, movement and respawn times, and placed spawns */
 export interface WorldLayerApi {
@@ -46,6 +50,8 @@ export interface WorldLayerApi {
   worldSetMovement(guid: number, to: Movement): Promise<Result<WorldLayer>>;
   /** Sets a spawn's respawn time in seconds; a database spawn's original is read at the first edit. */
   worldSetRespawn(kind: WorldSpawnKind, guid: number, secs: number): Promise<Result<WorldLayer>>;
+  /** Sets an NPC spawn's own game events ('npc' follows its NPC again); a database spawn's original rows are read at the first edit. */
+  worldSetSpawnEvents(guid: number, to: SpawnEvents): Promise<Result<WorldLayer>>;
   /** Takes one spawn or route out of the world layer. */
   worldRevert(target: WorldRevertTarget): Promise<Result<WorldLayer>>;
   /** Every world layer entry, with whether the database has moved off its original. */

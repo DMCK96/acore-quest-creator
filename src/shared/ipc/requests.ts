@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import type { RefKind } from '@core/db/types';
+import { eventRuleSchema } from '@core/entities/model';
 import type { Api } from './api';
 import type { ApiError } from './result';
 
@@ -180,6 +181,7 @@ const REQUEST_SCHEMAS: Record<keyof Api, z.ZodType<unknown[]>> = {
   worldSetRoute: z.tuple([z.number().int().min(1), z.array(routePointArg), z.object({ isNew: z.boolean().optional() }).optional()]),
   worldSetMovement: z.tuple([z.number().int().min(1), movementArg]),
   worldSetRespawn: z.tuple([z.enum(['creature', 'gameobject']), z.number().int().min(1), z.number().int().min(0)]),
+  worldSetSpawnEvents: z.tuple([z.number().int().min(1), z.union([eventRuleSchema, z.literal('npc')])]),
   worldNewPathId: z.tuple([z.number().int().min(1)]),
   worldRevert: z.tuple([z.discriminatedUnion('kind', [
     z.object({ kind: z.literal('spawn'), spawnKind: worldKindArg, guid: z.number().int() }),
@@ -187,6 +189,7 @@ const REQUEST_SCHEMAS: Record<keyof Api, z.ZodType<unknown[]>> = {
     z.object({ kind: z.literal('movement'), guid: z.number().int() }),
     z.object({ kind: z.literal('respawn'), spawnKind: worldKindArg, guid: z.number().int() }),
     z.object({ kind: z.literal('group'), id: z.number().int() }),
+    z.object({ kind: z.literal('spawnEvents'), guid: z.number().int() }),
   ])]),
   worldChanges: z.tuple([]),
   worldGroup: z.tuple([z.number().int().min(1)]),
