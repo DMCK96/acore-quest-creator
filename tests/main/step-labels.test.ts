@@ -61,6 +61,12 @@ describe('describeStep', () => {
     expect(world({ respawns: [resp, { ...resp, guid: 2 }] }).label).toBe('World: 2 changes');
   });
 
+  it('names spawn event steps', () => {
+    const ev = { guid: 80330, entry: 1423, name: 'Stormwind Guard', map: 0, original: [], current: null };
+    expect(describeStep(step([{ kind: 'world', before: EMPTY_WORLD, after: { ...EMPTY_WORLD, spawnEvents: [ev] } }])).label).toBe('Events of Stormwind Guard');
+    expect(describeStep(step([{ kind: 'world', before: { ...EMPTY_WORLD, spawnEvents: [ev] }, after: EMPTY_WORLD }])).label).toBe('Reverted events of Stormwind Guard');
+  });
+
   it('names world changes from the layer\'s difference and says where', () => {
     const guard = { kind: 'creature' as const, guid: 80330, entry: 1423, name: 'Stormwind Guard', map: 0, original: at, current: { ...at, x: 9 } };
     expect(describeStep(step([{ kind: 'world', before: EMPTY_WORLD, after: { ...EMPTY_WORLD, spawns: [guard] } }])))

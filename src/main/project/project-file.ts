@@ -3,8 +3,8 @@ import type { QuestAggregate, Snapshot } from '../../core/model/aggregate';
 import type { FidelityReport } from '../../core/roundtrip/verify';
 import { TOOL_VERSION } from '../../core/version';
 import { migrateQuestEntities } from '../../core/entities/migrate';
-import { EMPTY_ENTITIES, readProjectEntities, type ProjectEntities } from '../../core/entities/model';
-import { EMPTY_WORLD, groupsOf, movementsOf, respawnsOf, type Placement, type RoutePoint, type WorldLayer } from '../../core/world/layer';
+import { EMPTY_ENTITIES, eventRuleSchema, readProjectEntities, type ProjectEntities } from '../../core/entities/model';
+import { EMPTY_WORLD, groupsOf, movementsOf, respawnsOf, spawnEventsOf, type Placement, type RoutePoint, type WorldLayer } from '../../core/world/layer';
 import type { GroupMember, SpawnGroup } from '../../core/world/groups';
 import type { Movement } from '../../core/world/movement';
 import type { Viewport } from '../../shared/ipc';
@@ -164,6 +164,7 @@ export function serializeProject(doc: ProjectDocument): string {
         kind: a.kind, guid: a.guid, entry: a.entry, name: a.name, map: a.map, placement: placement(a.placement),
         look: { displayId: a.look.displayId, scale: a.look.scale, equipment: a.look.equipment, preset: a.look.preset, ...(a.look.objectType !== undefined ? { objectType: a.look.objectType } : {}) },
         ...(a.respawnSecs !== undefined ? { respawnSecs: a.respawnSecs } : {}),
+        ...(a.events !== undefined ? { events: a.events } : {}),
       })),
       // Left out while there are none, so a project with no movement edits saves as it did before
       ...(movementsOf(doc.world).length > 0
@@ -185,6 +186,14 @@ export function serializeProject(doc: ProjectDocument): string {
           }
         : {}),
       ...(groupsOf(doc.world).length > 0 ? { groups: groupsOf(doc.world).map(group) } : {}),
+      // Left out while there are none, like respawns
+      ...(spawnEventsOf(doc.world).length > 0
+        ? {
+            spawnEvents: spawnEventsOf(doc.world).map((e) => ({
+              guid: e.guid, entry: e.entry, name: e.name, map: e.map, original: e.original.map((r) => ({ ...r })), current: e.current,
+            })),
+          }
+        : {}),
     },
     entities: doc.entities,
   };
@@ -300,6 +309,8 @@ const worldSchema = z.object({
         }),
         // Absent from a project saved before a placed spawn's respawn time could be set
         respawnSecs: z.number().int().optional(),
+        // Absent from a project saved before a placed NPC's events could be set
+        events: z.union([eventRuleSchema, z.literal('npc')]).optional(),
       }),
     )
     .default([]),
@@ -335,6 +346,19 @@ const worldSchema = z.object({
     .optional(),
   // Absent from a project saved before spawns could be grouped
   groups: z.array(groupSchema).optional(),
+  // Absent from a project saved before spawn events could be changed
+  spawnEvents: z
+    .array(
+      z.object({
+        guid: z.number().int(),
+        entry: z.number().int(),
+        name: z.string(),
+        map: z.number().int(),
+        original: z.array(z.record(z.string(), z.string().nullable())),
+        current: eventRuleSchema,
+      }),
+    )
+    .optional(),
 });
 
 const fileSchema = z.object({

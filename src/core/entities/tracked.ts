@@ -1,5 +1,5 @@
 import type { SpawnGroup } from '../world/groups';
-import { groupsOf, movementsOf, respawnsOf, type WorldLayer } from '../world/layer';
+import { groupsOf, movementsOf, respawnsOf, spawnEventsOf, type WorldLayer } from '../world/layer';
 import { spawnKindOf, type EntityChange, type EntityKind, type SpawnLocation, type TrackedEntity } from './entity';
 import type { QuestUse } from './links';
 import type { ProjectEntities, StoredOrigin } from './model';
@@ -65,6 +65,7 @@ export function trackedEntities(input: {
   for (const a of layer.added) touch(spawnKindOf(a.kind), a.entry, a.name, 'spawns', locate(a.kind, a.guid, a.map, a.placement));
   const spawnOf = (kind: 'npc' | 'object', guid: number, map: number): SpawnLocation => ({ kind: kind === 'npc' ? 'creature' : 'object', guid, map });
   for (const r of respawnsOf(layer)) touch(spawnKindOf(r.kind), r.entry, r.name, 'spawns', spawnOf(spawnKindOf(r.kind), r.guid, r.map));
+  for (const e of spawnEventsOf(layer)) touch('npc', e.entry, e.name, 'spawns', spawnOf('npc', e.guid, e.map));
   const movements = movementsOf(layer);
   for (const m of movements) touch('npc', m.entry, m.name, 'movement', spawnOf('npc', m.guid, m.map));
   for (const r of layer.routes) {
@@ -108,6 +109,7 @@ function spawnEntries(
   for (const s of layer.spawns) put(spawnKindOf(s.kind), s.guid, s.entry);
   for (const a of layer.added) put(spawnKindOf(a.kind), a.guid, a.entry);
   for (const r of respawnsOf(layer)) put(spawnKindOf(r.kind), r.guid, r.entry);
+  for (const e of spawnEventsOf(layer)) put('npc', e.guid, e.entry);
   for (const m of movementsOf(layer)) put('npc', m.guid, m.entry);
   for (const g of groupsOf(layer)) for (const m of g.members) if (m.type === 'spawn') put(m.kind, m.guid, m.entry);
   for (const n of store.npcs) for (const s of n.spawns) put('npc', s.guid, n.entry);

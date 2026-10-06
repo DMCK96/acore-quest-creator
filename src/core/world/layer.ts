@@ -140,7 +140,7 @@ export const spawnEventsOf = (layer: WorldLayer): WorldEventEdit[] => layer.spaw
 /** Whether the layer holds anything to export */
 export const hasWorldChanges = (layer: WorldLayer): boolean =>
   layer.spawns.length > 0 || layer.routes.length > 0 || layer.added.length > 0 || movementsOf(layer).length > 0 || respawnsOf(layer).length > 0 ||
-  groupsOf(layer).length > 0;
+  groupsOf(layer).length > 0 || spawnEventsOf(layer).length > 0;
 
 /** What a point added in the 3D view has in the columns the view does not edit */
 export const NEW_POINT_REST: Record<string, string | null> = {
@@ -335,6 +335,33 @@ export function setRespawn(layer: WorldLayer, edit: Omit<WorldRespawnEdit, 'curr
   const rest = all.filter((r) => r !== known);
   const respawns = entry.current === entry.original ? rest : known ? all.map((r) => (r === known ? entry : r)) : [...all, entry];
   return { ...layer, respawns };
+}
+
+/**
+ * Sets an NPC spawn's own game events: a placed spawn's own, else an edit that keeps its first original.
+ * 'npc' takes the spawn's own events away, so it follows its NPC (or, for an NPC the project does not
+ * hold, keeps the database's rows).
+ */
+export function setSpawnEvents(layer: WorldLayer, edit: Omit<WorldEventEdit, 'current'>, to: SpawnEvents): WorldLayer {
+  if (isAdded(layer, 'creature', edit.guid)) {
+    const added = layer.added.map((a) => {
+      if (a.kind !== 'creature' || a.guid !== edit.guid) return a;
+      const { events: _, ...rest } = a;
+      return to === 'npc' ? rest : { ...rest, events: to };
+    });
+    return { ...layer, added };
+  }
+  const all = spawnEventsOf(layer);
+  const known = all.find((e) => e.guid === edit.guid);
+  const rest = all.filter((e) => e !== known);
+  if (to === 'npc') return { ...layer, spawnEvents: rest };
+  const entry: WorldEventEdit = known ? { ...known, current: to } : { ...edit, current: to };
+  return { ...layer, spawnEvents: known ? all.map((e) => (e === known ? entry : e)) : [...all, entry] };
+}
+
+/** Takes back a database spawn's own game events */
+export function revertSpawnEvents(layer: WorldLayer, guid: number): WorldLayer {
+  return { ...layer, spawnEvents: spawnEventsOf(layer).filter((e) => e.guid !== guid) };
 }
 
 /** Takes back a database spawn's respawn time */

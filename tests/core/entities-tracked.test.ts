@@ -80,6 +80,11 @@ describe('trackedEntities', () => {
     expect(trackedEntities({ store: EMPTY_ENTITIES, layer, quests: [] })[0]).toMatchObject({ entry: 1423, changes: ['spawns'] });
   });
 
+  it('a spawn events change is a spawns change', () => {
+    const layer: WorldLayer = { ...EMPTY_WORLD, spawnEvents: [{ guid: 80330, entry: 1423, name: 'Stormwind Guard', map: 0, original: [], current: null }] };
+    expect(trackedEntities({ store: EMPTY_ENTITIES, layer, quests: [] })[0]).toMatchObject({ entry: 1423, changes: ['spawns'] });
+  });
+
   it('every entity with a spawn in a changed group has a group change', () => {
     const member = { type: 'spawn' as const, kind: 'npc' as const, guid: 39203, entry: 32491, chance: 0 };
     const layer: WorldLayer = { ...EMPTY_WORLD, groups: [{ id: 900001, name: 'Path 1', map: 571, maxActive: 1, event: null, members: [member], origin: { kind: 'new' } }] };
