@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { localiseEdit } from '../../src/renderer/world3d/frame-edit';
+import { localiseEdit, localisePlacement } from '../../src/renderer/world3d/frame-edit';
 import { IDENTITY_FRAME, placementToWorld } from '../../src/core/map/transport-frame';
 import type { SpawnEdit } from '../../src/renderer/world3d/edits';
 
@@ -35,6 +35,11 @@ describe('turning the scene’s edits into vessel-local ones', () => {
     expect(localiseEdit(edit, IDENTITY_FRAME)).toBe(edit);
     const route: SpawnEdit = { kind: 'route', spawn: ref, pathId: 1, points: [] };
     expect(localiseEdit(route, IDENTITY_FRAME)).toBe(route);
+  });
+  it('turns a place put down on the deck vessel-local, and leaves one on a continent alone', () => {
+    const out = localisePlacement(placementToWorld(frame, local), frame);
+    expect([out.x, out.y, out.z, out.orientation].map((v) => Math.round(v * 1e6) / 1e6)).toEqual([2, -1, 0.5, 1]);
+    expect(localisePlacement(local, IDENTITY_FRAME)).toBe(local);
   });
   it('is not applied twice by accident: converting a local placement again would move it', () => {
     const once = localiseEdit({ kind: 'place', spawn: ref, to: placementToWorld(frame, local) }, frame) as Extract<SpawnEdit, { kind: 'place' }>;

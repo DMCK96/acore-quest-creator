@@ -767,3 +767,37 @@
   padding-left: 1.1em;
 }
 
+
+/* A transport's route and stop, under the view */
+.world3d__transport {
+  position: absolute;
+  bottom: 14px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 2;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem 0.9rem;
+  align-items: center;
+  max-width: calc(100% - 28px);
+  padding: 0.45rem 0.8rem;
+  font-size: 12px;
+}
+
+.world3d__transport-field {
+  display: flex;
+  gap: 0.4rem;
+  align-items: center;
+  color: var(--text-muted);
+}
+
+.world3d__transport-field select {
+  max-width: 16rem;
+  font-size: 12px;
+  padding: 0.3em 2em 0.3em 0.5em;
+}
+
+.world3d__transport-note {
+  margin: 0;
+  color: var(--text-muted);
+}

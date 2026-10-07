@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
-import { afterEach, describe, expect, it, vi } from 'vitest';
-import { WORLD_MAPS } from '../../src/core/map/world-maps';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { WORLD_MAPS, setClientMaps, type WorldMap } from '../../src/core/map/world-maps';
 import { LAST_PLACE_KEY, readLastPlace, writeLastPlace } from '../../src/renderer/world3d/last-place';
 import { WELCOME_SEEN_KEY, markWelcomeSeen, projectKey, welcomeSeen } from '../../src/renderer/world3d/welcome-seen';
 
@@ -27,6 +27,23 @@ describe('where the world was left', () => {
   ])('falls back to the start when the stored place is %s', (_why, raw) => {
     localStorage.setItem(LAST_PLACE_KEY, raw);
     expect(readLastPlace()).toEqual(fallback);
+  });
+  describe('on a transport', () => {
+    const zeppelin: WorldMap = { id: 591, name: 'Zeppelin', directory: 'kalimdor', kind: 'transport', start: { x: 0, y: 0, z: 0 }, transport: { templates: [], paths: {} } };
+    beforeEach(() => setClientMaps([zeppelin]));
+    afterEach(() => setClientMaps([]));
+    it('remembers the route and stop with the place', () => {
+      writeLastPlace({ map: 591, x: 1, y: 2, z: 3, transport: { template: 2, node: 4 } });
+      expect(readLastPlace()).toEqual({ map: 591, x: 1, y: 2, z: 3, transport: { template: 2, node: 4 } });
+    });
+    it('reads a stored place without a broken route and stop', () => {
+      localStorage.setItem(LAST_PLACE_KEY, JSON.stringify({ map: 591, x: 1, y: 2, z: 3, transport: { template: 'x' } }));
+      expect(readLastPlace()).toEqual({ map: 591, x: 1, y: 2, z: 3 });
+    });
+    it('reads an old place with no route and stop as before', () => {
+      localStorage.setItem(LAST_PLACE_KEY, JSON.stringify({ map: 1, x: 10, y: 20, z: 30 }));
+      expect(readLastPlace()).toEqual({ map: 1, x: 10, y: 20, z: 30 });
+    });
   });
   it('never throws when storage does', () => {
     vi.spyOn(Storage.prototype, 'getItem').mockImplementation(() => { throw new Error('denied'); });

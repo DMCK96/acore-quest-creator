@@ -31,9 +31,12 @@ import { MapAreaSpec, MapSpec } from './loader/types.js';
 import MapLight from './light/MapLight.js';
 import DbManager from '../db/DbManager.js';
 import { describeError, reportProblem } from '../diagnostics.js';
+import type { Frame } from '../../../../core/map/transport-frame.js';
 
 const DEFAULT_VIEW_DISTANCE = 1277.0;
 const DETAIL_DISTANCE_EXTENSION = MAP_CHUNK_HEIGHT;
+/** The one spawn area of a vessel's passengers: no tile has this id */
+const VESSEL_AREA = -1;
 
 /**
  * Works out where everything in a group that never moves is, once, and leaves it out of every later
@@ -54,6 +57,8 @@ type MapManagerOptions = {
   viewDistance?: number;
   /** The drawn ground nearest below a point, for standing NPCs on it; see `SpawnManager` */
   groundBelow?(x: number, y: number, fromZ: number, distance: number): number | null;
+  /** A vessel's frame: the spawns are its passengers, stored vessel-local (see `SpawnManager`) */
+  frame?: Frame;
 };
 
 class MapManager extends EventTarget {
@@ -75,7 +80,10 @@ class MapManager extends EventTarget {
   #scenery = { buildings: true, doodads: true };
   /** Areas whose spawns were asked for and not dropped since (drawn, on their way, or failed) */
   #spawnAsked = new Set<number>();
-  #mapId: number;
+  /** The map whose spawns are drawn: the terrain's own, or a transport's */
+  #spawnMapId: number;
+  /** Whether the spawns are a vessel's passengers, all asked for at once (their rows are not tied to tiles) */
+  #framed: boolean;
 
   #textureManager: TextureManager;
   #terrainManager: TerrainManager;
@@ -165,7 +173,9 @@ class MapManager extends EventTarget {
       source: null,
       bodyTexture: (body) => characterTexture.build(body),
       groundBelow: options.groundBelow,
+      frame: options.frame,
     });
+    this.#framed = options.frame !== undefined;
 
     // Never moved, so never worked out again; what is under it is still visited (spawns move). The
     // scene must not force it either (see world3d.ts), or every frame works out every object's matrix.
@@ -300,16 +310,32 @@ class MapManager extends EventTarget {
     return this.#root;
   }
 
+  /** The vessel, drawn at its frame; apart from the map's areas */
+  get decor() {
+    return this.#spawnManager.decor;
+  }
+
+  /** Moves the vessel and its passengers to a new frame */
+  setFrame(frame: Frame) {
+    this.#spawnManager.setFrame(frame);
+  }
+
+  /** Draws the vessel by its display, in place of the last; null takes it away */
+  setVessel(vessel: { displayId: number } | null) {
+    this.#spawnManager.setVessel(vessel).catch((error) => console.warn(`3D view: the vessel could not be drawn: ${describeError(error)}`));
+  }
+
   /** The one building of a map without terrain tiles: drawn in place of them, with every spawn in one area */
   #globalWmo: GlobalWmo | null = null;
 
-  load(mapName: string, mapId?: number, globalWmo: GlobalWmo | null = null) {
+  /** `mapId` is the terrain's (its light and fog); `spawnMapId`, whose spawns are drawn, defaults to it */
+  load(mapName: string, mapId?: number, globalWmo: GlobalWmo | null = null, spawnMapId = mapId) {
     this.#globalWmo = globalWmo;
     this.#mapName = mapName;
     this.#mapDir = `world/maps/${mapName}`;
 
     this.#mapLight.mapId = mapId;
-    this.#mapId = mapId ?? 0;
+    this.#spawnMapId = spawnMapId ?? 0;
 
     this.#root.name = `map:${mapName}`;
 
@@ -399,6 +425,10 @@ class MapManager extends EventTarget {
    * area it is in.
    */
   #syncSpawns() {
+    if (this.#framed) {
+      this.#syncPassengers();
+      return;
+    }
     // A one-building map has its one area, with every spawn of the map
     const wanted = this.#globalWmo ? new Set([`${GLOBAL_AREA.areaX}:${GLOBAL_AREA.areaY}`]) : nearbyAreas(this.#targetAreaX, this.#targetAreaY);
     const keyOf = (areaId: number) => {
@@ -425,7 +455,7 @@ class MapManager extends EventTarget {
       const { areaX, areaY } = this.#getAreaIndex(areaId);
       this.#spawnAsked.add(areaId);
       this.#spawnManager
-        .loadArea(areaId, this.#mapId, this.#globalWmo ? WHOLE_MAP : areaBox(areaX, areaY))
+        .loadArea(areaId, this.#spawnMapId, this.#globalWmo ? WHOLE_MAP : areaBox(areaX, areaY))
         .then((group) => {
           // Null when it failed or was dropped meanwhile; a stale answer never replaces a newer one
           if (group && this.#spawnAsked.has(areaId) && this.#terrainGroups.has(areaId)) {
@@ -435,6 +465,17 @@ class MapManager extends EventTarget {
         })
         .catch((error) => console.warn(`3D view: the NPCs and objects of area ${areaId} could not be drawn: ${describeError(error)}`));
     }
+  }
+
+  /** A vessel's passengers: one area over the whole grid, as a one-building map's, loaded whatever terrain is there */
+  #syncPassengers() {
+    if (!this.#spawnManager.canLoad(VESSEL_AREA)) return;
+    this.#spawnManager
+      .loadArea(VESSEL_AREA, this.#spawnMapId, WHOLE_MAP)
+      .then((group) => {
+        if (group) this.#root.add(group);
+      })
+      .catch((error) => console.warn(`3D view: the passengers could not be drawn: ${describeError(error)}`));
   }
 
   /** Stops every worker this map started; managers it was handed (textures, tables) are left to their owner */

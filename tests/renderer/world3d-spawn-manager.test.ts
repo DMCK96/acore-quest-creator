@@ -1046,6 +1046,29 @@ describe('drawing spawns through a vessel’s frame', () => {
     warn.mockRestore();
   });
 
+  it('hides walking paths on a vessel, and shows them again off it', async () => {
+    const m = manager(spawns([creature(1, 1, { path: [{ x: 10, y: 0, z: 0 }, { x: 20, y: 0, z: 0 }] })]), { frame });
+    const group = (await m.loadArea(1, 0, box))!;
+    m.setActiveRoutes([1]);
+    m.cull(new THREE.Vector3(0, 0, 0));
+    expect(group.getObjectByName('paths')!.visible).toBe(false);
+    expect(m.pickRoutePoint(new THREE.Ray(new THREE.Vector3(10, 0, 50), new THREE.Vector3(0, 0, -1)), 1)).toBeNull();
+    m.setFrame({ x: 0, y: 0, z: 0, heading: 0 });
+    expect(group.getObjectByName('paths')!.visible).toBe(true);
+    expect(m.pickRoutePoint(new THREE.Ray(new THREE.Vector3(10, 0, 50), new THREE.Vector3(0, 0, -1)), 1)).toBe(0);
+  });
+
+  it('tells the menu where a spawn stands in the view, carried by the vessel', async () => {
+    const m = manager(spawns([creature(1, 1, { x: 1, y: 0, z: 0, orientation: 0 })], [object(3, 2, { x: 0, y: 2, z: 0 })]), { frame });
+    await m.loadArea(1, 0, box);
+    const npc = m.info('creature', 1)!.placement;
+    expect([npc.x, npc.y, npc.z].map((v) => Math.round(v * 1e4) / 1e4)).toEqual([100, 201, 5]);
+    expect(npc.orientation).toBeCloseTo(Math.PI / 2);
+    const obj = m.info('object', 3)!.placement;
+    expect([obj.x, obj.y].map((v) => Math.round(v * 1e4) / 1e4)).toEqual([98, 200]);
+    expect(obj.orientation).toBeCloseTo(Math.PI / 2);
+  });
+
   it('is the identity by default', async () => {
     const m = manager(spawns([creature(1, 1, { x: 4, y: 5, z: 6 })]));
     const npc = (await m.loadArea(1, 0, box))!.getObjectByName('creatures')!.children[0]!;

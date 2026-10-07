@@ -15,7 +15,9 @@ import { ownEdit } from './own-edit';
 import { newSpawnGuid } from './spawn-guid';
 import { chainOf, questMenuInfo } from './quest-context';
 import { OBJECTIVES_FULL } from './menu/section';
-import { groupWorldMaps, worldMapById } from '@core/map/world-maps';
+import { groupWorldMaps, isTerrainMap, worldMapById } from '@core/map/world-maps';
+import { frameOfView, normaliseView, type TransportView } from '@core/map/transport-view';
+import { TransportBar } from './TransportBar';
 import { useClientMaps } from './useClientMaps';
 import type { TeleportSpot } from '@core/map/teleports';
 import { World3DView, type FocusTarget } from './World3DView';
@@ -224,6 +226,15 @@ export function WorldWorkspace({
   const [at, setAt] = useState<Point>({ x: first.x, y: first.y, z: first.z });
   const mapRef = useRef(mapId);
   mapRef.current = mapId;
+  // On a transport's map: the route and stop its vessel is shown at, as last chosen (made valid for the map below)
+  const [chosenView, setChosenView] = useState<Partial<TransportView> | undefined>(first.transport);
+  const shownMap = worldMapById(mapId);
+  const transportMap = shownMap?.kind === 'transport' ? shownMap : null;
+  const transportView = transportMap ? normaliseView(transportMap, chosenView, isTerrainMap) : null;
+  const viewRef = useRef(transportView);
+  viewRef.current = transportView;
+  /** Remembers where the camera is on the map shown, with the transport's route and stop there */
+  const remember = (point: Point): void => writeLastPlace({ map: mapRef.current, ...point, ...(viewRef.current && { transport: viewRef.current }) });
   // The coordinates being typed; they only move the camera on Go.
   const [typed, setTyped] = useState({ x: String(first.x), y: String(first.y), z: String(first.z) });
   const [area, setArea] = useState<string | null>(null);
@@ -252,12 +263,29 @@ export function WorldWorkspace({
 
   /** Moves the camera to a point, on the map given (this one by default), and remembers it */
   const goTo = (point: Point, map = mapRef.current): void => {
-    if (map !== mapRef.current) setMapId(map);
+    if (map !== mapRef.current) {
+      setMapId(map);
+      // Another map starts at its own route's first stop
+      setChosenView(undefined);
+      viewRef.current = null;
+    }
     mapRef.current = map;
     setAt(point);
     placeRef.current = point;
     setTyped({ x: String(point.x), y: String(point.y), z: String(point.z) });
-    writeLastPlace({ map, ...point });
+    remember(point);
+  };
+  /**
+   * Another route or stop of the transport shown: the camera goes to the vessel there. Not a jump Back
+   * returns from: the place left may be on another continent's terrain than the one the vessel is now on
+   */
+  const chooseView = (view: TransportView): void => {
+    if (!transportMap) return;
+    setChosenView(view);
+    viewRef.current = view;
+    lastCameraMove.current = nowRef.current();
+    const { x, y, z } = frameOfView(transportMap, view);
+    goTo({ x, y, z });
   };
   // Where the camera has been before each jump, for Back
   const [back, setBack] = useState<CameraPlace[]>([]);
@@ -570,7 +598,7 @@ export function WorldWorkspace({
         onArea={setArea}
         onPlaceChange={(place) => {
           placeRef.current = place;
-          writeLastPlace({ map: mapRef.current, ...place });
+          remember(place);
         }}
         onCameraInput={() => {
           lastCameraMove.current = nowRef.current();
@@ -612,7 +640,11 @@ export function WorldWorkspace({
         markers={markers.shown}
         onMarkerMove={markers.move}
         markerFocus={markerFocus}
+        transport={transportMap && transportView ? { map: transportMap, view: transportView } : undefined}
       />
+      {transportMap && transportView && (
+        <TransportBar map={transportMap} view={transportView} hostName={(id) => worldMapById(id)?.name ?? `Map ${id}`} onView={chooseView} />
+      )}
       {showing && (
         <p role="status" className="world3d__placing">
           Showing {showing}

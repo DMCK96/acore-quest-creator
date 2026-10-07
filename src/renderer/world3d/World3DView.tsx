@@ -1,7 +1,10 @@
 import { Component, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { assetUrl } from '@core/client/asset-url';
-import { worldMapById, worldMapDirectory } from '@core/map/world-maps';
-import { createWorld3D, type Scenery, type SelectionSummary, type World3D } from './world3d';
+import { worldMapById, worldMapDirectory, type WorldMap } from '@core/map/world-maps';
+import { IDENTITY_FRAME } from '@core/map/transport-frame';
+import { frameOfView, hostMapIdOf, routeLinesOf, templateOf, type TransportView } from '@core/map/transport-view';
+import { createWorld3D, type Scenery, type SelectionSummary, type TransportScene, type World3D } from './world3d';
+import { localiseEdit, localisePlacement } from './frame-edit';
 import type { Tool } from './controls';
 import { FALLOFF_DEFAULT, FALLOFF_MAX, FALLOFF_MIN } from './scene/edit/falloff';
 import { summaryText } from './summary';
@@ -170,6 +173,16 @@ interface ViewProps {
   onMarkerMove?(id: string, to: { x: number; y: number; z: number }): void;
   /** A marker to select, once its world is there (the host takes the camera to it) */
   markerFocus?: MarkerFocus;
+  /** On a transport's map (`map`): the vessel shown at a stop of one of its routes, on that stop's terrain */
+  transport?: { map: WorldMap; view: TransportView };
+}
+
+/** A transport at a stop: the terrain it is on, and what the view draws of it there */
+function transportSceneOf(map: WorldMap, view: TransportView): { hostMap: number; scene: TransportScene } {
+  return {
+    hostMap: hostMapIdOf(map, view),
+    scene: { frame: frameOfView(map, view), vessel: { displayId: templateOf(map, view).displayId }, route: routeLinesOf(map, view) },
+  };
 }
 
 /** How often, and how many times once the world has loaded its NPCs, a patrol request looks for its NPC in the view */
@@ -240,7 +253,7 @@ class Contained extends Component<{ children: ReactNode }, { failure: string | n
 
 function WorldStage({
   map, start, hasClient, own, onSelect, onOwnEdit, focus, showArea = true, onArea, onPlaceChange, onCameraInput, quest, chainIds, onQuestRole, onNewQuest, onOpenQuest, onShowSpawns,
-  onCreateEntity, onEditEntity, onSetLootable, onGoToSpawn, placeRequest, patrolRequest, onRequestEnd, markers, onMarkerMove, markerFocus,
+  onCreateEntity, onEditEntity, onSetLootable, onGoToSpawn, placeRequest, patrolRequest, onRequestEnd, markers, onMarkerMove, markerFocus, transport,
 }: ViewProps): React.JSX.Element {
   const container = useRef<HTMLDivElement>(null);
   const world = useRef<World3D | null>(null);
@@ -372,7 +385,14 @@ function WorldStage({
   ownRef.current = own;
   // A stable key, so the world is told only when the quest's spawns really change
   const ownKey = JSON.stringify(own ?? null);
-  const directory = worldMapDirectory(map);
+  // On a transport, the terrain is its stop's and the spawns are its passengers, stored vessel-local
+  const shownTransport = transport ? transportSceneOf(transport.map, transport.view) : null;
+  const hostMap = shownTransport?.hostMap ?? map;
+  const transportRef = useRef<TransportScene | null>(null);
+  transportRef.current = shownTransport?.scene ?? null;
+  /** The frame the spawns' rows are in: a place in the view is stored through it */
+  const frameNow = () => transportRef.current?.frame ?? IDENTITY_FRAME;
+  const directory = worldMapDirectory(hostMap);
   const mapRef = useRef(map);
   mapRef.current = map;
   // Edits as the view sends them, set by the world that is up; paths started here, which the database lacks
@@ -384,8 +404,9 @@ function WorldStage({
   const newPaths = useRef(new Set<number>());
   /** A path the database does not have: started here, or found in the layer made from nothing (before a restart) */
   const isNewPath = (pathId: number): boolean => newPaths.current.has(pathId) || layerRef.current.routes.some((r) => r.pathId === pathId && r.original.length === 0);
-  /** The server's floor nearest a height at a place on this map, or null when it has none there */
+  /** The server's floor nearest a height at a place on this map, or null when it has none there (a vessel's deck has none) */
   const floorAt = async (x: number, y: number, nearZ: number): Promise<number | null> => {
+    if (transportRef.current) return null;
     const answer = await apiRef.current?.mapFloors(mapRef.current, x, y);
     if (!answer?.ok || 'reason' in answer.value) return null;
     return chooseZ(floorCandidates(answer.value), nearZ);
@@ -398,6 +419,7 @@ function WorldStage({
     takeLayer: (next) => takeLayer(next),
     setNote,
     floorZ: floorAt,
+    toRow: (at) => localisePlacement(at, frameNow()),
     placing: placing !== null,
     stopPlacing: () => setPlacing(null),
     clearSelection: () => clearSelection(),
@@ -504,6 +526,8 @@ function WorldStage({
     const place = async ({ target, at }: PlaceRequest): Promise<void> => {
       const current = apiRef.current;
       if (!current) return;
+      // Where it is stored, and shown on its card: on a vessel, vessel-local
+      const row = localisePlacement(at, frameNow());
       const entities = projectEntitiesRef.current;
       const own = onOwnEditRef.current && (target.kind === 'object' ? entities?.objects : entities?.npcs)?.find((e) => e.entry === target.entry);
       if (own) {
@@ -516,12 +540,12 @@ function WorldStage({
         const spawn = { kind: target.kind, guid: made.guid, entry: target.entry, own: true };
         if (!(await send({ kind: 'presence', spawn, present: true, at, map }))) return;
         created?.select({ kind: target.kind, guid: made.guid });
-        setSelected({ ...spawn, name: own.name, added: false, pathId: 0, event: null, position: { x: at.x, y: at.y, z: at.z } });
+        setSelected({ ...spawn, name: own.name, added: false, pathId: 0, event: null, position: { x: row.x, y: row.y, z: row.z } });
         setNote(null);
         return;
       }
       const kind = target.kind === 'object' ? 'gameobject' : 'creature';
-      const result = await current.worldAddSpawn(kind, target.entry, map, at);
+      const result = await current.worldAddSpawn(kind, target.entry, map, row);
       if (!live) return;
       if (!result.ok) {
         setNote(result.error.message);
@@ -533,14 +557,16 @@ function WorldStage({
       created?.select({ kind: target.kind, guid });
       setSelected({
         kind: target.kind, guid, entry: target.entry, name: added?.name ?? '', own: false, added: true, pathId: 0, event: null,
-        position: { x: at.x, y: at.y, z: at.z },
+        position: { x: row.x, y: row.y, z: row.z },
       });
       setNote(null);
     };
     const floorZ = floorAt;
     // The quest's own edits are taken at once; world edits wait their turn. One that fails outright is
-    // said, and the queue goes on
-    const send = (change: SpawnEdit): Promise<boolean> => {
+    // said, and the queue goes on. The scene's places are stored through the vessel's frame, once, here
+    const send = (scene: SpawnEdit): Promise<boolean> => {
+      const change = localiseEdit(scene, frameNow());
+      if (!change) return Promise.resolve(false);
       if (change.spawn.own && onOwnEditRef.current) return edit(change);
       waiting += 1;
       const kept = queue
@@ -590,7 +616,9 @@ function WorldStage({
             container: element,
             directory,
             map,
-            wmo: worldMapById(map)?.wmo,
+            hostMap,
+            wmo: worldMapById(hostMap)?.wmo,
+            ...transportRef.current,
             start: startRef.current,
             onArea: (name) => {
               setArea(name);
@@ -662,7 +690,13 @@ function WorldStage({
       created?.dispose();
       world.current = null;
     };
-  }, [directory, map, hasClient]);
+  }, [directory, map, hostMap, hasClient]);
+
+  // Another stop on the same terrain, or another route: the vessel moves without the world being built again
+  const transportKey = JSON.stringify(transportRef.current);
+  useEffect(() => {
+    if (transportRef.current) world.current?.setTransport(transportRef.current);
+  }, [transportKey]);
 
   // Edited existing NPCs and objects, drawn with their new look
   const looks = useMemo(() => looksOf(projectEntities ?? EMPTY_ENTITIES), [projectEntities]);

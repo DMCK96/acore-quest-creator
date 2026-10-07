@@ -45,6 +45,7 @@ export type SpawnInfo = {
   pathId: number;
   wander: number;
   map: number;
+  /** Where it stands in the view: on a vessel, its row's place carried by the vessel's frame */
   placement: Placement;
   /** The spawn group it is in (as the world layer has the groups), or null */
   group: number | null;
@@ -389,6 +390,7 @@ class SpawnManager {
           drawn.updateMatrixWorld(true);
         }
       }
+      this.#applyVisibility(group);
       group.updateMatrixWorld(true);
     }
     this.#placeVessel();
@@ -734,7 +736,12 @@ class SpawnManager {
     return creature.wander > 0 ? { type: 'wander', wander: creature.wander, pathId } : { type: 'idle', wander: 0, pathId };
   }
 
-  /** A drawn spawn as the right-click menu describes it, or null when it is not drawn */
+  /** A row's place as the view has it: carried by the frame, like everything else the scene hands out */
+  #inView(placement: Placement): Placement {
+    return isIdentity(this.#frame) ? placement : placementToWorld(this.#frame, placement);
+  }
+
+  /** A drawn spawn as the right-click menu describes it (where it stands in the view), or null when it is not drawn */
   info(kind: 'creature' | 'object', guid: number): SpawnInfo | null {
     for (const group of this.#areas.values()) {
       const data: ViewCreature | ViewObject | undefined = (kind === 'creature' ? group.userData.creatures : group.userData.objects)?.get(guid);
@@ -742,11 +749,11 @@ class SpawnManager {
       const base = { kind, guid, entry: data.entry, name: data.name, own: data.own, added: data.added ?? false, map: data.map, group: data.group ?? null, respawnSecs: data.respawnSecs ?? 300 };
       if (kind === 'creature') {
         const c = data as ViewCreature;
-        return { ...base, pathId: c.pathId ?? 0, wander: c.wander, placement: { x: c.x, y: c.y, z: c.z, orientation: c.orientation, rotation: null }, spawnEvents: c.spawnEvents === undefined ? 'npc' : c.spawnEvents, eventsNow: { during: c.events, gone: c.removedBy } };
+        return { ...base, pathId: c.pathId ?? 0, wander: c.wander, placement: this.#inView({ x: c.x, y: c.y, z: c.z, orientation: c.orientation, rotation: null }), spawnEvents: c.spawnEvents === undefined ? 'npc' : c.spawnEvents, eventsNow: { during: c.events, gone: c.removedBy } };
       }
       const o = data as ViewObject;
       const objectType = o.objectType ?? -1;
-      return { ...base, pathId: 0, wander: 0, placement: { x: o.x, y: o.y, z: o.z, orientation: facingOf(o.rotation), rotation: o.rotation }, ...(objectType >= 0 ? { objectType } : {}) };
+      return { ...base, pathId: 0, wander: 0, placement: this.#inView({ x: o.x, y: o.y, z: o.z, orientation: facingOf(o.rotation), rotation: o.rotation }), ...(objectType >= 0 ? { objectType } : {}) };
     }
     return null;
   }
@@ -776,6 +783,8 @@ class SpawnManager {
 
   /** Which of an NPC's route points a ray passes within a yard of (the nearest along it), or null */
   pickRoutePoint(ray: THREE.Ray, guid: number): number | null {
+    // A vessel's walking paths are not drawn, so none of their points is there to pick
+    if (!isIdentity(this.#frame)) return null;
     let best: { point: number; distance: number } | null = null;
     for (const group of this.#areas.values()) {
       for (const shown of holderOf(group, 'paths')?.children ?? []) {
@@ -1273,10 +1282,11 @@ class SpawnManager {
     return marker;
   }
 
+  /** Walking paths stay hidden on a vessel: they are vessel-local, and come with animation (phase 2) */
   #applyVisibility(group: THREE.Group) {
     for (const name of ['creatures', 'objects', 'paths'] as const) {
       const child = holderOf(group, name);
-      if (child) child.visible = this.#visibility[name];
+      if (child) child.visible = this.#visibility[name] && (name !== 'paths' || isIdentity(this.#frame));
     }
   }
 

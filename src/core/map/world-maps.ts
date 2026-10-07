@@ -50,6 +50,12 @@ export function onWorldMapsChange(listener: () => void): () => void {
 
 export const worldMapById = (id: number): WorldMap | null => WORLD_MAPS.find((m) => m.id === id) ?? clientMaps.find((m) => m.id === id) ?? null;
 
+/** Whether the World draws a map's own terrain, so a transport's route can stop on it: any map it draws but a transport's */
+export const isTerrainMap = (id: number): boolean => {
+  const map = worldMapById(id);
+  return map !== null && map.kind !== 'transport';
+};
+
 /** The client folder of a map's terrain; null when the 3D view cannot draw that map. */
 export function worldMapDirectory(map: number): string | null {
   return worldMapById(map)?.directory ?? null;
