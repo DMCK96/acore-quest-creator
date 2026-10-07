@@ -1,7 +1,7 @@
 import { NODE_STOP, type TaxiNode } from '../game/taxi-path';
 import type { Placement } from '../world/layer';
 
-/** Where a vessel is and which way it faces (radians, 0 = +x); its local x axis is its forward. */
+/** Where a vessel is and which way its local x axis points (radians, 0 = +x); see `frameAt` for how that relates to its travel. */
 export interface Frame {
   x: number;
   y: number;
@@ -16,15 +16,18 @@ export const IDENTITY_FRAME: Frame = { x: 0, y: 0, z: 0, heading: 0 };
 
 const TAU = 2 * Math.PI;
 
-/** The vessel's frame at a node: heading towards the next node, else from the previous one, both only on the same map. */
+/**
+ * The vessel's frame at a node, as the server poses it (`TransportMgr::GeneratePath`): the route's direction there
+ * (the spline's, from the previous node to the next; at an end, along its one neighbour; only nodes on the same map
+ * count), turned by pi, since a vessel's local x points against its travel. A lone node faces 0.
+ */
 export function frameAt(nodes: readonly TaxiNode[], index: number): Frame {
   const node = nodes[index];
   if (!node) return IDENTITY_FRAME;
-  const next = nodes[index + 1];
-  const prev = nodes[index - 1];
-  let heading = 0;
-  if (next && next.map === node.map) heading = Math.atan2(next.y - node.y, next.x - node.x);
-  else if (prev && prev.map === node.map) heading = Math.atan2(node.y - prev.y, node.x - prev.x);
+  const near = (other: TaxiNode | undefined): TaxiNode => (other && other.map === node.map ? other : node);
+  const from = near(nodes[index - 1]);
+  const to = near(nodes[index + 1]);
+  const heading = from === to ? 0 : wrap(Math.atan2(to.y - from.y, to.x - from.x) + Math.PI);
   return { x: node.x, y: node.y, z: node.z, heading };
 }
 
