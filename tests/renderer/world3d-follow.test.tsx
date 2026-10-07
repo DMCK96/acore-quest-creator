@@ -149,6 +149,22 @@ describe('a focused NPC or object (Show in World and Go to)', () => {
     expect(screen.getByRole('button', { name: 'Back' })).toHaveProperty('disabled', true);
   });
 
+  it('names the map when the quest is only in an instance the World cannot draw', async () => {
+    const icc = { ...giver, map: 631 };
+    const view = mount({}, vi.fn(async () => okv([{ questId: 60001, title: 'Q', spawns: [icc], capped: false, cut: 0 }])));
+    await waitFor(() => expect(worlds).toHaveLength(1));
+    view.rerender({ focus: quest() });
+    expect(await screen.findByText('This quest is on map 631, which the World cannot draw.')).toBeTruthy();
+  });
+
+  it('goes to a spawn on a drawable map when others are in an instance', async () => {
+    const icc = { ...giver, guid: 6000002, map: 631 };
+    const view = mount({}, vi.fn(async () => okv([{ questId: 60001, title: 'Q', spawns: [icc, giver], capped: false, cut: 0 }])));
+    await waitFor(() => expect(worlds).toHaveLength(1));
+    view.rerender({ focus: quest() });
+    await waitFor(() => expect(worlds.at(-1).options.map).toBe(1));
+  });
+
   it('takes its note back once a later focus is followed', async () => {
     const empty = { questId: 60001, title: 'Q', spawns: [], capped: false, cut: 0 };
     const placed = { questId: 60001, title: 'Q', spawns: [giver], capped: false, cut: 0 };

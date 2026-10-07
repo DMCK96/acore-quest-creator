@@ -314,10 +314,15 @@ export function WorldWorkspace({
       return { error: read.error.code === 'NOT_CONNECTED' ? NEEDS_DATABASE : `Could not read the quest’s spawns: ${read.error.message}` };
     }
     const groups: QuestSpawnGroup[] = read.value;
-    const s = questPlace(groups, from, only);
+    // A spawn on a map the World draws wins; the rest (an instance, say) are only named when nothing else is left
+    const s = questPlace(groups.map((g) => ({ ...g, spawns: g.spawns.filter((sp) => worldMapById(sp.map)) })), from, only);
     // Nothing the project or the layer has: the database may still have it
     if (!s && groups.some((g) => g.offline)) return { error: NEEDS_DATABASE };
-    if (!s || !worldMapById(s.map)) return { spawn: null, ...(only && { name: giverName({ kind: only.kind, id: only.entry }, namesRef.current, storeRef.current) }) };
+    if (!s) {
+      const elsewhere = questPlace(groups, from, only);
+      if (elsewhere) return { error: `${only ? giverName({ kind: only.kind, id: only.entry }, namesRef.current, storeRef.current) : 'This quest'} is on map ${elsewhere.map}, which the World cannot draw.` };
+      return { spawn: null, ...(only && { name: giverName({ kind: only.kind, id: only.entry }, namesRef.current, storeRef.current) }) };
+    }
     return { spawn: { kind: s.kind === 'gameobject' ? 'object' : 'creature', guid: s.guid, entry: s.entry, name: s.name, map: s.map, x: s.x, y: s.y, z: s.z, event: s.event ?? null, note: null } };
   };
   // The spawn the focus last led to, for selecting it once the camera is there
