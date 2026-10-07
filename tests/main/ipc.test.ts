@@ -8,7 +8,7 @@ describe('parseRequest', () => {
   it('knows every API method', () => {
     expect([...API_METHODS].sort()).toEqual([
       'addQuestChain', 'applyToDev', 'chooseServerDataDir', 'connect', 'exportQuest', 'projectState', 'listNodes', 'listProfiles', 'deleteProfile', 'lookupNames', 'moveNodes', 'newQuest',
-      'openQuest', 'previewChanges', 'questLinks', 'removeNode', 'rewardTables', 'updateQuest', 'saveProfile', 'saveViewport', 'searchQuests', 'searchEntities', 'startupProfile',
+      'openQuest', 'previewChanges', 'questLinks', 'questsOfNpc', 'removeNode', 'rewardTables', 'updateQuest', 'saveProfile', 'saveViewport', 'searchQuests', 'searchEntities', 'startupProfile',
       'testConnection', 'validate', 'questScripts', 'testCommands', 'groundHeight', 'spellFacts', 'clientMaps', 'mapFloors', 'viewSpawns', 'entitySpawns', 'findSpawns', 'spawnPlacement', 'allocateIds', 'entityTemplate', 'itemColumns',
       'patrolPathId', 'renameProject', 'newProject', 'openProject', 'saveProject', 'saveProjectAs', 'recentProjects', 'forgetRecent', 'recoveries', 'restoreRecovery', 'discardRecovery',
       'projectEntities', 'putProjectEntities', 'deleteEntity', 'readExistingEntity', 'existingDrift', 'worldLayer', 'worldMoveSpawn', 'worldAddSpawn', 'worldRoute', 'worldSetRoute', 'worldRevert', 'worldChanges', 'exportProject', 'worldSetMovement', 'worldSetRespawn', 'worldSetSpawnEvents', 'worldNewPathId', 'questSpawnList',

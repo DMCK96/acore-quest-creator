@@ -166,7 +166,7 @@ describe('a spawn', () => {
   it('Quests ▸ sets or removes the spawn\'s parts in the open quest and starts quests from an NPC', () => {
     const groups = buildMenu(on(npc()), context({ quest }));
     expect(groups.find((g) => g.id === 'quest')!.items.map((i) => [i.label, i.children?.map((c) => c.label)])).toEqual([
-      ['Quests', ['Remove as quest giver', 'Set as quest ender', 'Add as kill objective', 'Start a new quest from this NPC', 'Start the next quest in this chain']],
+      ['Quests', ['Remove as quest giver', 'Set as quest ender', 'Add as kill objective', 'Find quests that start or end here…', 'Start a new quest from this NPC', 'Start the next quest in this chain']],
     ]);
     expect(item(groups, 'Set as quest ender')!.action).toEqual({ kind: 'toggleRole', role: 'ender', spawn: npc(), on: true });
     expect(item(buildMenu(on(crate()), context({ quest })), 'Add as use objective')).toBeDefined();
@@ -178,7 +178,14 @@ describe('a spawn', () => {
     expect(item(buildMenu(on(npc()), context()), 'Start a new quest from this NPC')!.action).toEqual({ kind: 'newQuest', spawn: npc(), after: false });
     expect(item(buildMenu(on(npc()), context()), 'Start the next quest in this chain')).toBeUndefined();
     expect(buildMenu(on(crate()), context()).map((g) => g.id)).not.toContain('quest');
-    expect(item(buildMenu(on(npc()), context({ project: false })), 'Quests')).toBeUndefined();
+    expect(item(buildMenu(on(npc()), context({ project: false, connected: false })), 'Quests')).toBeUndefined();
+  });
+
+  it('an NPC can be asked which quests start or end at it while the database is there', () => {
+    const find = item(buildMenu(on(npc()), context({ project: false })), 'Find quests that start or end here…');
+    expect(find!.action).toEqual({ kind: 'findQuests', spawn: npc() });
+    expect(item(buildMenu(on(crate()), context()), 'Find quests that start or end here…')).toBeUndefined();
+    expect(item(buildMenu(on(npc()), context({ connected: false })), 'Find quests that start or end here…')).toBeUndefined();
   });
 });
 

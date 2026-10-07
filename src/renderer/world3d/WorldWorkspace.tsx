@@ -51,6 +51,8 @@ export interface WorldWorkspaceProps {
   onQuestField?(fieldId: string, value: FieldValue): void;
   /** Starts a new quest given and taken back by an NPC, after `previous` in its chain when that is set */
   onNewQuest?(giver: { entry: number; name: string }, previous: number | null): void;
+  /** Opens a quest the database has in the quest editor */
+  onOpenQuest?(id: number): void;
   /** A place to take the camera to (Show on the undo note); each request is its own, even to the same place */
   goTo?: { map: number; x: number; y: number; z: number; nonce: number };
   /**
@@ -108,7 +110,7 @@ const WELCOME_FADE_MS = 500;
  * a place to start.
  */
 export function WorldWorkspace({
-  hasClient, projectKey, projectName, onOpenSettings, onShowQuests, onStartQuest, quest, onQuestField, onNewQuest, goTo: goToRequest,
+  hasClient, projectKey, projectName, onOpenSettings, onShowQuests, onStartQuest, quest, onQuestField, onNewQuest, onOpenQuest, goTo: goToRequest,
   focus: shared = NO_FOCUS, onFocusPart, now = Date.now, request, onRequestEnd,
 }: WorldWorkspaceProps): React.JSX.Element {
   // The open quest's values as last changed here, so edits made one after another build on each other
@@ -595,6 +597,7 @@ export function WorldWorkspace({
           return null;
         }}
         onNewQuest={onNewQuest ? (giver, after) => onNewQuest(giver, after && quest ? quest.open.questId : null) : undefined}
+        onOpenQuest={onOpenQuest}
         onShowSpawns={(groups, scope) => setPreset(presetOf(groups, scope))}
         onCreateEntity={createEntity}
         onEditEntity={(kind, entry) => void editEntity(kind, entry)}

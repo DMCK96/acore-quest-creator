@@ -21,6 +21,7 @@ function questChildren({ info: spawn }: SpawnSubject, context: MenuContext): Men
       children.push(full ? item(set, { disabledReason: OBJECTIVES_FULL }) : item(has ? unset : set, { action: { kind: 'toggleRole', role, spawn, on: !has } }));
     }
   }
+  if (spawn.kind === 'creature' && context.connected) children.push(item('Find quests that start or end here…', { action: { kind: 'findQuests', spawn } }));
   if (spawn.kind === 'creature' && context.project) {
     children.push(item('Start a new quest from this NPC', { action: { kind: 'newQuest', spawn, after: false } }));
     if (quest) children.push(item('Start the next quest in this chain', { action: { kind: 'newQuest', spawn, after: true } }));

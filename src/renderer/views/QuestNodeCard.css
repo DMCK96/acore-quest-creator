@@ -93,7 +93,12 @@
 }
 
 .quest-card__part[draggable='true'] {
-  cursor: grab;
+  cursor: pointer;
+}
+
+.quest-card__roles {
+  font-size: 0.9em;
+  opacity: 0.8;
 }
 
 .quest-card__part[aria-current='true'] {

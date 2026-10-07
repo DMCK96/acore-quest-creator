@@ -19,6 +19,22 @@ async function setup() {
   return { api, db };
 }
 
+describe('quests of an NPC through the API', () => {
+  it('lists the quests an NPC starts and ends, with their titles', async () => {
+    const { api, db } = await setup();
+    db.insert('quest_template', { ID: '500', LogTitle: 'Wolves' });
+    db.insert('quest_template', { ID: '501', LogTitle: 'More Wolves' });
+    db.insert('creature_queststarter', { id: '823', quest: '500' });
+    db.insert('creature_queststarter', { id: '823', quest: '501' });
+    db.insert('creature_questender', { id: '823', quest: '501' });
+    db.insert('creature_queststarter', { id: '9', quest: '500' });
+    expect(((await api.questsOfNpc(823)) as any).value).toEqual({
+      starts: [{ id: 500, title: 'Wolves' }, { id: 501, title: 'More Wolves' }],
+      ends: [{ id: 501, title: 'More Wolves' }],
+    });
+  });
+});
+
 describe('custom items through the API', () => {
   it('allocates item entries above the database and the project', async () => {
     const { api, db } = await setup();

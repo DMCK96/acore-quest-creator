@@ -1,4 +1,5 @@
 import { Fragment, useEffect, useId, useLayoutEffect, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import type { MenuAction, MenuGroup, MenuItem } from './menu/model';
 import './WorldContextMenu.css';
 
@@ -47,7 +48,9 @@ export function WorldContextMenu({
     const first = itemsOf(menu.current).find((item) => item.getAttribute('aria-disabled') !== 'true');
     first?.focus();
     const outside = (e: MouseEvent): void => {
-      if (menu.current && !menu.current.contains(e.target as Node)) onCloseRef.current();
+      // Submenus are portalled out of the menu, so they are told apart by class
+      const inside = menu.current?.contains(e.target as Node) || (e.target as Element).closest?.('.world3d-menu');
+      if (!inside) onCloseRef.current();
     };
     document.addEventListener('mousedown', outside);
     return () => document.removeEventListener('mousedown', outside);
@@ -85,14 +88,30 @@ export function WorldContextMenu({
 function Item({ item, open, onOpen, onPick }: { item: MenuItem; open: boolean; onOpen(open: boolean): void; onPick(action: MenuAction): void }): React.JSX.Element {
   const reason = useId();
   const self = useRef<HTMLButtonElement | null>(null);
+  const entry = useRef<HTMLDivElement | null>(null);
   const sub = useRef<HTMLDivElement | null>(null);
+  const [subAt, setSubAt] = useState<{ left: number; top: number } | null>(null);
   const disabled = item.disabledReason !== undefined;
   const parent = item.children !== undefined;
 
-  // A submenu opened by key takes focus on its first item
-  useEffect(() => {
-    if (open) itemsOf(sub.current)[0]?.focus();
+  // The submenu is portalled to the body (the menu scrolls and clips its children), so it is placed
+  // beside its entry in window coordinates: to the right, or to the left when there is no room
+  useLayoutEffect(() => {
+    if (!open || !entry.current) {
+      setSubAt(null);
+      return;
+    }
+    const rect = entry.current.getBoundingClientRect();
+    const height = sub.current?.offsetHeight ?? 0;
+    const left = rect.right + MENU_WIDTH > window.innerWidth ? Math.max(0, rect.left - MENU_WIDTH) : rect.right;
+    setSubAt({ left, top: Math.max(0, Math.min(rect.top - 5, window.innerHeight - height)) });
   }, [open]);
+
+  // A submenu opened by key takes focus on its first item, once it is placed
+  const placed = subAt !== null;
+  useEffect(() => {
+    if (open && placed) itemsOf(sub.current)[0]?.focus();
+  }, [open, placed]);
 
   const run = (): void => {
     if (disabled) return;
@@ -105,7 +124,7 @@ function Item({ item, open, onOpen, onPick }: { item: MenuItem; open: boolean; o
   };
 
   return (
-    <div className="world3d-menu__entry" onMouseEnter={() => parent && !disabled && onOpen(true)} onMouseLeave={() => parent && onOpen(false)}>
+    <div ref={entry} className="world3d-menu__entry" onMouseEnter={() => parent && !disabled && onOpen(true)} onMouseLeave={() => parent && onOpen(false)}>
       <button
         ref={self}
         type="button"
@@ -145,29 +164,33 @@ function Item({ item, open, onOpen, onPick }: { item: MenuItem; open: boolean; o
           </span>
         )}
       </button>
-      {parent && open && (
-        <div
-          ref={sub}
-          role="menu"
-          aria-label={item.label}
-          className="world3d-menu world3d-menu--sub glass"
-          onKeyDown={(e) => {
-            if (e.key === 'ArrowLeft' || e.key === 'Escape') {
-              e.preventDefault();
-              e.stopPropagation();
-              closeSub();
-            } else if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
-              e.preventDefault();
-              e.stopPropagation();
-              step(sub.current, e.key === 'ArrowDown' ? 1 : -1);
-            }
-          }}
-        >
-          {item.children!.map((child) => (
-            <Item key={child.id} item={child} open={false} onOpen={() => {}} onPick={onPick} />
-          ))}
-        </div>
-      )}
+      {parent &&
+        open &&
+        createPortal(
+          <div
+            ref={sub}
+            style={subAt ?? { left: 0, top: 0, visibility: 'hidden' }}
+            role="menu"
+            aria-label={item.label}
+            className="world3d-menu world3d-menu--sub glass"
+            onKeyDown={(e) => {
+              if (e.key === 'ArrowLeft' || e.key === 'Escape') {
+                e.preventDefault();
+                e.stopPropagation();
+                closeSub();
+              } else if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+                e.preventDefault();
+                e.stopPropagation();
+                step(sub.current, e.key === 'ArrowDown' ? 1 : -1);
+              }
+            }}
+          >
+            {item.children!.map((child) => (
+              <Item key={child.id} item={child} open={false} onOpen={() => {}} onPick={onPick} />
+            ))}
+          </div>,
+          document.body,
+        )}
     </div>
   );
 }

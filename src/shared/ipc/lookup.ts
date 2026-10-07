@@ -3,6 +3,12 @@ import type { EntityHit, QuestSummary, SearchKind } from '@core/db/world-db';
 import type { SpellFacts } from '@core/game/spells';
 import type { Result } from './result';
 
+/** A quest an NPC starts or ends. */
+export interface NpcQuest {
+  id: number;
+  title: string;
+}
+
 /** What `spellFacts` answers: the spells found, or why spell names are not available. */
 export interface SpellFactsResult {
   available: boolean;
@@ -13,6 +19,8 @@ export interface SpellFactsResult {
 /** Searches and names: quests, NPCs, objects, items, spells, sounds, looks, rewards and events */
 export interface LookupApi {
   searchQuests(text: string): Promise<Result<QuestSummary[]>>;
+  /** The quests an NPC starts and the quests it ends, by the database's own giver tables. */
+  questsOfNpc(entry: number): Promise<Result<{ starts: NpcQuest[]; ends: NpcQuest[] }>>;
   /** Items, NPCs, objects or quests whose name contains the text, or whose ID is it. */
   searchEntities(kind: SearchKind, text: string): Promise<Result<EntityHit[]>>;
   lookupNames(kind: RefKind, ids: number[]): Promise<Result<Record<number, string>>>;

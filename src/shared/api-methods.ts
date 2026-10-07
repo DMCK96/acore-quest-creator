@@ -18,6 +18,7 @@ export const API_METHODS = [
   'connect',
   'chooseServerDataDir',
   'searchQuests',
+  'questsOfNpc',
   'searchEntities',
   'openQuest',
   'newQuest',

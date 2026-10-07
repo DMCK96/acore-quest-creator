@@ -44,7 +44,7 @@ export function QuestNodeCard({
    * those already placed in the world are marked. Each is dragged out (onto the 3D view, to place it,
    * or place another) as its `drag` data.
    */
-  parts?: { key: string; name: string; focused: boolean; placed?: boolean; drag: string }[];
+  parts?: { key: string; name: string; roles?: string; focused: boolean; placed?: boolean; drag: string; onFocus?: () => void }[];
   /** The quest rotation this quest is in, if any */
   rotation?: { name: string; daily: boolean } | null;
   /** The rotation tag's click: open the rotation */
@@ -138,12 +138,25 @@ export function QuestNodeCard({
               aria-current={part.focused ? 'true' : undefined}
               title={part.placed ? 'Already placed in the world; drag onto the 3D view to place another' : 'Drag onto the 3D view to place it'}
               draggable
+              // A click picks the part out in the World, without opening the quest's modal
+              onClick={(e) => {
+                e.stopPropagation();
+                part.onFocus?.();
+              }}
+              onDoubleClick={(e) => e.stopPropagation()}
+              onKeyDown={(e) => {
+                if (e.key !== 'Enter') return;
+                e.stopPropagation();
+                part.onFocus?.();
+              }}
+              tabIndex={0}
               onDragStart={(e) => {
                 e.dataTransfer.setData(CHAIN_DRAG_TYPE, part.drag);
                 e.dataTransfer.effectAllowed = 'copy';
               }}
             >
               <span className="quest-card__part-name">{part.name}</span>
+              {part.roles && <span className="quest-card__roles">{part.roles}</span>}
               {part.placed && <span className="quest-card__placed">Placed</span>}
             </li>
           ))}

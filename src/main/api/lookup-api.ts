@@ -1,7 +1,7 @@
 import type { RawRow, RefKind } from '../../core/db/types';
 import { UnknownColumnError, UnknownTableError, type WorldDb } from '../../core/db/world-db';
 import { registry } from '../../core/registry';
-import type { LookupApi, SpellFactsResult } from '../../shared/ipc';
+import type { LookupApi, NpcQuest, SpellFactsResult } from '../../shared/ipc';
 import { spellDetail, spellLabel } from '../../core/game/spells';
 import type { Services } from './services';
 import { run } from './errors';
@@ -46,6 +46,23 @@ export function createLookupApi(s: Services): LookupApi {
 
   return {
     searchQuests: (text) => run(async () => connected().db.searchQuests(text, SEARCH_LIMIT)),
+    questsOfNpc: (entry) =>
+      run(async () => {
+        const { db } = connected();
+        const quests = async (table: string): Promise<NpcQuest[]> => {
+          let rows: RawRow[];
+          try {
+            rows = await db.selectRows(table, { id: [String(entry)] });
+          } catch (error) {
+            if (error instanceof UnknownTableError || error instanceof UnknownColumnError) return [];
+            throw error;
+          }
+          const ids = [...new Set(rows.map((r) => Number(r.quest)))].sort((a, b) => a - b);
+          const names = await db.lookupNames('quest', ids);
+          return ids.map((id) => ({ id, title: names.get(id) ?? `#${id}` }));
+        };
+        return { starts: await quests('creature_queststarter'), ends: await quests('creature_questender') };
+      }),
     searchEntities: (kind, text) =>
       run(async () => {
         if (kind === 'sound') {

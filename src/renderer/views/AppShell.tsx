@@ -164,6 +164,10 @@ export function AppShell({ store }: { store: AppStore }): React.JSX.Element {
               request={worldRequest}
               onRequestEnd={endRequest}
               onQuestField={(fieldId, value) => store.getState().setValue(fieldId, value)}
+              onOpenQuest={(questId) => {
+                setDockOpen(true);
+                void store.getState().openQuest(questId);
+              }}
               onNewQuest={(giver, previous) => {
                 // The NPC gives the new quest and takes it back; in a chain, it comes after the one that was
                 // open. The quest it makes opens the dock.

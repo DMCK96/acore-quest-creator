@@ -154,6 +154,8 @@ interface ViewProps {
   onSetLootable?(entry: number, on: boolean): Promise<void>;
   /** Starts a new quest given and taken back by an NPC; `after` puts it after the open quest in its chain. */
   onNewQuest?(giver: { entry: number; name: string }, after: boolean): void;
+  /** Opens a quest from the database (the right-click menu's quest finder) */
+  onOpenQuest?(id: number): void;
   /** Told the spawns of the open quest or its chain, when they are shown, to list them. */
   onShowSpawns?(groups: QuestSpawnGroup[], scope: 'quest' | 'chain'): void;
   /** An editor's Place in world: placing that NPC or object starts, as Place… does (each request is its own) */
@@ -237,7 +239,7 @@ class Contained extends Component<{ children: ReactNode }, { failure: string | n
 }
 
 function WorldStage({
-  map, start, hasClient, own, onSelect, onOwnEdit, focus, showArea = true, onArea, onPlaceChange, onCameraInput, quest, chainIds, onQuestRole, onNewQuest, onShowSpawns,
+  map, start, hasClient, own, onSelect, onOwnEdit, focus, showArea = true, onArea, onPlaceChange, onCameraInput, quest, chainIds, onQuestRole, onNewQuest, onOpenQuest, onShowSpawns,
   onCreateEntity, onEditEntity, onSetLootable, onGoToSpawn, placeRequest, patrolRequest, onRequestEnd, markers, onMarkerMove, markerFocus,
 }: ViewProps): React.JSX.Element {
   const container = useRef<HTMLDivElement>(null);
@@ -411,6 +413,7 @@ function WorldStage({
     onOwnEdit,
     onQuestRole,
     onNewQuest,
+    onOpenQuest,
     onShowSpawns,
     onCreateEntity,
     onEditEntity,

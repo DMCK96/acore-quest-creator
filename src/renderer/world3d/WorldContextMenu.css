@@ -12,10 +12,8 @@
 }
 
 .world3d-menu--sub {
-  position: absolute;
-  left: 100%;
-  top: -5px;
-  margin-left: 2px;
+  /* Portalled to the body and placed beside its entry by the component */
+  position: fixed;
 }
 
 .world3d-menu__entry {

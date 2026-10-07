@@ -70,6 +70,23 @@ describe('the chain dock', () => {
     expect(ender).not.toHaveAttribute('aria-current');
   });
 
+  it('picks a part out in the World with one click on its row, naming its roles, without opening the editor', async () => {
+    const values = { 'quest_template.LogTitle': 'Wolves', creature_queststarter: [{ id: 1423 }], gameobject_questender: [{ id: 77 }] };
+    const { store } = await chainDock({ openQuest: async (id: number) => okv(sampleOpen({ questId: id, aggregate: { ...sampleOpen().aggregate, values } })) });
+    const card = (await screen.findAllByTestId('quest-node'))[0]!;
+    await store.getState().openQuest(60001);
+    const parts = await within(card).findByRole('list', { name: 'Parts' });
+    const giver = within(parts).getByText('NPC #1423').closest('li')!;
+    const ender = within(parts).getByText('Object #77').closest('li')!;
+    expect(within(giver).getByText('Giver')).toBeInTheDocument();
+    expect(within(ender).getByText('Ender')).toBeInTheDocument();
+    await userEvent.click(ender);
+    expect(store.getState().focus).toMatchObject({ questId: 60001, part: { kind: 'gameobject', entry: 77 } });
+    await userEvent.dblClick(giver);
+    expect(store.getState().focus.part).toEqual({ kind: 'creature', entry: 1423 });
+    expect(store.getState().screen).not.toBe('edit');
+  });
+
   it('lets each NPC or object row be dragged out as a copy, without dragging the card', async () => {
     const values = { 'quest_template.LogTitle': 'Wolves', creature_queststarter: [{ id: 1423 }], gameobject_questender: [{ id: 77 }] };
     const { store } = await chainDock({ openQuest: async (id: number) => okv(sampleOpen({ questId: id, aggregate: { ...sampleOpen().aggregate, values } })) });

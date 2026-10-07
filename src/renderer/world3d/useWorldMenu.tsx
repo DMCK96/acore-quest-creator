@@ -16,6 +16,7 @@ import { WanderDialog } from './WanderDialog';
 import { PointDialog, type PointResult, type PointTarget } from './PointDialog';
 import { patrolOf } from '@core/map/patrol';
 import { RespawnDialog } from './RespawnDialog';
+import { NpcQuestsDialog } from './NpcQuestsDialog';
 import { EventDialog } from './EventDialog';
 import type { GameEvent } from '../controls/EventPicker';
 import type { SpawnEvents } from '@core/entities/model';
@@ -56,6 +57,8 @@ export interface WorldMenuDeps {
   /** Gives a spawn's NPC or object a part in the open quest, or takes it away; says why when it could not */
   onQuestRole?(role: Role, target: RoleTarget, on: boolean): string | null;
   onNewQuest?(giver: { entry: number; name: string }, after: boolean): void;
+  /** Opens a quest the database has, as picking it in the quest dock does */
+  onOpenQuest?(id: number): void;
   onShowSpawns?(groups: QuestSpawnGroup[], scope: 'quest' | 'chain'): void;
   /** Makes a new project NPC or object with one spawn at `at`, as one step */
   onCreateEntity?(what: 'creature' | 'object', at: Placement): Promise<void>;
@@ -107,6 +110,7 @@ export function useWorldMenu(deps: WorldMenuDeps): {
   const [wander, setWander] = useState<{ spawn: MenuSpawn } | null>(null);
   /** A route point open in its dialog: whose route, its points as the view has them, and the point */
   const [point, setPoint] = useState<{ ref: SpawnRef; name: string; pathId: number; points: EditPoint[]; target: PointTarget } | null>(null);
+  const [npcQuests, setNpcQuests] = useState<{ entry: number; name: string } | null>(null);
   const [respawn, setRespawn] = useState<{ targets: RespawnTarget[] } | null>(null);
   const [spawnEvents, setSpawnEvents] = useState<{ targets: EventsTarget[]; events: readonly GameEvent[] } | null>(null);
   const [groupEdit, setGroupEdit] = useState<GroupEdit | null>(null);
@@ -484,6 +488,9 @@ export function useWorldMenu(deps: WorldMenuDeps): {
       case 'newQuest':
         d.current.onNewQuest?.({ entry: action.spawn.entry, name: action.spawn.name }, action.after);
         return;
+      case 'findQuests':
+        setNpcQuests({ entry: action.spawn.entry, name: action.spawn.name });
+        return;
       case 'showSpawns': {
         const { quest, chainIds, map } = d.current;
         if (!api || !quest) return;
@@ -638,6 +645,21 @@ export function useWorldMenu(deps: WorldMenuDeps): {
           }}
           onClose={() => {
             setSpawnEvents(null);
+            d.current.focusView();
+          }}
+        />
+      )}
+      {npcQuests && d.current.api && (
+        <NpcQuestsDialog
+          api={d.current.api}
+          entry={npcQuests.entry}
+          name={npcQuests.name}
+          onOpen={(id) => {
+            setNpcQuests(null);
+            d.current.onOpenQuest?.(id);
+          }}
+          onClose={() => {
+            setNpcQuests(null);
             d.current.focusView();
           }}
         />

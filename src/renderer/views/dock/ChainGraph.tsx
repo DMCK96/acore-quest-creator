@@ -20,12 +20,21 @@ import { DRAG_LINK } from '@core/links/drag-link';
 import { encodePart } from '../../world3d/chain-drop';
 import { ChainLinkMenu } from './ChainLinkMenu';
 import { partKey, usePlacedParts } from './usePlacedParts';
-import { questParts, questRoles } from '@core/modules/quest-roles';
+import { hasRole, questParts, questRoles } from '@core/modules/quest-roles';
 import { giverName } from '@core/modules/summaries';
 import { EMPTY_ENTITIES } from '@core/entities/model';
 import { useNameBook } from '../../state/names';
 import { useProjectEntities } from '../../state/project-entities';
 import './ChainGraph.css';
+
+/** What a part does in the quest, as its row says: "Giver · Ender" for an NPC that offers and takes back */
+const partRoles = (roles: ReturnType<typeof questRoles> | null, target: { kind: 'creature' | 'gameobject'; id: number }): string =>
+  roles
+    ? ([['giver', 'Giver'], ['ender', 'Ender'], ['objective', 'Objective']] as const)
+        .filter(([role]) => hasRole(roles, role, target))
+        .map(([, label]) => label)
+        .join(' · ')
+    : '';
 
 /** Drags and pans are queued locally and flushed together after the user pauses. */
 const FLUSH_DEBOUNCE_MS = 300;
@@ -41,7 +50,7 @@ interface QuestNodeData extends Record<string, unknown> {
   onAddChain: () => void;
   rotation: { name: string; daily: boolean } | null;
   onRotation: () => void;
-  parts?: { key: string; name: string; focused: boolean; placed: boolean; drag: string }[];
+  parts?: { key: string; name: string; roles: string; focused: boolean; placed: boolean; drag: string; onFocus(): void }[];
 }
 
 /** A quest's card between its handles: a link is dragged out of the right one into another's left */
@@ -108,7 +117,8 @@ export function ChainGraph({
   const unlinkQuests = store((s) => s.unlinkQuests);
   const names = useNameBook();
   const entities = useProjectEntities()?.entities ?? EMPTY_ENTITIES;
-  const openParts = useMemo(() => (open ? questParts(questRoles(open.aggregate.values)) : []), [open]);
+  const openRoles = useMemo(() => (open ? questRoles(open.aggregate.values) : null), [open]);
+  const openParts = useMemo(() => (openRoles ? questParts(openRoles) : []), [openRoles]);
   const placedParts = usePlacedParts(open?.questId ?? null, nodes);
 
   const { screenToFlowPosition, setViewport: setFlowViewport } = useReactFlow();
@@ -178,9 +188,12 @@ export function ChainGraph({
         ? openParts.map((t) => ({
             key: partKey(t.kind, t.id),
             name: giverName(t, names, entities),
+            roles: partRoles(openRoles, t),
             focused: focus.questId === n.questId && focus.part?.kind === t.kind && focus.part.entry === t.id,
             placed: placedParts.has(partKey(t.kind, t.id)),
             drag: encodePart({ kind: t.kind, entry: t.id }),
+            // Picks it out in the World, as clicking its spawn there picks out its card's row
+            onFocus: () => store.getState().setFocus(n.questId, { kind: t.kind, entry: t.id }),
           }))
         : undefined,
     } satisfies QuestNodeData,

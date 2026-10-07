@@ -77,6 +77,8 @@ export type MenuAction =
   | { kind: 'removePath'; spawn: MenuSpawn }
   | { kind: 'toggleRole'; role: Role; spawn: MenuSpawn; on: boolean }
   | { kind: 'newQuest'; spawn: MenuSpawn; after: boolean }
+  /** The quests an NPC starts and ends, listed in a dialog */
+  | { kind: 'findQuests'; spawn: MenuSpawn }
   | { kind: 'showSpawns'; scope: 'quest' | 'chain' }
   | { kind: 'hideSpawns' };
 
