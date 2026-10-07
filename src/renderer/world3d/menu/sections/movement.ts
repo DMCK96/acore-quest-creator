@@ -1,5 +1,5 @@
 import { item, type MenuContext, type MenuItem, type MenuSpawn } from '../model';
-import { NEEDS_DATABASE, NEEDS_GROUND, WALKS_A_PATH, type MenuSection } from '../section';
+import { NEEDS_DATABASE, NEEDS_GROUND, ON_A_VESSEL, WALKS_A_PATH, type MenuSection } from '../section';
 import type { GroundSubject, SpawnSubject } from './kinds';
 
 /** A world NPC's movement is kept by the world database; a project NPC's by the project */
@@ -17,7 +17,8 @@ export const movement: MenuSection<GroundSubject | SpawnSubject> = {
       const [only] = selection;
       if (selection.length !== 1 || only!.kind !== 'creature' || only!.pathId !== 0) return [];
       return [
-        !at ? item('Start path here', { disabledReason: NEEDS_GROUND })
+        context.vessel ? item('Start path here', { disabledReason: ON_A_VESSEL })
+        : !at ? item('Start path here', { disabledReason: NEEDS_GROUND })
         : offline(only!, context) ? item('Start path here', { disabledReason: NEEDS_DATABASE })
         : item('Start path here', { action: { kind: 'startPath', spawn: only!, at } }),
       ];
@@ -29,7 +30,11 @@ export const movement: MenuSection<GroundSubject | SpawnSubject> = {
       : item('Change wander distance…', { action: { kind: 'wander', spawn } }),
     ];
     if (spawn.pathId > 0) {
-      items.push(offline(spawn, context) ? item('Remove path', { disabledReason: NEEDS_DATABASE }) : item('Remove path', { action: { kind: 'removePath', spawn } }));
+      items.push(
+        context.vessel ? item('Remove path', { disabledReason: ON_A_VESSEL })
+        : offline(spawn, context) ? item('Remove path', { disabledReason: NEEDS_DATABASE })
+        : item('Remove path', { action: { kind: 'removePath', spawn } }),
+      );
     }
     return items;
   },

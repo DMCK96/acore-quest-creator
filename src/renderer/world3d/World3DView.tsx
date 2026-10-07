@@ -422,6 +422,7 @@ function WorldStage({
     setNote,
     floorZ: floorAt,
     toRow: (at) => localisePlacement(at, frameNow()),
+    vessel: shownTransport !== null,
     placing: placing !== null,
     stopPlacing: () => setPlacing(null),
     clearSelection: () => clearSelection(),
@@ -652,7 +653,8 @@ function WorldStage({
             onTool: (tool) => live && setLayers((l) => ({ ...l, tool })),
             onCameraInput: () => live && onCameraInputRef.current?.(),
             onFalloff: (falloff) => live && setLayers((l) => ({ ...l, falloff: falloff.on, falloffRadius: falloff.radius })),
-            floorZ,
+            // A vessel's deck is the only floor there: a drag or a placing stays on it, with no word about the server's
+            floorZ: transportRef.current ? undefined : floorZ,
             beforeRouteEdit,
             onNotice: (message) => live && setNote(message),
             onPlace: (request) => placeStep(request),

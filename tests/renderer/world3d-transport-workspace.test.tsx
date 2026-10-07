@@ -152,10 +152,10 @@ describe('a transport in the World', () => {
     expect(api.worldSetRoute).not.toHaveBeenCalled();
   });
 
-  it('never asks the server for a floor on a vessel', async () => {
+  it('never asks the server for a floor on a vessel: the deck is the floor, so a drag there says nothing of the server', async () => {
     mount();
     const world = await chooseZeppelin();
-    await expect(world.options.floorZ(1300, -4600, 40)).resolves.toBeNull();
+    expect(world.options.floorZ).toBeUndefined();
     expect(api.mapFloors).not.toHaveBeenCalled();
   });
 });

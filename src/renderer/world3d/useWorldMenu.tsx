@@ -41,6 +41,8 @@ export interface WorldMenuDeps {
   floorZ(x: number, y: number, nearZ: number): Promise<number | null>;
   /** A place in the view as a spawn's row stores it (vessel-local on a transport) */
   toRow(at: Placement): Placement;
+  /** The view shows a vessel, where walking paths are not drawn */
+  vessel: boolean;
   placing: boolean;
   stopPlacing(): void;
   clearSelection(): void;
@@ -148,6 +150,7 @@ export function useWorldMenu(deps: WorldMenuDeps): {
       quest: quest ?? null,
       project: onNewQuest !== undefined,
       marked,
+      vessel: d.current.vessel,
     });
     if (groups.length > 0) setMenu({ groups, at: client });
   };

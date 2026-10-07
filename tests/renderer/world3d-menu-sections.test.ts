@@ -13,7 +13,7 @@ const crate = (over: Partial<MenuSpawn> = {}): MenuSpawn => npc({ kind: 'object'
 const hela = npc({ guid: 6000001, entry: 12000001, name: 'Hela', own: true });
 const chest = crate({ guid: 7000001, entry: 9100001, own: true });
 const store: ProjectEntities = { ...EMPTY_ENTITIES, npcs: [{ ...newNpc(12000001), name: 'Hela' }], objects: [{ ...newObject(9100001), name: 'Crate' }] };
-const context = (over: Partial<MenuContext> = {}): MenuContext => ({ map: 0, connected: true, clipboard: { count: 0, blocked: null }, placing: false, drawing: null, quest: null, project: true, marked: false, ...over });
+const context = (over: Partial<MenuContext> = {}): MenuContext => ({ map: 0, connected: true, clipboard: { count: 0, blocked: null }, placing: false, drawing: null, quest: null, project: true, marked: false, vessel: false, ...over });
 const ground = (selection: MenuSpawn[] = []): MenuSubject => subjectOf({ ground: at, hit: null, selection }, store);
 const sky: MenuSubject = subjectOf({ ground: null, hit: null, selection: [] }, store);
 const on = (spawn: MenuSpawn, s: ProjectEntities = store): MenuSubject => subjectOf({ ground: at, hit: { type: 'spawn', spawn }, selection: [spawn] } as MenuTarget, s);
@@ -156,6 +156,13 @@ describe('a spawn', () => {
     expect(item(walking, 'Change wander distance…')!.disabledReason).toBe('Walks a path: remove the path first');
     expect(item(walking, 'Remove path')!.action).toEqual({ kind: 'removePath', spawn: npc({ pathId: 801 }) });
     expect(buildMenu(on(crate()), context()).map((g) => g.id)).not.toContain('movement');
+  });
+
+  it('on a vessel: a passenger\'s walking path is neither started nor removed (it is not drawn there yet)', () => {
+    const reason = "Paths on a ship or zeppelin can't be edited yet";
+    expect(item(buildMenu(ground([npc()]), context({ vessel: true })), 'Start path here')!.disabledReason).toBe(reason);
+    expect(item(buildMenu(on(npc({ pathId: 801 })), context({ vessel: true })), 'Remove path')!.disabledReason).toBe(reason);
+    expect(item(buildMenu(on(npc()), context({ vessel: true })), 'Change wander distance…')!.action).toEqual({ kind: 'wander', spawn: npc() });
   });
 
   it('offline: a database NPC\'s movement needs the database, a project NPC\'s does not', () => {
