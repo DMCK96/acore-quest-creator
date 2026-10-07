@@ -1,6 +1,6 @@
 import { Component, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { assetUrl } from '@core/client/asset-url';
-import { worldMapDirectory } from '@core/map/world-maps';
+import { worldMapById, worldMapDirectory } from '@core/map/world-maps';
 import { createWorld3D, type Scenery, type SelectionSummary, type World3D } from './world3d';
 import type { Tool } from './controls';
 import { FALLOFF_DEFAULT, FALLOFF_MAX, FALLOFF_MIN } from './scene/edit/falloff';
@@ -587,6 +587,7 @@ function WorldStage({
             container: element,
             directory,
             map,
+            wmo: worldMapById(map)?.wmo,
             start: startRef.current,
             onArea: (name) => {
               setArea(name);

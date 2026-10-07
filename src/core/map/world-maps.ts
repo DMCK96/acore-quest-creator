@@ -3,7 +3,7 @@
  * (`World\Maps\<name>\<name>.wdt`), each with a place to start looking. The four continents are listed
  * here, each starting in a city or starting area that is on the ground; the other maps (dungeons,
  * raids, battlegrounds, arenas) come from the game client's `Map.dbc` once it is read (`setClientMaps`).
- * A map stored as a single building has no terrain and is not drawn yet.
+ * A map stored as a single building (most dungeons) has no terrain: it draws as that one building (`wmo`).
  */
 export type MapKind = 'continent' | 'world' | 'dungeon' | 'raid' | 'battleground' | 'arena';
 
@@ -13,6 +13,8 @@ export interface WorldMap {
   directory: string;
   kind: MapKind;
   start: { x: number; y: number; z: number };
+  /** The one building a map without terrain tiles is made of (a dungeon stored as a single WMO), placed at the world's origin */
+  wmo?: { path: string; doodadSet: number };
 }
 
 export const WORLD_MAPS: readonly WorldMap[] = [

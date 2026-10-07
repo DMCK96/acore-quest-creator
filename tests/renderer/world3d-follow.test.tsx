@@ -170,6 +170,16 @@ describe('a focused NPC or object (Show in World and Go to)', () => {
     expect(worlds.at(-1).options.directory).toBe('IcecrownCitadel');
   });
 
+  it('loads a one-building map and goes to a quest in it', async () => {
+    const jail = { ...giver, map: 34 };
+    const maps = vi.fn(async () => okv([{ id: 34, name: 'Stormwind Stockade', directory: 'StormwindJail', kind: 'dungeon', start: { x: 0, y: 0, z: 0 }, wmo: { path: 'World\wmo\Dungeon\Jail.wmo', doodadSet: 0 } }]));
+    const view = mount({}, vi.fn(async () => okv([{ questId: 60001, title: 'Q', spawns: [jail], capped: false, cut: 0 }])), maps);
+    await waitFor(() => expect(worlds).toHaveLength(1));
+    view.rerender({ focus: quest() });
+    await waitFor(() => expect(worlds.at(-1).options.map).toBe(34));
+    expect(worlds.at(-1).options.wmo).toEqual({ path: 'World\wmo\Dungeon\Jail.wmo', doodadSet: 0 });
+  });
+
   it('goes to a spawn on a drawable map when others are in an instance', async () => {
     const icc = { ...giver, guid: 6000002, map: 631 };
     const view = mount({}, vi.fn(async () => okv([{ questId: 60001, title: 'Q', spawns: [icc, giver], capped: false, cut: 0 }])));
