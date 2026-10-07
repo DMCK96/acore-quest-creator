@@ -14,6 +14,7 @@ import type { Placement } from '../../../../core/world/layer.js';
 import type { SpawnEvents } from '../../../../core/entities/model.js';
 import { BodyTexture, DisplayResolver, Look, ModelLook } from './DisplayResolver.js';
 import { creatureTransform, objectTransform, Transform } from './placement.js';
+import { Frame, IDENTITY_FRAME, placementToWorld } from '../../../../core/map/transport-frame.js';
 import { moveRouteDrawing, routeObject, setBallSelected, wanderObject } from './paths.js';
 import type { Candidates } from '../edit/box.js';
 import type { SelectedPoint } from '../edit/selection.js';
@@ -158,7 +159,12 @@ type SpawnManagerOptions = {
    * down than `distance`; null when there is none (or the terrain there has not loaded yet)
    */
   groundBelow?(x: number, y: number, fromZ: number, distance: number): number | null;
+  /** The vessel the spawns' rows are local to (default: none, rows are in the world) */
+  frame?: Frame;
 };
+
+/** Whether a frame leaves every place where it is */
+const isIdentity = (frame: Frame): boolean => frame.x === 0 && frame.y === 0 && frame.z === 0 && frame.heading === 0;
 
 /** Whether a kind was capped, why none could be read, and how many areas are still loading */
 type SpawnStatus = { capped: { creatures: boolean; objects: boolean }; error: string | null; loading?: number; events: ViewEvent[] };
@@ -305,6 +311,12 @@ class SpawnManager {
   #warned = new Set<string>();
   #now: () => number;
   #groundBelow: SpawnManagerOptions['groundBelow'];
+  /** The vessel rows are local to: each spawn is drawn at its row's place carried by this */
+  #frame: Frame;
+  /** The vessel itself, drawn at the frame; no part of any area, never picked or edited */
+  readonly decor = new THREE.Group();
+  /** Rises with each `setVessel`: a vessel still loading when another was asked for is dropped */
+  #vessels = 0;
   /** Areas whose answer failed, and when they may be asked for again */
   #failed = new globalThis.Map<number, number>();
 
@@ -338,6 +350,85 @@ class SpawnManager {
     this.#source = options.source;
     this.#now = options.now ?? Date.now;
     this.#groundBelow = options.groundBelow;
+    this.#frame = options.frame ?? IDENTITY_FRAME;
+    this.decor.name = 'decor';
+  }
+
+  /** The row's drawn place: its own, carried by the frame */
+  #transformOf(kind: 'creature' | 'object', spawn: ViewCreature | ViewObject): Transform {
+    if (isIdentity(this.#frame)) return kind === 'creature' ? creatureTransform(spawn as ViewCreature) : objectTransform(spawn as ViewObject);
+    const row = spawn as ViewCreature & ViewObject;
+    const world = placementToWorld(this.#frame, {
+      x: spawn.x,
+      y: spawn.y,
+      z: spawn.z,
+      orientation: kind === 'creature' ? row.orientation || 0 : 0,
+      rotation: kind === 'object' ? row.rotation : null,
+    });
+    return kind === 'creature'
+      ? creatureTransform({ ...world, scale: spawn.scale })
+      : objectTransform({ ...world, rotation: world.rotation ?? row.rotation, scale: spawn.scale });
+  }
+
+  /** Moves the vessel, and with it every drawn spawn and the vessel's own model, to a new frame */
+  setFrame(frame: Frame) {
+    this.#frame = frame;
+    for (const group of this.#areas.values()) {
+      for (const [name, kind] of [['creatures', 'creature'], ['objects', 'object']] as const) {
+        for (const drawn of holderOf(group, name)?.children ?? []) {
+          const row = drawn.userData.row;
+          if (!row) continue;
+          const data = drawn.userData;
+          data.lift = 0;
+          data.grounded = false;
+          data.tries = 0;
+          data.groundAfter = undefined;
+          const transform = this.#transformOf(kind, row);
+          drawn.position.set(...transform.position);
+          drawn.quaternion.set(...transform.quaternion);
+          drawn.updateMatrixWorld(true);
+        }
+      }
+      group.updateMatrixWorld(true);
+    }
+    this.#placeVessel();
+  }
+
+  /** Draws the vessel's building or model at the frame, in place of the last; null takes it away */
+  async setVessel(vessel: { displayId: number } | null): Promise<void> {
+    const turn = ++this.#vessels;
+    for (const old of [...this.decor.children]) this.#remove(old);
+    if (!vessel) return;
+    let drawn: THREE.Object3D | null = null;
+    let scale = 1;
+    try {
+      const look = await this.#resolver.object(vessel.displayId);
+      if (look) {
+        scale = look.scale;
+        drawn = look.kind === 'building' ? await this.#createBuilding(look.path) : await this.#createModel(look);
+      } else {
+        this.#warnOnce(`vessel:${vessel.displayId}`, `3D view: vessel (display ${vessel.displayId}) has no model the client knows; left out`);
+      }
+    } catch (error) {
+      this.#warnOnce(`vessel:${vessel.displayId}`, `3D view: vessel (display ${vessel.displayId}) could not be drawn: ${error instanceof Error ? error.message : String(error)}`);
+    }
+    if (!drawn) return;
+    if (this.#vessels !== turn) {
+      this.#remove(drawn);
+      return;
+    }
+    drawn.scale.setScalar(scale);
+    this.decor.add(drawn);
+    this.#placeVessel();
+  }
+
+  #placeVessel() {
+    const frame = this.#frame;
+    for (const drawn of this.decor.children) {
+      drawn.position.set(frame.x, frame.y, frame.z);
+      drawn.quaternion.setFromAxisAngle(new THREE.Vector3(0, 0, 1), frame.heading);
+      drawn.updateMatrixWorld(true);
+    }
   }
 
   /** Areas asked for and not yet drawn (their spawns on their way, or their models loading) */
@@ -901,7 +992,7 @@ class SpawnManager {
    */
   #ground(spawn: THREE.Object3D): boolean {
     const data = spawn.userData;
-    if (!this.#groundBelow || data.grounded || !data.spawn || spawn.name === 'marker') return false;
+    if (!this.#groundBelow || !isIdentity(this.#frame) || data.grounded || !data.spawn || spawn.name === 'marker') return false;
     const now = this.#now();
     if (data.groundAfter !== undefined && now < data.groundAfter) return false;
     const { x, y, z } = data.spawn.position;
@@ -952,7 +1043,7 @@ class SpawnManager {
 
     const drawnCreatures = await Promise.all(
       spawns.creatures.map((creature) =>
-        this.#drawSpawn('creature', creature, () => this.#resolver.creature(creature.displayId, creature.preset ?? null), creatureTransform(creature)),
+        this.#drawSpawn('creature', creature, () => this.#resolver.creature(creature.displayId, creature.preset ?? null), this.#transformOf('creature', creature)),
       ),
     );
     for (const drawn of drawnCreatures) creatures.add(drawn);
@@ -963,7 +1054,7 @@ class SpawnManager {
 
     const drawnObjects = await Promise.all(
       spawns.objects.map((object) =>
-        this.#drawSpawn('object', object, () => this.#resolver.object(object.displayId), objectTransform(object)),
+        this.#drawSpawn('object', object, () => this.#resolver.object(object.displayId), this.#transformOf('object', object)),
       ),
     );
     for (const drawn of drawnObjects) objects.add(drawn);
@@ -1009,7 +1100,7 @@ class SpawnManager {
       const wanted = new globalThis.Set<number>();
       for (const spawn of list) {
         wanted.add(spawn.guid);
-        const transform = kind === 'creature' ? creatureTransform(spawn as ViewCreature) : objectTransform(spawn as ViewObject);
+        const transform = this.#transformOf(kind, spawn);
         const old = drawn.get(spawn.guid);
         if (old) this.#place(old, kind, spawn, transform);
         if (old && old.userData.lookKey === lookKeyOf(kind, spawn)) continue;
@@ -1060,6 +1151,7 @@ class SpawnManager {
     const was = data.spawn.position;
     const moved = was.x !== spawn.x || was.y !== spawn.y || was.z !== spawn.z;
     data.spawn = spawnDataOf(kind, spawn);
+    data.row = spawn;
     if (moved) {
       data.lift = 0;
       data.grounded = false;
@@ -1145,6 +1237,8 @@ class SpawnManager {
     object.quaternion.set(...transform.quaternion);
     object.scale.setScalar(transform.scale * (drawn ? lookScale : 1));
     object.userData.spawn = spawnDataOf(kind, spawn);
+    // The row itself, so a new frame can place it again
+    object.userData.row = spawn;
     // What it was drawn from: a change to any of it means drawing it again, not just moving it
     object.userData.lookKey = lookKeyOf(kind, spawn);
     return object;
