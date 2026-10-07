@@ -33,6 +33,8 @@ export interface World3DOptions {
   /** The client folder of the map's terrain, e.g. `azeroth`. */
   directory: string;
   map: number;
+  /** The one building of a map without terrain tiles (a dungeon stored as a single building), drawn in their place. */
+  wmo?: { path: string; doodadSet: number };
   /** Where the camera starts looking. */
   start: { x: number; y: number; z: number };
   /** Told when the terrain around the camera changes to another area. */
@@ -611,7 +613,7 @@ export function createWorld3D(options: World3DOptions): World3D {
 
   try {
     manager.setSpawnSource(options.spawns ?? null);
-    manager.load(options.directory, options.map);
+    manager.load(options.directory, options.map, options.wmo ?? null);
     lookAt(options.start.x, options.start.y, options.start.z);
   } catch (error) {
     options.onError?.(error instanceof Error ? error.message : String(error));

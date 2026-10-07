@@ -33,6 +33,8 @@ export interface ApiDeps {
   onClientDir?(dir: string | null): void;
   /** What the game client folder given to `onClientDir` holds; the folder is opened now if it was not yet. */
   clientStatus?(): Promise<ClientStatus | null>;
+  /** A file from the game client's archives by its client path; null without a client or when it has none. */
+  clientFile?(path: string): Promise<Uint8Array | null>;
   /** Where Export patch writes whatever the connection says (`ACQC_OUTPUT_DIR`, for tests). */
   exportDirOverride?: string | null;
   /** Where Export patch writes when the connection names no export folder. */

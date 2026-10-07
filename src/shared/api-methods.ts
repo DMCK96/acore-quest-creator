@@ -36,6 +36,7 @@ export const API_METHODS = [
   'testCommands',
   'groundHeight',
   'spellFacts',
+  'clientMaps',
   'mapFloors',
   'viewSpawns',
   'projectEntities',

@@ -100,6 +100,7 @@ function buildDeps(
     store,
     onClientDir: (dir) => client.setDir(dir),
     clientStatus: () => client.status(),
+    clientFile: (path) => client.file(path),
     // Tests point exports at a scratch folder whatever the connection says.
     exportDirOverride: process.env['ACQC_OUTPUT_DIR'] || null,
     defaultExportDir: defaultOutputDir(),

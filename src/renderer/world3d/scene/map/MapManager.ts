@@ -26,6 +26,7 @@ import type { EntityLooks } from '../../../../core/entities/view-spawns.js';
 import { WorldLayer } from '../../../../core/world/layer.js';
 import { AssetHost } from '../asset.js';
 import MapLoader from './loader/MapLoader.js';
+import { GLOBAL_AREA, WHOLE_MAP, globalWmoArea, type GlobalWmo } from './global-wmo.js';
 import { MapAreaSpec, MapSpec } from './loader/types.js';
 import MapLight from './light/MapLight.js';
 import DbManager from '../db/DbManager.js';
@@ -299,7 +300,11 @@ class MapManager extends EventTarget {
     return this.#root;
   }
 
-  load(mapName: string, mapId?: number) {
+  /** The one building of a map without terrain tiles: drawn in place of them, with every spawn in one area */
+  #globalWmo: GlobalWmo | null = null;
+
+  load(mapName: string, mapId?: number, globalWmo: GlobalWmo | null = null) {
+    this.#globalWmo = globalWmo;
     this.#mapName = mapName;
     this.#mapDir = `world/maps/${mapName}`;
 
@@ -394,7 +399,8 @@ class MapManager extends EventTarget {
    * area it is in.
    */
   #syncSpawns() {
-    const wanted = nearbyAreas(this.#targetAreaX, this.#targetAreaY);
+    // A one-building map has its one area, with every spawn of the map
+    const wanted = this.#globalWmo ? new Set([`${GLOBAL_AREA.areaX}:${GLOBAL_AREA.areaY}`]) : nearbyAreas(this.#targetAreaX, this.#targetAreaY);
     const keyOf = (areaId: number) => {
       const { areaX, areaY } = this.#getAreaIndex(areaId);
       return `${areaX}:${areaY}`;
@@ -419,7 +425,7 @@ class MapManager extends EventTarget {
       const { areaX, areaY } = this.#getAreaIndex(areaId);
       this.#spawnAsked.add(areaId);
       this.#spawnManager
-        .loadArea(areaId, this.#mapId, areaBox(areaX, areaY))
+        .loadArea(areaId, this.#mapId, this.#globalWmo ? WHOLE_MAP : areaBox(areaX, areaY))
         .then((group) => {
           // Null when it failed or was dropped meanwhile; a stale answer never replaces a newer one
           if (group && this.#spawnAsked.has(areaId) && this.#terrainGroups.has(areaId)) {
@@ -549,7 +555,7 @@ class MapManager extends EventTarget {
         continue;
       }
 
-      if (this.#map.availableAreas[areaId] === 1) {
+      if (this.#map.availableAreas[areaId] === 1 || (this.#globalWmo && areaId === this.#getAreaId(GLOBAL_AREA.areaX, GLOBAL_AREA.areaY))) {
         newAreaIds.push(areaId);
       }
     }
@@ -668,6 +674,9 @@ class MapManager extends EventTarget {
       }
     }
 
+    // The building is always wanted: its spawns lie anywhere around it
+    if (this.#globalWmo) desiredAreas.add(this.#getAreaId(GLOBAL_AREA.areaX, GLOBAL_AREA.areaY));
+
     this.#desiredAreas = desiredAreas;
   }
 
@@ -699,6 +708,12 @@ class MapManager extends EventTarget {
 
   async #loadArea(areaId: number) {
     const { areaX, areaY } = this.#getAreaIndex(areaId);
+    if (this.#globalWmo) {
+      const spec = globalWmoArea(this.#globalWmo);
+      this.#loadedAreas.set(areaId, spec);
+      this.#loadingAreas.delete(areaId);
+      return spec;
+    }
 
     const mapPath = `${this.#mapDir}/${this.#mapName}.wdt`;
     const areaPath = `${this.#mapDir}/${this.#mapName}_${areaY}_${areaX}.adt`;
