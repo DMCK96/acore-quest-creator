@@ -30,7 +30,7 @@
 
 ## What it does
 
-- **The world in 3D.** Walk the game world from your client files; place, move and turn NPCs and objects, draw their paths, set respawn times and build spawn groups, then export the changes as a project patch.
+- **The world in 3D.** Walk the game world from your client files; place, move and turn NPCs and objects (including the passengers of ships, zeppelins and gunships), draw their paths, set respawn times and build spawn groups, then export the changes as a project patch.
 - **Quest chains docked to the World.** The **Quests** dock sits under or beside the 3D view. Make new quests or bring in existing chains from your world database, see how they connect, and drag from one quest to another to link them. Pick a quest and the camera flies to its NPCs; select one of them in the World and it is marked on the quest's card; drag one from the card onto the ground to place it.
 - **Givers and objectives.** Choose who offers and takes back a quest, and what the player must kill, use, collect or explore.
 - **Quest scripting.** Describe what happens around a quest as scenes: an NPC speaks on accept, a talk option gives credit, an escort walks a path.
