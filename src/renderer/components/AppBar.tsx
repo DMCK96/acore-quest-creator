@@ -1,32 +1,24 @@
-import { useRef } from 'react';
 import type { ClientStatus, ServerDataStatus } from '@shared/ipc';
 import type { AppStore } from '../state/app-store';
 import { OrbMark } from './OrbMark';
 import { HistoryButtons } from './HistoryButtons';
 import './AppBar.css';
 
-/** The app's two workspaces: the world in 3D, and the quest graph */
-export type Workspace = 'world' | 'quests';
-
-const WORKSPACES: [Workspace, string][] = [
-  ['world', 'World'],
-  ['quests', 'Quests'],
-];
-
 /**
  * The bar across the top of the app, on the login card's frosted surface: the orb and the project,
- * the World and Quests tabs, what is connected, and Settings.
+ * the Quests dock's toggle, what is connected, and Settings.
  */
 export function AppBar({
   store,
-  workspace,
-  onWorkspace,
+  dockOpen,
+  onToggleDock,
   onOpenProject,
   onOpenSettings,
 }: {
   store: AppStore;
-  workspace: Workspace;
-  onWorkspace(workspace: Workspace): void;
+  /** Whether the quest chain's dock shows under or beside the world */
+  dockOpen: boolean;
+  onToggleDock(): void;
   onOpenProject(): void;
   onOpenSettings(): void;
 }): React.JSX.Element {
@@ -34,18 +26,8 @@ export function AppBar({
   const dirty = store((s) => s.project.dirty);
   const summary = store((s) => s.summary);
   const profiles = store((s) => s.profiles);
-  const tabs = useRef<(HTMLButtonElement | null)[]>([]);
 
   const connectedDatabase = summary ? profiles.find((p) => p.id === summary.profileId)?.database : undefined;
-
-  /** Left and right move between the tabs (and choose the one moved to), as tabs do */
-  const onTabKey = (e: React.KeyboardEvent, index: number): void => {
-    if (e.key !== 'ArrowLeft' && e.key !== 'ArrowRight') return;
-    e.preventDefault();
-    const next = (index + (e.key === 'ArrowRight' ? 1 : WORKSPACES.length - 1)) % WORKSPACES.length;
-    onWorkspace(WORKSPACES[next]![0]);
-    tabs.current[next]?.focus();
-  };
 
   return (
     <header className="app-bar">
@@ -67,27 +49,15 @@ export function AppBar({
           <span className="app-bar__project-label">Project</span>
         </button>
       </div>
-      {/* The middle column: the workspace switch, with undo and redo beside it */}
+      {/* The middle column: the Quests dock's toggle, with undo and redo beside it */}
       <div className="app-bar__center">
-        <div className="app-bar__tabs" role="tablist" aria-label="Workspace">
-          {WORKSPACES.map(([id, label], index) => (
-            <button
-              key={id}
-              ref={(el) => {
-                tabs.current[index] = el;
-              }}
-              type="button"
-              role="tab"
-              className="app-bar__tab"
-              aria-selected={workspace === id}
-              tabIndex={workspace === id ? 0 : -1}
-              onClick={() => onWorkspace(id)}
-              onKeyDown={(e) => onTabKey(e, index)}
-            >
-              {label}
-            </button>
-          ))}
-        </div>
+        <button type="button" className="btn app-bar__quests" aria-pressed={dockOpen} onClick={onToggleDock}>
+          <svg className="app-bar__icon" viewBox="0 0 16 16" aria-hidden="true">
+            <path d="M4.5 2.5h7a1 1 0 0 1 1 1v10l-4.5-2.5-4.5 2.5v-10a1 1 0 0 1 1-1z" />
+            <path d="M6 6h4M6 8.5h4" />
+          </svg>
+          <span className="app-bar__quests-label">Quests</span>
+        </button>
         <HistoryButtons store={store} />
       </div>
       <div className="app-bar__status">

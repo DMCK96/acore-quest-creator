@@ -21,7 +21,7 @@ The build fails on a broken internal link or a missing image, so run it before y
 
 - Pages live in `site/src/content/docs/`, one folder per sidebar group: `getting-started`, `guides`, `reference`, `contributing`.
 - Each page's frontmatter sets its `title`, `description` and `sidebar.order`.
-- Link to other pages with the full path, including the site's base: `/azeroth-world-editor/guides/quest-map/`.
+- Link to other pages with the full path, including the site's base: `/azeroth-world-editor/guides/the-world/`.
 - Write for quest authors: name things the way the app does, in author terms. Table names belong on the [database tables](/azeroth-world-editor/reference/database-tables/) page only.
 
 ## Screenshots
@@ -36,7 +36,7 @@ It needs `.env` with a world database, the server data folder and the game clien
 
 `tests/docs/route-change.docs.ts` takes the World guide's before and after of a route change: it opens `tests/docs/fixtures/goldshire.awe`, a project that moves one stretch of a Stormwind Guard's route north of Goldshire onto the road, and shoots both from the same camera.
 
-Regenerate the screenshots after a change to a screen the docs show, and before a release. Check each image before committing. Pages use them with Markdown image syntax, such as `![The quest map](../../../assets/screenshots/quest-map.png)`.
+Regenerate the screenshots after a change to a screen the docs show, and before a release. Check each image before committing. Pages use them with Markdown image syntax, such as `![The World](../../../assets/screenshots/world.png)`.
 
 ## The app icon
 

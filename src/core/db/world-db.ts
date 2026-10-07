@@ -67,8 +67,6 @@ export interface WorldDb {
    * number (a path, a menu, an area trigger) starts. Throws `UnknownTableError` / `UnknownColumnError`.
    */
   selectMax?(table: string, column: string): Promise<number | null>;
-  /** Spawns of one kind on a map inside a box, ordered by guid, at most `limit`. */
-  spawnsInBox?(kind: SpawnKind, map: number, box: MapBox, limit: number): Promise<SpawnDot[]>;
   /**
    * Creatures and objects on a map inside a box for the 3D view, each kind ordered by guid and at most
    * `limit`: with facing, display, scale, wander, patrol route and held items.

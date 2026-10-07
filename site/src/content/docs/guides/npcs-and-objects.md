@@ -54,7 +54,7 @@ An NPC holds a weapon by its item's display alone, so any item works, even one y
 :::
 - **Fight**: how it fights. See the [combat wizard](/azeroth-world-editor/guides/combat-wizard/).
 - **Loot**: what it drops. See [Loot](/azeroth-world-editor/guides/loot/).
-- **Placement**: where it stands. **Add spawn**, then either paste the output of the in-game `.gps` command or place it on the [quest map](/azeroth-world-editor/guides/quest-map/). Each spawn has its own **Event**, which starts as **Same as the NPC**.
+- **Placement**: where it stands. **Add spawn** and paste the output of the in-game `.gps` command, or choose **Place in world** to put it down in [the World](/azeroth-world-editor/guides/the-world/#your-own-npcs-from-their-editor). Each spawn has its own **Event**, which starts as **Same as the NPC**.
 
 ### Visibility
 

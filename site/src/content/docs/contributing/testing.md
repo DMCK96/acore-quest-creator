@@ -27,7 +27,7 @@ ACQC_TEST_MYSQL_URL=mysql://user:password@127.0.0.1:3306/acore_world
 
 They do not skip when it is missing; they fail, so a green run always means they ran.
 
-- End-to-end tests that use the map read the server data and game client folders from `ACQC_WORLD_DB_DBC_DIR` and `ACQC_WORLD_DB_CLIENT_DIR`.
+- End-to-end tests that use the World read the server data and game client folders from `ACQC_WORLD_DB_DBC_DIR` and `ACQC_WORLD_DB_CLIENT_DIR`.
 - A test that needs a folder you have not set fails and names the variable to set.
 - End-to-end tests launch the app with a fresh `ACQC_USER_DATA` folder, so they never touch your own connection details or projects.
 

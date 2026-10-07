@@ -1,6 +1,6 @@
 ---
 title: Troubleshooting
-description: Fixes for common problems with connecting, the map and installing.
+description: Fixes for common problems with connecting, the World and installing.
 sidebar:
   order: 4
 ---
@@ -11,9 +11,9 @@ sidebar:
 - Check the MySQL user can connect from your computer and read the world database. A read-only user is enough.
 - The error shows in the login screen or Settings; *Access denied* means the user name or password is wrong.
 
-## The map is blank or has no zone art
+## The World is not drawn
 
-The zone art and minimap come from the **game client folder**. Set it in [Settings](/azeroth-world-editor/reference/settings/) to the folder with `Wow.exe`. The top bar shows **Game client** once it opened.
+The World is drawn from the **game client folder**. Set it in [Settings](/azeroth-world-editor/reference/settings/) to the folder with `Wow.exe`. The top bar shows **Game client** once it opened. In a busy place the ground and its NPCs can take a few seconds to load.
 
 ## No heights, floors or ground snapping
 

@@ -2,37 +2,42 @@ import { popPlace, pushPlace, type CameraPlace } from './camera-history';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import type { CanvasNode, GroupView, OpenResult, QuestSpawnGroup } from '@shared/ipc';
 import type { FieldValue } from '@core/registry/types';
-import { EMPTY_ENTITIES, newSpawn, type CustomObject } from '@core/entities/model';
+import { EMPTY_ENTITIES, newSpawn, type CustomObject, type ProjectEntities } from '@core/entities/model';
 import type { Placement } from '@core/world/layer';
 import { EntityEditorHost, type EditorState } from '../entities/EntityEditorHost';
 import { useHistorySteps } from '../state/history-context';
 import { useProjectEntities } from '../state/project-entities';
 import { ownViewSpawns } from '@core/entities/view-spawns';
-import { toggleRole } from '@core/modules/quest-roles';
+import { hasRole, toggleRole } from '@core/modules/quest-roles';
 import { useApi, useNameBook } from '../state/names';
 import { giverName } from '@core/modules/summaries';
-import { ownEdit } from '../map/own-3d-edit';
+import { ownEdit } from './own-edit';
+import { newSpawnGuid } from './spawn-guid';
 import { chainOf, questMenuInfo } from './quest-context';
 import { OBJECTIVES_FULL } from './menu/section';
 import { WORLD_MAPS, worldMapById } from '@core/map/world-maps';
 import type { TeleportSpot } from '@core/map/teleports';
 import { World3DView, type FocusTarget } from './World3DView';
+import type { PickedSpawn } from './scene/spawn/SpawnManager';
 import { FindDialog, type FindPreset, type FoundSpawn } from './FindDialog';
 import { TeleportDialog } from './TeleportDialog';
 import { QuestOrb } from '../components/QuestOrb';
 import { questPlace } from './quest-place';
-import type { ShowTarget } from './ShowInWorldContext';
+import { PlaceInWorldProvider, ShowInWorldProvider, useAsideForWorld, type ShowTarget, type WorldRequest } from './ShowInWorldContext';
+import { questLabel } from '@core/links/drag-link';
+import { useFocusFollow } from './useFocusFollow';
+import type { FocusPart, FocusSlice } from '../state/app/focus';
 import { NEEDS_DATABASE } from './menu/section';
 import { readLastPlace, writeLastPlace } from './last-place';
 import { markWelcomeSeen, welcomeSeen } from './welcome-seen';
 import { Welcome } from './Welcome';
+import { useQuestMarkers } from './useQuestMarkers';
+import type { MarkerFocus } from './useMarkerView';
 import './world3d.css';
 
 export interface WorldWorkspaceProps {
   /** Whether a game client folder is set: the world is drawn from it */
   hasClient: boolean;
-  /** False while the Quests workspace is showing: the world rests until it is shown again. True by default. */
-  active?: boolean;
   /** The open project's key (see `projectKey`), for its first-time welcome */
   projectKey: string;
   projectName: string;
@@ -48,15 +53,22 @@ export interface WorldWorkspaceProps {
   /** A place to take the camera to (Show on the undo note); each request is its own, even to the same place */
   goTo?: { map: number; x: number; y: number; z: number; nonce: number };
   /**
-   * A quest opened while the World was hidden, and when its opening began (on `now`'s clock): when the
-   * World is next shown, the camera goes to where the quest is, unless it was moved after that moment
+   * The quest (or one of its NPCs or objects) every view is on: the camera goes to each new one, unless
+   * it was moved after the focus was set (see `useFocusFollow`)
    */
-  follow?: { questId: number; at: number };
-  /** Show in World / Go to: a quest or one of its NPCs or objects to take the camera to; each request is its own */
-  showRequest?: { target: ShowTarget; nonce: number };
-  /** Now, on the clock `follow.at` is read against (the store's `moment`) */
+  focus?: FocusSlice['focus'];
+  /** Told when an NPC or object selected here plays a part in the open quest: it becomes the focus */
+  onFocusPart?(questId: number, part: FocusPart): void;
+  /** Now, on the clock `focus.at` is read against (the store's `moment`) */
   now?: () => number;
+  /** An editor's Place in world, Draw patrol, or a spawn's or quest position's Show in World; each request is its own */
+  request?: WorldRequest & { nonce: number };
+  /** Told when what an editor asked is done (placing stopped, the patrol drawn), so the editor comes back */
+  onRequestEnd?(): void;
 }
+
+const NO_FOCUS: FocusSlice['focus'] = { questId: null, part: null, nonce: 0, at: 0 };
+const ROLES = ['giver', 'ender', 'objective'] as const;
 
 const ROLE_LABELS: Record<QuestSpawnGroup['spawns'][number]['role'], string> = { giver: 'givers', ender: 'enders', objective: 'objectives', own: 'own' };
 
@@ -79,6 +91,12 @@ function presetOf(groups: QuestSpawnGroup[], scope: 'quest' | 'chain'): FindPres
 
 type Point = { x: number; y: number; z: number };
 
+/** One spawn of the project's own NPC or object, as Find lists it; null when the project has no such spawn */
+function ownSpawnOf(store: ProjectEntities, kind: 'creature' | 'object', entry: number, guid: number, name: string): FoundSpawn | null {
+  const spawn = (kind === 'object' ? store.objects : store.npcs).find((e) => e.entry === entry)?.spawns.find((s) => s.guid === guid);
+  return spawn ? { kind, guid, entry, name, map: spawn.map, x: spawn.x, y: spawn.y, z: spawn.z, event: null, note: null } : null;
+}
+
 /** How long the welcome takes to fade from the world once something is chosen (matches Welcome.css) */
 const WELCOME_FADE_MS = 500;
 
@@ -89,8 +107,8 @@ const WELCOME_FADE_MS = 500;
  * a place to start.
  */
 export function WorldWorkspace({
-  hasClient, active = true, projectKey, projectName, onOpenSettings, onShowQuests, onStartQuest, quest, onQuestField, onNewQuest, goTo: goToRequest,
-  follow, showRequest, now = Date.now,
+  hasClient, projectKey, projectName, onOpenSettings, onShowQuests, onStartQuest, quest, onQuestField, onNewQuest, goTo: goToRequest,
+  focus: shared = NO_FOCUS, onFocusPart, now = Date.now, request, onRequestEnd,
 }: WorldWorkspaceProps): React.JSX.Element {
   // The open quest's values as last changed here, so edits made one after another build on each other
   const values = useRef(quest?.open.aggregate.values);
@@ -115,6 +133,8 @@ export function WorldWorkspace({
   namesRef.current = names;
   // The NPC or object editor, opened from the right-click menu
   const [editor, setEditor] = useState<EditorState | null>(null);
+  // The editor steps aside while the author places or draws in the world from it
+  const [editorAside, editorPlace, editorShow] = useAsideForWorld();
   const [note, setNote] = useState<string | null>(null);
 
   /** New NPC here… / New object here…: one project NPC or object with a spawn where it was asked for, as one step */
@@ -122,12 +142,12 @@ export function WorldWorkspace({
     if (!project || !api) return;
     let made: { kind: 'npc' | 'object'; entry: number } | null = null;
     await runStep(async () => {
-      const guid = await api.allocateIds(what === 'creature' ? 'creatureSpawn' : 'gameobjectSpawn', 1);
-      if (!guid.ok || guid.value.length === 0) {
-        setNote(guid.ok ? 'No free spawn ID could be found.' : guid.error.message);
+      const guid = await newSpawnGuid(api, what);
+      if ('error' in guid) {
+        setNote(guid.error);
         return;
       }
-      const spawn = { ...newSpawn(guid.value[0]!), map: mapRef.current, x: at.x, y: at.y, z: at.z, o: at.orientation, rotation: what === 'object' ? at.rotation : null };
+      const spawn = { ...newSpawn(guid.guid), map: mapRef.current, x: at.x, y: at.y, z: at.z, o: at.orientation, rotation: what === 'object' ? at.rotation : null };
       const kind = what === 'creature' ? 'npc' : 'object';
       const result = await project.create(kind, { spawns: [spawn] });
       if ('error' in result) setNote(result.error);
@@ -208,10 +228,9 @@ export function WorldWorkspace({
   const [finding, setFinding] = useState(false);
   // The spawn the view is to bring into view (each pick is its own, even of the same spawn)
   const [focus, setFocus] = useState<FocusTarget | undefined>();
-  // Projects whose welcome was closed here; read with what storage says, so a project greeted
-  // elsewhere, or opened while this was hidden, is handled when the world is next shown
+  // Projects whose welcome was closed here; read with what storage says, so a project greeted elsewhere is not greeted again
   const [closed, setClosed] = useState<ReadonlySet<string>>(new Set());
-  const welcoming = active && hasClient && !closed.has(projectKey) && !welcomeSeen(projectKey);
+  const welcoming = hasClient && !closed.has(projectKey) && !welcomeSeen(projectKey);
   // The welcome fading out over the world after a choice (the choice itself happens at once)
   const [fading, setFading] = useState(false);
   useEffect(() => {
@@ -230,6 +249,7 @@ export function WorldWorkspace({
   /** Moves the camera to a point, on the map given (this one by default), and remembers it */
   const goTo = (point: Point, map = mapRef.current): void => {
     if (map !== mapRef.current) setMapId(map);
+    mapRef.current = map;
     setAt(point);
     placeRef.current = point;
     setTyped({ x: String(point.x), y: String(point.y), z: String(point.z) });
@@ -240,7 +260,7 @@ export function WorldWorkspace({
   const placeRef = useRef<Point>({ x: first.x, y: first.y, z: first.z });
   const areaRef = useRef(area);
   areaRef.current = area;
-  // When the camera last moved (a flight, a drag or a jump), on `now`'s clock: a quest opened before then is not followed
+  // When the camera last moved (the author flying or dragging it, or a jump), on `now`'s clock: a focus set before then is not followed
   const lastCameraMove = useRef(0);
   const nowRef = useRef(now);
   nowRef.current = now;
@@ -294,61 +314,82 @@ export function WorldWorkspace({
       return { error: read.error.code === 'NOT_CONNECTED' ? NEEDS_DATABASE : `Could not read the quest’s spawns: ${read.error.message}` };
     }
     const groups: QuestSpawnGroup[] = read.value;
-    const s = questPlace(groups, from, only);
+    // A spawn on a map the World draws wins; the rest (an instance, say) are only named when nothing else is left
+    const s = questPlace(groups.map((g) => ({ ...g, spawns: g.spawns.filter((sp) => worldMapById(sp.map)) })), from, only);
     // Nothing the project or the layer has: the database may still have it
     if (!s && groups.some((g) => g.offline)) return { error: NEEDS_DATABASE };
-    if (!s || !worldMapById(s.map)) return { spawn: null, ...(only && { name: giverName({ kind: only.kind, id: only.entry }, namesRef.current, storeRef.current) }) };
+    if (!s) {
+      const elsewhere = questPlace(groups, from, only);
+      if (elsewhere) return { error: `${only ? giverName({ kind: only.kind, id: only.entry }, namesRef.current, storeRef.current) : 'This quest'} is on map ${elsewhere.map}, which the World cannot draw.` };
+      return { spawn: null, ...(only && { name: giverName({ kind: only.kind, id: only.entry }, namesRef.current, storeRef.current) }) };
+    }
     return { spawn: { kind: s.kind === 'gameobject' ? 'object' : 'creature', guid: s.guid, entry: s.entry, name: s.name, map: s.map, x: s.x, y: s.y, z: s.z, event: s.event ?? null, note: null } };
   };
-  const placeOfRef = useRef(placeOf);
-  placeOfRef.current = placeOf;
-  const findRef = useRef<(spawn: FoundSpawn) => void>(() => {});
-  // The follow last dealt with (taken, dropped, or seen while the World was shown), by when it began
-  const followSeen = useRef(0);
-  // Show in World / Go to: the camera goes there, or a note says why it cannot
-  useEffect(() => {
-    if (!showRequest) return;
-    // Asked for just now: a quest followed on the way here would only be gone from at once
-    if (follow) followSeen.current = Math.max(followSeen.current, follow.at);
-    void (async () => {
-      const place = await placeOfRef.current(showRequest.target);
-      if ('error' in place) setNote(place.error);
-      else if (!place.spawn) setNote(place.name !== undefined ? `${place.name} has no spawn in the world yet.` : 'Nothing of this quest is placed in the world yet.');
-      else findRef.current(place.spawn);
-    })();
-    // Only a new request moves the camera
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [showRequest?.nonce]);
-  // A quest opened while the World was hidden: followed when the World is next shown, unless the camera moved since
-  const wasActive = useRef(active);
-  useEffect(() => {
-    const shown = active && !wasActive.current;
-    wasActive.current = active;
-    if (!active || !follow || follow.at <= followSeen.current) return;
-    followSeen.current = follow.at;
-    if (!shown || follow.at <= lastCameraMove.current) return;
-    const moved = lastCameraMove.current;
-    void (async () => {
-      const place = await placeOfRef.current({ questId: follow.questId });
-      // Nothing placed, or nothing could be read: the camera stays, with nothing said; nor does it go once the author has moved it
-      if ('error' in place || !place.spawn || lastCameraMove.current !== moved) return;
-      findRef.current(place.spawn);
-    })();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [active, follow?.at]);
+  // The spawn the focus last led to, for selecting it once the camera is there
+  const followed = useRef<FoundSpawn | null>(null);
+  // The part this view selected and made the focus: that focus is not followed back to it
+  const reported = useRef<FocusPart | null>(null);
+  // The note the follow last put up, which the next focus takes back
+  const followNote = useRef<string | null>(null);
+  useFocusFollow({
+    focus: shared,
+    lastCameraMove: () => lastCameraMove.current,
+    shown: hasClient,
+    placeOf: async (target) => {
+      const place = await placeOf(target);
+      followed.current = 'spawn' in place ? place.spawn : null;
+      return place;
+    },
+    jump: ({ map, ...point }) => jump(point, map),
+    select: ({ kind, guid }) => {
+      const spawn = followed.current;
+      if (!spawn || spawn.kind !== kind || spawn.guid !== guid || spawn.map !== mapRef.current) return;
+      // The camera went to it, and closes in; one the author has moved away from is selected only while it is in view
+      const there = Math.hypot(spawn.x - placeRef.current.x, spawn.y - placeRef.current.y, spawn.z - placeRef.current.z) <= 1;
+      bringIntoView(spawn, !there);
+    },
+    note: (text) => {
+      followNote.current = text;
+      setNote(text);
+    },
+    // Only the follow's own note: one another action left meanwhile stays
+    clearNote: () => {
+      const mine = followNote.current;
+      followNote.current = null;
+      if (mine !== null) setNote((shown) => (shown === mine ? null : shown));
+    },
+    selected: () => {
+      const part = reported.current;
+      reported.current = null;
+      return part;
+    },
+  });
+  /** An NPC or object selected here (by a click or by Find) that plays a part in the open quest becomes the focus */
+  const selectSpawn = (spawn: Pick<PickedSpawn, 'kind' | 'entry'> | null): void => {
+    if (!spawn || !info || !onFocusPart) return;
+    const part: FocusPart = { kind: spawn.kind === 'object' ? 'gameobject' : 'creature', entry: spawn.entry };
+    if (!ROLES.some((role) => hasRole(info.roles, role, { kind: part.kind, id: part.entry }))) return;
+    if (shared.questId === info.id && shared.part?.kind === part.kind && shared.part.entry === part.entry) return;
+    reported.current = part;
+    onFocusPart(info.id, part);
+  };
   const teleport = (spot: TeleportSpot): void => {
     setTeleporting(false);
     jump({ x: spot.x, y: spot.y, z: spot.z }, spot.map);
   };
+  /** Selects a spawn in the view and, unless it is to `stay`, takes the camera close to it */
+  function bringIntoView(spawn: FoundSpawn, stay = false): void {
+    setFocus((previous) => ({
+      kind: spawn.kind, guid: spawn.guid, entry: spawn.entry, name: spawn.name, x: spawn.x, y: spawn.y, z: spawn.z,
+      event: spawn.event, added: spawn.note === 'placed', stay, nonce: (previous?.nonce ?? 0) + 1,
+    }));
+  }
   const find = (spawn: FoundSpawn): void => {
     setFinding(false);
     jump({ x: spawn.x, y: spawn.y, z: spawn.z }, spawn.map);
-    setFocus((previous) => ({
-      kind: spawn.kind, guid: spawn.guid, entry: spawn.entry, name: spawn.name, x: spawn.x, y: spawn.y, z: spawn.z,
-      event: spawn.event, added: spawn.note === 'placed', nonce: (previous?.nonce ?? 0) + 1,
-    }));
+    bringIntoView(spawn);
+    selectSpawn(spawn);
   };
-  findRef.current = find;
   // A spawn group: the camera goes to the middle of its members, and its first spawn is focused
   const findGroup = (view: GroupView): void => {
     setFinding(false);
@@ -367,16 +408,94 @@ export function WorldWorkspace({
       }));
     }
   };
+
+  const onRequestEndRef = useRef(onRequestEnd);
+  onRequestEndRef.current = onRequestEnd;
+  // The open quest's positions (scene steps, escorts, fight summons, areas, POIs) drawn as markers
+  const markers = useQuestMarkers({
+    values, entities: storeRef, map: mapId, change, runStep,
+    setEntities: (next) => {
+      storeRef.current = next;
+      project?.setEntities(next);
+    },
+  });
+  const [markerFocus, setMarkerFocus] = useState<MarkerFocus | undefined>();
+  // What an editor asked to see (a quest position, a spawn, a quest or its part), until the author is done with it there
+  const [showing, setShowing] = useState<string | null>(null);
+  const endShowing = (): void => {
+    setShowing(null);
+    onRequestEndRef.current?.();
+  };
+  /** Show in World on a quest position: the camera goes to its marker, which is selected to drag */
+  const showMarker = (id: string): void => {
+    const marker = markers.all.find((m) => m.id === id);
+    const map = marker ? (marker.map ?? mapRef.current) : null;
+    if (!marker || map === null || !worldMapById(map)) {
+      setNote(marker ? `${marker.label} is on a map the 3D view does not draw.` : 'That position is not in the open quest.');
+      onRequestEndRef.current?.();
+      return;
+    }
+    jump({ x: marker.x, y: marker.y, z: marker.z }, map);
+    setMarkerFocus((was) => ({ id, nonce: (was?.nonce ?? 0) + 1 }));
+    setShowing(`${marker.label}: drag its handles to move it.`);
+  };
+  // A quest closed while one of its positions is shown: there is nothing left to show
+  const questOpen = quest !== undefined;
+  useEffect(() => {
+    if (!questOpen && showing !== null) endShowing();
+    // Only the quest closing ends it
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [questOpen]);
+
+  // An editor's request: placing starts, the camera goes to the exact spawn (and its patrol is drawn) or
+  // quest position, or (Show in World, which the focus does) the World says what it is showing
+  const [placeRequest, setPlaceRequest] = useState<{ kind: 'creature' | 'object'; entry: number; name: string; nonce: number } | undefined>();
+  const [patrolRequest, setPatrolRequest] = useState<{ guid: number; name: string; nonce: number } | undefined>();
+  useEffect(() => {
+    const asked = request;
+    if (!asked) return;
+    setShowing(null);
+    if (asked.kind === 'marker') {
+      showMarker(asked.id);
+      return;
+    }
+    if (asked.kind === 'show') {
+      const { target } = asked;
+      setShowing(`${'kind' in target ? giverName({ kind: target.kind, id: target.entry }, namesRef.current, storeRef.current) : questLabel(quest?.nodes ?? [], target.questId)}.`);
+      return;
+    }
+    const kind = asked.kind === 'patrol' ? 'creature' : asked.kind === 'spawn' ? asked.spawn : asked.kind;
+    const name = giverName({ kind: kind === 'object' ? 'gameobject' : 'creature', id: asked.entry }, namesRef.current, storeRef.current);
+    if (asked.kind !== 'patrol' && asked.kind !== 'spawn') {
+      setPlaceRequest((was) => ({ kind, entry: asked.entry, name, nonce: (was?.nonce ?? 0) + 1 }));
+      return;
+    }
+    const spawn = ownSpawnOf(storeRef.current, kind, asked.entry, asked.guid, name);
+    if (!spawn || !worldMapById(spawn.map)) {
+      setNote(spawn ? `${name} stands on a map the 3D view does not draw.` : 'That spawn is no longer in the project.');
+      onRequestEndRef.current?.();
+      return;
+    }
+    find(spawn);
+    if (asked.kind === 'patrol') setPatrolRequest((was) => ({ guid: spawn.guid, name, nonce: (was?.nonce ?? 0) + 1 }));
+    else setShowing(`${name}.`);
+    // Only a new request is acted on
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [request?.nonce]);
+
   const parsed = { x: Number(typed.x), y: Number(typed.y), z: Number(typed.z) };
   const valid = [typed.x, typed.y, typed.z].every((v) => v.trim() !== '') && Object.values(parsed).every(Number.isFinite);
 
   // Esc closes this workspace's own panels, the top one first; it never leaves the world. The view
-  // clears its own selection.
+  // clears its own selection. Only keys pressed in the world are its own: one pressed in the quest dock
+  // beside it, or in a dialog over the app, is left to that.
+  const section = useRef<HTMLElement | null>(null);
   const panels = useRef({ finding, teleporting, coordinates, welcoming, leaveWelcome, preset });
   panels.current = { finding, teleporting, coordinates, welcoming, leaveWelcome, preset };
   useEffect(() => {
-    if (!active) return;
     const onKeyDown = (e: KeyboardEvent): void => {
+      const from = e.target instanceof Element ? e.target : null;
+      if (from && from !== document.body && !section.current?.contains(from)) return;
       if (e.key === 'ArrowLeft' && e.altKey && !e.ctrlKey && !e.metaKey && !e.shiftKey) {
         const el = e.target instanceof HTMLElement ? e.target : null;
         if (el && (el.isContentEditable || ['INPUT', 'TEXTAREA', 'SELECT'].includes(el.tagName))) return;
@@ -396,7 +515,7 @@ export function WorldWorkspace({
     };
     document.addEventListener('keydown', onKeyDown, true);
     return () => document.removeEventListener('keydown', onKeyDown, true);
-  }, [active]);
+  }, []);
 
   const mapName = worldMapById(mapId)?.name ?? '';
 
@@ -434,22 +553,21 @@ export function WorldWorkspace({
   );
 
   return (
-    <section className="world-workspace" aria-label="World">
+    <section ref={section} className="world-workspace" aria-label="World">
       <World3DView
         map={mapId}
         start={at}
         hasClient
         focus={focus}
-        active={active}
+        onSelect={selectSpawn}
         showArea={false}
         onArea={setArea}
         onPlaceChange={(place) => {
-          // The place the camera was last sent to is reported back once it rests there; anything else is the author
-          // moving it. The author cannot move it while the World is hidden: a jump settling then is not a move
-          const was = placeRef.current;
-          if (active && Math.hypot(place.x - was.x, place.y - was.y, place.z - was.z) > 1) lastCameraMove.current = nowRef.current();
           placeRef.current = place;
           writeLastPlace({ map: mapRef.current, ...place });
+        }}
+        onCameraInput={() => {
+          lastCameraMove.current = nowRef.current();
         }}
         own={own}
         onOwnEdit={
@@ -481,7 +599,21 @@ export function WorldWorkspace({
           setFocus((previous) => ({ ...target, nonce: (previous?.nonce ?? 0) + 1 }));
         }}
         onSetLootable={setLootable}
+        placeRequest={placeRequest}
+        patrolRequest={patrolRequest}
+        onRequestEnd={() => onRequestEndRef.current?.()}
+        markers={markers.shown}
+        onMarkerMove={markers.move}
+        markerFocus={markerFocus}
       />
+      {showing && (
+        <p role="status" className="world3d__placing">
+          Showing {showing}
+          <button type="button" className="btn" onClick={endShowing}>
+            Done
+          </button>
+        </p>
+      )}
       {note && (
         <p className="world3d__note" role="status">
           {note}
@@ -491,11 +623,15 @@ export function WorldWorkspace({
         </p>
       )}
       {editor && project && (
-        <div className="modal-backdrop">
-          <EntityEditorHost entities={project.entities} onChange={(next) => project.setEntities(next)} quests={project.quests} layer={project.layer}
-            state={editor} onTab={(tab) => setEditor((was) => (was ? { ...was, tab } : was))} onClose={() => setEditor(null)}
-            onDelete={(kind, entry) => project.remove(kind, entry)} />
-        </div>
+        <PlaceInWorldProvider value={editorPlace}>
+        <ShowInWorldProvider value={editorShow}>
+          <div className="modal-backdrop" hidden={editorAside}>
+            <EntityEditorHost entities={project.entities} onChange={(next) => project.setEntities(next)} quests={project.quests} layer={project.layer}
+              state={editor} onTab={(tab) => setEditor((was) => (was ? { ...was, tab } : was))} onClose={() => setEditor(null)}
+              onDelete={(kind, entry) => project.remove(kind, entry)} />
+          </div>
+        </ShowInWorldProvider>
+        </PlaceInWorldProvider>
       )}
       <section className="world-place glass" aria-label="Place">
         <h2 className="world-place__title">{area ?? mapName}</h2>
@@ -546,7 +682,7 @@ export function WorldWorkspace({
           </form>
         )}
       </section>
-      {(welcoming || (fading && active)) && (
+      {(welcoming || fading) && (
         <Welcome
           projectName={projectName}
           leaving={!welcoming}

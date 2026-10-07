@@ -1,30 +1,22 @@
 import { useEffect, useRef, useState } from 'react';
 import type { AppStore } from '../state/app-store';
-import { ConnectionCard } from '../connection/ConnectionCard';
 import { trapTab } from '../components/trap-tab';
-import { devChanged, draftFromProfiles, validateDraft, worldChanged, type ConnectionDraft, type DraftErrors } from '../connection/draft';
+import { SETTINGS_SECTIONS } from './settings/sections';
 import './ProjectDialog.css';
 import './SettingsDialog.css';
 
 /**
- * The Settings modal: the login screen's card, over the canvas, with Save for Connect. A change to
- * the world database (or its folders) saves and then reconnects: the new connection is opened
- * first and the old one closed only once it works, so a failed reconnect keeps the old connection
- * (and shows why here). Reconnecting closes any open quest. A change to the dev database alone
- * just saves.
+ * The Settings modal over the World: a tab per section (the connection, the preferences). Every
+ * section stays mounted, so edits in one survive a look at another. A section mid-save reports it
+ * busy and the dialog will not close or change tab until it is done: closing would lose a failure
+ * nobody else shows.
  */
 export function SettingsDialog({ store, onClose }: { store: AppStore; onClose: () => void }): React.JSX.Element {
-  const { saveConnection, reconnect, chooseServerDataDir } = store.getState();
-  const [original, setOriginal] = useState<ConnectionDraft>(() => draftFromProfiles(store.getState().profiles));
-  const [draft, setDraft] = useState<ConnectionDraft>(original);
-  const [errors, setErrors] = useState<DraftErrors>({});
-  const [error, setError] = useState<string | null>(null);
+  const [active, setActive] = useState(0);
   const [busy, setBusy] = useState(false);
-  // Saved but not yet connected with: the last reconnect failed, so Save offers it again.
-  const [unconnected, setUnconnected] = useState(false);
-  const dialog = useRef<HTMLFormElement | null>(null);
+  const dialog = useRef<HTMLDivElement | null>(null);
+  const tabs = useRef<(HTMLButtonElement | null)[]>([]);
 
-  // Closing mid-save would lose a failure nobody else shows.
   const close = (): void => {
     if (!busy) onClose();
   };
@@ -54,73 +46,60 @@ export function SettingsDialog({ store, onClose }: { store: AppStore; onClose: (
     if (!busy && dialog.current && !dialog.current.contains(document.activeElement)) dialog.current.focus();
   }, [busy]);
 
-  const reconnects = unconnected || worldChanged(draft, original);
-  const changed = reconnects || devChanged(draft, original);
-
-  const submit = async (e: React.FormEvent): Promise<void> => {
+  /** Left and right move between the tabs (and choose the one moved to), as tabs do */
+  const onTabKey = (e: React.KeyboardEvent, index: number): void => {
+    if (e.key !== 'ArrowLeft' && e.key !== 'ArrowRight') return;
     e.preventDefault();
-    const found = validateDraft(draft);
-    setErrors(found);
-    const firstInvalid = Object.keys(found)[0];
-    if (firstInvalid !== undefined) {
-      document.getElementById(firstInvalid)?.focus();
-      return;
-    }
-    setError(null);
-    setBusy(true);
-    try {
-      const saved = await saveConnection(draft, original);
-      if (!saved.ok) {
-        setError(saved.error);
-        // What did save is kept, so a retry updates it; a saved world change is still to connect with.
-        if (saved.saved && saved.original) {
-          setOriginal(saved.original);
-          setDraft(saved.saved);
-          if (reconnects) setUnconnected(true);
-        }
-        return;
-      }
-      // Saving again (after a failed reconnect) updates these rows instead of adding more.
-      setOriginal(saved.saved);
-      setDraft(saved.saved);
-      if (reconnects) {
-        const failed = await reconnect(saved.worldId);
-        setUnconnected(failed !== null);
-        if (failed !== null) {
-          setError(failed);
-          return;
-        }
-      }
-      onClose();
-    } finally {
-      setBusy(false);
-    }
+    const next = (index + (e.key === 'ArrowRight' ? 1 : SETTINGS_SECTIONS.length - 1)) % SETTINGS_SECTIONS.length;
+    setActive(next);
+    tabs.current[next]?.focus();
   };
 
   return (
     <div className="modal-backdrop settings-backdrop" onMouseDown={(e) => e.target === e.currentTarget && close()}>
-      <ConnectionCard
-        formRef={dialog}
+      <div
+        ref={dialog}
+        className="conn-card settings-dialog"
         role="dialog"
         aria-modal="true"
-        aria-labelledby="settings-dialog-title"
+        aria-label="Settings"
         tabIndex={-1}
         onKeyDown={(e) => trapTab(e, dialog.current)}
-        onSubmit={(e) => void submit(e)}
-        title="Settings"
-        titleId="settings-dialog-title"
-        subtitle="Your AzerothCore world database connection."
-        error={error}
-        note={reconnects ? 'Saving reconnects with these details and closes the open quest. Your project stays open.' : null}
-        submitLabel={busy ? 'Saving…' : 'Save'}
-        submitDisabled={!changed}
-        busy={busy}
-        onClose={close}
-        draft={draft}
-        onChange={setDraft}
-        errors={errors}
-        browse={chooseServerDataDir}
-      />
+      >
+        <div className="settings-dialog__bar">
+          <div className="settings-tabs" role="tablist" aria-label="Settings sections">
+            {SETTINGS_SECTIONS.map(({ id, title }, index) => (
+              <button
+                key={id}
+                ref={(el) => {
+                  tabs.current[index] = el;
+                }}
+                type="button"
+                role="tab"
+                id={`settings-tab-${id}`}
+                aria-controls={`settings-panel-${id}`}
+                aria-selected={active === index}
+                tabIndex={active === index ? 0 : -1}
+                className="settings-tabs__tab"
+                disabled={busy}
+                onClick={() => setActive(index)}
+                onKeyDown={(e) => onTabKey(e, index)}
+              >
+                {title}
+              </button>
+            ))}
+          </div>
+          {/* The dialog's, not a section's: every tab can be closed */}
+          <button type="button" className="btn btn--icon" aria-label="Close" onClick={close} disabled={busy}>
+            ✕
+          </button>
+        </div>
+        {SETTINGS_SECTIONS.map(({ id, Component }, index) => (
+          <div key={id} role="tabpanel" id={`settings-panel-${id}`} aria-labelledby={`settings-tab-${id}`} hidden={active !== index}>
+            <Component store={store} onClose={onClose} setBusy={setBusy} />
+          </div>
+        ))}
+      </div>
     </div>
   );
 }

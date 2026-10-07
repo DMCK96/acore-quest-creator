@@ -18,6 +18,7 @@ import { EMPTY_ENTITIES } from '@core/entities/model';
 import { PlaceDialog, type Chosen } from './PlaceDialog';
 import { OrbMark } from '../components/OrbMark';
 import type { PlaceRequest } from './placing';
+import { CHAIN_DRAG_TYPE, dropToRequest, groundOverDrag } from './chain-drop';
 import { useWorldMenu } from './useWorldMenu';
 import type { QuestMenuInfo } from './menu/model';
 import type { Role, RoleTarget } from '@core/modules/quest-roles';
@@ -27,12 +28,16 @@ import { looksOf } from '@core/entities/view-spawns';
 import '../views/ProjectDialog.css';
 import './world3d.css';
 import { goToTarget } from './go-to-spawn';
+import { newSpawnGuid } from './spawn-guid';
+import type { WorldMarker } from './quest-markers';
+import { useMarkerView, type MarkerFocus } from './useMarkerView';
+import { MarkerCard } from './MarkerCard';
 
 /** The camera's controls, as the help in the corner lists them. */
 const CONTROLS: [string, string][] = [
   ['Right-drag', 'Look around'],
   ['Tab', 'Switch between Camera and Select'],
-  ['Left-click', 'Select an NPC, an object or a point of a shown route'],
+  ['Left-click', 'Select an NPC, an object, a point of a shown route or a quest position'],
   ['Left-drag', 'Camera: orbit round the point under the cursor. Select: select with a box'],
   ['Shift-click', 'Camera: add a point to the selected NPC’s route. Select: add to the selection'],
   ['Ctrl-click', 'Select: take from the selection'],
@@ -42,6 +47,7 @@ const CONTROLS: [string, string][] = [
   ['O', 'Falloff: nearby route points follow a move'],
   ['[ / ]', 'Falloff radius'],
   ['Place…', 'Choose an existing NPC or object, then click the ground'],
+  ['Drag from the Quests dock', 'Drop the open quest’s NPC or object on the ground to place it'],
   ['Delete', 'Remove the selected route points'],
   ['Ctrl+Z / Ctrl+Y', 'Undo and redo'],
   ['Right-click', 'Menu: place, copy, paste, paths, quest'],
@@ -124,14 +130,14 @@ interface ViewProps {
   onOwnEdit?(edit: SpawnEdit): boolean | void;
   /** A spawn to bring into view: the camera goes close to it and it is selected. Its map is `map`. */
   focus?: FocusTarget;
-  /** False while the view is hidden: the world stops drawing until it is shown again. True by default. */
-  active?: boolean;
   /** Whether the view labels the area itself; a host that names it elsewhere turns this off. True by default. */
   showArea?: boolean;
   /** Told the name of the area the camera is over, and null while a new world starts. */
   onArea?(name: string | null): void;
   /** Told where the camera rests (the point it looks at) once it has moved more than a yard. */
   onPlaceChange?(place: { x: number; y: number; z: number }): void;
+  /** Told each time the author moves the camera themselves, as it happens */
+  onCameraInput?(): void;
   /** The open quest, for the right-click menu's quest items; none leaves them out. */
   quest?: QuestMenuInfo;
   /** The quests of the open quest's chain, for showing the chain's spawns. */
@@ -150,7 +156,26 @@ interface ViewProps {
   onNewQuest?(giver: { entry: number; name: string }, after: boolean): void;
   /** Told the spawns of the open quest or its chain, when they are shown, to list them. */
   onShowSpawns?(groups: QuestSpawnGroup[], scope: 'quest' | 'chain'): void;
+  /** An editor's Place in world: placing that NPC or object starts, as Place… does (each request is its own) */
+  placeRequest?: { kind: 'creature' | 'object'; entry: number; name: string; nonce: number };
+  /** An editor's Draw patrol: a project NPC spawn's new path is started once it is drawn; one with a route is left to edit */
+  patrolRequest?: { guid: number; name: string; nonce: number };
+  /** Told when what an editor asked is done: placing stopped, or the patrol drawn or left */
+  onRequestEnd?(): void;
+  /** The open quest's positions on this map, drawn as markers to select and drag */
+  markers?: readonly WorldMarker[];
+  /** Told where a marker was dragged to */
+  onMarkerMove?(id: string, to: { x: number; y: number; z: number }): void;
+  /** A marker to select, once its world is there (the host takes the camera to it) */
+  markerFocus?: MarkerFocus;
 }
+
+/** How often, and how many times once the world has loaded its NPCs, a patrol request looks for its NPC in the view */
+const PATROL_LOOK_MS = 250;
+const PATROL_LOOKS = 120;
+
+/** A patrol an editor asked for: its NPC is looked for, then its path drawn, or its route edited */
+type Patrolling = { guid: number; name: string; stage: 'finding' | 'drawing' | 'editing' };
 
 /** How often the view checks where the camera rests, and how far it must move to count */
 const PLACE_CHECK_MS = 2000;
@@ -169,6 +194,8 @@ export interface FocusTarget {
   event: { id: number; name: string } | null;
   /** One placed in the 3D view */
   added: boolean;
+  /** Selected where the camera is, without moving it, and only while it is in view; by default the camera goes close to it */
+  stay?: boolean;
   /** Told apart from an earlier focus on the same spawn, which is to be done again */
   nonce: number;
 }
@@ -210,8 +237,8 @@ class Contained extends Component<{ children: ReactNode }, { failure: string | n
 }
 
 function WorldStage({
-  map, start, hasClient, own, onSelect, onOwnEdit, focus, active = true, showArea = true, onArea, onPlaceChange, quest, chainIds, onQuestRole, onNewQuest, onShowSpawns,
-  onCreateEntity, onEditEntity, onSetLootable, onGoToSpawn,
+  map, start, hasClient, own, onSelect, onOwnEdit, focus, showArea = true, onArea, onPlaceChange, onCameraInput, quest, chainIds, onQuestRole, onNewQuest, onShowSpawns,
+  onCreateEntity, onEditEntity, onSetLootable, onGoToSpawn, placeRequest, patrolRequest, onRequestEnd, markers, onMarkerMove, markerFocus,
 }: ViewProps): React.JSX.Element {
   const container = useRef<HTMLDivElement>(null);
   const world = useRef<World3D | null>(null);
@@ -235,8 +262,8 @@ function WorldStage({
   onAreaRef.current = onArea;
   const onPlaceChangeRef = useRef(onPlaceChange);
   onPlaceChangeRef.current = onPlaceChange;
-  const activeRef = useRef(active);
-  activeRef.current = active;
+  const onCameraInputRef = useRef(onCameraInput);
+  onCameraInputRef.current = onCameraInput;
   // A spawn to bring into view; kept until the world that is to show it is there (a map switch builds a new one)
   const pendingFocus = useRef<FocusTarget | null>(null);
   // The world layer as the main process last gave it, drawn over the database
@@ -248,6 +275,8 @@ function WorldStage({
   const [changesOpen, setChangesOpen] = useState(false);
   const project = useProjectEntities();
   const projectEntities = project?.entities;
+  const projectEntitiesRef = useRef(projectEntities);
+  projectEntitiesRef.current = projectEntities;
   const setProjectLayer = useRef(project?.setLayer);
   setProjectLayer.current = project?.setLayer;
   const changes = layer.spawns.length + layer.routes.length + layer.added.length + movementsOf(layer).length + respawnsOf(layer).length + groupsOf(layer).length + spawnEventsOf(layer).length
@@ -255,6 +284,26 @@ function WorldStage({
   // Choosing an existing NPC or object to place, and the one being placed (each click on the ground puts one down)
   const [choosing, setChoosing] = useState(false);
   const [placing, setPlacing] = useState<Chosen | null>(null);
+  const placingRef = useRef(placing);
+  placingRef.current = placing;
+  // Whether the placing under way is one an editor asked for, which is told when it stops
+  const placeAsked = useRef(false);
+  const [patrolling, setPatrolling] = useState<Patrolling | null>(null);
+  const patrollingRef = useRef(patrolling);
+  patrollingRef.current = patrolling;
+  const onRequestEndRef = useRef(onRequestEnd);
+  onRequestEndRef.current = onRequestEnd;
+  /** Ends the patrol an editor asked for (a path being drawn is finished first) and says so */
+  const endPatrol = (): void => {
+    const was = patrollingRef.current;
+    if (!was) return;
+    patrollingRef.current = null;
+    setPatrolling(null);
+    if (was.stage === 'drawing') world.current?.finishPath();
+    onRequestEndRef.current?.();
+  };
+  const endPatrolRef = useRef(endPatrol);
+  endPatrolRef.current = endPatrol;
   /** A layer from the Project changes list (after a revert): kept and drawn */
   const takeLayer = (next: WorldLayer): void => {
     layerRef.current = next;
@@ -287,19 +336,22 @@ function WorldStage({
     setLayer(storeLayer);
     world.current?.setWorldLayer(storeLayer);
   }, [storeLayer]);
-  /** Takes the camera close to the pending focus and selects it, with the layers that would hide it on */
+  /** Takes the camera close to the pending focus and selects it, with the layers that would hide it on; one to `stay` is only selected, while it is in view */
   const bringIntoView = (): void => {
     const target = pendingFocus.current;
     const current = world.current;
     if (!target || !current) return;
     pendingFocus.current = null;
+    if (target.stay && !current.spawnOf(target.kind, target.guid)) return;
     // An event spawn is shown by drawing the world during its event (all events already show it)
-    setLayers((l) => ({
-      ...l,
-      [target.kind === 'creature' ? 'creatures' : 'objects']: true,
-      ...(target.event && l.events !== 'all' && l.events !== target.event.id ? { events: target.event.id, eventName: target.event.name } : {}),
-    }));
-    current.lookAt(target.x, target.y, target.z + 1, true);
+    if (!target.stay) {
+      setLayers((l) => ({
+        ...l,
+        [target.kind === 'creature' ? 'creatures' : 'objects']: true,
+        ...(target.event && l.events !== 'all' && l.events !== target.event.id ? { events: target.event.id, eventName: target.event.name } : {}),
+      }));
+      current.lookAt(target.x, target.y, target.z + 1, true);
+    }
     current.select({ kind: target.kind, guid: target.guid });
     setSelected({
       kind: target.kind, guid: target.guid, entry: target.entry, name: target.name, own: false, added: target.added, pathId: 0,
@@ -323,6 +375,10 @@ function WorldStage({
   mapRef.current = map;
   // Edits as the view sends them, set by the world that is up; paths started here, which the database lacks
   const sendRef = useRef<(change: SpawnEdit) => Promise<boolean>>(async () => false);
+  // Places a spawn in the world that is up; a click while placing and a part dropped from the chain alike
+  const placeRef = useRef<(request: PlaceRequest) => Promise<void>>(async () => {});
+  /** One placement is one step of the project's history */
+  const placeStep = (request: PlaceRequest): void => void runStepRef.current(() => placeRef.current(request));
   const newPaths = useRef(new Set<number>());
   /** A path the database does not have: started here, or found in the layer made from nothing (before a restart) */
   const isNewPath = (pathId: number): boolean => newPaths.current.has(pathId) || layerRef.current.routes.some((r) => r.pathId === pathId && r.original.length === 0);
@@ -336,7 +392,6 @@ function WorldStage({
     world,
     api,
     map,
-    active,
     send: (change) => sendRef.current(change),
     takeLayer: (next) => takeLayer(next),
     setNote,
@@ -364,6 +419,9 @@ function WorldStage({
   });
   const menuRef = useRef(menu);
   menuRef.current = menu;
+  const markerView = useMarkerView({ world, markers, focus: markerFocus, onMove: onMarkerMove });
+  const markerViewRef = useRef(markerView);
+  markerViewRef.current = markerView;
 
   useEffect(() => {
     const element = container.current;
@@ -377,6 +435,7 @@ function WorldStage({
     setSummary(null);
     setNote(null);
     setPlacing(null);
+    markerViewRef.current.clear();
     let live = true;
     // One gesture's edits go to the main process one after another: each answer is a whole new
     // layer, so an earlier, slower answer must never replace a later one
@@ -437,10 +496,27 @@ function WorldStage({
       setNote(null);
       return true;
     };
-    // A click while placing: the spawn goes into the world layer, and is selected so it can be turned or moved at once
+    // A click while placing: the spawn goes into the world layer, and is selected so it can be turned or moved at once.
+    // The project's own NPC or object (which the database may not have yet) is given a spawn of its own instead
     const place = async ({ target, at }: PlaceRequest): Promise<void> => {
       const current = apiRef.current;
       if (!current) return;
+      const entities = projectEntitiesRef.current;
+      const own = onOwnEditRef.current && (target.kind === 'object' ? entities?.objects : entities?.npcs)?.find((e) => e.entry === target.entry);
+      if (own) {
+        const made = await newSpawnGuid(current, target.kind);
+        if (!live) return;
+        if ('error' in made) {
+          setNote(made.error);
+          return;
+        }
+        const spawn = { kind: target.kind, guid: made.guid, entry: target.entry, own: true };
+        if (!(await send({ kind: 'presence', spawn, present: true, at, map }))) return;
+        created?.select({ kind: target.kind, guid: made.guid });
+        setSelected({ ...spawn, name: own.name, added: false, pathId: 0, event: null, position: { x: at.x, y: at.y, z: at.z } });
+        setNote(null);
+        return;
+      }
       const kind = target.kind === 'object' ? 'gameobject' : 'creature';
       const result = await current.worldAddSpawn(kind, target.entry, map, at);
       if (!live) return;
@@ -479,6 +555,7 @@ function WorldStage({
       return kept;
     };
     sendRef.current = send;
+    placeRef.current = place;
     const beforeRouteEdit = (spawn: SpawnRef, pathId: number): Promise<boolean> => {
       if (spawn.own) return Promise.resolve(true);
       let answer = answers.get(pathId);
@@ -530,18 +607,25 @@ function WorldStage({
                 for (const change of changes) await send(change);
               }),
             onContextMenu: (target, client) => live && menuRef.current.open(target, client),
-            onDrawing: (drawing) => live && menuRef.current.onDrawing(drawing),
+            onDrawing: (drawing) => {
+              if (!live) return;
+              menuRef.current.onDrawing(drawing);
+              // The path an editor asked for is drawn (or given up): the editor comes back
+              if (!drawing && patrollingRef.current?.stage === 'drawing') endPatrolRef.current();
+            },
             onShortcut: (code) => live && menuRef.current.shortcut(code),
             onSelection: (next) => live && setSummary(next),
             onTool: (tool) => live && setLayers((l) => ({ ...l, tool })),
+            onCameraInput: () => live && onCameraInputRef.current?.(),
             onFalloff: (falloff) => live && setLayers((l) => ({ ...l, falloff: falloff.on, falloffRadius: falloff.radius })),
             floorZ,
             beforeRouteEdit,
             onNotice: (message) => live && setNote(message),
-            onPlace: (request) => void runStepRef.current(() => place(request)),
+            onPlace: (request) => placeStep(request),
             // A gesture waiting for the floor holds undo, so Ctrl+Z takes it back rather than the step before
             onGestureStart: () => holdRef.current(),
             onPlaceEnd: () => live && setPlacing(null),
+            ...markerViewRef.current.options,
             spawns: async (spawnMap, box) => {
               const current = apiRef.current;
               if (!current) return { error: 'the app is not connected' };
@@ -553,10 +637,11 @@ function WorldStage({
           created.setScenery(sceneryOf(layersRef.current));
           created.setTool(layersRef.current.tool);
           created.setFalloff({ on: layersRef.current.falloff, radius: layersRef.current.falloffRadius });
-          if (!activeRef.current) created.setActive(false);
           if (looksRef.current.size > 0) created.setLooks(looksRef.current);
           if (ownRef.current) created.setOwnSpawns(ownRef.current);
+          if (placingRef.current) created.setPlacing({ kind: placingRef.current.kind, entry: placingRef.current.entry });
           if (groupSpawnsRef.current.size > 0) created.setGroupSpawns(groupSpawnsRef.current);
+          markerViewRef.current.attach(created);
           world.current = created;
           bringIntoViewRef.current();
           void apiRef.current?.worldLayer().then((result) => live && result.ok && applyLayer(result.value));
@@ -633,10 +718,81 @@ function WorldStage({
     }
   }, [layers]);
 
-  // What is being placed, told to the world
+  // What is being placed, told to the world; a placing an editor asked for says when it stops
   useEffect(() => {
     world.current?.setPlacing(placing ? { kind: placing.kind, entry: placing.entry } : null);
+    if (placing || !placeAsked.current) return;
+    placeAsked.current = false;
+    onRequestEndRef.current?.();
   }, [placing]);
+
+  // An editor's Place in world
+  useEffect(() => {
+    if (!placeRequest) return;
+    placeAsked.current = true;
+    setPlacing({ kind: placeRequest.kind, entry: placeRequest.entry, name: placeRequest.name });
+    // The keys (Esc stops) are the view's
+    container.current?.querySelector('canvas')?.focus();
+    // Only a new request starts placing
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [placeRequest?.nonce]);
+
+  // An editor's Draw patrol: the NPC is looked for until it is drawn (its world may still be loading),
+  // then a new path is started at it; one that already walks a route has it shown to edit
+  useEffect(() => {
+    if (!patrolRequest) return;
+    const { guid, name } = patrolRequest;
+    const asked: Patrolling = { guid, name, stage: 'finding' };
+    patrollingRef.current = asked;
+    setPatrolling(asked);
+    // The keys (Enter finishes the path) are the view's
+    container.current?.querySelector('canvas')?.focus();
+    let looks = 0;
+    let live = true;
+    const stage = (next: Patrolling['stage']): void => {
+      if (!live || patrollingRef.current?.guid !== guid) return;
+      const now = { ...patrollingRef.current, stage: next };
+      patrollingRef.current = now;
+      setPatrolling(now);
+    };
+    const timer = setInterval(() => {
+      const current = world.current;
+      const info = current?.spawnOf('creature', guid);
+      if (!current || !info) {
+        // A busy place's NPCs can take longer than the looks to load: the time only runs once they are in
+        if ((current?.spawnStatus().loading ?? 0) > 0) return;
+        looks += 1;
+        if (looks >= PATROL_LOOKS) {
+          clearInterval(timer);
+          setNote(`${name} could not be found in the view.`);
+          endPatrolRef.current();
+        }
+        return;
+      }
+      clearInterval(timer);
+      if (info.pathId > 0) {
+        stage('editing');
+        return;
+      }
+      void apiRef.current?.patrolPathId(guid).then((id) => {
+        if (!live || patrollingRef.current?.guid !== guid) return;
+        // No path id, or the world was rebuilt meanwhile (another map): the patrol is given up
+        if (!id.ok || world.current !== current) {
+          if (!id.ok) setNote(id.error.message);
+          endPatrolRef.current();
+          return;
+        }
+        stage('drawing');
+        current.startPath(guid, id.value, info.placement);
+      });
+    }, PATROL_LOOK_MS);
+    return () => {
+      live = false;
+      clearInterval(timer);
+    };
+    // Only a new request starts a patrol
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [patrolRequest?.nonce]);
 
   /** Takes a spawn placed in this view back out of the world layer */
   async function removePlaced(spawn: PickedSpawn): Promise<void> {
@@ -656,11 +812,6 @@ function WorldStage({
     setSummary(null);
     onSelectRef.current?.(null);
   }
-
-  // A hidden view stops drawing
-  useEffect(() => {
-    world.current?.setActive(active);
-  }, [active]);
 
   // Where the camera rests, told to the host once it has moved far enough to matter
   useEffect(() => {
@@ -700,6 +851,26 @@ function WorldStage({
   const nearbyEvents = spawns?.events ?? [];
   const chosen = typeof layers.events === 'number' && !nearbyEvents.some((e) => e.id === layers.events) ? [{ id: layers.events, name: layers.eventName ?? '' }] : [];
   const eventChoices = [...nearbyEvents, ...chosen];
+
+  /** Whether a drag over the view carries a quest's part from the chain */
+  const carriesPart = (event: React.DragEvent): boolean => Array.from(event.dataTransfer.types).includes(CHAIN_DRAG_TYPE);
+  // The ground under the drag, asked for at most once a frame: a drop over the sky is refused as it moves
+  const [dragGround] = useState(() => groundOverDrag((client) => world.current?.groundAt(client) ?? null));
+  const onDragOver = (event: React.DragEvent): void => {
+    if (!carriesPart(event) || !dragGround.at({ x: event.clientX, y: event.clientY })) return;
+    event.preventDefault();
+    event.dataTransfer.dropEffect = 'copy';
+  };
+  // A part dropped on the ground is placed there, as a click while placing would; where it fell is asked afresh
+  const onDrop = (event: React.DragEvent): void => {
+    dragGround.reset();
+    const current = world.current;
+    const ground = current && carriesPart(event) ? current.groundAt({ x: event.clientX, y: event.clientY }) : null;
+    const request = current && dropToRequest(event.dataTransfer.getData(CHAIN_DRAG_TYPE), ground, current.camera().position);
+    if (!request) return;
+    event.preventDefault();
+    placeStep(request);
+  };
 
   /** A click on a tool leaves the keyboard with the view, so Tab, G and R still reach it */
   const keepFocus = (event: React.MouseEvent): void => event.preventDefault();
@@ -760,7 +931,7 @@ function WorldStage({
 
   return (
     <div className="world3d" aria-label="3D view">
-      <div ref={container} className="world3d__stage" />
+      <div ref={container} className="world3d__stage" onDragOver={onDragOver} onDragLeave={() => dragGround.reset()} onDrop={onDrop} />
       {showArea && area && <p className="world3d__area">{area}</p>}
       {missing.length > 0 && (
         <p className="world3d__missing" title={missing.join('\n')}>
@@ -838,6 +1009,16 @@ function WorldStage({
           </button>
         </p>
       )}
+      {!unavailable && patrolling && (
+        <p role="status" className="world3d__placing">
+          {patrolling.stage === 'finding' ? `Finding ${patrolling.name}…`
+            : patrolling.stage === 'drawing' ? `Drawing ${patrolling.name}’s patrol: click the ground to add points. Enter finishes.`
+            : `${patrolling.name}’s patrol: drag its points; Shift-click adds one.`}
+          <button type="button" className="btn" onClick={endPatrol}>
+            Done
+          </button>
+        </p>
+      )}
       {choosing && api && (
         <PlaceDialog
           onPick={(chosen) => {
@@ -864,7 +1045,8 @@ function WorldStage({
           </p>
         </section>
       )}
-      {!unavailable && !selected && !several && note && (
+      {!unavailable && markerView.selected && <MarkerCard marker={markerView.selected} note={note} onClose={markerView.clear} />}
+      {!unavailable && !selected && !several && !markerView.selected && note && (
         <p role="status" className="world3d__edit-note">
           {note}
         </p>

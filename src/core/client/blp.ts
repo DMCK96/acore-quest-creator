@@ -1,6 +1,5 @@
 /**
  * BLP2, the client's texture format: mip 0 of a palette, DXT1/3/5 or raw BGRA image, as RGBA.
- * The map uses it for the painted zone art and the minimap tiles.
  */
 
 export interface RgbaImage {

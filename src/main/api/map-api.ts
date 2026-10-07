@@ -2,25 +2,23 @@ import { SPAWN_VIEW_CAP } from '@core/db/view-spawns';
 import { rowsOrNone } from '../../core/links/context';
 import type { QuestAggregate } from '../../core/model/aggregate';
 import { movementsOf } from '../../core/world/layer';
-import type { MapApi, QuestMapRef, QuestSpawn, QuestSpawnGroup, SpawnDot } from '../../shared/ipc';
+import type { MapApi, QuestSpawn, QuestSpawnGroup, SpawnDot } from '../../shared/ipc';
 import { floorsAt } from '../../core/game/navmesh';
 import { objectivesOf, relationOwners } from '../../core/entities/links';
 import { gridFileName, terrainHeight } from '../../core/game/terrain';
 import type { Services } from './services';
 import { run } from './errors';
 
-/** Spawn dots sent to the map per kind; more means the author should zoom in. */
-const SPAWN_DOT_CAP = 2000;
 const REF_SPAWNS_PER_ENTRY = 20;
 /** Spawns of one NPC or object listed for jumping to in the 3D view; more is said, not given. */
 const FIND_SPAWNS_LIMIT = 300;
 /** Spawns listed per NPC or object a quest names, when its spawns are shown in the 3D view */
 const QUEST_SPAWNS_PER_ENTRY = 200;
 
-/** The quest map and the 3D view: ground, floors, maps, spawns near a place or of a quest, and new path ids */
+/** The 3D view: ground, floors, maps, spawns near a place or of a quest, and new path ids */
 export function createMapApi(s: Services): MapApi {
   const { deps, conn, connected, questOf, projectEntities, questEntities } = s.ctx;
-  const { terrainAt, navTileAt, mapsOf } = s.files;
+  const { terrainAt, navTileAt } = s.files;
   const { spawnAt } = s.groups;
 
   /**
@@ -49,8 +47,8 @@ export function createMapApi(s: Services): MapApi {
   }
 
   /** The existing NPCs and objects a quest names, by role: givers, enders, then objectives */
-  function wantedOf(aggregate: QuestAggregate): { role: QuestMapRef['role']; kind: 'creature' | 'gameobject'; entry: number }[] {
-    const wanted: { role: QuestMapRef['role']; kind: 'creature' | 'gameobject'; entry: number }[] = [];
+  function wantedOf(aggregate: QuestAggregate): { role: QuestSpawn['role']; kind: 'creature' | 'gameobject'; entry: number }[] {
+    const wanted: { role: QuestSpawn['role']; kind: 'creature' | 'gameobject'; entry: number }[] = [];
     for (const [role, relation] of [['giver', 'starter'], ['ender', 'ender']] as const) {
       for (const owner of relationOwners(aggregate, relation)) {
         if (owner.kind === 'creature' || owner.kind === 'gameobject') wanted.push({ role, kind: owner.kind, entry: owner.entry });
@@ -87,8 +85,6 @@ export function createMapApi(s: Services): MapApi {
         return { z: Math.round(z * 100) / 100 };
       }),
 
-    mapList: () => run(async () => mapsOf(connected())),
-
     mapFloors: (map, x, y) =>
       run(async () => {
         const live = connected();
@@ -99,18 +95,6 @@ export function createMapApi(s: Services): MapApi {
         const height = 'file' in terrain && terrain.file ? terrainHeight(terrain.file, x, y) : null;
         const ground = height === null || !Number.isFinite(height) ? null : Math.round(height * 100) / 100;
         return { floors: tile ? floorsAt(tile, x, y) : [], ground };
-      }),
-
-    mapSpawns: (map, area) =>
-      run(async () => {
-        const db = connected().db;
-        if (!db.spawnsInBox) return { dots: [], capped: false };
-        const [creatures, objects] = await Promise.all([
-          db.spawnsInBox('creature', map, area, SPAWN_DOT_CAP + 1),
-          db.spawnsInBox('gameobject', map, area, SPAWN_DOT_CAP + 1),
-        ]);
-        const capped = creatures.length > SPAWN_DOT_CAP || objects.length > SPAWN_DOT_CAP;
-        return { dots: [...creatures.slice(0, SPAWN_DOT_CAP), ...objects.slice(0, SPAWN_DOT_CAP)], capped };
       }),
 
     viewSpawns: (map, area) =>
@@ -135,30 +119,6 @@ export function createMapApi(s: Services): MapApi {
       }),
 
     spawnPlacement: (kind, guid) => run(async () => spawnAt(connected().db, kind, guid)),
-
-    questMapRefs: (questId) =>
-      run(async () => {
-        const db = connected().db;
-        if (!db.spawnsOfEntries) return [];
-        const aggregate = questOf(questId).aggregate;
-        const { npcs, objects } = questEntities(aggregate);
-        // The quest's own NPCs and objects are markers already.
-        const own = new Set([...npcs.map((n) => `creature:${n.entry}`), ...objects.map((o) => `gameobject:${o.entry}`)]);
-        const wanted = wantedOf(aggregate);
-        const refs: QuestMapRef[] = [];
-        const seen = new Set<string>();
-        for (const want of wanted) {
-          if (own.has(`${want.kind}:${want.entry}`)) continue;
-          const dots: SpawnDot[] = await db.spawnsOfEntries(want.kind, [want.entry], REF_SPAWNS_PER_ENTRY);
-          for (const dot of dots) {
-            const key = `${dot.kind}:${dot.guid}`;
-            if (seen.has(key)) continue;
-            seen.add(key);
-            refs.push({ ...dot, role: want.role });
-          }
-        }
-        return refs;
-      }),
 
     questSpawnList: (questIds) =>
       run(async () => {

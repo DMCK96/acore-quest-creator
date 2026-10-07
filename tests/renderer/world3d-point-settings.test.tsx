@@ -16,7 +16,7 @@ vi.mock('../../src/renderer/world3d/world3d', () => ({
     options.container.appendChild(canvas);
     const world = { options, canvas, dispose: vi.fn(), lookAt: vi.fn(), setSpawnVisibility: vi.fn(), setOwnSpawns: vi.fn(), select: vi.fn(), selectSpawns: vi.fn(),
       setWorldLayer: vi.fn(), setMode: vi.fn(), setPlacing: vi.fn(), cancelDrag: vi.fn(), setMarked: vi.fn(), setLooks: vi.fn(), setGroupSpawns: vi.fn(), setGroupView: vi.fn(),
-      setActive: vi.fn(), setScenery: vi.fn(), setTool: vi.fn(), setFalloff: vi.fn(), setPendingMovement: vi.fn(), spawnMovement: vi.fn(() => null),
+      setScenery: vi.fn(), setTool: vi.fn(), setFalloff: vi.fn(), setPendingMovement: vi.fn(), spawnMovement: vi.fn(() => null),
       startPath: vi.fn(), finishPath: vi.fn(), cancelPath: vi.fn(), undoPoint: vi.fn(), selectedSpawns: vi.fn(() => []), groundAt: vi.fn(() => null), lastPointer: vi.fn(() => null),
       spawnOf: vi.fn(() => null), routeOf: vi.fn(() => null),
       camera: () => ({ position: { x: 0, y: 0, z: 0 }, direction: { x: 1, y: 0, z: 0 } }),
@@ -111,6 +111,30 @@ describe('a route point\'s settings in the 3D view', () => {
     expect(edit.points[0].carry).toMatchObject({ waitSecs: 3, actions: [{ kind: 'say' }] });
     // The other point is as it was
     expect(edit.points[1].carry).toEqual(patrol.points[1]);
+  });
+
+  it('give a project NPC\'s patrol point an object to use, by its spawn and object', async () => {
+    const patrol = { ...newPatrol(80), points: [newPatrolPoint({ x: 1, y: 2, z: 3 }), newPatrolPoint({ x: 4, y: 5, z: 6 })] };
+    const npc = { ...newNpc(12000001), name: 'Guard', spawns: [{ ...newSpawn(7000001), patrol }] };
+    const { api, world, onOwnEdit } = await view({ ...EMPTY_ENTITIES, npcs: [npc] });
+    vi.mocked(api.searchEntities).mockResolvedValue(okv([{ id: 143981, name: 'Lever' }]));
+    world.spawnOf.mockReturnValue(spawnInfo(7000001, 12000001, true));
+    world.routeOf.mockReturnValue({ pathId: 80, points: patrol.points.map((p) => ({ x: p.x, y: p.y, z: p.z, carry: p })) });
+    rightClickPoint(world, 7000001, 1);
+    await userEvent.click(screen.getByRole('menuitem', { name: 'Point settings…' }));
+
+    const dialog = screen.getByRole('dialog', { name: 'Point 2' });
+    await userEvent.selectOptions(within(dialog).getByLabelText('Actions'), 'Use an object');
+    const uses = within(dialog).getByRole('group', { name: 'Uses an object' });
+    await userEvent.type(within(uses).getByLabelText('Spawn (guid)'), '55001');
+    await userEvent.type(within(uses).getByRole('combobox', { name: 'Object' }), 'lev');
+    await userEvent.click(await within(uses).findByRole('option', { name: /Lever/ }));
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Apply' }));
+
+    await waitFor(() => expect(onOwnEdit).toHaveBeenCalled());
+    const edit = (onOwnEdit.mock.calls as any[][]).map(([e]) => e).find((e) => e.kind === 'route');
+    expect(edit.points[1].carry.actions).toEqual([{ id: 'a1', afterSecs: 0, kind: 'useObject', guid: 55001, entry: 143981 }]);
+    expect(edit.points[0].carry).toEqual(patrol.points[0]);
   });
 
 });

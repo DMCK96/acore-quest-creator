@@ -46,6 +46,20 @@ async function worldSettled(page: Page): Promise<void> {
   await page.waitForTimeout(4000);
 }
 
+/**
+ * Waits for the ground in front of the camera to be drawn: the right-click menu can place on it then.
+ * The probing click may select what it lands on.
+ */
+async function groundDrawn(page: Page): Promise<void> {
+  const box = (await page.locator('.world3d__stage canvas').boundingBox())!;
+  await expect(async () => {
+    await page.keyboard.press('Escape');
+    await page.mouse.click(box.x + box.width * 0.5, box.y + box.height * 0.92, { button: 'right' });
+    await expect(page.getByRole('menuitem', { name: /^Place NPC here…/ })).not.toHaveAttribute('aria-disabled', 'true', { timeout: 1000 });
+  }).toPass({ timeout: 120_000 });
+  await page.keyboard.press('Escape');
+}
+
 async function spawnAt(editor: Locator, gps: string): Promise<void> {
   await editor.getByRole('tab', { name: 'Placement' }).click();
   await editor.getByRole('button', { name: 'Add spawn' }).click();
@@ -106,20 +120,37 @@ test.describe.serial('docs screenshots', () => {
 
   test('canvas', async () => {
     await page.getByRole('button', { name: 'Connect', exact: true }).click();
-    // The app opens on the world, greeting a fresh profile; the quest graph is the Quests tab.
+    // The app opens on the world, greeting a fresh profile; the quest graph is in the Quests dock.
     await page.getByRole('button', { name: 'Just look around' }).click({ timeout: 30000 });
-    await page.getByRole('tab', { name: 'Quests' }).click();
+    await page.getByRole('button', { name: 'Quests', exact: true }).click();
     await expect(page.getByRole('button', { name: 'New quest', exact: true })).toBeVisible({ timeout: 30000 });
     await expect(page.getByText('Game client', { exact: true })).toBeVisible();
     await page.getByRole('button', { name: 'Add existing quest', exact: true }).click();
-    await page.getByRole('searchbox').fill('The Defias Brotherhood');
+    await page.getByRole('dialog', { name: 'Add existing quest chain' }).getByRole('searchbox').fill('The Defias Brotherhood');
     await page.getByRole('button', { name: /^The Defias Brotherhood \(\d+, level \d+\)$/ }).first().click();
     // The whole chain loads from the world DB before the preview opens.
     await expect(page.getByRole('complementary', { name: 'Quest preview' })).toBeVisible({ timeout: 30000 });
     await expect(page.getByTestId('quest-node').first()).toBeVisible();
     await page.getByRole('button', { name: 'Close preview' }).click();
+    await groundDrawn(page);
+    await worldSettled(page);
     await page.getByRole('button', { name: 'Fit view', exact: true }).click();
     await shot(page, 'canvas');
+  });
+
+  test('dock-right', async () => {
+    const dockSide = async (side: RegExp): Promise<void> => {
+      await page.getByRole('button', { name: 'Settings' }).click();
+      const settings = page.getByRole('dialog', { name: 'Settings' });
+      await settings.getByRole('tab', { name: 'Preferences' }).click();
+      await settings.getByRole('radio', { name: side }).check();
+      await settings.getByRole('button', { name: 'Close' }).click();
+    };
+    await dockSide(/Beside the world/);
+    await worldSettled(page);
+    await page.getByRole('button', { name: 'Fit view', exact: true }).click();
+    await shot(page, 'dock-right');
+    await dockSide(/Under the world/);
   });
 
   test('quest-details', async () => {
@@ -162,51 +193,8 @@ test.describe.serial('docs screenshots', () => {
     // A new NPC is named in the pickers, never "not found in your database".
     await expect(giver.getByText(/not found in your database/)).toHaveCount(0);
     await shot(page, 'quest-giver');
-  });
-
-  test('quest-map', async () => {
-    const card = page.getByRole('dialog', { name: 'Quest Giver' }).getByRole('region', { name: 'Starts at 1' });
-    await card.getByRole('button', { name: 'Place on map' }).click();
-    const map = page.getByRole('dialog', { name: 'Quest map' });
-    await expect(map.getByText('Click where Foreman Brask should stand.')).toBeVisible();
-    await map.getByRole('combobox', { name: 'Map' }).selectOption({ label: 'Eastern Kingdoms' });
-    await map.getByRole('combobox', { name: 'Jump to' }).fill('Marshal McBride');
-    await map.getByRole('option', { name: /Marshal McBride/ }).first().click();
-    const canvas = map.locator('.quest-map__canvas');
-    const box = (await canvas.boundingBox())!;
-    await page.mouse.click(box.x + box.width / 2, box.y + box.height / 2);
-    await expect(map.getByText('Placed. Drag to adjust, or draw its patrol.')).toBeVisible();
-    await expect.poll(async () => Number(await canvas.getAttribute('data-dot-count'))).toBeGreaterThan(0);
-    await page.waitForTimeout(2000); // relief and imagery tiles
-    await shot(page, 'quest-map');
-  });
-
-  test('patrol', async () => {
-    const map = page.getByRole('dialog', { name: 'Quest map' });
-    const box = (await map.locator('.quest-map__canvas').boundingBox())!;
-    const cx = box.x + box.width / 2;
-    const cy = box.y + box.height / 2;
-    await map.getByRole('button', { name: 'Draw patrol' }).click();
-    await expect(map.getByRole('heading', { name: 'Patrol: Foreman Brask' })).toBeVisible();
-    // Above and left of the spawn: its label runs off to the right and takes clicks of its own.
-    await page.mouse.click(cx, cy - 80);
-    await expect(map.getByRole('button', { name: 'Point 1', exact: true })).toBeVisible();
-    await page.mouse.click(cx - 80, cy - 80);
-    await expect(map.getByRole('button', { name: 'Point 2', exact: true })).toBeVisible();
-    await page.mouse.click(cx - 80, cy);
-    await expect(map.getByRole('button', { name: 'Point 3', exact: true })).toBeVisible();
-    const point2 = map.locator('.quest-map__marker[title="Foreman Brask · patrol point 2"]');
-    await point2.click({ button: 'right' });
-    await page.getByRole('menuitem', { name: 'Say something…' }).click();
-    await map.getByRole('group', { name: 'Says' }).getByLabel('Line 1').fill('Where is that shipment?');
-    await point2.click({ button: 'right' });
-    await expect(page.getByRole('menuitem', { name: 'Wait here…' })).toBeVisible();
-    await shot(page, 'patrol');
     await page.keyboard.press('Escape');
-    await map.getByRole('button', { name: 'Done' }).click();
-    await map.getByRole('button', { name: 'Close' }).click();
-    await page.keyboard.press('Escape');
-    await expect(page.getByRole('dialog', { name: 'Quest Giver' })).toHaveCount(0);
+    await expect(giver).toHaveCount(0);
   });
 
   test('objectives', async () => {
@@ -318,7 +306,7 @@ test.describe.serial('docs screenshots', () => {
   });
 
   test('changes', async () => {
-    await page.getByRole('button', { name: 'Changes' }).click();
+    await page.getByRole('button', { name: 'Changes', exact: true }).click();
     const changes = page.getByRole('dialog', { name: 'Changes' });
     await expect(changes.getByRole('heading', { name: 'quest_template', exact: true })).toBeVisible();
     await shot(page, 'changes');
@@ -326,6 +314,8 @@ test.describe.serial('docs screenshots', () => {
   });
 
   test('settings', async () => {
+    // The quest editor is a modal over the whole window: back to the chain first
+    await page.getByRole('button', { name: '← Back to chain' }).click();
     await page.getByRole('button', { name: 'Settings' }).click();
     const settings = page.getByRole('dialog', { name: 'Settings' });
     await expect(settings).toBeVisible();
@@ -337,13 +327,18 @@ test.describe.serial('docs screenshots', () => {
 
   // The 3D world, with the quest built above still open, so the menu offers its quest items too
   test('world', async () => {
-    await page.getByRole('tab', { name: 'World' }).click();
-    await page.getByRole('button', { name: 'Find…' }).click();
-    const find = page.getByRole('dialog', { name: 'Find an NPC or object' });
-    await find.getByRole('searchbox', { name: 'Find by name or ID' }).fill('Marshal McBride');
-    await find.locator('.place-dialog__hit').first().click({ timeout: 30000 });
-    await find.getByRole('button', { name: /^Go to spawn/ }).first().click({ timeout: 30000 });
-    await expect(page.getByRole('region', { name: 'Selected spawn' })).toBeVisible({ timeout: 30000 });
+    const goToMcBride = async (): Promise<void> => {
+      await page.getByRole('button', { name: 'Find…' }).click();
+      const find = page.getByRole('dialog', { name: 'Find an NPC or object' });
+      await find.getByRole('searchbox', { name: 'Find by name or ID' }).fill('Marshal McBride');
+      await find.locator('.place-dialog__hit').first().click({ timeout: 30000 });
+      await find.getByRole('button', { name: /^Go to spawn/ }).first().click({ timeout: 30000 });
+      await expect(page.getByRole('region', { name: 'Selected spawn' })).toBeVisible({ timeout: 30000 });
+    };
+    await goToMcBride();
+    // Waiting for the ground may select something else, so go back to him after
+    await groundDrawn(page);
+    await goToMcBride();
     await worldSettled(page);
     await shot(page, 'world');
   });
@@ -386,5 +381,43 @@ test.describe.serial('docs screenshots', () => {
     await expect(changes.getByText(/walks path/)).toBeVisible({ timeout: 30000 });
     await shot(page, 'world-changes');
     await changes.getByRole('button', { name: 'Close' }).first().click();
+  });
+
+  test('patrol', async () => {
+    // The demo quest, edited from its card on the chain
+    await page.getByRole('button', { name: /^Quest \d+: The Lost Shipment$/ }).dispatchEvent('dblclick');
+    await page.getByRole('list', { name: 'Modules' }).getByRole('button', { name: /^Quest Giver/ }).click();
+    const card = page.getByRole('dialog', { name: 'Quest Giver' }).getByRole('region', { name: 'Starts at 1' });
+    const box = (await page.locator('.world3d__stage canvas').boundingBox())!;
+    const at = (fx: number, fy: number) => ({ x: box.x + box.width * fx, y: box.y + box.height * fy });
+    // Place in world: the editor steps aside and a click on the ground puts Foreman Brask there
+    await card.getByRole('button', { name: 'Place in world' }).click();
+    await expect(async () => {
+      await page.mouse.click(at(0.45, 0.7).x, at(0.45, 0.7).y);
+      await expect(page.getByRole('region', { name: 'Selected spawn' }).getByText('Foreman Brask')).toBeVisible({ timeout: 2000 });
+    }).toPass({ timeout: 90_000 });
+    await page.getByRole('button', { name: 'Done', exact: true }).click();
+    // Draw patrol: the World goes to him, each click adds a point and Enter finishes
+    await card.getByRole('button', { name: 'Draw patrol' }).click();
+    await expect(page.getByText(/^Drawing Foreman Brask’s patrol/)).toBeVisible({ timeout: 30_000 });
+    await page.waitForTimeout(1500);
+    const points = [at(0.3, 0.8), at(0.2, 0.9), at(0.7, 0.85)];
+    for (const p of points) {
+      await page.mouse.click(p.x, p.y);
+      await page.waitForTimeout(500);
+    }
+    await page.keyboard.press('Enter');
+    await expect(card).toBeVisible({ timeout: 30_000 });
+    // Back in the World with the editor closed: a point's settings, with a line to say
+    await page.keyboard.press('Escape');
+    await page.keyboard.press('Escape');
+    await page.mouse.click(points[1]!.x, points[1]!.y, { button: 'right' });
+    await page.getByRole('menu', { name: 'World actions' }).getByRole('menuitem', { name: 'Point settings…' }).click();
+    const point = page.getByRole('dialog', { name: /^Point \d+$/ });
+    await point.getByLabel('Wait (seconds)').fill('5');
+    await point.getByLabel('Actions').selectOption('say');
+    await point.getByLabel('Line 1').fill('Where is that shipment?');
+    await shot(page, 'patrol');
+    await point.getByRole('button', { name: 'Apply' }).click();
   });
 });

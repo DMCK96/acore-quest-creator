@@ -1,14 +1,14 @@
 // @vitest-environment jsdom
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 
-const created = vi.hoisted(() => [] as { options: any; dispose: ReturnType<typeof vi.fn>; setActive: ReturnType<typeof vi.fn> }[]);
+const created = vi.hoisted(() => [] as { options: any; dispose: ReturnType<typeof vi.fn>; lookAt: ReturnType<typeof vi.fn>; setPlacing: ReturnType<typeof vi.fn> }[]);
 vi.mock('../../src/renderer/world3d/world3d', () => ({
   createWorld3D: (options: any) => {
     const world = {
-      options, setOwnSpawns: vi.fn(), setWorldLayer: vi.fn(), setMarked: vi.fn(),
-      dispose: vi.fn(), cancelPath: vi.fn(), lookAt: vi.fn(), setSpawnVisibility: vi.fn(), setActive: vi.fn(), setScenery: vi.fn(), setTool: vi.fn(), setFalloff: vi.fn(), target: () => ({ x: 0, y: 0, z: 0 }),
+      options, setOwnSpawns: vi.fn(), setWorldLayer: vi.fn(), setMarked: vi.fn(), setPlacing: vi.fn(),
+      dispose: vi.fn(), cancelPath: vi.fn(), lookAt: vi.fn(), select: vi.fn(), setSpawnVisibility: vi.fn(), setScenery: vi.fn(), setTool: vi.fn(), setFalloff: vi.fn(), target: () => ({ x: 0, y: 0, z: 0 }),
       spawnStatus: () => ({ capped: { creatures: false, objects: false }, error: null, loading: 0 }),
     };
     created.push(world);
@@ -18,6 +18,9 @@ vi.mock('../../src/renderer/world3d/world3d', () => ({
 
 import { createAppStore } from '../../src/renderer/state/app-store';
 import { AppShell } from '../../src/renderer/views/AppShell';
+import { NamesProvider } from '../../src/renderer/state/names';
+import { DEFAULT_PREFERENCES, writePreferences } from '../../src/renderer/preferences/store';
+import { newNpc } from '../../src/core/entities/model';
 import { makeMockApi, okv, sampleOpen, nodeOf } from './mock-api';
 
 const drift = { missingTables: [], unregistered: [], missingColumns: [], typeMismatches: [] };
@@ -36,16 +39,19 @@ async function shell(over: Record<string, any> = {}, client = true) {
   });
   const store = createAppStore(api, { saveDelayMs: 0 });
   await store.getState().connect(form);
-  render(<AppShell store={store} />);
+  // The app gives the world its api through the names provider, as App does
+  render(<NamesProvider api={api}><AppShell store={store} /></NamesProvider>);
   await waitFor(() => expect(store.getState().project.name).not.toBe(''));
   return { api, store };
 }
 afterEach(() => {
+  writePreferences(DEFAULT_PREFERENCES);
   created.length = 0;
   localStorage.clear();
   vi.unstubAllGlobals();
 });
-const tab = (name: string) => screen.getByRole('tab', { name });
+const quests = () => screen.getByRole('button', { name: 'Quests' });
+const dock = () => screen.queryByTestId('chain-dock');
 
 describe('the app shell', () => {
   it('Ctrl+Z on a keyboard whose letters are not Latin still undoes', async () => {
@@ -69,95 +75,144 @@ describe('the app shell', () => {
     field.remove();
   });
 
-  it('opens on the world, with the quests one tab away', async () => {
+  it('opens on the world with the dock closed, and no workspace tabs', async () => {
     await shell();
-    expect(tab('World')).toHaveAttribute('aria-selected', 'true');
+    expect(screen.queryByRole('tab', { name: 'Quests' })).toBeNull();
+    expect(screen.getByRole('button', { name: 'Quests', pressed: false })).toBeTruthy();
+    expect(document.querySelector('.dock-layout [data-testid="chain-dock"]')).toBeNull();
     expect(screen.getByRole('region', { name: 'World' })).toBeVisible();
     await waitFor(() => expect(created).toHaveLength(1));
     expect(screen.queryByRole('button', { name: 'New quest' })).toBeNull();
   });
 
-  it('switches to the quests and back without building the world again, and the world rests while hidden', async () => {
+  it('the Quests button opens and closes the dock, and the world stays mounted', async () => {
+    await shell();
+    const world = document.querySelector('.world-workspace');
+    await userEvent.click(screen.getByRole('button', { name: 'Quests' }));
+    expect(screen.getByTestId('chain-dock')).toBeTruthy();
+    await userEvent.click(screen.getByRole('button', { name: 'Quests' }));
+    expect(screen.queryByTestId('chain-dock')).toBeNull();
+    expect(document.querySelector('.world-workspace')).toBe(world);
+    expect(created.every((w) => w.dispose.mock.calls.length === 0)).toBe(true);
+  });
+
+  it('the dock holds the quest graph and its tools, and the world beside it keeps drawing', async () => {
     await shell();
     await waitFor(() => expect(created).toHaveLength(1));
-    await userEvent.click(tab('Quests'));
-    expect(tab('Quests')).toHaveAttribute('aria-selected', 'true');
-    expect(await screen.findAllByTestId('quest-node')).toHaveLength(1);
+    await userEvent.click(quests());
+    expect(quests()).toHaveAttribute('aria-pressed', 'true');
+    expect(await within(dock()!).findAllByTestId('quest-node')).toHaveLength(1);
     const tools = screen.getByRole('toolbar', { name: 'Quest tools' });
     for (const name of ['New quest', 'Add existing quest', 'Fit view']) expect(within(tools).getByRole('button', { name })).toBeInTheDocument();
-    expect(created[0]!.setActive).toHaveBeenLastCalledWith(false);
-    await userEvent.click(tab('World'));
+    expect(screen.getByRole('region', { name: 'World' })).toBeVisible();
     expect(created).toHaveLength(1);
-    expect(created[0]!.dispose).not.toHaveBeenCalled();
-    expect(created[0]!.setActive).toHaveBeenLastCalledWith(true);
   });
 
-  it('moves between the tabs with the arrow keys', async () => {
+  it('toggles the dock from the keyboard', async () => {
     await shell();
-    tab('World').focus();
-    await userEvent.keyboard('{ArrowRight}');
-    expect(tab('Quests')).toHaveAttribute('aria-selected', 'true');
-    expect(tab('Quests')).toHaveFocus();
-    await userEvent.keyboard('{ArrowLeft}');
-    expect(tab('World')).toHaveAttribute('aria-selected', 'true');
+    quests().focus();
+    await userEvent.keyboard('{Enter}');
+    expect(dock()).not.toBeNull();
+    expect(quests()).toHaveFocus();
+    await userEvent.keyboard(' ');
+    expect(dock()).toBeNull();
   });
 
-  it('brings the user to the quests when a quest opens', async () => {
+  it('opening a quest from anywhere opens the dock, unless the author just closed it', async () => {
     const { store } = await shell();
-    await store.getState().openQuest(60001);
-    await waitFor(() => expect(tab('Quests')).toHaveAttribute('aria-selected', 'true'));
+    await act(async () => { await store.getState().openQuest(60001); });
+    expect(screen.getByTestId('chain-dock')).toBeTruthy();
+    await userEvent.click(screen.getByRole('button', { name: 'Quests' }));
+    expect(screen.queryByTestId('chain-dock')).toBeNull();
   });
 
-  it('a quest preview that opens after the author chose the world leaves them on the world', async () => {
+  // After a reconnect the shell is drawn again: a quest opened before then is not a reason to open the dock
+  it('a shell drawn again leaves the dock closed for a quest opened before it', async () => {
+    const { api, store } = await shell();
+    await act(async () => { await store.getState().openQuest(60001); });
+    expect(dock()).not.toBeNull();
+    cleanup();
+    render(<NamesProvider api={api}><AppShell store={store} /></NamesProvider>);
+    await new Promise((r) => setTimeout(r, 20));
+    expect(dock()).toBeNull();
+    await act(async () => { await store.getState().openQuest(60001); });
+    await waitFor(() => expect(dock()).not.toBeNull());
+  });
+
+  it('follows the Preferences dock side', async () => {
+    await shell();
+    await userEvent.click(screen.getByRole('button', { name: 'Quests' }));
+    expect(document.querySelector('.dock-layout')!.getAttribute('data-side')).toBe('bottom');
+    writePreferences({ ...DEFAULT_PREFERENCES, dockSide: 'right' });
+    await waitFor(() => expect(document.querySelector('.dock-layout')!.getAttribute('data-side')).toBe('right'));
+  });
+
+  it('a quest preview that opens after the author closed the dock leaves it closed', async () => {
     let finishSave: (value: unknown) => void = () => {};
     const { store } = await shell({ updateQuest: () => new Promise((resolve) => { finishSave = resolve; }) });
-    await store.getState().openQuest(60001);
-    store.getState().editQuest();
-    store.getState().setValue('quest_template.LogTitle', 'Edited');
-    await waitFor(() => expect(tab('Quests')).toHaveAttribute('aria-selected', 'true'));
-    // Back to chain saves first; the author goes to the world before the save comes back
+    await act(async () => { await store.getState().openQuest(60001); });
+    act(() => store.getState().editQuest());
+    act(() => store.getState().setValue('quest_template.LogTitle', 'Edited'));
+    await waitFor(() => expect(dock()).not.toBeNull());
+    // Back to chain saves first; the author closes the dock before the save comes back
     const back = store.getState().backToChain();
-    await userEvent.click(tab('World'));
-    expect(tab('World')).toHaveAttribute('aria-selected', 'true');
+    await userEvent.click(quests());
+    expect(dock()).toBeNull();
     await act(async () => {
       finishSave(okv(true));
       await back;
     });
     expect(store.getState().screen).toBe('preview');
-    expect(tab('World')).toHaveAttribute('aria-selected', 'true');
+    expect(dock()).toBeNull();
   });
 
-  it('a quest that finishes opening after the author chose the world leaves them on the world', async () => {
+  it('a quest that finishes opening after the author closed the dock leaves it closed', async () => {
     let finishOpen: (value: unknown) => void = () => {};
     const { store } = await shell({ openQuest: () => new Promise((resolve) => { finishOpen = resolve; }) });
-    await userEvent.click(tab('Quests'));
+    await userEvent.click(quests());
     const opening = store.getState().openQuest(60001);
-    await userEvent.click(tab('World'));
+    await userEvent.click(quests());
     await act(async () => {
       finishOpen(okv(sampleOpen()));
       await opening;
     });
     expect(store.getState().screen).toBe('preview');
-    expect(tab('World')).toHaveAttribute('aria-selected', 'true');
+    expect(dock()).toBeNull();
   });
 
-  it('brings the quests forward again for a quest opened after the author chose the world', async () => {
+  it('opens the dock again for a quest opened after the author closed it', async () => {
     const { store } = await shell();
-    await store.getState().openQuest(60001);
-    await userEvent.click(tab('World'));
-    await store.getState().openQuest(60001);
-    await waitFor(() => expect(tab('Quests')).toHaveAttribute('aria-selected', 'true'));
+    await act(async () => { await store.getState().openQuest(60001); });
+    await userEvent.click(quests());
+    expect(dock()).toBeNull();
+    await act(async () => { await store.getState().openQuest(60001); });
+    await waitFor(() => expect(dock()).not.toBeNull());
   });
 
-  it('starts a quest from the welcome on the quests tab', async () => {
-    const { api } = await shell();
-    // A project not greeted yet: the next time the world is shown, it is
+  it('Escape in the dock is the dock\'s: it closes the preview and leaves the world\'s welcome open', { timeout: 20000 }, async () => {
+    const { store } = await shell();
+    await act(async () => { await store.getState().openQuest(60001); });
+    // A project not greeted yet: the next time the world draws, it is
     localStorage.clear();
-    await userEvent.click(tab('Quests'));
-    await userEvent.click(tab('World'));
+    await userEvent.click(quests());
+    await userEvent.click(quests());
+    expect(await screen.findByRole('dialog', { name: 'Welcome' })).toBeInTheDocument();
+    within(dock()!).getByRole('button', { name: 'Close preview' }).focus();
+    await userEvent.keyboard('{Escape}');
+    await waitFor(() => expect(store.getState().screen).toBe('pick'));
+    expect(screen.getByRole('dialog', { name: 'Welcome' })).toBeInTheDocument();
+  });
+
+  it('starts a quest from the welcome in the dock', { timeout: 20000 }, async () => {
+    const { api } = await shell();
+    // A project not greeted yet: the next time the world draws, it is
+    localStorage.clear();
+    await userEvent.click(quests());
+    await userEvent.click(quests());
     await userEvent.click(await screen.findByRole('button', { name: 'Start a quest' }));
     await waitFor(() => expect(api.newQuest).toHaveBeenCalled());
-    expect(tab('Quests')).toHaveAttribute('aria-selected', 'true');
+    expect(dock()).not.toBeNull();
+    expect(await screen.findByRole('list', { name: 'Modules' })).toBeInTheDocument();
   });
 
   it('welcomes a project not saved yet without its placeholder name', async () => {
@@ -185,17 +240,18 @@ describe('the app shell', () => {
   it('without a game client, offers settings and the quests from the world', async () => {
     await shell({}, false);
     await userEvent.click(screen.getByRole('button', { name: 'Go to Quests' }));
-    expect(tab('Quests')).toHaveAttribute('aria-selected', 'true');
-    await userEvent.click(tab('World'));
+    expect(dock()).not.toBeNull();
+    expect(quests()).toHaveAttribute('aria-pressed', 'true');
     await userEvent.click(screen.getByRole('button', { name: 'Open settings' }));
     expect(await screen.findByRole('dialog', { name: 'Settings' })).toBeInTheDocument();
   });
 
   it('starts the next quest of the chain from an NPC right-clicked in the world, with it as giver and ender, and shows it', async () => {
     const { store } = await shell();
-    await store.getState().openQuest(60001);
-    // Opening a quest shows the quests; back to the world, where it stays open
-    await userEvent.click(tab('World'));
+    await act(async () => { await store.getState().openQuest(60001); });
+    // Opening a quest opens the dock; the author closes it, and the quest stays open
+    await userEvent.click(quests());
+    expect(dock()).toBeNull();
     await waitFor(() => expect(created).toHaveLength(1));
     const guard = { kind: 'creature', guid: 80330, entry: 1423, name: 'Guard', own: false, added: false, pathId: 0, wander: 0, map: 0, placement: { x: 1, y: 2, z: 3, orientation: 0, rotation: null } };
     act(() => created[0]!.options.onContextMenu({ ground: { x: 1, y: 2, z: 3 }, hit: { type: 'spawn', spawn: guard }, selection: [guard] }, { x: 10, y: 10 }));
@@ -206,13 +262,116 @@ describe('the app shell', () => {
     const values = store.getState().open!.aggregate.values;
     expect(values.creature_queststarter).toEqual([{ id: 1423 }]);
     expect(values.creature_questender).toEqual([{ id: 1423 }]);
-    expect(tab('Quests')).toHaveAttribute('aria-selected', 'true');
+    await waitFor(() => expect(dock()).not.toBeNull());
+  });
+
+  it('takes the world to a quest opened in the dock', async () => {
+    const giver = { kind: 'creature', guid: 80330, entry: 1423, name: 'Guard', map: 0, x: 500, y: 10, z: 20, role: 'giver' };
+    const { store } = await shell({ questSpawnList: vi.fn(async () => okv([{ questId: 60001, title: 'Wolves', spawns: [giver], capped: false, cut: 0 }])) });
+    await waitFor(() => expect(created).toHaveLength(1));
+    await act(async () => { await store.getState().openQuest(60001); });
+    await waitFor(() => expect(created[0]!.lookAt).toHaveBeenCalledWith(500, 10, 20));
+    expect(screen.getByRole('button', { name: 'Back' })).toHaveProperty('disabled', false);
+  });
+
+  it('Show in World takes the world to the focused quest again', async () => {
+    const giver = { kind: 'creature', guid: 80330, entry: 1423, name: 'Guard', map: 0, x: 500, y: 10, z: 20, role: 'giver' };
+    const questSpawnList = vi.fn(async () => okv([{ questId: 60001, title: 'Wolves', spawns: [giver], capped: false, cut: 0 }]));
+    const { store } = await shell({ questSpawnList });
+    await waitFor(() => expect(created).toHaveLength(1));
+    await act(async () => { await store.getState().openQuest(60001); });
+    await waitFor(() => expect(created[0]!.lookAt).toHaveBeenCalledWith(500, 10, 20));
+    // The card's placed marks read the quest's spawns too, so count from here
+    await waitFor(() => expect(within(dock()!).getByRole('button', { name: 'Show in World' })).toBeTruthy());
+    const before = questSpawnList.mock.calls.length;
+    await userEvent.click(within(dock()!).getByRole('button', { name: 'Show in World' }));
+    await waitFor(() => expect(questSpawnList.mock.calls.length).toBeGreaterThan(before));
+  });
+
+  it('selecting a part of the open quest in the world focuses it, without moving the camera', async () => {
+    const values = { 'quest_template.LogTitle': 'Wolves', creature_queststarter: [{ id: 1423 }] };
+    const { store } = await shell({ openQuest: async () => okv(sampleOpen({ aggregate: { ...sampleOpen().aggregate, values } })) });
+    await waitFor(() => expect(created).toHaveLength(1));
+    await act(async () => { await store.getState().openQuest(60001); });
+    const world = created[0]!;
+    const before = world.lookAt.mock.calls.length;
+    const pick = (entry: number) => ({ kind: 'creature', guid: 80330, entry, name: 'Guard', own: false, added: false, pathId: 0, event: null, position: { x: 1, y: 2, z: 3 } });
+    act(() => world.options.onSelect(pick(4000)));
+    expect(store.getState().focus.part).toBeNull();
+    act(() => world.options.onSelect(pick(1423)));
+    expect(store.getState().focus).toMatchObject({ questId: 60001, part: { kind: 'creature', entry: 1423 } });
+    await new Promise((r) => setTimeout(r, 20));
+    expect(world.lookAt.mock.calls.length).toBe(before);
+  });
+
+  it('going to a part of the open quest with Find focuses it too', async () => {
+    const values = { 'quest_template.LogTitle': 'Wolves', creature_queststarter: [{ id: 1423 }] };
+    const guard = { kind: 'creature', guid: 80330, entry: 1423, name: 'Guard', map: 0, x: 500, y: 10, z: 20 };
+    const { store } = await shell({
+      openQuest: async () => okv(sampleOpen({ aggregate: { ...sampleOpen().aggregate, values } })),
+      searchEntities: vi.fn(async () => okv([{ id: 1423, name: 'Guard', detail: '' }])),
+      findSpawns: vi.fn(async () => okv({ spawns: [guard], capped: false })),
+    });
+    await waitFor(() => expect(created).toHaveLength(1));
+    await act(async () => { await store.getState().openQuest(60001); });
+    await userEvent.click(screen.getByRole('button', { name: 'Find…' }));
+    await userEvent.type(await screen.findByRole('searchbox', { name: 'Find by name or ID' }), 'guard');
+    await userEvent.click(await screen.findByRole('button', { name: /Guard/ }));
+    await userEvent.click((await screen.findAllByRole('button', { name: /^Go to spawn/ }))[0]!);
+    await waitFor(() => expect(store.getState().focus).toMatchObject({ questId: 60001, part: { kind: 'creature', entry: 1423 } }));
+  });
+
+  describe('Place in world from the quest editor', () => {
+    const values = { 'quest_template.LogTitle': 'Wolves', creature_queststarter: [{ id: 12000005 }] };
+    async function editing(client = true) {
+      const { store } = await shell({
+        openQuest: async () => okv(sampleOpen({ aggregate: { ...sampleOpen().aggregate, values } })),
+        projectEntities: async () => okv({ npcs: [{ ...newNpc(12000005), name: 'Hela' }], objects: [], items: [] }),
+      }, client);
+      await act(async () => {
+        await store.getState().loadEntities();
+        await store.getState().openQuest(60001);
+      });
+      act(() => store.getState().editQuest());
+      await userEvent.click(within(screen.getByRole('list', { name: 'Modules' })).getByRole('button', { name: /^Quest Giver/ }));
+      return store;
+    }
+
+    it('steps the editor aside, places the NPC in the world, and brings the editor back on its panel', async () => {
+      await editing();
+      await waitFor(() => expect(created).toHaveLength(1));
+      await userEvent.click(within(screen.getByRole('dialog', { name: 'Quest Giver' })).getByRole('button', { name: 'Place in world' }));
+      expect(screen.queryByRole('dialog', { name: 'Edit quest' })).toBeNull();
+      await waitFor(() => expect(created[0]!.setPlacing).toHaveBeenLastCalledWith({ kind: 'creature', entry: 12000005 }));
+      expect(screen.getByText(/Placing Hela \(#12000005\)/)).toBeTruthy();
+      act(() => created[0]!.options.onPlaceEnd());
+      expect(await screen.findByRole('dialog', { name: 'Edit quest' })).toBeTruthy();
+      expect(screen.getByRole('dialog', { name: 'Quest Giver' })).toBeTruthy();
+    });
+
+    it('Show in World steps the editor aside while the World shows the quest, and Done brings it back', async () => {
+      const store = await editing();
+      await waitFor(() => expect(created).toHaveLength(1));
+      const before = store.getState().focus.nonce;
+      await userEvent.click(within(screen.getByRole('dialog', { name: 'Edit quest' })).getByRole('button', { name: 'Show in World' }));
+      expect(screen.queryByRole('dialog', { name: 'Edit quest' })).toBeNull();
+      expect(store.getState().focus).toMatchObject({ questId: 60001, part: null, nonce: before + 1 });
+      expect(await screen.findByText(/Showing Wolves\./)).toBeTruthy();
+      await userEvent.click(screen.getByRole('button', { name: 'Done' }));
+      expect(await screen.findByRole('dialog', { name: 'Edit quest' })).toBeTruthy();
+      expect(screen.getByRole('dialog', { name: 'Quest Giver' })).toBeTruthy();
+    });
+
+    it('is not offered without a game client', async () => {
+      await editing(false);
+      expect(within(screen.getByRole('dialog', { name: 'Quest Giver' })).getByText('Made with this quest.')).toBeTruthy();
+      expect(screen.queryByRole('button', { name: 'Place in world' })).toBeNull();
+    });
   });
 
   it('leaves the open quest alone when the new quest cannot be made', async () => {
     const { store } = await shell({ newQuest: async () => ({ ok: false, error: { code: 'UNKNOWN', message: 'no' } }) });
-    await store.getState().openQuest(60001);
-    await userEvent.click(tab('World'));
+    await act(async () => { await store.getState().openQuest(60001); });
     await waitFor(() => expect(created).toHaveLength(1));
     const guard = { kind: 'creature', guid: 80330, entry: 1423, name: 'Guard', own: false, added: false, pathId: 0, wander: 0, map: 0, placement: { x: 1, y: 2, z: 3, orientation: 0, rotation: null } };
     act(() => created[0]!.options.onContextMenu({ ground: { x: 1, y: 2, z: 3 }, hit: { type: 'spawn', spawn: guard }, selection: [guard] }, { x: 10, y: 10 }));

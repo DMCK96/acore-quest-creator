@@ -19,14 +19,14 @@ You never edit database tables by hand, and the app never writes to your live wo
 
 - **Your world database.** The app reads quests, NPCs, items and spells from your server's world database over MySQL (usually called `acore_world`). A read-only user is enough.
 - **The server data folder** (optional). The worldserver's data folder, the one holding `dbc/`. With it the app shows values the server reads from its DBC files, such as how much XP each reward tier gives, lets you search spells and models by name, and can snap spawns to the ground.
-- **Your game client folder** (optional, but the app is built around it). The folder with `Wow.exe`. With it the app draws [the World](/azeroth-world-editor/guides/the-world/) in 3D, where it opens, and the quest map shows the game's zone art and minimap.
+- **Your game client folder** (optional, but the app is built around it). The folder with `Wow.exe`. With it the app draws [the World](/azeroth-world-editor/guides/the-world/) in 3D, where it opens.
 - **A dev database** (optional). A separate world database on a test server, for **Apply to dev DB**.
 
 ## How a session goes
 
 1. [Connect](/azeroth-world-editor/getting-started/connect/) to your world database. The app opens on [the World](/azeroth-world-editor/guides/the-world/).
 2. Find the place you are working on, and select, move, place and group its NPCs and objects; fix or draw the paths they walk. Right-click anything for what you can do with it.
-3. For a quest, start it from an NPC in the World or on the **Quests** canvas, and fill in its parts: givers, objectives, dialogue, rewards, scripts. Opening a quest takes the World to its NPCs.
+3. For a quest, start it from an NPC in the World or in the **Quests** dock, and fill in its parts: givers, objectives, dialogue, rewards, scripts. Opening a quest takes the World to its NPCs.
 4. Review the changes in **Project changes**, then export an SQL patch or apply it to your dev database, and [test it in game](/azeroth-world-editor/guides/test-in-game/).
 
 Ready? [Install the app](/azeroth-world-editor/getting-started/install/), then walk through [your first quest](/azeroth-world-editor/getting-started/first-quest/).

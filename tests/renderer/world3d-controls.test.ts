@@ -307,4 +307,38 @@ describe('the right-click menu', () => {
     expect(contexts).toEqual([]);
     expect(clicks).toHaveLength(1);
   });
+
+  describe('telling the host the author moved the camera', () => {
+    const moving = () => {
+      const camera = new THREE.PerspectiveCamera(60, 1, 0.5, 1000);
+      const dom = document.createElement('canvas');
+      document.body.appendChild(dom);
+      const onCameraInput = vi.fn();
+      const controls = new WorldControls(camera, dom, { onCameraInput });
+      return { dom, controls, onCameraInput };
+    };
+
+    it('on a drag that turns the camera, and on the wheel', () => {
+      const { dom, onCameraInput } = moving();
+      dom.dispatchEvent(new PointerEvent('pointerdown', { button: 2, clientX: 10, clientY: 10, pointerId: 1 }));
+      expect(onCameraInput).not.toHaveBeenCalled();
+      dom.dispatchEvent(new PointerEvent('pointermove', { button: 2, clientX: 30, clientY: 10, pointerId: 1 }));
+      expect(onCameraInput).toHaveBeenCalledTimes(1);
+      dom.dispatchEvent(new PointerEvent('pointerup', { button: 2, clientX: 30, clientY: 10, pointerId: 1 }));
+      dom.dispatchEvent(new WheelEvent('wheel', { deltaY: 100 }));
+      expect(onCameraInput).toHaveBeenCalledTimes(2);
+    });
+
+    it('when the keys fly it, and not for a click', () => {
+      const { dom, controls, onCameraInput } = moving();
+      dom.dispatchEvent(new PointerEvent('pointerdown', { button: 0, clientX: 10, clientY: 10, pointerId: 1 }));
+      dom.dispatchEvent(new PointerEvent('pointerup', { button: 0, clientX: 10, clientY: 10, pointerId: 1 }));
+      controls.update(1);
+      expect(onCameraInput).not.toHaveBeenCalled();
+      dom.focus();
+      controls.keyDown('KeyW');
+      controls.update(0.1);
+      expect(onCameraInput).toHaveBeenCalledTimes(1);
+    });
+  });
 });

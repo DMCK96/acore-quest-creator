@@ -11,7 +11,7 @@ import type { Store } from './store/store';
  *
  * A role is only configured when HOST, USER and DATABASE are all set; PORT defaults to 3306 and
  * PASSWORD to empty. The world role may also name the server's data folder in ACQC_WORLD_DB_DBC_DIR, and the
- * game client's folder (for the map's pictures) in ACQC_WORLD_DB_CLIENT_DIR.
+ * game client's folder (for the 3D view's terrain and models) in ACQC_WORLD_DB_CLIENT_DIR.
  */
 
 type Env = Record<string, string | undefined>;

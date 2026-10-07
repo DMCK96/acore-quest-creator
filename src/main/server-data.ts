@@ -14,8 +14,6 @@ export interface ServerDataFiles {
   /** The file's bytes, found by name in any letter case; null when the folder has no such file. */
   read(dir: string, fileName: string): Promise<Uint8Array | null>;
   isDir(dir: string): Promise<boolean>;
-  /** The file names in a folder; empty when it cannot be read. */
-  list?(dir: string): Promise<string[]>;
 }
 
 export interface ServerData {
@@ -57,7 +55,7 @@ export async function loadServerData(dir: string, files: ServerDataFiles): Promi
 
 /**
  * The data folder on disk. With `listingTtlMs`, each folder's listing is reused: the map folders
- * hold thousands of files and the quest map asks for hundreds at a time, many of them absent. A name
+ * hold thousands of files and the 3D view asks for hundreds at a time, many of them absent. A name
  * not in the listing is looked for again once the listing is older than that, so files added later
  * still appear. Without it every read lists the folder, as connecting needs.
  */
@@ -95,9 +93,6 @@ export function createServerDataFiles(options: { listingTtlMs?: number; now?: ()
         return null;
       }
     },
-    async list(dir) {
-      return (await list(dir)) ?? [];
-    },
     async isDir(dir) {
       try {
         return (await stat(dir)).isDirectory();
@@ -110,5 +105,5 @@ export function createServerDataFiles(options: { listingTtlMs?: number; now?: ()
 
 export const nodeServerDataFiles: ServerDataFiles = createServerDataFiles();
 
-/** For the quest map's grid and navmesh reads: listings kept for a minute. */
+/** For the grid and navmesh reads: listings kept for a minute. */
 export const mapDataFiles: ServerDataFiles = createServerDataFiles({ listingTtlMs: 60_000 });

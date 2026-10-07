@@ -44,13 +44,13 @@ test('new, name, save, reopen from recent, and recover after a crash', async () 
   let page = await app.firstWindow();
   // The environment's connection is filled in on the login screen; connecting is a click.
   await page.getByRole('button', { name: 'Connect', exact: true }).click();
-  // The world is the home screen; the quest graph is the Quests tab.
-  await page.getByRole('tab', { name: 'Quests' }).click();
+  // The world is the home screen; the quest graph is in the Quests dock under it.
+  await page.getByRole('button', { name: 'Quests', exact: true }).click();
   const heading = page.getByRole('banner').getByRole('heading', { level: 1 });
   await expect(heading).toHaveText('Untitled Project');
 
   await page.getByRole('button', { name: 'Add existing quest', exact: true }).click();
-  await page.getByRole('searchbox').fill('a');
+  await page.getByRole('dialog', { name: 'Add existing quest chain' }).getByRole('searchbox').fill('a');
   await page.getByRole('button', { name: /level \d+\)/ }).first().click();
   await page.getByRole('button', { name: 'Close preview' }).click();
   await expect(page.getByTestId('quest-node').first()).toBeVisible();
@@ -101,7 +101,7 @@ test('new, name, save, reopen from recent, and recover after a crash', async () 
   const prompt = page.getByRole('alertdialog', { name: 'Recover unsaved work' });
   await expect(prompt).toContainText('Crashed name');
   await prompt.getByRole('button', { name: 'Restore Crashed name' }).click();
-  await page.getByRole('tab', { name: 'Quests' }).click();
+  await page.getByRole('button', { name: 'Quests', exact: true }).click();
   await expect(page.getByRole('banner').getByRole('heading', { level: 1 })).toHaveText('Crashed name');
   await expect(page.getByLabel('Unsaved changes')).toBeVisible();
   await expect(page.getByTestId('quest-node')).toHaveCount(nodeCount);

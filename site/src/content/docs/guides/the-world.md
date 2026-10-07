@@ -5,7 +5,7 @@ sidebar:
   order: 0.5
 ---
 
-The **World** tab is where the app opens and where most work happens: the game world in 3D, drawn from your own game client. Walk it, place NPCs and objects that already exist, move them, draw the paths they walk, and tie them to the quest you have open. Changes to spawns that belong to no quest are kept as **world changes** and exported as a patch of their own.
+The **World** is where the app opens and where most work happens: the game world in 3D, drawn from your own game client. Walk it, place NPCs and objects that already exist, move them, draw the paths they walk, and tie them to the quest you have open. Changes to spawns that belong to no quest are kept as **world changes** and exported as a patch of their own.
 
 ![The World over Northshire Abbey, with Marshal McBride selected](../../../assets/screenshots/world.png)
 
@@ -30,12 +30,16 @@ The World needs the **game client folder**, set when you [connect](/azeroth-worl
 
 ### Following a quest
 
-Open a quest from the **Quests** tab and then switch to the World, and the camera is already there: it flies to the quest's giver, or its ender if it has no giver, or an objective if it has neither. If the quest has several, it picks the one nearest the camera on the current map. A quest with no spawns leaves the camera where it was. If you move the camera yourself before switching, it stays where you put it. **Back** takes you to where you were.
+Open a quest in the **Quests** dock and the camera goes there: it flies to the quest's giver, or its ender if it has no giver, or an objective if it has neither. If the quest has several, it picks the one nearest the camera on the current map. A quest with no spawns leaves the camera where it was, and a note says nothing of it is placed yet. If you move the camera while the World is still finding the quest, it stays where you put it. **Back** takes you to where you were.
+
+Select a giver, ender or objective of the open quest in the World, by clicking it or going to it with **Find…**, and it is marked on the quest's card in the dock, which lists the quest's NPCs and objects. The camera stays where it is.
 
 Two buttons do the same on demand:
 
-- **Show in World**, in the quest editor and in the graph preview, switches to the World and takes the camera to the quest.
-- **Go to _name_**, beside each giver, ender and objective that names an NPC or object with a spawn, takes the camera to that one's nearest spawn.
+- **Show in World**, in the quest editor and in the graph preview, takes the World's camera to the quest.
+- **Go to _name_**, beside each giver, ender and objective that names an NPC or object with a spawn, takes the camera to that one's nearest spawn and selects it.
+
+Used from inside the quest editor (or an NPC or object editor), either one steps the editor aside so you can see what the camera went to, and the World says what it is showing; **Done** brings the editor back.
 
 Without the world database, both buttons find only your project's own NPCs and objects and the spawns you moved or placed in the World. For anything else they say *Needs the world database*.
 
@@ -83,7 +87,7 @@ Right-click (without dragging) for a menu about what is under the cursor: a rout
 
 ### Place, copy and paste
 
-- **Place NPC here…** and **Place object here…**: pick an existing NPC or object, and one is put down where you right-clicked, facing you, on the server's floor. **Place…** in the Layers card places one with each click instead, until **Esc**.
+- **Place NPC here…** and **Place object here…**: pick an existing NPC or object, and one is put down where you right-clicked, facing you, on the server's floor. **Place…** in the Layers card places one with each click instead, until **Esc**. You can also drag an NPC or object from the open quest's card in the Quests dock and drop it on the ground (one already in the world is marked **Placed** there). One of the project's own NPCs or objects gets a new spawn of its own, even before the database has it.
 - **Copy**, **Paste here** and **Duplicate** (also **Ctrl+C**, **Ctrl+V** and **Ctrl+D**): a copied group keeps its layout and facing. **Ctrl+V** pastes under the cursor, and Duplicate puts the copy beside the original. A paste copies what a spawn is, how it faces, its respawn time, how far it wanders and an NPC's own game events. It does not copy a path: a pasted NPC that walked a path stands still, and you draw it a new one.
 - **Respawn time…**: how long a spawn takes to come back after it dies or is despawned, in minutes and seconds. It starts from the spawn's current time. With several spawns selected the item reads **Respawn time of _n_ spawns…** and sets them all; if they differ the boxes start empty. It works on any spawn, a new one, one you placed, or one the database already has.
 - **Event…**: which game events NPC spawns follow of their own: **Same as the NPC**, **Always**, **Only during…** or **Gone during…** one or more events. For one spawn the dialog first says what it follows now, including a spawn the database has both appearing during some events and gone during others, which is kept unless you choose something else. With several NPCs selected the item reads **Event of _n_ spawns…**; if they differ nothing is chosen at first. Objects are left out. The NPC's own setting is in the [NPC editor](/azeroth-world-editor/guides/npcs-and-objects/#visibility).
@@ -97,7 +101,7 @@ Placing, pasting and removing are undone with **Ctrl+Z** like any other change.
 - **Start path here**: with one NPC selected that has no route, right-click the ground where its path should begin. Each click then adds the next point. **Enter** or **Esc** finishes, **Ctrl+Z** takes back the last point, and **Cancel path** puts everything back. A path needs at least two points.
 - **Change wander distance…**: how far the NPC roams from where it stands, 0 to 100 yards. Its circle follows what you type.
 - **Remove path**: the NPC stands still. A path the database already has is left in place for any other NPC that walks it.
-- **Point settings…** (right-click a point of a shown route): what the NPC does there. On a route the database has: how long it waits, whether it walks or runs on from there, and the way it faces; a waypoint script the point already runs is named and kept. On your own NPC's patrol: the same, plus its actions (saying a line, an emote, a pose, a spell, a sound, mounting), as on the quest map. **Apply** is one undo step.
+- **Point settings…** (right-click a point of a shown route): what the NPC does there. On a route the database has: how long it waits, whether it walks or runs on from there, and the way it faces; a waypoint script the point already runs is named and kept. On your own NPC's patrol: the same, plus its actions (saying a line, an emote, a pose, a spell, a sound, mounting, using an object by its spawn guid); see [patrols](/azeroth-world-editor/guides/patrols/#what-happens-at-a-point). **Apply** is one undo step.
 
 These work for any NPC, whether the database has it or you made it.
 
@@ -117,6 +121,30 @@ On the ground, with a quest open:
 - **New NPC here…** and **New object here…** make a new [NPC or object](/azeroth-world-editor/guides/npcs-and-objects/) for the project, with a spawn where you right-clicked, and open its editor. No quest needs to be open.
 - On any NPC or object, **Edit NPC…** or **Edit object…** opens its editor. For one the database already has this needs the world database connected; see [Change an NPC or object that already exists](/azeroth-world-editor/guides/npcs-and-objects/#change-one-that-already-exists).
 - On an object, **Make lootable…** turns it into a chest and opens its loot. **Stop being lootable** turns it back.
+
+### Your own NPCs from their editor
+
+The editors work in the World too. On a giver card, or under **Placement** in an NPC or object editor:
+
+- **Place in world** steps the editor aside and places the NPC or object with each click on the ground, as **Place…** does. **Done** or **Esc** brings the editor back where it was.
+- **Show in World** beside a spawn steps the editor aside, takes the camera to that spawn and selects it. **Done** brings the editor back.
+- **Draw patrol** (or **Edit patrol**) goes to the spawn and starts its path; **Enter** finishes it and brings the editor back. See [patrols](/azeroth-world-editor/guides/patrols/).
+
+Without a game client these are not offered.
+
+### The quest's positions
+
+While a quest is open, the World marks the places its scripts and fights use, each with a coloured pin and its name:
+
+- the place of a scene's **Move to**, **Spawn an NPC** or **Spawn an object** step (green),
+- each point of an **Escort** path (blue),
+- where a fight's **Summon adds** puts them (red),
+- an **Enter an area** scene's area, with a ring at its radius (purple),
+- the quest's POI outline from the map marker tables, drawn on the ground (orange; shown, not moved here).
+
+Click a pin to select it: a card names it, says what kind it is and where it is. Drag its handles to move it; let go along the ground and it lands on the server's floor there, as a moved spawn does. Each move is one undo step. **Esc** or **Deselect** lets it go. A position whose NPC has no spawn yet has no known map; it is drawn on the map you are on, and its card says so.
+
+In the quest editor, **Show in World** beside one of these positions steps the editor aside, takes the camera to it and selects it. **Done** brings the editor back. Without a game client it is not offered. Closing the quest takes its pins away.
 
 An NPC or object is the project's, and a quest uses it by naming it. The project's NPCs and objects are drawn and edited in the World whether or not a quest is open. A move, or a path you give one, stays with the NPC, whichever quest uses it.
 

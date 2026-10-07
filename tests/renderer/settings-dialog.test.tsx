@@ -144,7 +144,8 @@ describe('SettingsDialog keyboard', () => {
     // Save is disabled until something changes, so Add a dev database is the last stop.
     expect(screen.getByRole('button', { name: 'Add a dev database' })).toHaveFocus();
     await userEvent.tab();
-    expect(screen.getByRole('button', { name: 'Close' })).toHaveFocus();
+    // The tabs come first now, so Tab wraps round to the selected one.
+    expect(screen.getByRole('tab', { name: 'Connection' })).toHaveFocus();
   });
   it('moves focus to what replaces the Add and Remove dev database buttons', async () => {
     await setup();
@@ -176,7 +177,7 @@ describe("the app bar's settings button", () => {
   it('opens settings', async () => {
     const onOpenSettings = vi.fn();
     const store = createAppStore(makeMockApi());
-    render(<AppBar store={store} workspace="world" onWorkspace={() => {}} onOpenProject={() => {}} onOpenSettings={onOpenSettings} />);
+    render(<AppBar store={store} dockOpen={false} onToggleDock={() => {}} onOpenProject={() => {}} onOpenSettings={onOpenSettings} />);
     await userEvent.click(screen.getByRole('button', { name: 'Settings' }));
     expect(onOpenSettings).toHaveBeenCalled();
   });

@@ -44,9 +44,8 @@ test('two spawns are grouped in the World and the project patch carries the pool
   await page.getByLabel('Server data folder (optional)').fill(serverDataDir());
   await page.getByLabel('Game client folder (optional)').fill(process.env.ACQC_TEST_CLIENT_DIR ?? clientDir());
   await page.getByRole('button', { name: 'Save and connect' }).click();
-  await expect(page.getByRole('tab', { name: 'Quests' })).toBeVisible({ timeout: 30_000 });
+  await expect(page.getByRole('button', { name: 'Quests', exact: true })).toBeVisible({ timeout: 30_000 });
 
-  await page.getByRole('tab', { name: 'World' }).click();
   const welcome = page.getByRole('dialog', { name: 'Welcome' });
   await expect(welcome).toBeVisible();
   await page.keyboard.press('Escape');

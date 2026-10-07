@@ -81,7 +81,7 @@ export function ReactionEditor({
   onRemove,
 }: {
   idPrefix: string;
-  /** `fight:<entry>:<reaction id>`: its summon points' markers on the quest map are named from it. */
+  /** `fight:<entry>:<reaction id>`: its summon points' markers in the World are named from it. */
   markerBase?: string;
   index: number;
   reaction: Reaction;

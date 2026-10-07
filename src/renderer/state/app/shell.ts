@@ -5,8 +5,8 @@ export interface ShellSlice {
   screen: 'connect' | 'pick' | 'preview' | 'edit';
   /**
    * The moment (on `moment()`'s clock) the action that last opened a quest began; 0 before any. The
-   * shell brings the quests forward for it unless the author picked a workspace after that moment, so
-   * an open that lands late, or a screen change inside the open quest, never pulls them away.
+   * shell opens the quests dock for it unless the author opened or closed the dock after that moment,
+   * so an open that lands late, or a screen change inside the open quest, never reopens a dock closed.
    */
   questsAsked: number;
   error: string | null;

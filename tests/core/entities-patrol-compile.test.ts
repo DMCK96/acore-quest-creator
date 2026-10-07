@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest';
 import { compileEntities } from '../../src/core/entities/compile';
 import { EMPTY_ENTITY_CONTEXT } from '../../src/core/entities/context';
 import { newNpc, newSpawn, type Patrol } from '../../src/core/entities/model';
-import { addAction, addPoint, newPatrol, updatePoint, setStartPace } from '../../src/core/map/patrol';
+import { addAction, addPoint, newPatrol, updatePoint } from '../../src/core/map/patrol';
 
 const Q = 60001;
 const three = (): Patrol => {
@@ -30,7 +30,7 @@ describe('patrol export', () => {
     expect(out.deletes.waypoint_data).toEqual([{ id: '9000', point: '1' }, { id: '9000', point: '2' }, { id: '9000', point: '3' }, { id: '9000', point: '4' }]);
   });
   it('starts at the pace it is set to start at', () => {
-    expect(compile(setStartPace(three(), 'run')).inserts.waypoint_data![0]!.move_type).toBe('1');
+    expect(compile({ ...three(), startPace: 'run' }).inserts.waypoint_data![0]!.move_type).toBe('1');
   });
   it('writes no route for fewer than two points, and the spawn wanders as before', () => {
     const out = compile(addPoint(newPatrol(9000), { x: 1, y: 2, z: 3 }));

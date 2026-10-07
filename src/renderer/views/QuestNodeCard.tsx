@@ -1,5 +1,6 @@
 import { useRef, useState } from 'react';
 import type { CanvasNode, StartBadge } from '@shared/ipc';
+import { CHAIN_DRAG_TYPE } from '../world3d/chain-drop';
 import './QuestNodeCard.css';
 
 /** Roughly the width a node occupies on the canvas; used to lay out new nodes. */
@@ -34,9 +35,16 @@ export function QuestNodeCard({
   onAddChain,
   rotation,
   onRotation,
+  parts,
 }: {
   node: CanvasNode;
   selected: boolean;
+  /**
+   * The NPCs and objects with a part in the quest, listed on the open quest's card; the focused one and
+   * those already placed in the world are marked. Each is dragged out (onto the 3D view, to place it,
+   * or place another) as its `drag` data.
+   */
+  parts?: { key: string; name: string; focused: boolean; placed?: boolean; drag: string }[];
   /** The quest rotation this quest is in, if any */
   rotation?: { name: string; daily: boolean } | null;
   /** The rotation tag's click: open the rotation */
@@ -120,6 +128,27 @@ export function QuestNodeCard({
           </span>
         )}
       </div>
+      {parts && parts.length > 0 && (
+        <ul className="quest-card__parts" aria-label="Parts">
+          {parts.map((part) => (
+            <li
+              key={part.key}
+              // nodrag: dragging the row carries the part out, and leaves the card where it is
+              className="quest-card__part nodrag"
+              aria-current={part.focused ? 'true' : undefined}
+              title={part.placed ? 'Already placed in the world; drag onto the 3D view to place another' : 'Drag onto the 3D view to place it'}
+              draggable
+              onDragStart={(e) => {
+                e.dataTransfer.setData(CHAIN_DRAG_TYPE, part.drag);
+                e.dataTransfer.effectAllowed = 'copy';
+              }}
+            >
+              <span className="quest-card__part-name">{part.name}</span>
+              {part.placed && <span className="quest-card__placed">Placed</span>}
+            </li>
+          ))}
+        </ul>
+      )}
       {node.offCanvasLinks > 0 && (
         <button
           type="button"

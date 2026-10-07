@@ -27,11 +27,9 @@ export interface ApiDeps {
   serverDataFiles?: ServerDataFiles;
   /** The native folder picker; null when cancelled. */
   chooseDirectory?(): Promise<string | null>;
-  /** The data folder for the quest map's grid and navmesh reads (listings cached); `serverDataFiles` otherwise. */
+  /** The data folder for the grid and navmesh reads (listings cached); `serverDataFiles` otherwise. */
   mapDataFiles?: ServerDataFiles;
-  /** Told the connection's server data folder at every connect (null when it names none), for the map tiles. */
-  onServerDataDir?(dir: string | null): void;
-  /** Told the connection's game client folder at every connect (null when it names none), for the map tiles. */
+  /** Told the connection's game client folder at every connect (null when it names none), for the 3D view's files. */
   onClientDir?(dir: string | null): void;
   /** What the game client folder given to `onClientDir` holds; the folder is opened now if it was not yet. */
   clientStatus?(): Promise<ClientStatus | null>;

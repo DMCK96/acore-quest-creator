@@ -5,7 +5,7 @@ sidebar:
   order: 13
 ---
 
-Every change you make to a project can be undone: a quest's title or objectives, its NPCs, objects, items and loot, its scripts and fights, a patrol on the quest map, quests added to or moved on the graph, the project's name, and everything you place, move, turn or reroute in the World.
+Every change you make to a project can be undone: a quest's title or objectives, its NPCs, objects, items and loot, its scripts and fights, quests added to, moved on or linked on the graph, the project's name, and everything you place, move, turn or reroute in the World.
 
 ## The keys
 

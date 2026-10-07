@@ -57,9 +57,9 @@ test('two quests are made a daily rotation, exported with its revert; the World 
   await page.getByLabel('Password').fill(decodeURIComponent(u.password));
   await page.getByLabel('Game client folder (optional)').fill(clientDir());
   await page.getByRole('button', { name: 'Save and connect' }).click();
-  await expect(page.getByRole('tab', { name: 'Quests' })).toBeVisible({ timeout: 30_000 });
+  await expect(page.getByRole('button', { name: 'Quests', exact: true })).toBeVisible({ timeout: 30_000 });
 
-  await page.getByRole('tab', { name: 'Quests' }).click();
+  await page.getByRole('button', { name: 'Quests', exact: true }).click();
   await newQuestWithGiver(page, 'Daily errand one');
   await newQuestWithGiver(page, 'Daily errand two');
 
@@ -81,7 +81,7 @@ test('two quests are made a daily rotation, exported with its revert; the World 
   await save.click();
   await expect(dialog).toHaveCount(0);
 
-  await page.getByRole('tab', { name: 'World' }).click();
+  // The world stays in view above the Quests dock
   const welcome = page.getByRole('dialog', { name: 'Welcome' });
   if (await welcome.isVisible().catch(() => false)) await page.keyboard.press('Escape');
   await expect(page.getByText('Loading the world…')).toHaveCount(0, { timeout: 90_000 });
@@ -101,10 +101,8 @@ test('two quests are made a daily rotation, exported with its revert; the World 
   await page.keyboard.press('Escape');
   await expect(changes).toHaveCount(0);
 
-  // The World follows an opened quest to its giver
-  await page.getByRole('tab', { name: 'Quests' }).click();
+  // The World follows a quest opened in the dock to its giver
   await one.click({ position: { x: 12, y: 12 } });
-  await page.getByRole('tab', { name: 'World' }).click();
   if (await page.getByText('See the world in 3D').isVisible().catch(() => false)) {
     test.info().annotations.push({ type: 'skipped', description: 'No game client: the World cannot follow the quest' });
     return;

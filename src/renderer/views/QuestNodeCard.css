@@ -55,6 +55,52 @@
   margin-top: 0.4em;
 }
 
+.quest-card__parts {
+  list-style: none;
+  margin: 0.45em 0 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.15em;
+  font-size: 0.78em;
+  color: var(--text-muted);
+}
+
+.quest-card__part {
+  display: flex;
+  align-items: baseline;
+  gap: 0.4em;
+  padding: 0.1em 0.4em;
+  border-radius: var(--radius);
+}
+
+.quest-card__part-name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Already in the world: a second drop is allowed, so this only warns */
+.quest-card__placed {
+  flex: none;
+  font-size: 0.85em;
+  color: var(--text-muted);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 0 0.3em;
+}
+
+.quest-card__part[draggable='true'] {
+  cursor: grab;
+}
+
+.quest-card__part[aria-current='true'] {
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+
 .chip--start {
   background: var(--accent-soft);
   color: var(--accent);

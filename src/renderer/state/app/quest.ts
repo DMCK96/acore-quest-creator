@@ -10,15 +10,19 @@ import type { SliceArgs } from './types';
 export interface QuestSlice {
   open: OpenResult | null;
   /** The module (or the changes view) open in the flow view's side panel. */
-  openPanel: ModuleId | 'changes' | 'test' | 'map' | null;
+  openPanel: ModuleId | 'changes' | 'test' | null;
   /** Optional modules added this session that have nothing in them yet, so they still show. */
   addedModules: ModuleId[];
   issues: Issue[];
   saving: boolean;
   dirty: boolean;
   links: QuestLinks | null;
-  /** Loads a quest into the preview; false when it failed or a newer open replaced it. */
-  openQuest(id: number, position?: NodePosition): Promise<boolean>;
+  /**
+   * Loads a quest into the preview and focuses it; false when it failed or a newer open replaced it.
+   * `working` opens it only to work on it: the focus (and so the World) stays where it was, and a
+   * failed open leaves the screen as it was, on the quest still open.
+   */
+  openQuest(id: number, position?: NodePosition, options?: { working?: boolean }): Promise<boolean>;
   /** Adds the quest and every quest chained to it to the canvas, then opens the one picked. */
   addQuestChain(id: number, position?: NodePosition): Promise<void>;
   newQuest(position?: NodePosition): Promise<void>;
@@ -27,7 +31,7 @@ export interface QuestSlice {
   editQuest(): void;
   /** Leaves the editor for the chain canvas, sending any pending edit first; the quest stays previewed. */
   backToChain(): Promise<void>;
-  setOpenPanel(p: ModuleId | 'changes' | 'test' | 'map' | null): void;
+  setOpenPanel(p: ModuleId | 'changes' | 'test' | null): void;
   addModule(id: ModuleId): void;
   /** Clears every writable field the module owns and hides it again. */
   removeModule(id: ModuleId): void;
@@ -51,13 +55,13 @@ export function createQuestSlice({ api, kit, set, get }: SliceArgs): QuestSlice 
     saving: false,
     dirty: false,
     links: null,
-    async openQuest(id, position) {
+    async openQuest(id, position, options) {
       const token = ++kit.openToken;
       const asked = ++kit.clock;
       const result = position === undefined ? await api.openQuest(id) : await api.openQuest(id, position);
       if (token !== kit.openToken) return false;
       if (!result.ok) {
-        set({ error: result.error.message, screen: 'pick' });
+        set(options?.working ? { error: result.error.message } : { error: result.error.message, screen: 'pick' });
         return false;
       }
       set({
@@ -69,6 +73,7 @@ export function createQuestSlice({ api, kit, set, get }: SliceArgs): QuestSlice 
         error: null,
         dirty: false,
       });
+      if (!options?.working) get().setFocus(id);
       await get().loadNodes();
       await get().loadLinks();
       return true;
@@ -94,6 +99,8 @@ export function createQuestSlice({ api, kit, set, get }: SliceArgs): QuestSlice 
         error: truncated ? `Only the first ${questIds.length} quests of this chain were added.` : null,
         dirty: false,
       });
+      // The quest picked from the chain is the open one, so the World goes to it as on any open
+      get().setFocus(open.questId);
       await get().loadNodes();
       await get().loadLinks();
     },
@@ -116,6 +123,8 @@ export function createQuestSlice({ api, kit, set, get }: SliceArgs): QuestSlice 
         error: null,
         dirty: false,
       });
+      // The World goes to it as on any open (a quest with nothing placed yet says so)
+      get().setFocus(result.value.questId);
       await get().loadNodes();
       await get().loadLinks();
     },
@@ -185,7 +194,8 @@ export function createQuestSlice({ api, kit, set, get }: SliceArgs): QuestSlice 
       const issues = await api.validate(open.questId);
       set({
         saving: false,
-        dirty: false,
+        // An edit made while this save was on its way is not in it, and is still to send
+        dirty: get().open === open ? false : get().dirty,
         issues: issues.ok ? issues.value : get().issues,
         error: issues.ok ? get().error : issues.error.message,
       });
@@ -199,6 +209,7 @@ export function createQuestSlice({ api, kit, set, get }: SliceArgs): QuestSlice 
       set({ error: null });
       await get().flushSave();
       set({ screen: 'pick', open: null, dirty: false, links: null });
+      get().setFocus(null);
     },
     // A failed save is the one thing that must survive closing: clearing `error` first drops a
     // stale message, and `flushSave` puts a fresh one back if the edit did not reach the project.
@@ -206,6 +217,7 @@ export function createQuestSlice({ api, kit, set, get }: SliceArgs): QuestSlice 
       set({ error: null });
       await get().flushSave();
       set({ screen: 'pick', open: null, dirty: false, links: null });
+      get().setFocus(null);
       await get().loadNodes();
     },
     // The Availability tab reads from `links`, so every point that changes which quest is open

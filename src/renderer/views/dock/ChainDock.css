@@ -1,0 +1,171 @@
+/* The dock's body: the graph pane, with the open quest's preview beside it. The quest editor lies over both. */
+.chain-dock {
+  position: relative;
+  display: flex;
+  width: 100%;
+  height: 100%;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.chain-dock__pane {
+  flex: 1;
+  position: relative;
+  min-width: 0;
+  min-height: 0;
+}
+
+/* A narrow dock (beside the world) has no room for the preview beside the graph: it goes under it */
+@container dock (max-width: 720px) {
+  .chain-dock {
+    flex-direction: column;
+  }
+
+  .chain-dock .quest-preview {
+    width: auto;
+    height: 50%;
+    border-left: 0;
+    border-top: 1px solid var(--border);
+  }
+}
+
+/* Top left over the graph: the quest actions on the same frosted card as the world's place card, and the
+   search unfolded under them. */
+.chain-dock__corner {
+  position: absolute;
+  top: 14px;
+  left: 14px;
+  bottom: 14px;
+  z-index: 5;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.5rem;
+  max-width: calc(100% - 28px);
+  pointer-events: none;
+}
+
+.chain-dock__corner > * {
+  pointer-events: auto;
+}
+
+.quest-tools {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  padding: 0.55rem 0.6rem;
+}
+
+.chain-dock__find {
+  width: min(24rem, 100%);
+  min-height: 0;
+  overflow-y: auto;
+  padding: 0.6rem;
+}
+
+.canvas-empty {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  pointer-events: none;
+  z-index: 1;
+}
+
+.canvas-empty__circle {
+  position: relative;
+  pointer-events: auto;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  gap: 0.6em;
+  width: 22em;
+  padding: 2.4em 2em;
+  border-radius: 50%;
+  aspect-ratio: 1;
+  justify-content: center;
+}
+
+.canvas-empty__content {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.6em;
+}
+
+.canvas-empty__icon {
+  width: 2.6em;
+  height: 2.6em;
+  fill: none;
+  stroke: #fff6e4;
+  stroke-width: 1.3;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  filter: drop-shadow(0 1px 6px rgba(40, 28, 16, 0.6));
+}
+
+.canvas-empty__title {
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: 1.4em;
+  color: #fffaf0;
+  text-shadow: 0 1px 6px rgba(40, 28, 16, 0.6);
+}
+
+.canvas-empty__subtitle {
+  margin: 0;
+  color: rgba(255, 248, 235, 0.9);
+  text-shadow: 0 1px 4px rgba(40, 28, 16, 0.7);
+  font-size: 0.9em;
+  max-width: 18em;
+}
+
+.canvas-empty__actions {
+  display: flex;
+  gap: 0.6em;
+  margin-top: 0.6em;
+}
+
+/* `.btn.` for specificity: theme.css loads after this file and its `.btn` would win a tie.
+   Wider than the circle's text column on purpose, like the reference: the buttons overhang the
+   sphere slightly so each label fits on one line. */
+.btn.canvas-empty__btn {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.25em;
+  white-space: nowrap;
+  padding: 0.55em 1.7em;
+  /* Frosted glass: a faint light sheen over a thin warm tint, blurring the sphere behind it. */
+  background:
+    linear-gradient(180deg, rgba(255, 246, 228, 0.16) 0%, rgba(255, 246, 228, 0.04) 100%),
+    rgba(60, 44, 30, 0.32);
+  backdrop-filter: blur(8px) saturate(1.2);
+  border-color: rgba(255, 240, 215, 0.3);
+  color: #fffaf0;
+  text-shadow: 0 1px 3px rgba(30, 20, 10, 0.6);
+  box-shadow:
+    0 2px 12px rgba(20, 14, 8, 0.3),
+    inset 0 1px 0 rgba(255, 250, 238, 0.25);
+}
+
+.btn.canvas-empty__btn:hover {
+  background:
+    linear-gradient(180deg, rgba(255, 246, 228, 0.24) 0%, rgba(255, 246, 228, 0.08) 100%),
+    rgba(60, 44, 30, 0.32);
+  border-color: rgba(255, 244, 224, 0.55);
+}
+
+.canvas-empty__btn-icon {
+  width: 1em;
+  height: 1em;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.8;
+  stroke-linecap: round;
+}

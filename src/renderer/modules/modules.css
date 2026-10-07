@@ -53,6 +53,12 @@
   padding: 2px 8px;
 }
 
+/* A choice among several, such as a common faction, shows which one holds */
+.entry-card__btn[aria-pressed='true'] {
+  border-color: var(--border-soft);
+  background: rgba(255, 255, 255, 0.04);
+}
+
 .entry-card__btn:disabled {
   opacity: 0.4;
   cursor: default;

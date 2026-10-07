@@ -1,16 +1,17 @@
 import { newSpawn, type ProjectEntities, type SpawnEvents } from '../entities/model';
 import type { FieldValue } from '../registry/types';
-import { movePoint, newPatrol, setPatrol } from './patrol';
+import { newPatrol } from './patrol';
 import type { Movement } from '../world/movement';
 import { readScenes, SCRIPTS_FIELD, writeScenes, type Position, type QuestScene, type SceneStep } from '../scripts/model';
 
 /**
- * Every position a quest uses, as markers for its map, and the edits a map makes: moving one
- * position, or adding a spawn. A marker's id names where its position lives, so a move changes
- * exactly that one value: a field of the quest (its scenes), or the project's NPCs and objects.
+ * The positions a quest uses that the World draws as markers (scene steps, escort and fight points,
+ * areas, POI outlines), the edit that moves one, and the edits to the project's own spawns. A marker's
+ * id names where its position lives, so a move changes exactly that one value: a field of the quest
+ * (its scenes), or the project's NPCs.
  */
 
-export type MarkerKind = 'npcSpawn' | 'objectSpawn' | 'patrolPoint' | 'scenePoint' | 'escortPoint' | 'fightPoint' | 'area' | 'poi';
+export type MarkerKind = 'scenePoint' | 'escortPoint' | 'fightPoint' | 'area' | 'poi';
 
 export interface QuestMarker {
   id: string;
@@ -37,7 +38,6 @@ const NO_MAP_NOTE = 'Its NPC has no spawn yet, so its map is not known.';
 
 const sceneName = (scene: QuestScene): string => scene.name.trim() || `Scene ${scene.id}`;
 const npcName = (name: string, entry: number): string => name.trim() || `New NPC ${entry}`;
-const objectName = (name: string, entry: number): string => name.trim() || `New object ${entry}`;
 
 /** The map of the quest's own NPCs and objects, from their first spawn, overriding what the database says. */
 function ownerMaps(entities: ProjectEntities, knownMaps: ReadonlyMap<string, number>): Map<string, number> {
@@ -61,22 +61,6 @@ export function questMarkers(values: Values, entities: ProjectEntities, knownMap
   const point = (base: Omit<QuestMarker, 'x' | 'y' | 'z'>, at: { x: number; y: number; z: number }): void => {
     markers.push({ ...base, x: at.x, y: at.y, z: at.z, ...(base.map === null ? { note: NO_MAP_NOTE } : {}) });
   };
-
-  for (const npc of entities.npcs) {
-    npc.spawns.forEach((s, i) =>
-      point({ id: `spawn:npc:${npc.entry}:${s.guid}`, kind: 'npcSpawn', label: `${npcName(npc.name, npc.entry)} · spawn ${i + 1}`, map: s.map, draggable: true }, s),
-    );
-    for (const s of npc.spawns) {
-      s.patrol?.points.forEach((p, i) =>
-        point({ id: `patrol:${npc.entry}:${s.guid}:${i}`, kind: 'patrolPoint', label: `${npcName(npc.name, npc.entry)} · patrol point ${i + 1}`, map: s.map, draggable: true }, p),
-      );
-    }
-  }
-  for (const object of entities.objects) {
-    object.spawns.forEach((s, i) =>
-      point({ id: `spawn:obj:${object.entry}:${s.guid}`, kind: 'objectSpawn', label: `${objectName(object.name, object.entry)} · spawn ${i + 1}`, map: s.map, draggable: true }, s),
-    );
-  }
 
   for (const scene of scenes) {
     const owner = scene.owner;
@@ -125,29 +109,6 @@ export function questMarkers(values: Values, entities: ProjectEntities, knownMap
   return markers;
 }
 
-/** A new NPC spawn's patrol as a line: from where it stands through each point, looping back. */
-export interface QuestRoute {
-  id: string;
-  map: number;
-  points: { x: number; y: number }[];
-  facings: { x: number; y: number; o: number }[];
-}
-
-export function questRoutes(entities: ProjectEntities): QuestRoute[] {
-  return entities.npcs.flatMap((npc) =>
-    npc.spawns.flatMap((s) => {
-      const points = s.patrol?.points ?? [];
-      if (points.length === 0) return [];
-      return [{
-        id: `patrol:${npc.entry}:${s.guid}`,
-        map: s.map,
-        points: [{ x: s.x, y: s.y }, ...points.map((p) => ({ x: p.x, y: p.y }))],
-        facings: points.flatMap((p) => (p.facing === null ? [] : [{ x: p.x, y: p.y, o: p.facing }])),
-      }];
-    }),
-  );
-}
-
 type To = { x: number; y: number; z: number };
 
 /**
@@ -176,26 +137,6 @@ const moved = (p: Position, to: To): Position => ({ ...p, x: to.x, y: to.y, z: t
 
 export function moveMarker(values: Values, entities: ProjectEntities, id: string, to: To): MarkerEdit {
   const parts = id.split(':');
-  if (parts[0] === 'spawn') {
-    const [, kind, entryText, guidText] = parts;
-    const entry = Number(entryText);
-    const guid = Number(guidText);
-    const owners: { entry: number; spawns: { guid: number }[] }[] = kind === 'npc' ? entities.npcs : kind === 'obj' ? entities.objects : [];
-    if (!owners.some((e) => e.entry === entry && e.spawns.some((s) => s.guid === guid))) return null;
-    const move = <T extends { entry: number; spawns: { guid: number; x: number; y: number; z: number }[] }>(list: T[]): T[] =>
-      list.map((e) => (e.entry !== entry ? e : { ...e, spawns: e.spawns.map((s) => (s.guid === guid ? { ...s, x: to.x, y: to.y, z: to.z } : s)) }));
-    return { entities: kind === 'npc' ? { ...entities, npcs: move(entities.npcs) } : { ...entities, objects: move(entities.objects) } };
-  }
-  if (parts[0] === 'patrol') {
-    const [, entryText, guidText, indexText] = parts;
-    const entry = Number(entryText);
-    const guid = Number(guidText);
-    const index = Number(indexText);
-    const patrol = entities.npcs.find((n) => n.entry === entry)?.spawns.find((s) => s.guid === guid)?.patrol;
-    if (!patrol || !Number.isInteger(index) || index < 0 || index >= patrol.points.length) return null;
-    const next = setPatrol(entities, entry, guid, movePoint(patrol, index, to));
-    return next ? { entities: next } : null;
-  }
   if (parts[0] === 'scene' || parts[0] === 'area') {
     const scenes = readScenes(values);
     const index = scenes.findIndex((s) => s.id === parts[1]);

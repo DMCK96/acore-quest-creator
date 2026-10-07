@@ -7,15 +7,12 @@
   overflow: hidden;
 }
 
-.app-shell__workspace {
+/* Under the bar and its notes: the world, with the quest dock under or beside it. */
+.app-shell__body {
   position: relative;
   flex: 1;
   min-height: 0;
   min-width: 0;
   display: flex;
   overflow: hidden;
-}
-
-.app-shell__workspace[hidden] {
-  display: none;
 }

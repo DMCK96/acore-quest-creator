@@ -183,8 +183,12 @@ function entityChanges(before: EntitiesPart['before'], after: EntitiesPart['afte
         const b = e.spawns ?? [];
         if (b.length === a.length + 1) text = `Placed ${name}`;
         else if (b.length === a.length - 1) text = `Removed a spawn of ${name}`;
-        else if (b.length === a.length && b.filter((s, i) => !isDeepStrictEqual(s, a[i])).length === 1) text = `Moved ${name}`;
-        else text = `Spawns of ${name}`;
+        else if (b.length === a.length) {
+          const changed = b.flatMap((s, i) => (isDeepStrictEqual(s, a[i]) ? [] : [[a[i] as Record<string, unknown>, s as Record<string, unknown>] as const]));
+          // One spawn changed: only its patrol is a patrol edit, anything else about it a move
+          const patrolOnly = changed.length === 1 && [...Object.keys(changed[0]![0]), ...Object.keys(changed[0]![1])].every((k) => k === 'patrol' || isDeepStrictEqual(changed[0]![0][k], changed[0]![1][k]));
+          text = changed.length !== 1 ? `Spawns of ${name}` : patrolOnly ? `Patrol of ${name}` : `Moved ${name}`;
+        } else text = `Spawns of ${name}`;
       } else if (fields.length === 1 && fields[0] === 'loot') text = `Loot of ${name}`;
       else if (fields.length === 1 && fields[0] === 'name') text = `Name of ${name}`;
       else if (fields.length === 1 && fields[0] === 'type') text = `Type of ${name}`;

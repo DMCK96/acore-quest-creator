@@ -45,10 +45,6 @@ describe('map API', () => {
     const elsewhere: any = await (await setup()).mapFloors(1, 5000, 5000);
     expect(elsewhere.value).toEqual({ floors: [], ground: null });
   });
-  it('lists spawns in a box with their names, and says when it capped them', async () => {
-    const out: any = await (await setup()).mapSpawns(0, { minX: -9000, maxX: -8800, minY: -200, maxY: -100 });
-    expect(out.value).toEqual({ capped: false, dots: [{ kind: 'creature', guid: 79970, entry: 197, name: 'Marshal McBride', map: 0, x: -8902.59, y: -162.606, z: 82.0223 }] });
-  });
   it('finds where an NPC stands, for the search box', async () => {
     const out: any = await (await setup()).entitySpawns('creature', 197);
     expect(out.value.map((d: any) => [d.guid, d.map])).toEqual([[79970, 0], [79971, 1]]);
@@ -65,18 +61,5 @@ describe('map API', () => {
     await api.worldMoveSpawn('creature', 79970, { x: 5, y: 6, z: 7, orientation: 0, rotation: null });
     expect(((await api.spawnPlacement('npc', 79970)) as any).value).toEqual({ x: 5, y: 6, z: 7 });
     expect(((await api.spawnPlacement('object', 79970)) as any).value).toBeNull();
-  });
-  it('gives the spawns of the quest giver as read-only references', async () => {
-    const api = await setup();
-    const opened: any = await api.newQuest();
-    const aggregate = opened.value.aggregate;
-    aggregate.values.creature_queststarter = [{ id: 197 }];
-    await api.updateQuest(aggregate);
-    const out: any = await api.questMapRefs(aggregate.questId);
-    expect(out.value.map((r: any) => [r.role, r.guid])).toEqual([['giver', 79970], ['giver', 79971]]);
-  });
-  it('lists the continents even without a server data folder', async () => {
-    const out: any = await (await setup('')).mapList();
-    expect(out.value.map((m: any) => [m.id, m.name])).toEqual([[0, 'Eastern Kingdoms'], [1, 'Kalimdor'], [530, 'Outland'], [571, 'Northrend']]);
   });
 });

@@ -30,8 +30,8 @@ async function connect(app: ElectronApplication) {
   await page.getByLabel('Password').fill(decodeURIComponent(u.password));
   await page.getByLabel('Server data folder (optional)').fill(DATA_DIR);
   await page.getByRole('button', { name: 'Save and connect' }).click();
-  // The world is the home screen; the quest graph is the Quests tab.
-  await page.getByRole('tab', { name: 'Quests' }).click();
+  // The world is the home screen; the quest graph is in the Quests dock under it.
+  await page.getByRole('button', { name: 'Quests', exact: true }).click();
   return page;
 }
 
@@ -57,8 +57,8 @@ test('a new quest giver is made in the NPC modal with a guard\'s look and weapon
   await page.getByLabel('Password').fill(decodeURIComponent(u.password));
   await page.getByLabel('Server data folder (optional)').fill(DATA_DIR);
   await page.getByRole('button', { name: 'Save and connect' }).click();
-  // The world is the home screen; the quest graph is the Quests tab.
-  await page.getByRole('tab', { name: 'Quests' }).click();
+  // The world is the home screen; the quest graph is in the Quests dock under it.
+  await page.getByRole('button', { name: 'Quests', exact: true }).click();
 
   await page.getByRole('button', { name: 'New quest', exact: true }).click();
   await page.getByLabel('Quest title').fill('Editor test');

@@ -7,7 +7,7 @@ const created = vi.hoisted(() => [] as { map: number; start?: unknown; lookAt: R
 vi.mock('../../src/renderer/world3d/world3d', () => ({
   createWorld3D: (options: { map: number; start: unknown }) => {
     const world = {
-      map: options.map, start: options.start, dispose: vi.fn(), cancelPath: vi.fn(), lookAt: vi.fn(), setSpawnVisibility: vi.fn(), setOwnSpawns: vi.fn(), setActive: vi.fn(), setScenery: vi.fn(), setTool: vi.fn(), setFalloff: vi.fn(),
+      map: options.map, start: options.start, dispose: vi.fn(), cancelPath: vi.fn(), lookAt: vi.fn(), setSpawnVisibility: vi.fn(), setOwnSpawns: vi.fn(), setScenery: vi.fn(), setTool: vi.fn(), setFalloff: vi.fn(),
       target: () => ({ x: 0, y: 0, z: 0 }), spawnStatus: () => ({ capped: { creatures: false, objects: false }, error: null, loading: 0 }),
     };
     created.push(world);
@@ -109,14 +109,5 @@ describe('the welcome', () => {
     await userEvent.keyboard('{Escape}');
     expect(screen.queryByRole('dialog', { name: 'Welcome' })).toBeNull();
     expect(seen()).toEqual(['C:\w\north.aqc']);
-  });
-
-  it('waits for a project opened while the world is hidden, and greets it when shown', async () => {
-    clientHasEverything();
-    const { rerender } = render(<WorldWorkspace {...props({ active: false })} />);
-    await waitFor(() => expect(created).toHaveLength(1));
-    expect(screen.queryByRole('dialog', { name: 'Welcome' })).toBeNull();
-    rerender(<WorldWorkspace {...props({ active: true })} />);
-    expect(await screen.findByRole('dialog', { name: 'Welcome' })).toBeInTheDocument();
   });
 });

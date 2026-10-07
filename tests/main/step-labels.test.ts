@@ -133,6 +133,11 @@ describe('describeStep for the project store', () => {
     expect(describeStep(step([part(npcs(hela), npcs({ ...hela, spawns: [...hela.spawns, newSpawn(6000002)] }))])).label).toBe('Placed Hela');
   });
 
+  it('names a spawn whose patrol alone changed as its patrol, not a move', () => {
+    const patrolled = { ...hela, spawns: [{ ...hela.spawns[0], patrol: { pathId: 60000010, startPace: 'walk', points: [] } }] };
+    expect(describeStep(step([part(npcs(hela), npcs(patrolled))])).label).toBe('Patrol of Hela');
+  });
+
   it('names objects as objects, and several changes by count', () => {
     const crate = { ...newObject(9100001), name: 'Crate' };
     expect(describeStep(step([part(EMPTY_ENTITIES, { ...EMPTY_ENTITIES, objects: [crate] })])).label).toBe('New object Crate');

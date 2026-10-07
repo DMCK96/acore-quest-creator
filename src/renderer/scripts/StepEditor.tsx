@@ -88,7 +88,7 @@ export function StepFields({
   idPrefix: string;
   step: SceneStep;
   onChange(next: SceneStep): void;
-  /** `scene:<id>:<step>`: the step's positions' markers on the quest map are named from it. */
+  /** `scene:<id>:<step>`: the step's positions' markers in the World are named from it. */
   markerBase?: string;
 }): React.JSX.Element | null {
   const at = markerBase ? `${markerBase}:at` : undefined;
@@ -224,7 +224,7 @@ export function StepEditor({
   onChange,
 }: {
   idPrefix: string;
-  /** The scene's id, for its points' markers on the quest map. */
+  /** The scene's id, for its points' markers in the World. */
   sceneId?: string;
   owner: OwnerKind;
   steps: readonly SceneStep[];

@@ -31,12 +31,12 @@
 ## What it does
 
 - **The world in 3D.** Walk the game world from your client files; place, move and turn NPCs and objects, draw their paths, set respawn times and build spawn groups, then export the changes as a project patch.
-- **Quest chains on a canvas.** Make new quests or bring in existing chains from your world database, and see how they connect.
+- **Quest chains docked to the World.** The **Quests** dock sits under or beside the 3D view. Make new quests or bring in existing chains from your world database, see how they connect, and drag from one quest to another to link them. Pick a quest and the camera flies to its NPCs; select one of them in the World and it is marked on the quest's card; drag one from the card onto the ground to place it.
 - **Givers and objectives.** Choose who offers and takes back a quest, and what the player must kill, use, collect or explore.
 - **Quest scripting.** Describe what happens around a quest as scenes: an NPC speaks on accept, a talk option gives credit, an escort walks a path.
 - **Combat wizard.** Design how an NPC fights, from one ability to a boss with phases, adds and health thresholds.
 - **New NPCs and objects.** Pick how they look, their faction and weapons, who sees them (the living, only the dead like a spirit healer, or both) and the game events their spawns follow; make readable books and notes, and chests with loot.
-- **Quest map.** Place spawns on the world map with the game's zone art, snap them to the ground and draw patrol routes with actions at each point.
+- **Patrols.** Place a new NPC in the World from its quest, draw its patrol on the ground and give each point a wait, a pace and actions such as a line to say.
 - **Test in game.** Get the GM commands to reload and try a quest on your test server.
 - **Export.** Review every change, then export an SQL patch or apply it to a dev database. Your live world database is only ever read.
 
@@ -50,11 +50,11 @@
     <td align="center"><sub><b>After</b>: dragged back onto the road, one entry in Project changes</sub></td>
   </tr>
   <tr>
-    <td width="50%"><img src="site/src/assets/screenshots/canvas.png" alt="The Quests canvas showing a chain of quests"></td>
+    <td width="50%"><img src="site/src/assets/screenshots/canvas.png" alt="The World over Sentinel Hill with the Quests dock under it, showing a chain of quests"></td>
     <td width="50%"><img src="site/src/assets/screenshots/world-menu.png" alt="The World's right-click menu"></td>
   </tr>
   <tr>
-    <td align="center"><sub><b>Quests</b>: chains on a canvas</sub></td>
+    <td align="center"><sub><b>Quests</b>: the chain in a dock under the World</sub></td>
     <td align="center"><sub><b>Right-click</b>: what you can do with what is under the cursor</sub></td>
   </tr>
   <tr>
@@ -66,11 +66,11 @@
     <td align="center"><sub><b>Combat wizard</b>: from one ability to a boss with phases</sub></td>
   </tr>
   <tr>
-    <td width="50%"><img src="site/src/assets/screenshots/quest-map.png" alt="The quest map with spawns placed in Elwynn Forest"></td>
+    <td width="50%"><img src="site/src/assets/screenshots/dock-right.png" alt="The Quests dock beside the World, with the whole chain fitted into it"></td>
     <td width="50%"><img src="site/src/assets/screenshots/npc-editor.png" alt="The NPC editor choosing how an NPC looks"></td>
   </tr>
   <tr>
-    <td align="center"><sub><b>Quest map</b>: spawns and patrols on the zone art</sub></td>
+    <td align="center"><sub><b>Beside the World</b>: the other dock layout, from Settings</sub></td>
     <td align="center"><sub><b>NPC editor</b>: looks, faction and weapons</sub></td>
   </tr>
 </table>

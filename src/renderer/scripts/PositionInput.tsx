@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { parseGps } from '@core/scripts/gps';
 import type { Position } from '@core/scripts/model';
 import { useApi } from '../state/names';
-import { useMapOpener } from '../map/MapOpener';
+import { usePlaceInWorld } from '../world3d/ShowInWorldContext';
 
 const AXES = ['x', 'y', 'z', 'o'] as const;
 const AXIS_LABEL = { x: 'X', y: 'Y', z: 'Z', o: 'Facing' } as const;
@@ -19,6 +19,7 @@ export function PositionInput({
   onChange,
   map,
   markerId,
+  onShowInWorld,
 }: {
   idPrefix: string;
   value: Position;
@@ -26,13 +27,15 @@ export function PositionInput({
   onChange(next: Position, map?: number): void;
   /** The map the position is on; without one there is no ground to snap to. */
   map?: number;
-  /** The quest map's marker for this position; with it, a link opens the map there. */
+  /** The quest's marker for this position (see `questMarkers`); with it, Show in World takes the World to it. */
   markerId?: string;
+  /** Shows what stands at this position in the World; with it, a Show in World link does */
+  onShowInWorld?(): void;
 }): React.JSX.Element {
   const [paste, setPaste] = useState('');
   const [groundNote, setGroundNote] = useState<string | null>(null);
   const api = useApi();
-  const openMap = useMapOpener();
+  const world = usePlaceInWorld();
 
   function fromText(text: string): void {
     setPaste(text);
@@ -76,9 +79,14 @@ export function PositionInput({
             Snap to ground
           </button>
         )}
-        {markerId && openMap && (
-          <button type="button" className="entry-card__btn position-input__map" onClick={() => openMap(markerId)}>
-            Show on map
+        {markerId && world && (
+          <button type="button" className="entry-card__btn position-input__map" onClick={() => world({ kind: 'marker', id: markerId })}>
+            Show in World
+          </button>
+        )}
+        {onShowInWorld && (
+          <button type="button" className="entry-card__btn position-input__map" onClick={onShowInWorld}>
+            Show in World
           </button>
         )}
       </div>

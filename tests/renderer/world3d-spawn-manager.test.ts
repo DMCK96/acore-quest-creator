@@ -331,6 +331,23 @@ it('draws the open quest\'s own spawns in their area, in place of the database r
   expect(drawn).toEqual([[5, false], [6, true]]);
 });
 
+// A spawn placed while its area's models were still being made was left out of it until another redraw,
+// so Draw patrol on it found nothing
+it('draws an own spawn placed while its area was still being drawn', async () => {
+  let made!: () => void;
+  const slow = new Promise<void>((r) => (made = r));
+  const m = manager({ creatures: [creature(5, 1)], objects: [], capped: { creatures: false, objects: false } }, {
+    createModel: async () => { await slow; return new THREE.Object3D(); },
+  });
+  const loading = m.loadArea(1, 0, box);
+  await new Promise((r) => setTimeout(r, 0));
+  await m.setOwnSpawns({ creatures: [creature(6, 1, { own: true, x: 0.5, y: 0.5 })], objects: [], capped: { creatures: false, objects: false } });
+  made();
+  const group = (await loading)!;
+  expect(group.getObjectByName('creatures')!.children.map((c) => c.userData.spawn.guid)).toEqual([5, 6]);
+  expect(m.info('creature', 6)).toMatchObject({ guid: 6, own: true });
+});
+
 describe('the final review\'s findings', () => {
   const disposable = () => {
     const model = new THREE.Object3D() as THREE.Object3D & { dispose: ReturnType<typeof vi.fn> };

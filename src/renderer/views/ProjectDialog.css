@@ -1,3 +1,8 @@
+/* A modal stepped aside (for the World) keeps its state, out of sight */
+.modal-backdrop[hidden] {
+  display: none;
+}
+
 .modal-backdrop {
   position: fixed;
   inset: 0;

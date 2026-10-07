@@ -1,7 +1,7 @@
 import { app, BrowserWindow, dialog, ipcMain, protocol, safeStorage } from 'electron';
 import { existsSync } from 'node:fs';
-import { mkdir, readdir, readFile, writeFile } from 'node:fs/promises';
-import { dirname, join } from 'node:path';
+import { mkdir, readdir, writeFile } from 'node:fs/promises';
+import { join } from 'node:path';
 import { openMysqlDevDb } from '../core/db/mysql-dev-db';
 import { openMysqlWorldDb } from '../core/db/mysql-world-db';
 import { FLUSH_DONE_CHANNEL, FLUSH_REQUEST_CHANNEL, HISTORY_CHANNEL } from '../shared/api-methods';
@@ -10,10 +10,8 @@ import { API_METHODS, channelFor, parseRequest, type Api, type ApiError } from '
 import { createApi, type ApiDeps } from './api';
 import { seedEnvProfiles } from './env-profiles';
 import { mapDataFiles, nodeServerDataFiles } from './server-data';
-import { createClientImagery, nodeClientFs } from './client-imagery';
+import { createGameClient, nodeClientFs, type GameClient } from './game-client';
 import { ASSET_SCHEME, parseAssetUrl } from '../core/client/asset-url';
-import { MAP_TILE_SCHEME } from '../core/client/schemes';
-import { createMapTiles, parseTileUrl, type MapTiles } from './map-tiles';
 import { createSecretBox } from './secret-box';
 import { moveProfileFromOldName } from './profile-move';
 import { openStore, type Store } from './store/store';
@@ -68,29 +66,17 @@ const unknownError = (error: unknown): { ok: false; error: ApiError } => ({
   error: { code: 'UNKNOWN', message: error instanceof Error ? error.message : String(error) },
 });
 
-// The quest map's relief tiles come from the main process; the scheme must be known before `ready`.
-// The 3D view reads the game client's files through `awe-wow`; its loaders run in workers, which need CORS.
+// The scheme must be known before `ready`. The 3D view reads the game client's files through `awe-wow`; its loaders run in workers, which need CORS.
 protocol.registerSchemesAsPrivileged([
-  { scheme: MAP_TILE_SCHEME, privileges: { standard: true, secure: true, supportFetchAPI: true } },
   { scheme: ASSET_SCHEME, privileges: { standard: true, secure: true, supportFetchAPI: true, corsEnabled: true } },
 ]);
 
-/** Serves `awe-map://tile/...` from the tile service; anything else is not found. */
-function registerMapTiles(tiles: MapTiles): void {
-  protocol.handle(MAP_TILE_SCHEME, async (request) => {
-    const address = parseTileUrl(request.url);
-    if (!address) return new Response(null, { status: 404 });
-    const png = await tiles.tile(address.map, address.zoom, address.tx, address.ty);
-    return new Response(png, { headers: { 'content-type': 'image/png', 'cache-control': 'no-cache' } });
-  });
-}
-
 /** Serves `awe-wow://file/<client path>` from the game client's archives; a missing file is a 404. */
-function registerClientFiles(tiles: MapTiles): void {
+function registerClientFiles(client: GameClient): void {
   const missing = new Set<string>();
   protocol.handle(ASSET_SCHEME, async (request) => {
     const path = parseAssetUrl(request.url);
-    const bytes = path ? await tiles.clientFile(path) : null;
+    const bytes = path ? await client.file(path) : null;
     if (!bytes) {
       // Once per file: the 3D view asks for the same missing one on every frame it is short of it.
       if (!missing.has(request.url)) {
@@ -108,13 +94,12 @@ function buildDeps(
   session: ProjectSession,
   projects: ProjectController,
   startupProfileId: number | null,
-  tiles: MapTiles,
+  client: GameClient,
 ): ApiDeps {
   return {
     store,
-    onServerDataDir: (dir) => tiles.setDataDir(dir),
-    onClientDir: (dir) => tiles.setClientDir(dir),
-    clientStatus: () => tiles.clientStatus(),
+    onClientDir: (dir) => client.setDir(dir),
+    clientStatus: () => client.status(),
     // Tests point exports at a scratch folder whatever the connection says.
     exportDirOverride: process.env['ACQC_OUTPUT_DIR'] || null,
     defaultExportDir: defaultOutputDir(),
@@ -306,27 +291,9 @@ void app.whenReady().then(() => {
     defaultOutputDir: defaultOutputDir(),
     now: () => new Date(),
   });
-  const tiles = createMapTiles({
-    files: mapDataFiles,
-    cacheRoot: join(app.getPath('userData'), 'map-tiles'),
-    openImagery: (dir) => createClientImagery(dir, nodeClientFs, (m) => console.warn(`Game client: ${m}`)),
-    cache: {
-      async read(path) {
-        try {
-          return new Uint8Array(await readFile(path));
-        } catch {
-          return null;
-        }
-      },
-      async write(path, bytes) {
-        await mkdir(dirname(path), { recursive: true });
-        await writeFile(path, bytes);
-      },
-    },
-  });
-  registerMapTiles(tiles);
-  registerClientFiles(tiles);
-  registerIpc(createApi(buildDeps(store, session, projects, startupProfileId, tiles)));
+  const client = createGameClient({ fs: nodeClientFs, log: (m) => console.warn(`Game client: ${m}`) });
+  registerClientFiles(client);
+  registerIpc(createApi(buildDeps(store, session, projects, startupProfileId, client)));
 
   createWindow(session, recovery, projects);
   app.on('activate', () => {

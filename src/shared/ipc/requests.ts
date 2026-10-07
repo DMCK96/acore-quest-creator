@@ -164,9 +164,7 @@ const REQUEST_SCHEMAS: Record<keyof Api, z.ZodType<unknown[]>> = {
   testCommands: z.tuple([z.number()]),
   groundHeight: z.tuple([z.number().int(), z.number(), z.number()]),
   spellFacts: z.tuple([z.array(z.number().int()).max(MAX_LOOKUP_IDS)]),
-  mapList: z.tuple([]),
   mapFloors: z.tuple([z.number().int(), z.number().finite(), z.number().finite()]),
-  mapSpawns: z.tuple([z.number().int(), z.object({ minX: z.number().finite(), maxX: z.number().finite(), minY: z.number().finite(), maxY: z.number().finite() })]),
   viewSpawns: z.tuple([z.number().int(), z.object({ minX: z.number().finite(), maxX: z.number().finite(), minY: z.number().finite(), maxY: z.number().finite() })]),
   projectEntities: z.tuple([]),
   // Each entry is checked against the entity schemas by the main process
@@ -213,7 +211,6 @@ const REQUEST_SCHEMAS: Record<keyof Api, z.ZodType<unknown[]>> = {
   entitySpawns: z.tuple([z.enum(['creature', 'gameobject']), z.number().int()]),
   findSpawns: z.tuple([z.enum(['creature', 'gameobject']), z.number().int()]),
   spawnPlacement: z.tuple([z.enum(['npc', 'object']), z.number().int()]),
-  questMapRefs: z.tuple([z.number()]),
   questSpawnList: z.tuple([z.array(z.number().int().min(1)).max(50)]),
   allocateIds: z.tuple([z.enum(['creature', 'gameobject', 'creatureSpawn', 'gameobjectSpawn', 'page', 'item']), z.number().int().min(1).max(50)]),
   patrolPathId: z.tuple([z.number().int().min(1)]),

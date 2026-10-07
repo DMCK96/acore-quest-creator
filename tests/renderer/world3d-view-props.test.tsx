@@ -3,14 +3,14 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { act, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 
-type Fake = { setActive: ReturnType<typeof vi.fn>; setScenery: ReturnType<typeof vi.fn>; setSpawnVisibility: ReturnType<typeof vi.fn>; at: { x: number; y: number; z: number }; area: (name: string) => void };
+type Fake = { setScenery: ReturnType<typeof vi.fn>; setSpawnVisibility: ReturnType<typeof vi.fn>; at: { x: number; y: number; z: number }; area: (name: string) => void };
 const created = vi.hoisted(() => [] as Fake[]);
 const nearby = vi.hoisted(() => ({ list: [] as { id: number; name: string }[] }));
 
 vi.mock('../../src/renderer/world3d/world3d', () => ({
   createWorld3D: (options: { onArea?: (name: string) => void }) => {
     const world = {
-      at: { x: 1, y: 2, z: 3 }, setActive: vi.fn(), setScenery: vi.fn(), setTool: vi.fn(), setFalloff: vi.fn(), dispose: vi.fn(), cancelPath: vi.fn(), lookAt: vi.fn(), setSpawnVisibility: vi.fn(),
+      at: { x: 1, y: 2, z: 3 }, setScenery: vi.fn(), setTool: vi.fn(), setFalloff: vi.fn(), dispose: vi.fn(), cancelPath: vi.fn(), lookAt: vi.fn(), setSpawnVisibility: vi.fn(),
       spawnStatus: () => ({ capped: { creatures: false, objects: false }, error: null, loading: 0, events: nearby.list }),
       target() { return world.at; }, area: (name: string) => options.onArea?.(name),
     };
@@ -31,15 +31,6 @@ afterEach(() => {
 const clientHasEverything = () => vi.stubGlobal('fetch', async () => new Response(new Uint8Array([1]), { status: 200 }));
 
 describe('the 3D view in a workspace', () => {
-  it('stops drawing while inactive and starts again when active', async () => {
-    clientHasEverything();
-    const { rerender } = render(<World3DView map={0} start={start} hasClient active={false} />);
-    await waitFor(() => expect(created).toHaveLength(1));
-    await waitFor(() => expect(created[0]!.setActive).toHaveBeenLastCalledWith(false));
-    rerender(<World3DView map={0} start={start} hasClient active />);
-    expect(created[0]!.setActive).toHaveBeenLastCalledWith(true);
-  });
-
   it('tells the area name to the workspace, and can leave its own label out', async () => {
     clientHasEverything();
     const onArea = vi.fn();

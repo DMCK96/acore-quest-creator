@@ -1,6 +1,5 @@
 // @vitest-environment jsdom
 import { ProjectEntitiesProvider } from '../../src/renderer/state/project-entities';
-import { storeOf } from './map-with-store';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { act, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
@@ -19,7 +18,7 @@ vi.mock('../../src/renderer/world3d/world3d', () => ({
     options.container.appendChild(canvas);
     const world = { options, canvas, dispose: vi.fn(), lookAt: vi.fn(), setSpawnVisibility: vi.fn(), setOwnSpawns: vi.fn(), select: vi.fn(), selectSpawns: vi.fn(),
       setWorldLayer: vi.fn(), setMode: vi.fn(), setPlacing: vi.fn(), cancelDrag: vi.fn(), setMarked: vi.fn(),
-      setActive: vi.fn(), setScenery: vi.fn(), setTool: vi.fn(), setFalloff: vi.fn(), setPendingMovement: vi.fn(), spawnMovement: vi.fn(() => ({ type: 'idle', wander: 0, pathId: null })),
+      setScenery: vi.fn(), setTool: vi.fn(), setFalloff: vi.fn(), setPendingMovement: vi.fn(), spawnMovement: vi.fn(() => ({ type: 'idle', wander: 0, pathId: null })),
       startPath: vi.fn(), finishPath: vi.fn(), cancelPath: vi.fn(), undoPoint: vi.fn(), selectedSpawns: vi.fn(() => []), groundAt: vi.fn(() => null), lastPointer: vi.fn(() => null),
       spawnOf: vi.fn(() => ({})), routeOf: vi.fn(() => null),
       camera: () => ({ position: { x: 0, y: 0, z: 0 }, direction: { x: 1, y: 0, z: 0 } }),
@@ -32,6 +31,9 @@ vi.mock('../../src/renderer/world3d/world3d', () => ({
 import { WorldWorkspace } from '../../src/renderer/world3d/WorldWorkspace';
 import { HistoryProvider } from '../../src/renderer/state/history-context';
 import { createAppStore } from '../../src/renderer/state/app-store';
+
+/** A project store over fixed entities, its changes going to `setEntities` */
+const storeOf = (entities: any, setEntities: (next: any) => void = () => {}) => ({ entities, setEntities, quests: [], layer: { spawns: [], routes: [], added: [] }, setLayer: () => {}, tracked: [], create: async () => ({ error: 'not here' }), remove: async () => null, adopt: async () => ({ error: 'not here' }), ensure: async () => null }) as any;
 
 const EMPTY = { spawns: [], routes: [], added: [] };
 const guard = { kind: 'creature' as const, guid: 80330, entry: 1423, name: 'Guard', own: false, added: false, pathId: 0, wander: 0, map: 0, placement: { x: 10, y: 0, z: 5, orientation: 1, rotation: null } };

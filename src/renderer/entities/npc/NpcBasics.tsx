@@ -75,7 +75,7 @@ export function NpcBasics({
       <div className="scene-row" aria-label="Common factions">
         {COMMON_FACTIONS.map((f) => (
           <button key={f.id} type="button" aria-pressed={npc.faction === f.id}
-            className={`entry-card__btn${npc.faction === f.id ? ' quest-map__item--selected' : ''}`} onClick={() => onChange({ ...npc, faction: f.id })}>
+            className="entry-card__btn" onClick={() => onChange({ ...npc, faction: f.id })}>
             {f.label}
           </button>
         ))}

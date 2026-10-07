@@ -3,8 +3,9 @@ import { describe, it, expect, vi } from 'vitest';
 import { render, screen, waitFor, fireEvent, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { createAppStore } from '../../src/renderer/state/app-store';
-import { CanvasHome } from '../../src/renderer/views/CanvasHome';
+import { ChainDock } from '../../src/renderer/views/dock/ChainDock';
 import { QuestNodeCard } from '../../src/renderer/views/QuestNodeCard';
+import { QuestEditorModal } from '../../src/renderer/views/QuestEditorModal';
 import { makeMockApi, okv, errv, sampleOpen, nodeOf } from './mock-api';
 
 const drift = { missingTables: [], unregistered: [], missingColumns: [], typeMismatches: [] };
@@ -20,7 +21,8 @@ async function canvas(over: Record<string, any> = {}) {
   });
   const store = createAppStore(api, { saveDelayMs: 0 });
   await store.getState().connect(form);
-  const view = render(<CanvasHome store={store} />);
+  // The editor opens in the modal the shell renders over the dock, so it is rendered alongside here
+  const view = render(<><ChainDock store={store} /><QuestEditorModal store={store} /></>);
   return { api, store, view };
 }
 
@@ -59,7 +61,7 @@ describe('QuestNodeCard', () => {
   });
 });
 
-describe('CanvasHome', () => {
+describe('ChainDock', () => {
   it('draws one card per node', async () => {
     await canvas();
     expect(await screen.findAllByTestId('quest-node')).toHaveLength(2);

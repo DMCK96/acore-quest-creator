@@ -55,6 +55,7 @@ export function createProjectSlice({ api, kit, set, get }: SliceArgs): ProjectSl
       worldLayer: null,
       layer: EMPTY_WORLD,
     });
+    get().setFocus(null);
     await get().loadNodes();
     await get().loadEntities();
     await get().loadLayer();

@@ -1,0 +1,30 @@
+/* The editor fills most of the window, centred, so the module boxes and a panel beside them fit. */
+.quest-editor-backdrop {
+  align-items: center;
+  padding: 1rem;
+}
+
+.quest-editor-modal {
+  position: relative;
+  display: flex;
+  width: min(92vw, 120rem);
+  height: 88vh;
+  overflow: hidden;
+  background: var(--bg);
+  border: 1px solid var(--glass-border);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--glass-shadow);
+  color: var(--text);
+}
+
+.quest-editor-modal:focus {
+  outline: none;
+}
+
+.quest-editor-modal__title {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+}

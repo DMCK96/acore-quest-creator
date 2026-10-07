@@ -63,9 +63,6 @@ export function QuestHeader({ store, chips }: { store: AppStore; chips: readonly
           <button type="button" className="btn" onClick={() => setOpenPanel('test')}>
             Test in game
           </button>
-          <button type="button" className="btn" onClick={() => setOpenPanel('map')}>
-            Map
-          </button>
           {showInWorld && (
             <button type="button" className="btn" onClick={() => showInWorld({ questId: open.questId })}>
               Show in World

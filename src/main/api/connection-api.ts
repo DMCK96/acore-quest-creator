@@ -42,10 +42,9 @@ export function createConnectionApi(s: Services): ConnectionApi {
       run(async () => {
         const profile = deps.store.profiles.getWithPassword(profileId);
         const db = await deps.openWorldDb(profile);
-        const dataDir = profile.dbcDir?.trim() || null;
         const clientDir = profile.clientDir?.trim() || null;
-        const before = conn.folders();
-        // Until the connect is confirmed, the old connection (and the map's folders with it) stays live.
+        const before = conn.clientDir();
+        // Until the connect is confirmed, the old connection (and the client folder with it) stays live.
         let reads;
         try {
           const schema = await loadSchema(db, REGISTRY_TABLES);
@@ -60,11 +59,11 @@ export function createConnectionApi(s: Services): ConnectionApi {
             : [];
           const serverData = await loadServerData(profile.dbcDir ?? '', deps.serverDataFiles ?? NO_SERVER_DATA_FILES);
           const scriptSchema = await loadSchema(db, [...new Set<string>([...SCRIPT_TABLES, ...ENTITY_TABLES])]);
-          conn.setFolders({ dataDir, clientDir });
+          conn.setClientDir(clientDir);
           const client = clientDir ? ((await deps.clientStatus?.()) ?? null) : null;
           reads = { schema, contextSchema, availability, itemStarters, serverData, scriptSchema, client };
         } catch (e) {
-          if (conn.folders() !== before) conn.setFolders(before);
+          if (conn.clientDir() !== before) conn.setClientDir(before);
           if (conn.current()?.db !== db) await db.close().catch(() => undefined);
           throw e;
         }

@@ -1,8 +1,7 @@
 import { join } from 'node:path';
 import { rowsOrNone } from '../../core/links/context';
-import type { MapInfo } from '../../shared/ipc';
 import { navTileFileName, parseNavTile, type NavTile } from '../../core/game/navmesh';
-import { AREA_TABLE_FILE, MAP_FILE, parseMapNames, parseZoneLabels, WORLD_MAP_AREA_FILE } from '../../core/game/maps-dbc';
+import { AREA_TABLE_FILE, MAP_FILE } from '../../core/game/maps-dbc';
 import { TerrainFormatError, gridFileName, parseMapFile, type TerrainFile } from '../../core/game/terrain';
 import { readServerDataFile, type ServerDataFiles } from '../server-data';
 import { CAST_TIMES_FILE, RANGE_FILE, readSpellIndex, SPELL_FILE, type SpellIndex } from '../../core/game/spells';
@@ -16,13 +15,6 @@ import type { Session } from './connection';
 
 export const NO_SERVER_DATA_FILES: ServerDataFiles = { read: async () => null, isDir: async () => false };
 
-/** The continents the quest map shows even when the server's own map list cannot be read. */
-const CONTINENTS: readonly MapInfo[] = [
-  { id: 0, name: 'Eastern Kingdoms', zones: [] },
-  { id: 1, name: 'Kalimdor', zones: [] },
-  { id: 530, name: 'Outland', zones: [] },
-  { id: 571, name: 'Northrend', zones: [] },
-];
 const NAV_CACHE_SIZE = 64;
 /** Picker results: enough to find a name, few enough to scan by eye. */
 export const ENTITY_SEARCH_LIMIT = 25;
@@ -86,45 +78,6 @@ export function createServerFiles(deps: ApiDeps) {
     cache.set(name, tile);
     if (cache.size > NAV_CACHE_SIZE) cache.delete(cache.keys().next().value!);
     return tile;
-  }
-
-  /**
-   * The maps the quest map shows: the open-world maps of `Map.dbc` that have terrain in the data
-   * folder, continents first, with zone names. Without the folder (or its files), the continents.
-   */
-  function mapsOf(live: Session): Promise<MapInfo[]> {
-    live.mapInfo ??= (async () => {
-      const dir = live.serverData?.status.dir;
-      if (!dir) return [...CONTINENTS];
-      const files = deps.serverDataFiles ?? NO_SERVER_DATA_FILES;
-      try {
-        const [maps, areas, zones] = await Promise.all([
-          readServerDataFile(dir, MAP_FILE, files),
-          readServerDataFile(dir, AREA_TABLE_FILE, files),
-          readServerDataFile(dir, WORLD_MAP_AREA_FILE, files),
-        ]);
-        if (!maps) return [...CONTINENTS];
-        const names = parseMapNames(maps);
-        const labels = areas && zones ? parseZoneLabels(zones, areas) : [];
-        const gridFiles = [...((await files.list?.(join(dir, 'maps'))) ?? []), ...((await files.list?.(join(dir, '..', 'maps'))) ?? [])];
-        const withTerrain = new Set(gridFiles.filter((f) => f.toLowerCase().endsWith('.map')).map((f) => Number(f.slice(0, 3))));
-        const continents = CONTINENTS.map((c) => c.id);
-        const rank = (id: number): number => (continents.includes(id) ? continents.indexOf(id) : continents.length);
-        const ids = [...names.entries()]
-          .filter(([id, m]) => !m.instance && (withTerrain.has(id) || (withTerrain.size === 0 && continents.includes(id))))
-          .map(([id]) => id)
-          .sort((a, b) => rank(a) - rank(b) || a - b);
-        return ids.map((id) => ({
-          id,
-          name: names.get(id)!.name,
-          zones: labels.filter((l) => l.map === id).map(({ name, x, y }) => ({ name, x, y })),
-        }));
-      } catch (error) {
-        console.warn(`Map list: ${error instanceof Error ? error.message : String(error)}`);
-        return [...CONTINENTS];
-      }
-    })();
-    return live.mapInfo;
   }
 
   /**
@@ -259,7 +212,7 @@ export function createServerFiles(deps: ApiDeps) {
       return names.length > 0 ? { ...h, detail: `used by ${names.join(', ')}` } : h;
     });
   }
-  return { terrainAt, navTileAt, mapsOf, spellsOf, soundsOf, questSortsOf, lookOf, isLookKind, lookHits };
+  return { terrainAt, navTileAt, spellsOf, soundsOf, questSortsOf, lookOf, isLookKind, lookHits };
 }
 
 export type ServerFiles = ReturnType<typeof createServerFiles>;

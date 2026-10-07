@@ -20,6 +20,7 @@ import { placementAt, type PlaceRequest, type PlaceTarget } from './placing';
 import type { MenuTarget } from './menu/model';
 import type { Movement } from '@core/world/movement';
 import type { SpawnInfo } from './scene/spawn/SpawnManager';
+import { MarkerLayer, type MarkerDrawing } from './scene/marker/MarkerLayer';
 
 /**
  * The 3D world: the game's own terrain, props and models for one map, read from the client's
@@ -63,6 +64,8 @@ export interface World3DOptions {
   onSelection?(summary: SelectionSummary): void;
   /** Told when Tab flipped between Camera and Select. */
   onTool?(tool: Tool): void;
+  /** Told each time the author moves the camera (a drag, the wheel, the flying keys), as it happens. */
+  onCameraInput?(): void;
   /** Told when falloff was switched or its radius changed by a key or the wheel. */
   onFalloff?(falloff: Falloff): void;
   /** Told when a new path starts or stops being drawn, and how many points it has. */
@@ -71,6 +74,10 @@ export interface World3DOptions {
   onContextMenu?(target: MenuTarget, client: { x: number; y: number }): void;
   /** Ctrl+C, Ctrl+V or Ctrl+D pressed on the view: copy, paste, duplicate; true when it was used. */
   onShortcut?(code: 'KeyC' | 'KeyV' | 'KeyD'): boolean;
+  /** Told which quest marker was clicked, or null when it was let go (the host's own `selectMarker` is not told back). */
+  onMarkerSelect?(id: string | null): void;
+  /** Told where a quest marker was dragged to, on the server's floor when it has one there. */
+  onMarkerMove?(id: string, to: { x: number; y: number; z: number }): void;
 }
 
 /** How much is selected: NPCs, objects, and route points with how many routes they are on */
@@ -145,10 +152,12 @@ export interface World3D {
   spawnOf(kind: 'creature' | 'object', guid: number): SpawnInfo | null;
   /** A drawn NPC's route as the view has it, or null when it has none. */
   routeOf(guid: number): { pathId: number; points: { x: number; y: number; z: number; carry?: unknown }[] } | null;
-  /** Stops drawing (while the world is hidden) or starts again; a hidden world costs nothing. */
-  setActive(active: boolean): void;
   /** The point the camera looks at and turns round. */
   target(): { x: number; y: number; z: number };
+  /** Draws the open quest's positions as markers in place of the last ones; none takes them away. */
+  setMarkers(markers: readonly MarkerDrawing[]): void;
+  /** Selects a quest marker (letting go of any spawns) or none; false when it is not drawn. */
+  selectMarker(id: string | null): boolean;
   dispose(): void;
 }
 
@@ -247,6 +256,8 @@ export function createWorld3D(options: World3DOptions): World3D {
    * (or none); a selection the host made itself (`select`) is not told back.
    */
   const setSelection = (next: Selection, tell = true): void => {
+    // A spawn or point picked lets go of a quest marker: one thing has the handles at a time
+    if (!isEmpty(next)) dropMarker();
     selection = next;
     editor.setSelection(next);
     manager.setActiveRoutes(next.routes);
@@ -266,7 +277,7 @@ export function createWorld3D(options: World3DOptions): World3D {
   let placing: PlaceTarget | null = null;
   let tool: Tool = 'camera';
   const refreshEscape = (): void => {
-    renderer.domElement.dataset.selection = !isEmpty(selection) || placing ? 'on' : '';
+    renderer.domElement.dataset.selection = !isEmpty(selection) || placing || markers.selected !== null ? 'on' : '';
     renderer.domElement.style.cursor = placing ? 'crosshair' : tool === 'select' ? 'default' : '';
   };
   const applyTool = (next: Tool): void => {
@@ -319,6 +330,15 @@ export function createWorld3D(options: World3DOptions): World3D {
     }
     // A new route point: Shift-click in Camera mode, Alt-click in Select mode
     if ((tool === 'camera' ? keys.shift : keys.alt) && editor.insertPoint(x, y)) return;
+    raycaster.setFromCamera(new THREE.Vector2(x, y), camera);
+    const marker = markers.pick(raycaster.ray);
+    if (marker) {
+      if (!isEmpty(selection)) setSelection(EMPTY_SELECTION);
+      markers.select(marker);
+      refreshEscape();
+      options.onMarkerSelect?.(marker);
+      return;
+    }
     const hit = hitAt(x, y);
     if ('points' in hit) options.onNotice?.(null);
     const caught = 'spawns' in hit ? hit.spawns : hit.points;
@@ -326,6 +346,7 @@ export function createWorld3D(options: World3DOptions): World3D {
     setSelection(combine(selection, hit, tool === 'select' ? modifierOf(keys) : 'replace'));
   };
   const doubleClick = (): void => {
+    if (misses >= 2) dropMarker();
     if (misses >= 2 && !isEmpty(selection)) setSelection(EMPTY_SELECTION);
     misses = 0;
   };
@@ -338,7 +359,7 @@ export function createWorld3D(options: World3DOptions): World3D {
   // A right-click: what it hit is selected first (unless it is already), then the menu is asked for
   const contextClick = (x: number, y: number, client: { x: number; y: number }): void => {
     // The gizmo only takes left presses: hovering it never stops the menu, only a drag of it does
-    if (editor.dragging) return;
+    if (editor.dragging || markers.dragging) return;
     const hit = hitAt(x, y);
     const ground = pick(x, y);
     if ('spawns' in hit && hit.spawns.length > 0) {
@@ -368,10 +389,31 @@ export function createWorld3D(options: World3DOptions): World3D {
       applyTool(next);
       options.onTool?.(next);
     },
-    blocked: () => editor.blocked,
+    blocked: () => editor.blocked || markers.blocked,
     onContextClick: (x, y, client) => contextClick(x, y, client),
+    onCameraInput: () => options.onCameraInput?.(),
   });
   const solid = (): THREE.Object3D[] => manager.root.children.filter(clickable);
+  // The open quest's positions: a marker let go after a drag along the ground lands on the server's floor there
+  const markers = new MarkerLayer(camera, renderer.domElement, scene, solid, {
+    moved: async (id, at, lifted) => {
+      const release = options.onGestureStart?.();
+      try {
+        const floor = !lifted && options.floorZ ? await options.floorZ(at.x, at.y, at.z) : at.z;
+        options.onNotice?.(floor === null ? NOT_SNAPPED : null);
+        options.onMarkerMove?.(id, { ...at, z: floor ?? at.z });
+      } finally {
+        release?.();
+      }
+    },
+  });
+  /** Lets go of the selected quest marker, and says so */
+  const dropMarker = (): void => {
+    if (markers.selected === null) return;
+    markers.select(null);
+    refreshEscape();
+    options.onMarkerSelect?.(null);
+  };
   const editor = new Editor(
     {
       camera,
@@ -427,12 +469,14 @@ export function createWorld3D(options: World3DOptions): World3D {
       event.stopPropagation();
       return;
     }
-    const used = event.code === 'Escape' ? !isEmpty(selection) || placing !== null : editor.keyDown(event);
+    const used = event.code === 'Escape' ? !isEmpty(selection) || placing !== null || markers.selected !== null : editor.keyDown(event);
     if (event.code === 'Escape' && placing) {
       // Esc stops placing first; a second one clears the selection
       placing = null;
       refreshEscape();
       options.onPlaceEnd?.();
+    } else if (event.code === 'Escape' && markers.selected !== null) {
+      dropMarker();
     } else if (event.code === 'Escape' && !isEmpty(selection)) {
       setSelection(EMPTY_SELECTION);
     }
@@ -587,9 +631,8 @@ export function createWorld3D(options: World3DOptions): World3D {
   const clock = new THREE.Clock();
   let frame = 0;
   let ready = false;
-  let running = true;
   const tick = (): void => {
-    if (disposed || !running) return;
+    if (disposed) return;
     frame = requestAnimationFrame(tick);
     const delta = clock.getDelta();
     try {
@@ -602,6 +645,7 @@ export function createWorld3D(options: World3DOptions): World3D {
       followSelected();
       followMarked();
       followGroup();
+      markers.update();
       editor.update();
       renderer.setClearColor(manager.clearColor);
       renderer.render(scene, camera);
@@ -664,18 +708,20 @@ export function createWorld3D(options: World3DOptions): World3D {
       const route = manager.spawnRoute(guid);
       return route ? { pathId: route.pathId, points: route.points } : null;
     },
-    setActive(active) {
-      if (active === running || disposed) return;
-      running = active;
-      if (active) {
-        // The time spent hidden is not one long frame
-        clock.getDelta();
-        frame = requestAnimationFrame(tick);
-      } else {
-        cancelAnimationFrame(frame);
-      }
-    },
     target: () => ({ x: controls.target.x, y: controls.target.y, z: controls.target.z }),
+    setMarkers: (next) => {
+      const was = markers.selected;
+      markers.set(next);
+      // A marker gone with the redraw (its step deleted, the quest closed) is let go
+      if (was !== null && markers.selected === null) options.onMarkerSelect?.(null);
+      refreshEscape();
+    },
+    selectMarker(id) {
+      if (id !== null && !isEmpty(selection)) setSelection(EMPTY_SELECTION);
+      const found = markers.select(id);
+      refreshEscape();
+      return found;
+    },
     camera() {
       const direction = camera.getWorldDirection(new THREE.Vector3());
       return { position: { ...camera.position }, direction: { x: direction.x, y: direction.y, z: direction.z } };
@@ -685,7 +731,7 @@ export function createWorld3D(options: World3DOptions): World3D {
       cancelAnimationFrame(frame);
       observer.disconnect();
       // Nothing here may throw: this runs while React unmounts the view, and a throw would take the whole screen with it.
-      for (const step of [() => controls.dispose?.(), () => renderer.domElement.removeEventListener('keydown', onKeyDown), () => editor.dispose(), stopProblems, () => manager.dispose(), () => release(manager.root), () => outlines.forEach(release), () => rings.forEach((ring) => ring.removeFromParent()), () => marks.forEach((ring) => ring.removeFromParent()), () => groupRings.forEach((ring) => ring.removeFromParent()), () => groupLines.removeFromParent(), () => groupLines.geometry.dispose(), () => groupMaterial.dispose(), () => ringGeometry.dispose(), () => ringMaterial.dispose(), () => markMaterial.dispose(), () => renderer.dispose()]) {
+      for (const step of [() => controls.dispose?.(), () => renderer.domElement.removeEventListener('keydown', onKeyDown), () => editor.dispose(), () => markers.dispose(), stopProblems, () => manager.dispose(), () => release(manager.root), () => outlines.forEach(release), () => rings.forEach((ring) => ring.removeFromParent()), () => marks.forEach((ring) => ring.removeFromParent()), () => groupRings.forEach((ring) => ring.removeFromParent()), () => groupLines.removeFromParent(), () => groupLines.geometry.dispose(), () => groupMaterial.dispose(), () => ringGeometry.dispose(), () => ringMaterial.dispose(), () => markMaterial.dispose(), () => renderer.dispose()]) {
         try {
           step();
         } catch (error) {

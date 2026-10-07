@@ -21,8 +21,8 @@ The password is stored encrypted on your computer. Once one is saved, the field 
 
 ## Folders (optional)
 
-- **Server data folder**: the worldserver's data folder, the one holding `dbc/`. It lets the app show XP values for reward tiers, search spells and creature or object models by name, and snap spawns to the ground on the map. Everything works without it; those parts fall back to typing IDs.
-- **Game client folder**: the folder with `Wow.exe`. [The World](/azeroth-world-editor/guides/the-world/) is drawn from it in 3D, and the quest map uses its zone art and minimap.
+- **Server data folder**: the worldserver's data folder, the one holding `dbc/`. It lets the app show XP values for reward tiers, search spells and creature or object models by name, and snap spawns to the ground in the World. Everything works without it; those parts fall back to typing IDs.
+- **Game client folder**: the folder with `Wow.exe`. [The World](/azeroth-world-editor/guides/the-world/) is drawn from it in 3D.
 - **Export folder**: where **Export patch** writes SQL files, such as your server's `data/sql/custom/db_world`. Left empty, they go to `Documents/Azeroth World Editor/sql`.
 
 Use **Browse…** to pick a folder instead of typing it.
@@ -33,7 +33,7 @@ Use **Browse…** to pick a folder instead of typing it.
 
 ## Connect
 
-Choose **Connect**. The app opens on the **World**: the game world in 3D, drawn from your game client, where you last left it (Northshire the first time). The first time a project opens there, a welcome offers a place to start. The bar across the top shows what the app reached: **Connected: _database_**, plus **Server data** and **Game client** when those folders opened. Without a game client folder the World says so and offers Settings; your quests are always on the **Quests** tab.
+Choose **Connect**. The app opens on the **World**: the game world in 3D, drawn from your game client, where you last left it (Northshire the first time). The first time a project opens there, a welcome offers a place to start. The bar across the top shows what the app reached: **Connected: _database_**, plus **Server data** and **Game client** when those folders opened. Without a game client folder the World says so and offers Settings; your quests are always in the **Quests** dock, opened from the top bar.
 
 ![Settings, with the same fields as the login screen](../../../assets/screenshots/settings.png)
 

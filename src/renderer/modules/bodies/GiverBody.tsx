@@ -5,10 +5,9 @@ import { EMPTY_ENTITIES } from '@core/entities/model';
 import { useProjectEntities } from '../../state/project-entities';
 import { EntityPicker } from '../../controls/EntityPicker';
 import { QuestStartsList } from '../../views/QuestStartsList';
-import { useMapOpener } from '../../map/MapOpener';
 import { useEntityEditor } from '../../entities/EntityEditorContext';
 import { GoToButton } from '../../world3d/GoToButton';
-import { useShowInWorld } from '../../world3d/ShowInWorldContext';
+import { usePlaceInWorld, useShowInWorld } from '../../world3d/ShowInWorldContext';
 import { useNameBook } from '../../state/names';
 import { giverName } from '@core/modules/summaries';
 import type { ModuleBodyProps } from '../body-props';
@@ -23,11 +22,11 @@ const ROLES = [
 /** Who offers the quest and who takes it back, as NPC-or-object cards, plus how it starts. */
 export function GiverBody({ open, links, onChange, onOpenQuest }: ModuleBodyProps): React.JSX.Element {
   const { aggregate } = open;
-  const openMap = useMapOpener();
   const openEditor = useEntityEditor();
   const showInWorld = useShowInWorld();
+  const placeInWorld = usePlaceInWorld();
   const names = useNameBook();
-  // The project's NPCs and objects: a card naming one shows its spawn and offers Place on map
+  // The project's NPCs and objects: a card naming one offers to place it in the World, then to draw its patrol
   const entities = useProjectEntities()?.entities ?? EMPTY_ENTITIES;
   // Edits made after waiting for the server start from the values as they are then.
   const valuesRef = useRef(aggregate.values);
@@ -126,22 +125,16 @@ export function GiverBody({ open, links, onChange, onOpenQuest }: ModuleBodyProp
                           Edit NPC
                         </button>
                       )}
-                      {openMap && !firstSpawn && (
-                        <button type="button" className="entry-card__btn"
-                          onClick={() => openMap({ kind: 'place', target: { kind: 'npc', entry: own.entry } })}>
-                          Place on map
+                      {placeInWorld && !firstSpawn && (
+                        <button type="button" className="entry-card__btn" onClick={() => placeInWorld({ kind: 'creature', entry: own.entry })}>
+                          Place in world
                         </button>
                       )}
-                      {openMap && firstSpawn && (
-                        <>
-                          <button type="button" className="entry-card__btn" onClick={() => openMap(`spawn:npc:${own.entry}:${firstSpawn.guid}`)}>
-                            Show on map
-                          </button>
-                          <button type="button" className="entry-card__btn"
-                            onClick={() => openMap({ kind: 'patrol', entry: own.entry, guid: firstSpawn.guid })}>
-                            Draw patrol
-                          </button>
-                        </>
+                      {placeInWorld && firstSpawn && (
+                        <button type="button" className="entry-card__btn"
+                          onClick={() => placeInWorld({ kind: 'patrol', entry: own.entry, guid: firstSpawn.guid })}>
+                          Draw patrol
+                        </button>
                       )}
                     </div>
                   )}

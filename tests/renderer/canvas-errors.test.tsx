@@ -23,7 +23,7 @@ async function canvas(over: Record<string, any> = {}) {
   const store = createAppStore(api, { saveDelayMs: 0 });
   await store.getState().connect(form);
   const view = render(<AppShell store={store} />);
-  await userEvent.click(screen.getByRole('tab', { name: 'Quests' }));
+  await userEvent.click(screen.getByRole('button', { name: 'Quests' }));
   return { api, store, view };
 }
 
@@ -31,7 +31,7 @@ async function canvas(over: Record<string, any> = {}) {
  * Everything past the connection screen used to swallow `store.error`: the canvas rendered it
  * nowhere, so a full ID range, a dropped connection or a failed save simply did nothing visible.
  */
-describe('CanvasHome error reporting', () => {
+describe('chain dock error reporting', () => {
   it('shows an exhausted ID range instead of doing nothing', async () => {
     const { store } = await canvas({
       newQuest: async () => errv('RANGE_EXHAUSTED', 'Every ID between 60000 and 60000 is taken.'),

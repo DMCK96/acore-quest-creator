@@ -31,6 +31,28 @@ describe('undo and redo in the store', () => {
     expect(vi.mocked(api.moveNodes).mock.invocationCallOrder[0]!).toBeLessThan(vi.mocked(api.historyUndo).mock.invocationCallOrder[0]!);
   });
 
+  it('still undoes when an edit lands while the one before it is being sent', async () => {
+    let store!: Awaited<ReturnType<typeof connected>>['store'];
+    let typed = false;
+    const made = await connected({
+      updateQuest: vi.fn(async () => {
+        // The author types again while the first edit is on its way
+        if (!typed) {
+          typed = true;
+          store.getState().setValue('quest_template.LogTitle', 'Typed while saving');
+        }
+        return okv(null);
+      }),
+    });
+    store = made.store;
+    await store.getState().openQuest(60001);
+    store.getState().setValue('quest_template.LogTitle', 'First');
+    await store.getState().undo();
+    expect(made.api.historyUndo).toHaveBeenCalledTimes(1);
+    expect(vi.mocked(made.api.updateQuest).mock.calls.at(-1)![0].values['quest_template.LogTitle']).toBe('Typed while saving');
+    expect(vi.mocked(made.api.updateQuest).mock.invocationCallOrder.at(-1)!).toBeLessThan(vi.mocked(made.api.historyUndo).mock.invocationCallOrder[0]!);
+  });
+
   it('does not undo when the pending edit could not be saved', async () => {
     const { api, store } = await connected({ updateQuest: async () => errv('UNKNOWN', 'disk full') });
     await store.getState().openQuest(60001);

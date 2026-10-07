@@ -14,9 +14,9 @@ describe('toFlowEdges', () => {
       nodeOf({ questId: 3 }),
     ];
     expect(toFlowEdges(nodes)).toEqual([
-      { id: '1>2>unlock.afterTurnIn', source: '1', target: '2', className: 'edge--turnin', animated: false },
-      { id: '1>3>start.offeredStraightAway', source: '1', target: '3', className: 'edge--offer', animated: true },
-      { id: '2>3>gate.breadcrumb', source: '2', target: '3', className: 'edge--breadcrumb', animated: false },
+      { id: '1>2>unlock.afterTurnIn', source: '1', target: '2', className: 'edge--turnin', animated: false, data: { component: 'unlock.afterTurnIn', owner: 2 } },
+      { id: '1>3>start.offeredStraightAway', source: '1', target: '3', className: 'edge--offer', animated: true, data: { component: 'start.offeredStraightAway', owner: 1 } },
+      { id: '2>3>gate.breadcrumb', source: '2', target: '3', className: 'edge--breadcrumb', animated: false, data: { component: 'gate.breadcrumb', owner: 2 } },
     ]);
   });
   it('gives every link kind a class', () => {

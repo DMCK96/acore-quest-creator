@@ -43,7 +43,7 @@ async function closeProjectDialog(page: Page): Promise<void> {
 
 async function newQuestTitled(page: Page, title: string): Promise<void> {
   await page.getByRole('button', { name: 'Connect', exact: true }).click();
-  await page.getByRole('tab', { name: 'Quests' }).click();
+  await page.getByRole('button', { name: 'Quests', exact: true }).click();
   await page.getByRole('button', { name: 'New quest', exact: true }).click();
   await page.getByLabel('Quest title').fill(title);
   // Leaving the editor sends the edit, and leaves the keys to the project

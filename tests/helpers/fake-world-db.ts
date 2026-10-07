@@ -158,12 +158,6 @@ export class FakeWorldDb implements WorldDb {
     return (await this.selectRows(table, {})).filter((row) => row[column] !== null && Number(row[column]) !== 0);
   }
 
-  async spawnsInBox(kind: SpawnKind, map: number, box: MapBox, limit: number): Promise<SpawnDot[]> {
-    return (await this.spawnDots(kind))
-      .filter((d) => d.map === map && d.x >= box.minX && d.x <= box.maxX && d.y >= box.minY && d.y <= box.maxY)
-      .slice(0, limit);
-  }
-
   async spawnsForView(map: number, box: MapBox, limit: number): Promise<{ creatures: ViewCreature[]; objects: ViewObject[] }> {
     const inBox = (r: RawRow) => {
       const x = Number(r.position_x), y = Number(r.position_y);
