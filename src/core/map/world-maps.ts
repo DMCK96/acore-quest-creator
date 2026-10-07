@@ -1,3 +1,5 @@
+import type { TransportInfo } from './transports';
+
 /**
  * The maps the 3D view can draw, by the folder name their terrain lives under in the client
  * (`World\Maps\<name>\<name>.wdt`), each with a place to start looking. The four continents are listed
@@ -5,7 +7,7 @@
  * raids, battlegrounds, arenas) come from the game client's `Map.dbc` once it is read (`setClientMaps`).
  * A map stored as a single building (most dungeons) has no terrain: it draws as that one building (`wmo`).
  */
-export type MapKind = 'continent' | 'world' | 'dungeon' | 'raid' | 'battleground' | 'arena';
+export type MapKind = 'continent' | 'world' | 'dungeon' | 'raid' | 'battleground' | 'arena' | 'transport';
 
 export interface WorldMap {
   id: number;
@@ -15,6 +17,8 @@ export interface WorldMap {
   start: { x: number; y: number; z: number };
   /** The one building a map without terrain tiles is made of (a dungeon stored as a single WMO), placed at the world's origin */
   wmo?: { path: string; doodadSet: number };
+  /** A transport's map (a ship, zeppelin or lift): its templates and their routes, drawn on the terrain they pass over */
+  transport?: TransportInfo;
 }
 
 export const WORLD_MAPS: readonly WorldMap[] = [
@@ -58,6 +62,7 @@ const GROUP_LABELS: Record<MapKind, string> = {
   raid: 'Raids',
   battleground: 'Battlegrounds',
   arena: 'Arenas',
+  transport: 'Transports',
 };
 
 /** Maps by what they are, continents first, for a picker; empty groups are left out */
