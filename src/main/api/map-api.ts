@@ -6,6 +6,9 @@ import type { MapApi, QuestSpawn, QuestSpawnGroup, SpawnDot } from '../../shared
 import { buildClientMaps } from '@core/map/client-maps';
 import type { WorldMap } from '@core/map/world-maps';
 import { MAP_FILE } from '@core/game/maps-dbc';
+import { parseTaxiPathNodes, TAXI_PATH_NODE_FILE, type TaxiNode } from '@core/game/taxi-path';
+import { buildTransportMaps, type TransportRow } from '@core/map/transports';
+import { WORLD_MAPS } from '@core/map/world-maps';
 import { floorsAt } from '../../core/game/navmesh';
 import { objectivesOf, relationOwners } from '../../core/entities/links';
 import { gridFileName, terrainHeight } from '../../core/game/terrain';
@@ -80,6 +83,42 @@ export function createMapApi(s: Services): MapApi {
     }
     return clientMaps.maps;
   }
+  /** The transports' routes and map names, read once per client folder; a missing or unreadable route file means none */
+  interface TaxiFiles { paths: Map<number, TaxiNode[]>; mapDbc: Uint8Array | null }
+  let taxiPaths: { dir: string; files: Promise<TaxiFiles> } | null = null;
+  async function taxiFiles(dir: string): Promise<TaxiFiles> {
+    const read = deps.clientFile;
+    if (!read) return { paths: new Map(), mapDbc: null };
+    if (taxiPaths?.dir !== dir) {
+      taxiPaths = {
+        dir,
+        files: (async () => {
+          const mapDbc = await read(`DBFilesClient/${MAP_FILE}`);
+          try {
+            const dbc = await read(`DBFilesClient/${TAXI_PATH_NODE_FILE}`);
+            return { paths: dbc ? parseTaxiPathNodes(dbc) : new Map<number, TaxiNode[]>(), mapDbc };
+          } catch {
+            return { paths: new Map<number, TaxiNode[]>(), mapDbc };
+          }
+        })(),
+      };
+    }
+    return taxiPaths.files;
+  }
+  /** The transport maps: their spawns are vessel-local, so they never go through startedAtSpawn */
+  async function transportMapList(terrain: WorldMap[]): Promise<WorldMap[]> {
+    const dir = (await deps.clientStatus?.())?.dir;
+    const db = conn.current()?.db;
+    if (!dir || !db) return [];
+    const { paths, mapDbc } = await taxiFiles(dir);
+    if (paths.size === 0) return [];
+    const rows: TransportRow[] = (await rowsOrNone(db, 'gameobject_template', { type: ['15'] })).map((r) => ({
+      entry: Number(r.entry), name: String(r.name ?? ''), displayId: Number(r.displayId), pathId: Number(r.Data0), map: Number(r.Data6),
+    }));
+    if (rows.length === 0) return [];
+    const hosts = new Map<number, WorldMap>([...WORLD_MAPS, ...terrain].map((m) => [m.id, m]));
+    return buildTransportMaps({ rows, paths, mapDbc, hostOf: (id) => hosts.get(id) ?? null });
+  }
   /** Starts a map at a spawn of the database's when it has one there: the middle of a tile may be nowhere */
   async function startedAtSpawn(map: WorldMap): Promise<WorldMap> {
     const db = conn.current()?.db;
@@ -94,7 +133,12 @@ export function createMapApi(s: Services): MapApi {
     }
   }
   return {
-    clientMaps: () => run(async () => Promise.all((await clientMapList()).map(startedAtSpawn))),
+    clientMaps: () =>
+      run(async () => {
+        const terrain = await clientMapList();
+        const started = await Promise.all(terrain.map(startedAtSpawn));
+        return [...started, ...(await transportMapList(terrain))];
+      }),
     patrolPathId: (guid) =>
       run(async () => {
         const pinned = projectEntities().npcs.flatMap((n) => n.spawns).find((s) => s.guid === guid)?.patrol;
