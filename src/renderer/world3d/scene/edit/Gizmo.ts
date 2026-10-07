@@ -153,9 +153,14 @@ export class Gizmo {
     return Math.atan2(Math.sin(angle), Math.cos(angle));
   }
 
-  /** The drawn ground (terrain or a building's floor) under a point, or null over nothing */
+  /**
+   * The drawn ground (terrain or a building's floor) under a point, or null over nothing. Where there
+   * are several (a roof over a floor, a stair's levels) it is the one nearest the point's own height,
+   * so a move stays on the floor it began on instead of jumping to the roof above.
+   */
   groundAt(x: number, y: number, z: number): number | null {
     this.#down.set(new THREE.Vector3(x, y, z + GROUND_PROBE), new THREE.Vector3(0, 0, -1));
-    return this.#down.intersectObjects(this.#ground(), true)[0]?.point.z ?? null;
+    const heights = this.#down.intersectObjects(this.#ground(), true).map((hit) => hit.point.z);
+    return heights.length === 0 ? null : heights.reduce((best, h) => (Math.abs(h - z) < Math.abs(best - z) ? h : best));
   }
 }
