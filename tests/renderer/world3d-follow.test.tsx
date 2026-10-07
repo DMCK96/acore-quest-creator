@@ -7,6 +7,7 @@ import { makeMockApi, okv } from './mock-api';
 import { clearClipboard } from '../../src/renderer/world3d/clipboard';
 import { EMPTY_ENTITIES } from '../../src/core/entities/model';
 import { markWelcomeSeen } from '../../src/renderer/world3d/welcome-seen';
+import { setClientMaps } from '../../src/core/map/world-maps';
 import { writeLastPlace } from '../../src/renderer/world3d/last-place';
 
 const worlds = vi.hoisted(() => [] as any[]);
@@ -38,10 +39,11 @@ const part = (entry: number, nonce = 1): Focus => ({ questId: 60001, part: { kin
 const giver = { kind: 'creature', guid: 6000001, entry: 12000001, name: 'Hela', map: 1, x: 500, y: 0, z: 0, role: 'giver' };
 let api: ReturnType<typeof makeMockApi>;
 
-function mount(first: Props, questSpawnList?: any) {
+function mount(first: Props, questSpawnList?: any, clientMaps?: any) {
   vi.stubGlobal('fetch', async () => new Response(new Uint8Array([1]), { status: 200 }));
   api = makeMockApi({ worldLayer: vi.fn(async () => okv({ spawns: [], routes: [], added: [] })),
     mapFloors: vi.fn(async () => okv({ floors: [31], ground: 31 })),
+    ...(clientMaps && { clientMaps }),
     questSpawnList: questSpawnList ?? (vi.fn(async () => okv([{ questId: 60001, title: 'Q', spawns: [giver], capped: false, cut: 0 }])) as any) });
   const value = { entities: EMPTY_ENTITIES, setEntities: vi.fn(), quests: [], layer: { spawns: [], routes: [], added: [] }, setLayer: vi.fn(), tracked: [],
     create: vi.fn(async () => ({ error: 'no' })), remove: vi.fn(async () => null), adopt: vi.fn(async () => ({ error: 'no' })), ensure: vi.fn(async () => null) };
@@ -66,6 +68,7 @@ beforeEach(() => {
   writeLastPlace({ map: 0, x: 0, y: 0, z: 0 });
 });
 afterEach(() => {
+  setClientMaps([]);
   vi.unstubAllGlobals();
   vi.restoreAllMocks();
 });
@@ -155,6 +158,16 @@ describe('a focused NPC or object (Show in World and Go to)', () => {
     await waitFor(() => expect(worlds).toHaveLength(1));
     view.rerender({ focus: quest() });
     expect(await screen.findByText('This quest is on map 631, which the World cannot draw.')).toBeTruthy();
+  });
+
+  it('loads an instance the client has terrain for, and goes to a quest in it', async () => {
+    const icc = { ...giver, map: 631 };
+    const maps = vi.fn(async () => okv([{ id: 631, name: 'Icecrown Citadel', directory: 'IcecrownCitadel', kind: 'raid', start: { x: 0, y: 0, z: 0 } }]));
+    const view = mount({}, vi.fn(async () => okv([{ questId: 60001, title: 'Q', spawns: [icc], capped: false, cut: 0 }])), maps);
+    await waitFor(() => expect(worlds).toHaveLength(1));
+    view.rerender({ focus: quest() });
+    await waitFor(() => expect(worlds.at(-1).options.map).toBe(631));
+    expect(worlds.at(-1).options.directory).toBe('IcecrownCitadel');
   });
 
   it('goes to a spawn on a drawable map when others are in an instance', async () => {

@@ -958,7 +958,8 @@ class SpawnManager {
     for (const drawn of drawnCreatures) creatures.add(drawn);
 
     // How they move: patrol routes and wander circles, in world coordinates
-    for (const creature of spawns.creatures) paths.add(...movesOf(creature));
+    // One at a time: add() with nothing to add (an NPC that stands still) logs an error
+    for (const creature of spawns.creatures) for (const shown of movesOf(creature)) paths.add(shown);
 
     const drawnObjects = await Promise.all(
       spawns.objects.map((object) =>
@@ -1033,7 +1034,7 @@ class SpawnManager {
     for (const shown of [...paths.children]) if (changed.has(shown.userData.guid)) this.#remove(shown);
     for (const guid of changed) {
       const creature = now.get(guid);
-      if (creature) paths.add(...movesOf(creature));
+      if (creature) for (const shown of movesOf(creature)) paths.add(shown);
     }
     // The creatures as drawn, so a route can be read back as the view has it, and the objects for the menu
     group.userData.creatures = now;

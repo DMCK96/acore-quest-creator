@@ -3,6 +3,9 @@ import { rowsOrNone } from '../../core/links/context';
 import type { QuestAggregate } from '../../core/model/aggregate';
 import { movementsOf } from '../../core/world/layer';
 import type { MapApi, QuestSpawn, QuestSpawnGroup, SpawnDot } from '../../shared/ipc';
+import { buildClientMaps } from '@core/map/client-maps';
+import type { WorldMap } from '@core/map/world-maps';
+import { MAP_FILE } from '@core/game/maps-dbc';
 import { floorsAt } from '../../core/game/navmesh';
 import { objectivesOf, relationOwners } from '../../core/entities/links';
 import { gridFileName, terrainHeight } from '../../core/game/terrain';
@@ -60,7 +63,38 @@ export function createMapApi(s: Services): MapApi {
     }
     return wanted;
   }
+  /** The client's other maps, read once per client folder */
+  let clientMaps: { dir: string; maps: Promise<WorldMap[]> } | null = null;
+  async function clientMapList(): Promise<WorldMap[]> {
+    const dir = (await deps.clientStatus?.())?.dir;
+    const read = deps.clientFile;
+    if (!dir || !read) return [];
+    if (clientMaps?.dir !== dir) {
+      clientMaps = {
+        dir,
+        maps: (async () => {
+          const dbc = await read(`DBFilesClient/${MAP_FILE}`);
+          return dbc ? buildClientMaps(dbc, read) : [];
+        })(),
+      };
+    }
+    return clientMaps.maps;
+  }
+  /** Starts a map at a spawn of the database's when it has one there: the middle of a tile may be nowhere */
+  async function startedAtSpawn(map: WorldMap): Promise<WorldMap> {
+    const db = conn.current()?.db;
+    if (!db?.spawnsForView) return map;
+    const everywhere = { minX: -17100, maxX: 17100, minY: -17100, maxY: 17100 };
+    try {
+      const { creatures, objects } = await db.spawnsForView(map.id, everywhere, 1);
+      const spawn = creatures[0] ?? objects[0];
+      return spawn ? { ...map, start: { x: spawn.x, y: spawn.y, z: spawn.z } } : map;
+    } catch {
+      return map;
+    }
+  }
   return {
+    clientMaps: () => run(async () => Promise.all((await clientMapList()).map(startedAtSpawn))),
     patrolPathId: (guid) =>
       run(async () => {
         const pinned = projectEntities().npcs.flatMap((n) => n.spawns).find((s) => s.guid === guid)?.patrol;

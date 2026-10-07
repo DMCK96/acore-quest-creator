@@ -164,6 +164,7 @@ const REQUEST_SCHEMAS: Record<keyof Api, z.ZodType<unknown[]>> = {
   testCommands: z.tuple([z.number()]),
   groundHeight: z.tuple([z.number().int(), z.number(), z.number()]),
   spellFacts: z.tuple([z.array(z.number().int()).max(MAX_LOOKUP_IDS)]),
+  clientMaps: z.tuple([]),
   mapFloors: z.tuple([z.number().int(), z.number().finite(), z.number().finite()]),
   viewSpawns: z.tuple([z.number().int(), z.object({ minX: z.number().finite(), maxX: z.number().finite(), minY: z.number().finite(), maxY: z.number().finite() })]),
   projectEntities: z.tuple([]),

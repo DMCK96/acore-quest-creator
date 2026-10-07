@@ -1,7 +1,9 @@
 import type { MapBox, SpawnDot } from '@core/db/spawns';
 import type { ViewSpawns } from '@core/db/view-spawns';
+import type { WorldMap } from '@core/map/world-maps';
 import type { Result } from './result';
 
+export type { WorldMap };
 export type { MapBox, SpawnDot, SpawnKind } from '@core/db/spawns';
 
 /** The floors at a point (navmesh) and the terrain ground there, or why there are none. */
@@ -31,6 +33,8 @@ export interface MapApi {
   groundHeight(map: number, x: number, y: number): Promise<Result<{ z: number } | { reason: string }>>;
   /** The walkable floors and the ground at a point, from the server data folder. */
   mapFloors(map: number, x: number, y: number): Promise<Result<MapFloors>>;
+  /** The maps beyond the continents the game client holds terrain for, each starting at a spawn when the database has one there. */
+  clientMaps(): Promise<Result<WorldMap[]>>;
   /** NPCs and objects in an area of a map as the 3D view draws them; each kind capped at 2000. */
   viewSpawns(map: number, box: MapBox): Promise<Result<ViewSpawns>>;
   /** Where an NPC or object stands in the world, for jumping to it in the 3D view. */

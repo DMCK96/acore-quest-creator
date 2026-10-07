@@ -15,7 +15,8 @@ import { ownEdit } from './own-edit';
 import { newSpawnGuid } from './spawn-guid';
 import { chainOf, questMenuInfo } from './quest-context';
 import { OBJECTIVES_FULL } from './menu/section';
-import { WORLD_MAPS, worldMapById } from '@core/map/world-maps';
+import { groupWorldMaps, worldMapById } from '@core/map/world-maps';
+import { useClientMaps } from './useClientMaps';
 import type { TeleportSpot } from '@core/map/teleports';
 import { World3DView, type FocusTarget } from './World3DView';
 import type { PickedSpawn } from './scene/spawn/SpawnManager';
@@ -128,6 +129,7 @@ export function WorldWorkspace({
   const own = useMemo(() => ownViewSpawns(store), [store]);
   const { runStep } = useHistorySteps();
   const api = useApi();
+  const { maps, ready: mapsReady } = useClientMaps(api, hasClient);
   const names = useNameBook();
   const namesRef = useRef(names);
   namesRef.current = names;
@@ -308,6 +310,8 @@ export function WorldWorkspace({
     const from = { map: mapRef.current, ...placeRef.current };
     const only = 'kind' in target ? { kind: target.kind, entry: target.entry } : undefined;
     if (!api) return { error: NEEDS_DATABASE };
+    // The client's other maps count as drawable once they are read
+    await mapsReady();
     const read = await api.questSpawnList([target.questId]);
     if (!read.ok) {
       // Only an absent connection needs the database; any other failure says what went wrong
@@ -666,10 +670,14 @@ export function WorldWorkspace({
             <label className="scene-field world-place__map-field">
               <span>Map</span>
               <select value={mapId} onChange={(e) => chooseMap(Number(e.target.value))}>
-                {WORLD_MAPS.map((m) => (
-                  <option key={m.id} value={m.id}>
-                    {m.name}
-                  </option>
+                {groupWorldMaps(maps).map((group) => (
+                  <optgroup key={group.label} label={group.label}>
+                    {group.maps.map((m) => (
+                      <option key={m.id} value={m.id}>
+                        {m.name}
+                      </option>
+                    ))}
+                  </optgroup>
                 ))}
               </select>
             </label>
