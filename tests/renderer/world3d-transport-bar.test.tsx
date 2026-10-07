@@ -1,8 +1,8 @@
 import { fireEvent, render, screen } from '@testing-library/react';
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { TransportBar } from '../../src/renderer/world3d/TransportBar';
 import { NODE_STOP, type TaxiNode } from '../../src/core/game/taxi-path';
-import type { WorldMap } from '../../src/core/map/world-maps';
+import { setClientMaps, type WorldMap } from '../../src/core/map/world-maps';
 
 const n = (index: number, map: number, flags = 0): TaxiNode => ({ index, map, x: index, y: 0, z: 0, flags, delay: 0 });
 const make = (templates: number): WorldMap => ({
@@ -13,6 +13,10 @@ const make = (templates: number): WorldMap => ({
   },
 });
 const name = () => 'Icecrown Citadel';
+
+// Icecrown Citadel is a map the World draws; the gunship's own map is not terrain
+beforeEach(() => setClientMaps([{ id: 631, name: 'Icecrown Citadel', directory: 'IcecrownCitadel', kind: 'raid', start: { x: 0, y: 0, z: 0 } }, make(1)]));
+afterEach(() => setClientMaps([]));
 
 describe('the transport bar', () => {
   it('offers a route only when the map has several, and always the stops', () => {
@@ -34,5 +38,12 @@ describe('the transport bar', () => {
     render(<TransportBar map={make(2)} view={{ template: 1, node: 1 }} hostName={name} onView={onView} />);
     fireEvent.change(screen.getByLabelText('Route'), { target: { value: '2' } });
     expect(onView).toHaveBeenCalledWith({ template: 2, node: 0 });
+  });
+  it('offers no node on a map the World cannot draw', () => {
+    const map = make(1);
+    map.transport!.paths[10] = [n(0, 631), n(1, 631, NODE_STOP), n(2, 999, NODE_STOP), n(3, 672)];
+    render(<TransportBar map={map} view={{ template: 1, node: 1 }} hostName={name} onView={() => {}} />);
+    const offered = Array.from((screen.getByLabelText('Stop') as HTMLSelectElement).options).map((o) => o.value);
+    expect(offered).toEqual(['1', '0']);
   });
 });

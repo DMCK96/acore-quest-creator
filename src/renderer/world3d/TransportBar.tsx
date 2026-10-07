@@ -1,5 +1,5 @@
 import { isTerrainMap, type WorldMap } from '@core/map/world-maps';
-import { nodeOptions, normaliseView, type NodeOption, type TransportView } from '@core/map/transport-view';
+import { nodeOptions, nodesOf, normaliseView, type NodeOption, type TransportView } from '@core/map/transport-view';
 
 export interface TransportBarProps {
   /** A transport's map */
@@ -16,7 +16,9 @@ export interface TransportBarProps {
  */
 export function TransportBar({ map, view, hostName, onView }: TransportBarProps): React.JSX.Element {
   const templates = map.transport?.templates ?? [];
-  const options = nodeOptions(map, view, hostName);
+  // Only the nodes over terrain the World draws can be shown
+  const nodes = nodesOf(map, view);
+  const options = nodeOptions(map, view, hostName).filter((o) => isTerrainMap(nodes[o.node]!.map));
   const group = (label: string, list: NodeOption[]): React.JSX.Element | null =>
     list.length === 0 ? null : (
       <optgroup label={label}>

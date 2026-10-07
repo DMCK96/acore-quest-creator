@@ -1,17 +1,18 @@
 // @vitest-environment jsdom
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { NamesProvider } from '../../src/renderer/state/names';
 import { ProjectEntitiesProvider } from '../../src/renderer/state/project-entities';
 import { makeMockApi, okv } from './mock-api';
 import { clearClipboard } from '../../src/renderer/world3d/clipboard';
-import { EMPTY_ENTITIES } from '../../src/core/entities/model';
+import { EMPTY_ENTITIES, newNpc, newSpawn, type ProjectEntities } from '../../src/core/entities/model';
 import { markWelcomeSeen } from '../../src/renderer/world3d/welcome-seen';
 import { setClientMaps, type WorldMap } from '../../src/core/map/world-maps';
 import { writeLastPlace } from '../../src/renderer/world3d/last-place';
 import { NODE_STOP, type TaxiNode } from '../../src/core/game/taxi-path';
 import { frameOfView, routeLinesOf } from '../../src/core/map/transport-view';
-import { placementToLocal } from '../../src/core/map/transport-frame';
+import { placementToLocal, toWorld } from '../../src/core/map/transport-frame';
 
 const worlds = vi.hoisted(() => [] as any[]);
 vi.mock('../../src/renderer/world3d/world3d', () => ({
@@ -47,23 +48,27 @@ const zeppelin = (templates = 1): WorldMap => ({
 
 let api: ReturnType<typeof makeMockApi>;
 
-function mount(map: WorldMap = zeppelin()) {
+type Props = { goTo?: { map: number; x: number; y: number; z: number; nonce: number }; focus?: { questId: number; part: { kind: 'creature'; entry: number }; nonce: number; at: number } };
+
+function mount({ map = zeppelin(), overrides = {}, entities = EMPTY_ENTITIES, tracked = [] }: { map?: WorldMap; overrides?: Record<string, unknown>; entities?: ProjectEntities; tracked?: unknown[] } = {}) {
   vi.stubGlobal('fetch', async () => new Response(new Uint8Array([1]), { status: 200 }));
   api = makeMockApi({ worldLayer: vi.fn(async () => okv({ spawns: [], routes: [], added: [] })),
     mapFloors: vi.fn(async () => okv({ floors: [31], ground: 31 })),
     worldMoveSpawn: vi.fn(async () => okv({ spawns: [], routes: [], added: [] })),
     worldSetRoute: vi.fn(async () => okv({ spawns: [], routes: [], added: [] })),
     viewSpawns: vi.fn(async () => okv({ creatures: [], objects: [], capped: { creatures: false, objects: false } })),
-    clientMaps: vi.fn(async () => okv([map])) as any });
-  const value = { entities: EMPTY_ENTITIES, setEntities: vi.fn(), quests: [], layer: { spawns: [], routes: [], added: [] }, setLayer: vi.fn(), tracked: [],
-    create: vi.fn(async () => ({ error: 'no' })), remove: vi.fn(async () => null), adopt: vi.fn(async () => ({ error: 'no' })), ensure: vi.fn(async () => null) };
-  render(
+    clientMaps: vi.fn(async () => okv([map])) as any, ...overrides });
+  const value = { entities, setEntities: vi.fn(), quests: [], layer: { spawns: [], routes: [], added: [] }, setLayer: vi.fn(), tracked,
+    create: vi.fn(async () => ({ error: 'no' })), remove: vi.fn(async () => null), adopt: vi.fn(async () => ({ error: 'no' })), ensure: vi.fn(async () => null) } as any;
+  const ui = (props: Props) => (
     <NamesProvider api={api}>
       <ProjectEntitiesProvider value={value}>
-        <WorldWorkspace hasClient projectKey="p" projectName="P" onOpenSettings={vi.fn()} onShowQuests={vi.fn()} onStartQuest={vi.fn()} />
+        <WorldWorkspace hasClient projectKey="p" projectName="P" onOpenSettings={vi.fn()} onShowQuests={vi.fn()} onStartQuest={vi.fn()} goTo={props.goTo} focus={props.focus as any} now={() => 0} />
       </ProjectEntitiesProvider>
-    </NamesProvider>,
+    </NamesProvider>
   );
+  const view = render(ui({}));
+  return { rerender: (props: Props) => view.rerender(ui(props)) };
 }
 
 /** Picks the zeppelin in the Coordinates form's map picker, under Transports */
@@ -120,7 +125,7 @@ describe('a transport in the World', () => {
   });
 
   it('changes the route without reading the passengers again', async () => {
-    mount(zeppelin(2));
+    mount({ map: zeppelin(2) });
     const world = await chooseZeppelin();
     await world.options.spawns(world.options.map, box);
     const asked = vi.mocked(api.viewSpawns).mock.calls.length;
@@ -152,5 +157,101 @@ describe('a transport in the World', () => {
     const world = await chooseZeppelin();
     await expect(world.options.floorZ(1300, -4600, 40)).resolves.toBeNull();
     expect(api.mapFloors).not.toHaveBeenCalled();
+  });
+});
+
+describe('going to a passenger', () => {
+  /** A passenger two yards forward of the vessel's middle, a yard up */
+  const deck = { x: 2, y: 0, z: 1 };
+  const atStop = (node: number) => toWorld(frameOfView(zeppelin(), { template: 175080, node }), deck);
+  const closeTo = (p: { x: number; y: number; z: number }) => ({ x: expect.closeTo(p.x, 4), y: expect.closeTo(p.y, 4), z: expect.closeTo(p.z, 4) });
+  const lookedAtClose = (world: any, p: { x: number; y: number; z: number }) =>
+    expect(world.lookAt).toHaveBeenLastCalledWith(expect.closeTo(p.x, 4), expect.closeTo(p.y, 4), expect.closeTo(p.z + 1, 4), true);
+  const hand = { kind: 'creature' as const, guid: 9, entry: 1423, name: 'Deckhand', map: 591, ...deck };
+
+  async function find(): Promise<void> {
+    await userEvent.click(screen.getByRole('button', { name: 'Find…' }));
+    await userEvent.type(await screen.findByRole('searchbox', { name: 'Find by name or ID' }), 'deck');
+    await userEvent.click(await screen.findByRole('button', { name: /Deckhand/ }));
+  }
+  const finding = () => ({ searchEntities: vi.fn(async () => okv([{ id: 1423, name: 'Deckhand' }])), findSpawns: vi.fn(async () => okv({ spawns: [hand], capped: false })) });
+
+  it('Find opens the transport at its dock and aims at the passenger on its deck', async () => {
+    mount({ overrides: finding() });
+    await waitFor(() => expect(worlds).toHaveLength(1));
+    await find();
+    const go = await screen.findByRole('button', { name: 'Go to spawn 9' });
+    await waitFor(() => expect(go).toBeEnabled());
+    await userEvent.click(go);
+    await waitFor(() => expect(worlds.at(-1).options.map).toBe(591));
+    const world = worlds.at(-1);
+    expect(world.options.start).toEqual(closeTo(atStop(0)));
+    await waitFor(() => expect(world.select).toHaveBeenLastCalledWith({ kind: 'creature', guid: 9 }));
+    lookedAtClose(world, atStop(0));
+    // The card keeps the stored, vessel-local place
+    expect(screen.getByText('X 2.00 · Y 0.00 · Z 1.00')).toBeTruthy();
+  });
+
+  it('Find on the open transport aims through the stop shown, measuring from the deck', async () => {
+    mount({ overrides: finding() });
+    const world = await chooseZeppelin();
+    fireEvent.change(screen.getByLabelText('Stop'), { target: { value: '1' } });
+    await waitFor(() => expect(world.setTransport).toHaveBeenCalled());
+    await find();
+    const row = (await screen.findByRole('button', { name: 'Go to spawn 9' })).closest('li')!;
+    expect(within(row as HTMLElement).getByText(/· 2 yards away/)).toBeTruthy();
+    await userEvent.click(screen.getByRole('button', { name: 'Go to spawn 9' }));
+    await waitFor(() => expect(world.select).toHaveBeenLastCalledWith({ kind: 'creature', guid: 9 }));
+    lookedAtClose(world, atStop(1));
+    expect(worlds.at(-1)).toBe(world);
+  });
+
+  it('the undo note\'s Show goes to a passenger\'s place on its vessel', async () => {
+    const view = mount();
+    await waitFor(() => expect(worlds).toHaveLength(1));
+    await waitFor(() => expect(api.clientMaps).toHaveBeenCalled());
+    await new Promise((r) => setTimeout(r, 0));
+    view.rerender({ goTo: { map: 591, ...deck, nonce: 1 } });
+    await waitFor(() => expect(worlds.at(-1).options.map).toBe(591));
+    expect(worlds.at(-1).options.start).toEqual(closeTo(atStop(0)));
+  });
+
+  it('following the focus to a passenger aims at it on its vessel', async () => {
+    const view = mount({ overrides: { questSpawnList: vi.fn(async () => okv([{ questId: 60001, title: 'Q', spawns: [{ ...hand, role: 'giver' }], capped: false, cut: 0 }])) } });
+    await waitFor(() => expect(worlds).toHaveLength(1));
+    view.rerender({ focus: { questId: 60001, part: { kind: 'creature', entry: 1423 }, nonce: 1, at: 10 } });
+    await waitFor(() => expect(worlds.at(-1).options.map).toBe(591));
+    const world = worlds.at(-1);
+    expect(world.options.start).toEqual(closeTo(atStop(0)));
+    await waitFor(() => expect(world.select).toHaveBeenCalledWith({ kind: 'creature', guid: 9 }));
+    lookedAtClose(world, atStop(0));
+  });
+
+  it('Project changes\' Go to aims at a project passenger on its vessel', async () => {
+    const entities = { ...EMPTY_ENTITIES, npcs: [{ ...newNpc(12000001), name: 'Hela', spawns: [{ ...newSpawn(6000001), map: 591, ...deck }] }] };
+    const tracked = [{ kind: 'npc', entry: 12000001, name: 'Hela', origin: 'new', changes: ['new'], usedBy: [], goTo: { kind: 'creature', guid: 6000001, map: 591, ...deck } }];
+    mount({ entities, tracked });
+    await waitFor(() => expect(worlds).toHaveLength(1));
+    await waitFor(() => expect(api.clientMaps).toHaveBeenCalled());
+    await new Promise((r) => setTimeout(r, 0));
+    await userEvent.click(screen.getByRole('button', { name: /Project changes/ }));
+    await userEvent.click(within(screen.getByRole('listitem', { name: 'Hela' })).getByRole('button', { name: 'Go to' }));
+    await waitFor(() => expect(worlds.at(-1).options.map).toBe(591));
+    const world = worlds.at(-1);
+    expect(world.options.start).toEqual(closeTo(atStop(0)));
+    await waitFor(() => expect(world.select).toHaveBeenCalledWith({ kind: 'creature', guid: 6000001 }));
+    lookedAtClose(world, atStop(0));
+  });
+
+  it('Find\'s spawn group on the transport aims at its members on the deck', async () => {
+    const group = { id: 1, name: 'Crew', map: 591, maxActive: 1, members: [{ key: 'npc:9', type: 'spawn' as const, name: 'Deckhand', chance: 100, at: deck }] };
+    mount({ overrides: { worldGroupsOnMap: vi.fn(async () => okv([{ id: 1, name: 'Crew', maxActive: 1, members: 1, groups: [] }])), worldGroupView: vi.fn(async () => okv(group)) } });
+    const world = await chooseZeppelin();
+    await userEvent.click(screen.getByRole('button', { name: 'Find…' }));
+    await userEvent.click(screen.getByRole('radio', { name: 'Spawn group' }));
+    await userEvent.type(screen.getByRole('searchbox', { name: 'Find by name or ID' }), 'crew');
+    await userEvent.click(await screen.findByRole('button', { name: /Crew/ }));
+    await waitFor(() => expect(world.select).toHaveBeenCalledWith({ kind: 'creature', guid: 9 }));
+    lookedAtClose(world, atStop(0));
   });
 });

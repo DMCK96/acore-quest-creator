@@ -1,7 +1,7 @@
 import { Component, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { assetUrl } from '@core/client/asset-url';
 import { worldMapById, worldMapDirectory, type WorldMap } from '@core/map/world-maps';
-import { IDENTITY_FRAME } from '@core/map/transport-frame';
+import { IDENTITY_FRAME, toWorld } from '@core/map/transport-frame';
 import { frameOfView, hostMapIdOf, routeLinesOf, templateOf, type TransportView } from '@core/map/transport-view';
 import { createWorld3D, type Scenery, type SelectionSummary, type TransportScene, type World3D } from './world3d';
 import { localiseEdit, localisePlacement } from './frame-edit';
@@ -365,7 +365,9 @@ function WorldStage({
         [target.kind === 'creature' ? 'creatures' : 'objects']: true,
         ...(target.event && l.events !== 'all' && l.events !== target.event.id ? { events: target.event.id, eventName: target.event.name } : {}),
       }));
-      current.lookAt(target.x, target.y, target.z + 1, true);
+      // A passenger's stored place is on its vessel
+      const seen = toWorld(frameNow(), target);
+      current.lookAt(seen.x, seen.y, seen.z + 1, true);
     }
     current.select({ kind: target.kind, guid: target.guid });
     setSelected({
