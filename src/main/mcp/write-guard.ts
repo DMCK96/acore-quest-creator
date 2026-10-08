@@ -31,7 +31,9 @@ async function flushed(ctx: McpContext): Promise<void> {
  * pending edits, the tool's changes become one history step with the tool's label, and the window
  * is told what changed. The queue belongs to the guard, so every server has its own.
  */
-export function createWriteGuard(): (ctx: McpContext, tool: ToolDef, args: unknown) => Promise<Result<unknown>> {
+export type WriteGuard = (ctx: McpContext, tool: ToolDef, args: unknown) => Promise<Result<unknown>>;
+
+export function createWriteGuard(): WriteGuard {
   let tail: Promise<unknown> = Promise.resolve();
   const exclusively = <T,>(work: () => Promise<T>): Promise<T> => {
     const next = tail.then(work, work);

@@ -3,7 +3,7 @@ import { z } from 'zod';
 import type { ApiError, Result } from '../../shared/ipc';
 import { TOOL_VERSION } from '../../core/version';
 import type { McpContext, ToolDef } from './tool';
-import { createWriteGuard } from './write-guard';
+import { createWriteGuard, type WriteGuard } from './write-guard';
 
 /** The longest answer sent to a client; a longer one is refused so one call cannot flood the model. */
 export const MAX_ANSWER_CHARS = 200_000;
@@ -12,9 +12,8 @@ const textResult = (value: unknown, isError: boolean) => ({ content: [{ type: 't
 const failure = (error: ApiError) => textResult(error, true);
 
 /** Builds the MCP server for a tool list. A tool is data; adding one is adding an entry to the list. */
-export function createMcpServer(ctx: McpContext, tools: readonly ToolDef[]): McpServer {
+export function createMcpServer(ctx: McpContext, tools: readonly ToolDef[], runTool: WriteGuard = createWriteGuard()): McpServer {
   const server = new McpServer({ name: 'azeroth-world-editor', version: TOOL_VERSION });
-  const runTool = createWriteGuard();
   for (const tool of tools) {
     server.registerTool(tool.name, { title: tool.title, description: tool.description, inputSchema: tool.input }, async (args: z.infer<z.ZodObject<any>>) => {
       let result: Result<unknown>;
