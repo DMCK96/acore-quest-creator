@@ -100,6 +100,17 @@ describe('editing in the 3D view', () => {
     expect(await screen.findByText('X 1.00 · Y 2.00 · Z 3.00')).toBeTruthy();
   });
 
+  it('shows the selected spawn back where it was when its move is taken back', async () => {
+    const worldChanges = vi.fn(async () => okv([{ ...moved.spawns[0], type: 'spawn', drifted: false }]));
+    const { world } = await ownView(makeMockApi({ worldLayer: vi.fn(async () => okv(EMPTY)), worldMoveSpawn: vi.fn(async () => okv(moved)), worldChanges, worldRevert: vi.fn(async () => okv(EMPTY)) }));
+    act(() => world.options.onSelect({ kind: 'creature', guid: 80330, entry: 1423, name: 'Guard', own: false, event: null, position: { x: 0, y: 0, z: 0 }, pathId: 0 }));
+    world.options.onGesture([place(false, 80330, 1423)]);
+    expect(await screen.findByText('X 1.00 · Y 2.00 · Z 3.00')).toBeTruthy();
+    await userEvent.click(await screen.findByRole('button', { name: /^Project changes \(\d+\)$/ }));
+    await userEvent.click(await screen.findByRole('button', { name: 'Revert Guard' }));
+    expect(await screen.findByText('X 0.00 · Y 0.00 · Z 0.00')).toBeTruthy();
+  });
+
   it('puts the spawn back and says why when the world edit fails', async () => {
     const { world } = await ownView(makeMockApi({ worldLayer: vi.fn(async () => okv(EMPTY)), worldMoveSpawn: vi.fn(async () => errv('NOT_CONNECTED', 'Connect to a world database first.')) }));
     world.options.onSelect({ kind: 'creature', guid: 80330, entry: 1423, name: 'Guard', own: false, event: null, position: { x: 0, y: 0, z: 0 }, pathId: 0 });
