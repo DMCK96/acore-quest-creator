@@ -35,8 +35,8 @@ export interface DockInstance {
   picked(kind: Kind, guid: number): PickedSpawn | null;
   info(kind: Kind, guid: number): SpawnInfo | null;
   cull(camera: THREE.Vector3, frustum?: THREE.Frustum): void;
-  /** Once a frame: asks again for passengers whose answer failed, once it has aged */
-  update(): void;
+  /** Once a frame, `deltaTime` seconds on: walks the passengers, and asks again for them when their answer failed and has aged */
+  update(deltaTime: number, camera: THREE.Camera): void;
   /** What a selection box can catch among the drawn passengers */
   candidates(camera: THREE.Vector3): Candidates['spawns'];
   readonly status: DockStatus;
@@ -133,9 +133,9 @@ export class DockSet {
     return null;
   }
 
-  /** Once a frame: each dock asks again for what failed */
-  update(): void {
-    for (const { instance } of this.#docks.values()) instance.update();
+  /** Once a frame: each dock walks its passengers and asks again for what failed */
+  update(deltaTime: number, camera: THREE.Camera): void {
+    for (const { instance } of this.#docks.values()) instance.update(deltaTime, camera);
   }
 
   candidates(camera: THREE.Vector3): Candidates['spawns'] {

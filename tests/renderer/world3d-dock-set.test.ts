@@ -114,8 +114,9 @@ describe('the docks in a scene', () => {
   it('lets every instance work between frames, and gathers what a box can catch from them all', () => {
     const { set, made } = setup((d) => fake({ ...d, node: d.key === 'a' ? 1 : 2 }));
     set.sync([dock('a'), dock('b')], always);
-    set.update();
-    expect(made.map((m) => m.update.mock.calls.length)).toEqual([1, 1]);
+    const camera = new THREE.PerspectiveCamera();
+    set.update(0.5, camera);
+    expect(made.map((m) => m.update.mock.calls)).toEqual([[[0.5, camera]], [[0.5, camera]]]);
     expect(set.candidates(new THREE.Vector3()).map((c) => c.guid)).toEqual([2, 3]);
   });
 

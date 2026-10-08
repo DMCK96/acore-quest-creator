@@ -118,6 +118,19 @@ describe('MovementDriver', () => {
     expect(b.last().x).toBeCloseTo(1.625);
   });
 
+  it('hands the pose it has to a target it is tracked with again, standing while paused', () => {
+    const { control, driver } = setup();
+    const a = target(), b = target(), c = target();
+    driver.track(1, plan(), 'k', a.t);
+    control.play();
+    driver.tick(200, () => 'move');
+    driver.track(1, plan(), 'k', b.t);
+    expect(b.last()).toMatchObject({ x: 0.5, gait: 'walk' });
+    control.pause();
+    driver.track(1, plan(20), 'k2', c.t);
+    expect(c.last()).toMatchObject({ x: 0.5, gait: 'stand' });
+  });
+
   it('forgets an NPC that is untracked, and an idle plan stays home', () => {
     const { control, driver } = setup();
     const a = target(), idle = target();

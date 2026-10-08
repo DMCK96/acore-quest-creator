@@ -31,7 +31,11 @@ export class MovementDriver {
     return this.entries.size;
   }
 
-  /** Starts walking an NPC; the same `key` again only swaps the target, a new `key` gives it the new plan */
+  /**
+   * Starts walking an NPC; the same `key` again only swaps the target, a new `key` gives it the new plan.
+   * A target tracked again is handed the pose the NPC has (standing while paused), so a redraw that put
+   * it home does not leave it there.
+   */
   track(guid: number, plan: WalkPlan, key: string, target: WalkTarget): void {
     const entry = this.entries.get(guid);
     if (!entry) {
@@ -41,11 +45,17 @@ export class MovementDriver {
       return;
     }
     entry.target = target;
-    if (entry.key === key) return;
-    entry.key = key;
-    entry.plan = plan;
-    entry.walker.retarget(plan);
-    if (plan.type === 'idle') this.sendHome(entry);
+    if (entry.key !== key) {
+      entry.key = key;
+      entry.plan = plan;
+      entry.walker.retarget(plan);
+      if (plan.type === 'idle') {
+        this.sendHome(entry);
+        return;
+      }
+    }
+    const pose = entry.walker.pose();
+    target.apply(this.control.playing ? pose : { ...pose, gait: 'stand' });
   }
 
   untrack(guid: number): void {

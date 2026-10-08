@@ -171,6 +171,10 @@ export interface World3D {
   setDocks(docks: readonly Dock[]): void;
   /** Whether those docked vessels are drawn and picked at all. */
   setDocksEnabled(enabled: boolean): void;
+  /** Whether the NPCs walk their paths and wander circles (they start standing). */
+  setMovementPlaying(playing: boolean): void;
+  /** Sends every walking NPC home; whether they walk on is unchanged. */
+  resetMovement(): void;
   /** The frame of the docked vessel a spawn is drawn on (its row is local to it), or null when it is not on one. */
   frameOfSpawn(kind: 'creature' | 'object', guid: number): Frame | null;
   /** A spawn still in the view (loaded, though perhaps too far to be drawn), or null. */
@@ -750,6 +754,8 @@ export function createWorld3D(options: World3DOptions): World3D {
     spawnOf: (kind, guid) => manager.spawnInfo(kind, guid),
     setDocks: (docks) => manager.setDocks(docks),
     setDocksEnabled: (enabled) => manager.setDocksEnabled(enabled),
+    setMovementPlaying: (playing) => manager.setMovementPlaying(playing),
+    resetMovement: () => manager.resetMovement(),
     frameOfSpawn: (kind, guid) => manager.frameOfSpawn(kind, guid),
     routeOf(guid) {
       const route = manager.spawnRoute(guid);
