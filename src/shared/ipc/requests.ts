@@ -244,6 +244,7 @@ const REQUEST_SCHEMAS: Record<keyof Api, z.ZodType<unknown[]>> = {
   checkIds: z.tuple([z.enum(['creature', 'gameobject', 'item', 'quest']), z.array(z.number().int().min(1)).min(1).max(100)]),
   wikiSearch: z.tuple([z.string().min(1).max(200), z.number().int().min(1).max(10).optional()]),
   wikiPage: z.tuple([z.string().min(1).max(200), z.string().min(1).max(200).optional()]),
+  projectIssues: z.tuple([]),
 };
 
 /**

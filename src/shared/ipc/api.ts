@@ -10,6 +10,7 @@ import type { ExportApi } from './export';
 import type { ProjectApi } from './project';
 import type { McpApi } from './mcp';
 import type { LoreApi } from './lore';
+import type { AuthoringApi } from './authoring';
 
 /** Everything the renderer can ask the main process to do: every area's calls */
 export interface Api
@@ -24,4 +25,5 @@ export interface Api
     ExportApi,
     ProjectApi,
     McpApi,
-    LoreApi {}
+    LoreApi,
+    AuthoringApi {}

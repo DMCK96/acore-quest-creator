@@ -15,7 +15,7 @@ describe('parseRequest', () => {
       'worldGroup', 'worldGroupView', 'worldGroupSpawns', 'worldGroupsOnMap', 'worldNewGroupId', 'worldCheckGroup', 'worldSetGroup', 'worldDeleteGroup', 'worldDropMember', 'questPools', 'gameEvents',
       'historyList', 'historyUndo', 'historyRedo', 'historyJump', 'historyBegin', 'historyEnd',
       'mcpStatus', 'mcpConfigure', 'mcpRegenerateToken',
-      'questsInZone', 'questSummaries', 'areaOverview', 'checkNames', 'checkIds', 'wikiSearch', 'wikiPage',
+      'questsInZone', 'questSummaries', 'areaOverview', 'checkNames', 'checkIds', 'wikiSearch', 'wikiPage', 'projectIssues',
     ].sort());
   });
   it('refuses world edits with a bad kind, a missing rotation or a point without its columns', () => {
