@@ -1178,12 +1178,12 @@ describe('drawing spawns through a vessel’s frame', () => {
     warn.mockRestore();
   });
 
-  it('hides walking paths on a vessel, and shows them again off it', async () => {
+  it('draws walking paths on a vessel without letting their points be picked there, and picks them again off it', async () => {
     const m = manager(spawns([creature(1, 1, { path: [{ x: 10, y: 0, z: 0 }, { x: 20, y: 0, z: 0 }] })]), { frame });
     const group = (await m.loadArea(1, 0, box))!;
     m.setActiveRoutes([1]);
     m.cull(new THREE.Vector3(0, 0, 0));
-    expect(group.getObjectByName('paths')!.visible).toBe(false);
+    expect(group.getObjectByName('paths')!.visible).toBe(true);
     expect(m.pickRoutePoint(new THREE.Ray(new THREE.Vector3(10, 0, 50), new THREE.Vector3(0, 0, -1)), 1)).toBeNull();
     m.setFrame({ x: 0, y: 0, z: 0, heading: 0 });
     expect(group.getObjectByName('paths')!.visible).toBe(true);

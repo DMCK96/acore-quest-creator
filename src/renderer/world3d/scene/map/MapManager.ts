@@ -17,6 +17,7 @@ import SpawnManager, { SpawnSource, SpawnVisibility } from '../spawn/SpawnManage
 import { DOCK_AREA, createSpawnDock } from '../spawn/SpawnDock.js';
 import { DockSet } from '../spawn/DockSet.js';
 import { dockInRange } from '../spawn/dock-range.js';
+import { MovementControl } from '../spawn/movement-control.js';
 import type { Dock } from '../../../../core/map/transport-docks.js';
 import { CharacterTexture } from '../character/CharacterTexture.js';
 import { getAssetUrl } from '../asset.js';
@@ -93,6 +94,8 @@ class MapManager extends EventTarget {
   #wmoManager: WmoManager;
   #liquidManager: LiquidManager;
   #spawnManager: SpawnManager;
+  /** Whether the NPCs walk: one control for the view's own spawns and every dock's passengers */
+  #movement = new MovementControl();
   /** The vessels docked in range, each with its passengers; the transport view's own vessel is the spawn manager's */
   #docks: DockSet;
   #dockList: readonly Dock[] = [];
@@ -182,6 +185,7 @@ class MapManager extends EventTarget {
         bodyTexture: (body) => characterTexture.build(body),
         groundBelow,
         frame,
+        movement: this.#movement,
       });
     this.#spawnManager = spawnManagerOf(options.frame, options.groundBelow);
     this.#framed = options.frame !== undefined;
@@ -363,6 +367,17 @@ class MapManager extends EventTarget {
     this.#docksDirty = true;
   }
 
+  /** Whether the NPCs walk their paths and wander circles, or stand where they are */
+  setMovementPlaying(playing: boolean) {
+    if (playing) this.#movement.play();
+    else this.#movement.pause();
+  }
+
+  /** Sends every NPC home; whether they then walk is unchanged */
+  resetMovement() {
+    this.#movement.reset();
+  }
+
   /** The frame of the docked vessel a spawn is drawn on, or null when it is not on one */
   frameOfSpawn(kind: 'creature' | 'object', guid: number) {
     // The view's own spawns win, as in `findSpawn`: one drawn there is not on a dock
@@ -475,7 +490,8 @@ class MapManager extends EventTarget {
       this.#docksDirty = false;
       this.#docks.sync(this.#dockList, (dock) => dockInRange(dock.frame, { areaX: this.#targetAreaX, areaY: this.#targetAreaY }));
     }
-    this.#docks.update();
+    this.#docks.update(deltaTime, camera);
+    this.#spawnManager.update(deltaTime, camera);
     this.#spawnManager.cull(camera.position, this.#cullingFrustum);
     this.#docks.cull(camera.position, this.#cullingFrustum);
   }

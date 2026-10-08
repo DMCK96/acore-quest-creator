@@ -23,6 +23,7 @@ function build(source: any = vi.fn(async () => answer), now?: () => number) {
   return { manager, instance: createSpawnDock(dock, manager), source };
 }
 const settle = () => new Promise((r) => setTimeout(r, 0));
+const camera = new THREE.PerspectiveCamera();
 
 describe('a dock backed by a spawn manager', () => {
   it('asks the source for the transport map’s rows, whole grid, once it has a source, and draws them through the frame', async () => {
@@ -72,24 +73,24 @@ describe('a dock backed by a spawn manager', () => {
     await settle();
     await settle();
     expect(instance.status.error).toBe('not connected');
-    instance.update();
+    instance.update(0, camera);
     await settle();
     expect(source).toHaveBeenCalledTimes(1);
     clock = 31000;
-    instance.update();
+    instance.update(0, camera);
     await settle();
     await settle();
     expect(source).toHaveBeenCalledTimes(2);
     expect(instance.find('creature', 1)).not.toBeNull();
     expect(instance.status.error).toBeNull();
-    instance.update();
+    instance.update(0, camera);
     await settle();
     expect(source).toHaveBeenCalledTimes(2);
   });
 
   it('does not ask before it has a source', async () => {
     const { instance } = build();
-    instance.update();
+    instance.update(0, camera);
     await settle();
     expect(instance.find('creature', 1)).toBeNull();
   });
@@ -114,6 +115,13 @@ describe('a dock backed by a spawn manager', () => {
     await settle();
     expect(instance.find('creature', 1)).toBeNull();
     expect(instance.root.children.some((c) => c.getObjectByName('creatures'))).toBe(false);
+  });
+
+  it('walks its passengers each frame', () => {
+    const { instance, manager } = build();
+    const update = vi.spyOn(manager, 'update');
+    instance.update(0.25, camera);
+    expect(update).toHaveBeenCalledWith(0.25, camera);
   });
 
   it('uses the area id the scene reserves for passengers', () => {

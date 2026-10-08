@@ -84,6 +84,8 @@ export interface World3DOptions {
   onCameraInput?(): void;
   /** Told when falloff was switched or its radius changed by a key or the wheel. */
   onFalloff?(falloff: Falloff): void;
+  /** Told when the gizmo changed between move and rotate (buttons or the G and R keys). */
+  onMode?(mode: 'move' | 'rotate'): void;
   /** Told when a new path starts or stops being drawn, and how many points it has. */
   onDrawing?(drawing: { guid: number; points: number } | null): void;
   /** Asked for the right-click menu: what was right-clicked (selected first), and where in the window. */
@@ -171,6 +173,10 @@ export interface World3D {
   setDocks(docks: readonly Dock[]): void;
   /** Whether those docked vessels are drawn and picked at all. */
   setDocksEnabled(enabled: boolean): void;
+  /** Whether the NPCs walk their paths and wander circles (they start standing). */
+  setMovementPlaying(playing: boolean): void;
+  /** Sends every walking NPC home; whether they walk on is unchanged. */
+  resetMovement(): void;
   /** The frame of the docked vessel a spawn is drawn on (its row is local to it), or null when it is not on one. */
   frameOfSpawn(kind: 'creature' | 'object', guid: number): Frame | null;
   /** A spawn still in the view (loaded, though perhaps too far to be drawn), or null. */
@@ -475,6 +481,7 @@ export function createWorld3D(options: World3DOptions): World3D {
       // A delete or an insert changed the picked points
       onSelection: (next) => setSelection(next, false),
       onFalloff: (next) => options.onFalloff?.(next),
+      onMode: (mode) => options.onMode?.(mode),
       onDrawing: (drawing) => options.onDrawing?.(drawing),
     },
   );
@@ -750,6 +757,8 @@ export function createWorld3D(options: World3DOptions): World3D {
     spawnOf: (kind, guid) => manager.spawnInfo(kind, guid),
     setDocks: (docks) => manager.setDocks(docks),
     setDocksEnabled: (enabled) => manager.setDocksEnabled(enabled),
+    setMovementPlaying: (playing) => manager.setMovementPlaying(playing),
+    resetMovement: () => manager.resetMovement(),
     frameOfSpawn: (kind, guid) => manager.frameOfSpawn(kind, guid),
     routeOf(guid) {
       const route = manager.spawnRoute(guid);

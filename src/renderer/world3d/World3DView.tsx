@@ -273,6 +273,11 @@ function WorldStage({
   const [status, setStatus] = useState<'loading' | 'slow' | 'ready'>('loading');
   const [help, setHelp] = useState(false);
   const [layers, setLayers] = useState<Layers>(readLayers);
+  // NPC movement is paused on every open: not part of the saved layers
+  const [playing, setPlaying] = useState(false);
+  const playingRef = useRef(playing);
+  playingRef.current = playing;
+  const [gizmoMode, setGizmoMode] = useState<'move' | 'rotate'>('move');
   const [spawns, setSpawns] = useState<SpawnStatus | null>(null);
   const [selected, setSelected] = useState<PickedSpawn | null>(null);
   // How much is selected, as the world last said
@@ -671,6 +676,7 @@ function WorldStage({
             },
             onShortcut: (code) => live && menuRef.current.shortcut(code),
             onSelection: (next) => live && setSummary(next),
+            onMode: (mode) => live && setGizmoMode(mode),
             onTool: (tool) => live && setLayers((l) => ({ ...l, tool })),
             onCameraInput: () => live && onCameraInputRef.current?.(),
             onFalloff: (falloff) => live && setLayers((l) => ({ ...l, falloff: falloff.on, falloffRadius: falloff.radius })),
@@ -695,6 +701,9 @@ function WorldStage({
           created.setDocksEnabled(layersRef.current.transports);
           created.setDocks(docksRef.current);
           created.setTool(layersRef.current.tool);
+          created.setMovementPlaying(playingRef.current);
+          // A new editor starts on Move
+          setGizmoMode('move');
           created.setFalloff({ on: layersRef.current.falloff, radius: layersRef.current.falloffRadius });
           if (looksRef.current.size > 0) created.setLooks(looksRef.current);
           if (ownRef.current) created.setOwnSpawns(ownRef.current);
@@ -776,6 +785,10 @@ function WorldStage({
   useEffect(() => {
     if (ownRef.current) world.current?.setOwnSpawns(ownRef.current);
   }, [ownKey]);
+
+  useEffect(() => {
+    world.current?.setMovementPlaying(playing);
+  }, [playing]);
 
   // The layer checkboxes: applied to the world and remembered.
   useEffect(() => {
@@ -1063,6 +1076,25 @@ function WorldStage({
           <button type="button" className="world3d__tool" onMouseDown={keepFocus} aria-pressed={layers.tool === 'select'} title="Select: left-drag draws a box, Alt+drag orbits (Tab)" onClick={() => setLayers((l) => ({ ...l, tool: 'select' }))}>
             Select
           </button>
+          <button type="button" className="world3d__tool" onMouseDown={keepFocus} title={playing ? 'Pause NPC movement' : 'Play NPC movement'} onClick={() => setPlaying((p) => !p)}>
+            {playing ? 'Pause' : 'Play'}
+          </button>
+          <button type="button" className="world3d__tool" onMouseDown={keepFocus} title="Send every NPC back to where it stands" onClick={() => world.current?.resetMovement()}>
+            Reset
+          </button>
+          {layers.tool === 'select' && (['move', 'rotate'] as const).map((mode) => (
+            <button
+              key={mode}
+              type="button"
+              className="world3d__tool"
+              onMouseDown={keepFocus}
+              aria-pressed={gizmoMode === mode}
+              title={mode === 'move' ? 'Move (G)' : 'Rotate (R)'}
+              onClick={() => world.current?.setMode(mode)}
+            >
+              {mode === 'move' ? 'Move' : 'Rotate'}
+            </button>
+          ))}
           {layers.tool === 'select' && (
             <button
               type="button"

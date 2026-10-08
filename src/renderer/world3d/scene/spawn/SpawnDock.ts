@@ -60,8 +60,9 @@ export function createSpawnDock(dock: Dock, manager: SpawnManager): DockInstance
     info: (kind, guid) => manager.info(kind, guid),
     cull: (camera, frustum) => manager.cull(camera, frustum),
     // `load` asks only when the area is not drawn, not on its way and not recently failed
-    update: () => {
+    update: (deltaTime, camera) => {
       if (sourced) load();
+      manager.update(deltaTime, camera);
     },
     candidates: (camera) => manager.candidates(camera).spawns,
     get status() {

@@ -44,7 +44,7 @@ export interface MenuContext {
   project: boolean;
   /** Quest spawns are marked in the view */
   marked: boolean;
-  /** The view shows a vessel: its passengers' walking paths are not drawn there, so not edited either */
+  /** The view shows a vessel: its passengers' walking paths are drawn there but not edited */
   vessel: boolean;
 }
 

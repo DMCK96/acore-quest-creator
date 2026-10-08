@@ -19,7 +19,7 @@ For an NPC that already patrols (beside its spawn the button reads **Edit patrol
 
 The NPC walks from its spawn through each point and back to where it stands, then starts again.
 
-In the World, a selected NPC's route is shown: drag its points to move them, **Shift**-click to add one and **Delete** to remove the picked ones. **Remove path** in the right-click menu takes the whole route away. Each change is one step you can [undo](/azeroth-world-editor/guides/undo/).
+In the World, a selected NPC's route is shown: drag its points to move them, **Shift**-click to add one and **Delete** to remove the picked ones. **Remove path** in the right-click menu takes the whole route away. Each change is one step you can [undo](/azeroth-world-editor/guides/undo/). Press **Play** in the World's bar to [watch it walk the route](/azeroth-world-editor/guides/the-world/#watch-npcs-move), waiting and running where its points say.
 
 ## What happens at a point
 

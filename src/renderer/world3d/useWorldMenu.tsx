@@ -45,7 +45,7 @@ export interface WorldMenuDeps {
   toRow(at: Placement): Placement;
   /** Lists the stops of a vessel right-clicked: a docked one with its dock, or the view's own */
   onVessel?(dock: Dock | null): void;
-  /** The view shows a vessel, where walking paths are not drawn */
+  /** The view shows a vessel, where walking paths are drawn but not edited */
   vessel: boolean;
   placing: boolean;
   stopPlacing(): void;

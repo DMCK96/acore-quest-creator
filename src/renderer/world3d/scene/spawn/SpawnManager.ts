@@ -15,7 +15,11 @@ import type { SpawnEvents } from '../../../../core/entities/model.js';
 import { BodyTexture, DisplayResolver, Look, ModelLook } from './DisplayResolver.js';
 import { creatureTransform, objectTransform, Transform } from './placement.js';
 import { Frame, IDENTITY_FRAME, placementToWorld } from '../../../../core/map/transport-frame.js';
-import { moveRouteDrawing, routeObject, setBallSelected, wanderObject } from './paths.js';
+import { framePaths, moveRouteDrawing, routeObject, setBallSelected, wanderObject } from './paths.js';
+import { MovementControl } from './movement-control.js';
+import { Walkers } from './walkers.js';
+import type { Activity } from './MovementDriver.js';
+import { GROUND_REACH } from '../../../../core/world/walk/tuning.js';
 import type { Candidates } from '../edit/box.js';
 import type { SelectedPoint } from '../edit/selection.js';
 
@@ -162,6 +166,8 @@ type SpawnManagerOptions = {
   groundBelow?(x: number, y: number, fromZ: number, distance: number): number | null;
   /** The vessel the spawns' rows are local to (default: none, rows are in the world) */
   frame?: Frame;
+  /** Whether the NPCs walk, shared by every manager of a scene (default: a control of its own, paused) */
+  movement?: MovementControl;
 };
 
 /** Whether a frame leaves every place where it is */
@@ -197,12 +203,6 @@ const SHIELD_POINT = 0;
 /** How long to wait before asking again for an area whose answer failed */
 const RETRY_MS = 30000;
 
-/**
- * A database Z is where the server put an NPC, and the server snaps NPCs to the real floor as they
- * spawn, so a stored Z is often a little below the drawn ground. An NPC is drawn lifted onto the
- * ground when that is within this many yards above its Z; further than that is taken as meant.
- */
-const GROUND_REACH = 1.5;
 /** Where the ground is not there yet (its terrain still loading), asked again this often, this many times */
 const GROUND_RETRY_MS = 2000;
 const GROUND_TRIES = 4;
@@ -344,6 +344,9 @@ class SpawnManager {
   /** Picked route points, drawn larger and in the selection's colour */
   #marked = new globalThis.Set<string>();
 
+  /** The drawn NPCs walking their paths and wander circles */
+  #walkers: Walkers;
+
   status: SpawnStatus = { capped: { creatures: false, objects: false }, error: null, events: [] };
 
   constructor(options: SpawnManagerOptions) {
@@ -356,6 +359,11 @@ class SpawnManager {
     this.#groundBelow = options.groundBelow;
     this.#frame = options.frame ?? IDENTITY_FRAME;
     this.decor.name = 'decor';
+    this.#walkers = new Walkers(options.movement ?? new MovementControl(), {
+      frame: () => this.#frame,
+      // On a vessel, NPCs walk its flat deck: the ground below is not theirs
+      ground: () => (isIdentity(this.#frame) ? this.#groundBelow : undefined),
+    });
   }
 
   /** The row's drawn place: its own, carried by the frame */
@@ -391,9 +399,12 @@ class SpawnManager {
           drawn.position.set(...transform.position);
           drawn.quaternion.set(...transform.quaternion);
           drawn.updateMatrixWorld(true);
+          // A walking NPC is put back where it has walked to, on the vessel where it now is
+          if (kind === 'creature') this.#walkers.refresh(drawn);
         }
       }
       this.#applyVisibility(group);
+      framePaths(holderOf(group, 'paths')!, frame);
       group.updateMatrixWorld(true);
     }
     this.#placeVessel();
@@ -512,6 +523,7 @@ class SpawnManager {
     const group = this.#areas.get(areaId);
     if (group) {
       group.userData.fill = (group.userData.fill ?? 0) + 1;
+      for (const drawn of holderOf(group, 'creatures')?.children ?? []) this.#walkers.untrack(drawn);
       this.#release(group);
       group.clear();
     }
@@ -791,7 +803,7 @@ class SpawnManager {
 
   /** Which of an NPC's route points a ray passes within a yard of (the nearest along it), or null */
   pickRoutePoint(ray: THREE.Ray, guid: number): number | null {
-    // A vessel's walking paths are not drawn, so none of their points is there to pick
+    // A vessel's walking paths are drawn, but not edited there: none of their points is picked
     if (!isIdentity(this.#frame)) return null;
     let best: { point: number; distance: number } | null = null;
     for (const group of this.#areas.values()) {
@@ -892,7 +904,8 @@ class SpawnManager {
     const spawns: Candidates['spawns'] = [];
     for (const group of this.#areas.values()) {
       const paths = holderOf(group, 'paths');
-      for (const shown of paths?.visible ? paths.children : []) {
+      // A vessel's route points are not edited there, as `pickRoutePoint` says
+      for (const shown of paths?.visible && isIdentity(this.#frame) ? paths.children : []) {
         if (!shown.visible) continue;
         for (const ball of shown.children) {
           if (typeof ball.userData.point === 'number') points.push({ guid: shown.userData.guid, index: ball.userData.point, at: ball.position.clone() });
@@ -977,6 +990,8 @@ class SpawnManager {
           spawn.userData.drawn = near;
           if (near && name === 'creatures' && grounding > 0 && this.#ground(spawn)) grounding -= 1;
           const seen = near && (!frustum || inView(spawn, frustum));
+          // Walkers look for their ground only while seen
+          spawn.userData.seen = seen;
           if (spawn.show && spawn.hide) {
             if (seen) spawn.show();
             else spawn.hide();
@@ -1029,14 +1044,26 @@ class SpawnManager {
     const lift = found === null ? 0 : Math.min(Math.max(found - z, 0), GROUND_REACH);
     if (lift > 0.001) {
       data.lift = lift;
-      spawn.position.z = z + lift;
-      spawn.updateMatrixWorld(true);
+      // Drawn again by its walker: lifted at home, and left where it is when it has walked away
+      this.#walkers.refresh(spawn);
     }
     return true;
   }
 
-  /** Models animate through the shared model manager; nothing of the spawns' own moves yet */
-  update(_deltaTime: number, _camera: THREE.Camera) {}
+  /**
+   * Walks the NPCs `deltaTime` seconds on (models animate through the shared model manager): one whose
+   * route is worked on is held at home; one out of range, or with the NPC layer hidden, is left where
+   * it is; one out of view walks without looking for its ground
+   */
+  update(deltaTime: number, _camera: THREE.Camera) {
+    this.#walkers.tick(deltaTime * 1000, this.#activity);
+  }
+
+  #activity = (guid: number, drawn: THREE.Object3D): Activity => {
+    if (this.#activeRoutes.has(guid)) return 'hold';
+    if (!drawn.userData.drawn || !drawn.parent?.visible) return 'skip';
+    return drawn.userData.seen ? 'move' : 'unseen';
+  };
 
   /** A group with nothing in it yet: the holders for an area's NPCs, objects and their paths */
   #empty(): THREE.Group {
@@ -1050,6 +1077,8 @@ class SpawnManager {
       holder.matrixAutoUpdate = false;
       group.add(holder);
     }
+    // Routes are drawn from rows, so on a vessel they are carried by its frame
+    framePaths(holderOf(group, 'paths')!, this.#frame);
     group.userData.creatures = new globalThis.Map();
     group.userData.objects = new globalThis.Map();
     return group;
@@ -1063,6 +1092,15 @@ class SpawnManager {
     const fill = (group.userData.fill ?? 0) + 1;
     group.userData.fill = fill;
 
+    // Routes and wander circles: drawn again only for NPCs whose route, place or wander changed
+    const before: globalThis.Map<number, ViewCreature> = group.userData.creatures ?? new globalThis.Map();
+    const now = new globalThis.Map(spawns.creatures.map((c) => [c.guid, c]));
+    const changed = new globalThis.Set<number>();
+    for (const [guid, creature] of now) if (movesKeyOf(creature) !== (before.has(guid) ? movesKeyOf(before.get(guid)!) : null)) changed.add(guid);
+    for (const guid of before.keys()) if (!now.has(guid)) changed.add(guid);
+    // Moved while dragging: drawn again from the data, which may not have taken the move
+    for (const shown of paths.children) if (shown.userData.previewed) changed.add(shown.userData.guid);
+
     // Each is added as soon as it is made, unless the group was filled again or taken away meanwhile
     const drawing: Promise<void>[] = [];
     const add = (container: THREE.Object3D, made: THREE.Object3D, old: THREE.Object3D | undefined) => {
@@ -1070,9 +1108,11 @@ class SpawnManager {
         this.#remove(made);
         return;
       }
-      if (old) this.#remove(old);
       container.add(made);
       made.updateMatrixWorld(true);
+      // Walked before the old drawing goes, so an NPC drawn again walks on from where it was
+      if (container === creatures) this.#walkers.track(made, made.userData.row);
+      if (old) this.#remove(old);
     };
     // The ones nearest the camera are asked for first, so their models are the first made
     const nearestFirst = <T extends { x: number; y: number; z: number }>(list: T[]): T[] => {
@@ -1089,7 +1129,8 @@ class SpawnManager {
         wanted.add(spawn.guid);
         const transform = this.#transformOf(kind, spawn);
         const old = drawn.get(spawn.guid);
-        if (old) this.#place(old, kind, spawn, transform);
+        // Walked again only when its route, place, wander or facing changed (a walking NPC keeps where it is)
+        if (old) this.#place(old, kind, spawn, transform, changed.has(spawn.guid) || old.userData.row?.orientation !== (spawn as ViewCreature).orientation);
         if (old && old.userData.lookKey === lookKeyOf(kind, spawn)) continue;
         const resolve = kind === 'creature' ? () => this.#resolver.creature(spawn.displayId, (spawn as ViewCreature).preset ?? null) : () => this.#resolver.object(spawn.displayId);
         drawing.push(this.#drawSpawn(kind, spawn, resolve, transform).then((made) => add(container, made, old)));
@@ -1102,13 +1143,6 @@ class SpawnManager {
     sync('object', spawns.objects);
 
     // Routes and wander circles: drawn again only for NPCs whose route, place or wander changed
-    const before: globalThis.Map<number, ViewCreature> = group.userData.creatures ?? new globalThis.Map();
-    const now = new globalThis.Map(spawns.creatures.map((c) => [c.guid, c]));
-    const changed = new globalThis.Set<number>();
-    for (const [guid, creature] of now) if (movesKeyOf(creature) !== (before.has(guid) ? movesKeyOf(before.get(guid)!) : null)) changed.add(guid);
-    for (const guid of before.keys()) if (!now.has(guid)) changed.add(guid);
-    // Moved while dragging: drawn again from the data, which may not have taken the move
-    for (const shown of paths.children) if (shown.userData.previewed) changed.add(shown.userData.guid);
     for (const shown of [...paths.children]) if (changed.has(shown.userData.guid)) this.#remove(shown);
     for (const guid of changed) {
       const creature = now.get(guid);
@@ -1123,8 +1157,11 @@ class SpawnManager {
     await Promise.all(drawing);
   }
 
-  /** A drawn spawn put where it now stands, and turned; one that moved is stood on the ground again from there */
-  #place(object: THREE.Object3D, kind: 'creature' | 'object', spawn: ViewCreature | ViewObject, transform: Transform) {
+  /**
+   * A drawn spawn put where it now stands, and turned; one that moved is stood on the ground again from
+   * there. A walking NPC whose walk did not change (`walkChanged`) is left where it has walked to.
+   */
+  #place(object: THREE.Object3D, kind: 'creature' | 'object', spawn: ViewCreature | ViewObject, transform: Transform, walkChanged: boolean) {
     const data = object.userData;
     const was = data.spawn.position;
     const moved = was.x !== spawn.x || was.y !== spawn.y || was.z !== spawn.z;
@@ -1136,13 +1173,16 @@ class SpawnManager {
       data.tries = 0;
       data.groundAfter = undefined;
     }
+    if (kind === 'creature' && !walkChanged && this.#walkers.has(object)) return;
     object.position.set(transform.position[0], transform.position[1], transform.position[2] + (data.lift ?? 0));
     object.quaternion.set(...transform.quaternion);
     object.updateMatrixWorld(true);
+    if (kind === 'creature') this.#walkers.track(object, spawn as ViewCreature);
   }
 
-  /** Takes one drawn thing out of its group and frees what it holds of its own */
+  /** Takes one drawn thing out of its group and frees what it holds of its own; an NPC stops walking */
   #remove(object: THREE.Object3D) {
+    this.#walkers.untrack(object);
     object.removeFromParent();
     const holder = new THREE.Group();
     holder.add(object);
@@ -1254,11 +1294,11 @@ class SpawnManager {
     return marker;
   }
 
-  /** Walking paths stay hidden on a vessel: they are vessel-local, and come with animation (phase 2) */
+  /** Shows the kinds asked for; a vessel's walking paths are drawn on it (their holder takes the frame) */
   #applyVisibility(group: THREE.Group) {
     for (const name of ['creatures', 'objects', 'paths'] as const) {
       const child = holderOf(group, name);
-      if (child) child.visible = this.#visibility[name] && (name !== 'paths' || isIdentity(this.#frame));
+      if (child) child.visible = this.#visibility[name];
     }
   }
 

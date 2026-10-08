@@ -2,9 +2,10 @@
  * How NPCs move, drawn in the 3D view: a patrol route as a line from the spawn through each point and
  * back to the first, with a ball at each point and an arrow along each leg; a wander circle at the
  * wander radius round the spawn. Drawn over the terrain, so a route on uneven ground stays visible.
- * Everything is in world coordinates.
+ * Everything is in its rows' coordinates: the world's, or a vessel's, whose frame the holder takes.
  */
 import * as THREE from 'three';
+import type { Frame } from '../../../../core/map/transport-frame.js';
 
 const PATH_COLOUR = 0xf0d060;
 const OWN_COLOUR = 0x60e0a0;
@@ -159,4 +160,18 @@ const wanderObject = (creature: { x: number; y: number; z: number; wander: numbe
   return ring;
 };
 
-export { OWN_COLOUR, PATH_COLOUR, moveRouteDrawing, routeObject, setBallSelected, wanderObject };
+const UP = new THREE.Vector3(0, 0, 1);
+
+/**
+ * Puts an area's holder of routes and wander circles on a frame (identity off a vessel), so routes
+ * drawn from vessel-local rows sit on the vessel, and works out where each now is. Routes and circles
+ * are left out of the scene's every-frame matrix pass, so this forced pass is what moves them.
+ */
+const framePaths = (holder: THREE.Object3D, frame: Frame): void => {
+  holder.position.set(frame.x, frame.y, frame.z);
+  holder.quaternion.setFromAxisAngle(UP, frame.heading);
+  holder.updateMatrix();
+  holder.updateMatrixWorld(true);
+};
+
+export { OWN_COLOUR, PATH_COLOUR, framePaths, moveRouteDrawing, routeObject, setBallSelected, wanderObject };

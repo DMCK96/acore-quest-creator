@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { IDENTITY_FRAME, defaultNode, frameAt, hostRuns, placementToLocal, placementToWorld, toLocal, toWorld } from '../../src/core/map/transport-frame';
+import { IDENTITY_FRAME, defaultNode, frameAt, hostRuns, placementToLocal, placementToWorld, toLocal, toWorld, toWorldInto } from '../../src/core/map/transport-frame';
 import { NODE_STOP, type TaxiNode } from '../../src/core/game/taxi-path';
 
 const n = (index: number, map: number, x: number, y: number, z = 0, flags = 0): TaxiNode => ({ index, map, x, y, z, flags, delay: 0 });
@@ -88,5 +88,17 @@ describe('runs and the default node', () => {
     expect(defaultNode([n(0, 7, 0, 0), n(1, 1, 1, 1)], (m) => m === 1)).toBe(1);
     expect(defaultNode(path, () => false)).toBe(-1);
     expect(defaultNode([n(0, 1, 0, 0), n(1, 1, 5, 0)], () => true)).toBe(0);
+  });
+});
+
+describe('toWorldInto', () => {
+  it('writes what toWorld returns into the object it is given', () => {
+    const frame = { x: 10, y: 20, z: 3, heading: Math.PI / 3 };
+    const out = { x: 0, y: 0, z: 0 };
+    expect(toWorldInto(frame, { x: 1, y: 2, z: 4 }, out)).toBe(out);
+    const expected = toWorld(frame, { x: 1, y: 2, z: 4 });
+    expect(out.x).toBeCloseTo(expected.x);
+    expect(out.y).toBeCloseTo(expected.y);
+    expect(out.z).toBeCloseTo(expected.z);
   });
 });

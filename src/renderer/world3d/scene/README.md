@@ -113,7 +113,11 @@ A file taken on here loses its `@ts-nocheck` in the same change.
   weapons come from `Item.dbc` and `ItemDisplayInfo`. `SpawnManager` draws one group per area (only
   the camera's and the eight round it, within 100 yards), with markers for what cannot be drawn, and
   patrol routes and wander circles (`paths.ts`). `MapManager` gives it the doodads' model manager and
-  the buildings' manager, so spawned models animate with the doodads.
+  the buildings' manager, so spawned models animate with the doodads. NPCs walk their paths and wander
+  circles while the scene's one `MovementControl` plays (`walkers.ts` tracks each drawn NPC with a
+  `MovementDriver` over the walkers in `core/world/walk/`); on a docked vessel they walk the deck, and
+  their routes are drawn through the vessel's frame (not picked there, so not edited yet). The vessel never moves.
+  Walkers look for the ground only while their NPC is in view, once per half yard walked.
   - `model/attachments.ts` reads a model's attachment points from the raw M2 (the format package
     drops them); `Model.attachmentObject` follows a point's bone, for held weapons.
 - `edit/`: editing, which upstream does not do. `Gizmo.ts` puts Three's own `TransformControls` on a

@@ -67,6 +67,8 @@ export interface EditingOptions {
   onSelection?(selection: Selection): void;
   /** Told when falloff was switched or its radius changed by a key or the wheel */
   onFalloff?(falloff: Falloff): void;
+  /** Told when the gizmo changed between move and rotate (buttons or the G and R keys) */
+  onMode?(mode: GizmoMode): void;
   /** Told when a new path starts or stops being drawn, and how many points it has */
   onDrawing?(drawing: { guid: number; points: number } | null): void;
 }
@@ -182,8 +184,10 @@ export class Editor {
   }
 
   setMode(mode: GizmoMode): void {
+    const changed = mode !== this.#mode;
     this.#mode = mode;
     this.#gizmo.setMode(mode);
+    if (changed) this.#options.onMode?.(mode);
   }
 
   /**
