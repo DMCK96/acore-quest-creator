@@ -35,6 +35,16 @@ All three are optional.
 
 **Add a dev database** asks for a second host, port, user, password and database: a test server's world database that **Apply to dev DB** writes to. **Remove dev database** turns it off again.
 
+## Claude
+
+The **Claude** tab turns on the MCP server that lets Claude work in the open project. See [Working with Claude](/azeroth-world-editor/guides/claude-mcp/).
+
+| Setting | Meaning |
+| --- | --- |
+| Allow Claude to edit this project | Starts or stops the server. Off by default; it applies at once. |
+| Port | The port it listens on, from 1024 to 65535 (default 47600). |
+| Token | What a client sends as `Authorization: Bearer …`. Hidden until you press **Show**; **Make a new token** replaces it. |
+
 ## Saving
 
 **Save** reconnects with the new details. It closes the open quest; your project stays open. If the connection fails, the error shows in the dialog and the app stays connected with the old details.
