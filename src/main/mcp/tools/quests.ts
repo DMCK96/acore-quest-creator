@@ -118,7 +118,8 @@ export const questTools = [
       for (const [id, value] of Object.entries(fields)) {
         const field = fieldById(id);
         const locked = aggregate.readOnly.find((r) => r.fieldId === id);
-        if (!field) problems.push(`"${id}" is not a quest field (see describe_quest_fields).`);
+        if (id === 'scripts') problems.push("\"scripts\" holds the quest's scenes; edit them with set_scene and remove_scene (see describe_authoring).");
+        else if (!field) problems.push(`"${id}" is not a quest field (see describe_quest_fields).`);
         else if (locked) problems.push(`"${id}" cannot be edited on this quest: ${locked.reason}`);
         else {
           const problem = checkFieldValue(field, value);
