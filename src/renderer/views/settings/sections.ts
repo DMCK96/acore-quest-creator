@@ -20,5 +20,5 @@ export interface SettingsSection {
 export const SETTINGS_SECTIONS: readonly SettingsSection[] = [
   { id: 'connection', title: 'Connection', Component: ConnectionSection },
   { id: 'preferences', title: 'Preferences', Component: PreferencesSection },
-  { id: 'claude', title: 'Claude', Component: McpSection },
+  { id: 'mcp', title: 'MCP / AI', Component: McpSection },
 ];

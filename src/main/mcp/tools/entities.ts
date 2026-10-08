@@ -48,7 +48,7 @@ export const entityTools = [
     description:
       "Adds or replaces one NPC, object or item of the project; `entity` is the whole entity, with its `entry` id (take it from allocate_ids, or from read_existing_entity to change an existing one). Replaces the entity with the same entry. The editor checks the entity and refuses a malformed one.",
     input: { kind, entity: z.record(z.string(), z.unknown()) },
-    write: { kind: 'step', label: ({ kind, entity }: { kind: string; entity: Record<string, unknown> }) => `Claude: save ${kind} ${String(entity['entry'])}` },
+    write: { kind: 'step', label: ({ kind, entity }: { kind: string; entity: Record<string, unknown> }) => `AI: save ${kind} ${String(entity['entry'])}` },
     run: async ({ kind, entity }, ctx) => {
       const id = entity['entry'];
       if (typeof id !== 'number' || !Number.isInteger(id) || id < 1) {
@@ -68,7 +68,7 @@ export const entityTools = [
     title: 'Delete an NPC, object or item from the project',
     description: "Deletes one of the project's NPCs, objects or items and clears it from every quest that named it (one undo step). Answers the quests it changed.",
     input: { kind, entry },
-    write: { kind: 'step', label: ({ kind, entry }: { kind: string; entry: number }) => `Claude: delete ${kind} ${entry}` },
+    write: { kind: 'step', label: ({ kind, entry }: { kind: string; entry: number }) => `AI: delete ${kind} ${entry}` },
     run: async ({ kind, entry }, ctx) => {
       const out = await ctx.call('deleteEntity', kind, entry);
       return out.ok ? { ok: true, value: { deleted: { kind, entry }, questsChanged: out.value.quests.map((q) => q.questId) } } : out;

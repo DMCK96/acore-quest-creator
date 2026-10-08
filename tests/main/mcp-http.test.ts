@@ -103,7 +103,7 @@ describe('the MCP HTTP server', () => {
   it('keeps writes from two clients at once apart, one step each', async () => {
     const slow = (name: string) =>
       defineTool({
-        name, title: name, description: `Makes two new quests slowly (${name}).`, input: {}, write: { kind: 'step', label: () => `Claude: ${name}` },
+        name, title: name, description: `Makes two new quests slowly (${name}).`, input: {}, write: { kind: 'step', label: () => `AI: ${name}` },
         run: async (_a, ctx) => { await ctx.call('newQuest'); await new Promise((r) => setTimeout(r, 20)); await ctx.call('newQuest'); return { ok: true, value: name }; },
       });
     const { url, fx } = await boot('tok', [slow('a'), slow('b')]);

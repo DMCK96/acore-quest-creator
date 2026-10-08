@@ -34,7 +34,7 @@ export const projectTools = [
   defineTool({
     name: 'history_list',
     title: 'Undo history',
-    description: 'The project\'s undo history, oldest first. Steps made through this server are labelled "Claude: …". Also says which step is current.',
+    description: 'The project\'s undo history, oldest first. Steps made through this server are labelled "AI: …". Also says which step is current.',
     input: {},
     write: false,
     run: (_args, ctx) => ctx.call('historyList'),

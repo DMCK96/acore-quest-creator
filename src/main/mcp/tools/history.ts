@@ -1,6 +1,6 @@
 import { defineTool } from '../tool';
 
-/** Taking Claude's (or the user's) latest step back, or putting it forward again. */
+/** Taking the AI's (or the user's) latest step back, or putting it forward again. */
 export const historyTools = [
   defineTool({
     name: 'undo',

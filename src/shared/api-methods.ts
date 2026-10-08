@@ -115,10 +115,10 @@ export const channelFor = (method: keyof Api): string => `api:${method}`;
 export const FLUSH_REQUEST_CHANNEL = 'app:flush';
 export const FLUSH_DONE_CHANNEL = 'app:flushed';
 
-/** Main tells the window it was connected to a world database by a tool of the MCP server (Claude). */
+/** Main tells the window it was connected to a world database by a tool of the MCP server (an AI client). */
 export const CONNECTED_CHANNEL = 'app:connected';
 
-/** Main tells the window what a tool of the MCP server (Claude) changed in the project, as an undo result. */
+/** Main tells the window what a tool of the MCP server (an AI client) changed in the project, as an undo result. */
 export const EXTERNAL_CHANGE_CHANNEL = 'app:external-change';
 
 /** Main tells the window the undo history after every step, undo, redo, save or clear. */

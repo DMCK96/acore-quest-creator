@@ -6,7 +6,7 @@ import { mcpFixture } from '../helpers/mcp-fixture';
 const newQuests = (name: string, count: number, gapMs = 0) =>
   defineTool({
     name, title: name, description: `Makes ${count} new quests, one API call each.`, input: {},
-    write: { kind: 'step', label: () => `Claude: ${name}` },
+    write: { kind: 'step', label: () => `AI: ${name}` },
     run: async (_args, ctx) => {
       let last: any = { ok: true, value: null };
       for (let i = 0; i < count; i++) {
@@ -16,23 +16,23 @@ const newQuests = (name: string, count: number, gapMs = 0) =>
       return last.ok ? { ok: true, value: { done: true } } : last;
     },
   });
-const nothing = defineTool({ name: 'nothing', title: 'Nothing', description: 'Changes nothing at all.', input: {}, write: { kind: 'step', label: () => 'Claude: nothing' }, run: async () => ({ ok: true, value: 1 }) });
+const nothing = defineTool({ name: 'nothing', title: 'Nothing', description: 'Changes nothing at all.', input: {}, write: { kind: 'step', label: () => 'AI: nothing' }, run: async () => ({ ok: true, value: 1 }) });
 const halfway = defineTool({
-  name: 'halfway', title: 'Halfway', description: 'Changes the project, then fails.', input: {}, write: { kind: 'step', label: () => 'Claude: halfway' },
+  name: 'halfway', title: 'Halfway', description: 'Changes the project, then fails.', input: {}, write: { kind: 'step', label: () => 'AI: halfway' },
   run: async (_a, ctx) => { await ctx.call('newQuest'); return { ok: false, error: { code: 'VALIDATION', message: 'stop' } }; },
 });
 const exporter = defineTool({
-  name: 'exporter', title: 'Exporter', description: 'Marks a quest exported, which is not a history step.', input: { questId: z.number() }, write: { kind: 'step', label: () => 'Claude: exporter' },
+  name: 'exporter', title: 'Exporter', description: 'Marks a quest exported, which is not a history step.', input: { questId: z.number() }, write: { kind: 'step', label: () => 'AI: exporter' },
   run: async ({ questId }, ctx) => { ctx.session.quests.markExported(questId, 'C:/out/x.sql'); return { ok: true, value: 1 }; },
 });
 
 describe('the write guard', () => {
-  it('flushes first, makes one step labelled Claude:, then tells the window', async () => {
+  it('flushes first, makes one step labelled AI:, then tells the window', async () => {
     const { call, order, changes } = await mcpFixture([newQuests('make_two', 2)]);
     expect((await call('make_two')).isError).toBe(false);
     expect(order).toEqual(['flush', 'notify']);
     expect(changes).toHaveLength(1);
-    expect(changes[0]!.history.steps.map((s) => s.label)).toEqual(['Claude: make_two']);
+    expect(changes[0]!.history.steps.map((s) => s.label)).toEqual(['AI: make_two']);
     expect(changes[0]!.quests).toHaveLength(2);
     expect(changes[0]!.quests.every((q) => q.aggregate !== null)).toBe(true);
     expect(changes[0]!.direction).toBe('redo');
@@ -46,7 +46,7 @@ describe('the write guard', () => {
     expect(ids[0]).toHaveLength(2);
     expect(ids[1]).toHaveLength(2);
     expect(ids[0]!.some((id) => ids[1]!.includes(id))).toBe(false);
-    expect(changes[1]!.history.steps.map((s) => s.label)).toEqual(['Claude: a', 'Claude: b']);
+    expect(changes[1]!.history.steps.map((s) => s.label)).toEqual(['AI: a', 'AI: b']);
   });
 
   it('makes no step and sends no change when nothing changed', async () => {
@@ -64,7 +64,7 @@ describe('the write guard', () => {
     expect(changes).toHaveLength(1);
     await call('after');
     const list: any = await api.historyList();
-    expect(list.value.steps.map((s: any) => s.label)).toEqual(['Claude: halfway', 'Claude: after']);
+    expect(list.value.steps.map((s: any) => s.label)).toEqual(['AI: halfway', 'AI: after']);
   });
 
   it('goes on after the flush timeout when the window never answers', async () => {
@@ -85,24 +85,24 @@ describe('the write guard', () => {
     const { call, api } = await mcpFixture([newQuests('late', 1)], { flushTimeoutMs: 20, flush: () => new Promise(() => {}) });
     await call('late');
     const list: any = await api.historyList();
-    expect(list.value.steps.map((s: any) => s.label)).toEqual(['Claude: late (window did not answer)']);
+    expect(list.value.steps.map((s: any) => s.label)).toEqual(['AI: late (window did not answer)']);
   });
 
   it('gives up on a tool that hangs, closes its step and lets the next write run', async () => {
-    const hang = defineTool({ name: 'hang', title: 'Hang', description: 'Never finishes.', input: {}, write: { kind: 'step', label: () => 'Claude: hang' }, run: () => new Promise(() => {}) });
+    const hang = defineTool({ name: 'hang', title: 'Hang', description: 'Never finishes.', input: {}, write: { kind: 'step', label: () => 'AI: hang' }, run: () => new Promise(() => {}) });
     const { call, api } = await mcpFixture([hang, newQuests('after', 1)], { toolTimeoutMs: 30 });
     const out = await call('hang');
     expect(out.isError).toBe(true);
     expect(out.value.message).toMatch(/did not finish/i);
     expect((await call('after')).isError).toBe(false);
     const list: any = await api.historyList();
-    expect(list.value.steps.map((s: any) => s.label)).toEqual(['Claude: after']);
+    expect(list.value.steps.map((s: any) => s.label)).toEqual(['AI: after']);
   });
 
   it('sends the window the whole project when something else changed it during the write', async () => {
     const interrupted = defineTool({
       name: 'interrupted', title: 'Interrupted', description: 'Is undone from the window part-way through.', input: {},
-      write: { kind: 'step', label: () => 'Claude: interrupted' },
+      write: { kind: 'step', label: () => 'AI: interrupted' },
       run: async (_a, ctx) => { await ctx.call('newQuest'); await ctx.call('historyUndo'); await ctx.call('newQuest'); return { ok: true, value: 1 }; },
     });
     const { call, session, changes } = await mcpFixture([interrupted]);

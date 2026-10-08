@@ -43,17 +43,17 @@ describe('export tools', () => {
 });
 
 describe('undo and redo through MCP', () => {
-  it('undoes a Claude edit, tells the window, and redo puts it back', async () => {
+  it('undoes an AI edit, tells the window, and redo puts it back', async () => {
     const { call, changes, session } = await mcpFixture(allTools);
     const { questId } = (await call('new_quest')).value;
     await call('set_quest_fields', { questId, fields: { 'quest_template.LogTitle': 'Kobold Camp Cleanup' } });
     const undone = await call('undo');
     expect(undone.isError).toBe(false);
-    expect(undone.value.undid).toBe(`Claude: edit quest ${questId}`);
+    expect(undone.value.undid).toBe(`AI: edit quest ${questId}`);
     expect(changes.at(-1)!.direction).toBe('undo');
     expect(session.quests.get(questId)!.aggregate.values['quest_template.LogTitle']).not.toBe('Kobold Camp Cleanup');
     const redone = await call('redo');
-    expect(redone.value.redid).toBe(`Claude: edit quest ${questId}`);
+    expect(redone.value.redid).toBe(`AI: edit quest ${questId}`);
     expect(session.quests.get(questId)!.aggregate.values['quest_template.LogTitle']).toBe('Kobold Camp Cleanup');
   });
 

@@ -35,13 +35,13 @@ All three are optional.
 
 **Add a dev database** asks for a second host, port, user, password and database: a test server's world database that **Apply to dev DB** writes to. **Remove dev database** turns it off again.
 
-## Claude
+## MCP / AI
 
-The **Claude** tab turns on the MCP server that lets Claude work in the open project. See [Working with Claude](/azeroth-world-editor/guides/claude-mcp/).
+The **MCP / AI** tab turns on the MCP server that lets an AI assistant work in the open project. See [Working with an AI assistant](/azeroth-world-editor/guides/ai-mcp/).
 
 | Setting | Meaning |
 | --- | --- |
-| Allow Claude to edit this project | Starts or stops the server. Off by default; it applies at once. |
+| Allow AI to edit this project | Starts or stops the server. Off by default; it applies at once. |
 | Port | The port it listens on, from 1024 to 65535 (default 47600). |
 | Token | What a client sends as `Authorization: Bearer …`. Hidden until you press **Show**; **Make a new token** replaces it. |
 

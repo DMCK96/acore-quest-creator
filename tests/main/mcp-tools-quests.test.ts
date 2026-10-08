@@ -18,7 +18,7 @@ describe('quest tools', () => {
     const { call, api, changes } = await mcpFixture(allTools);
     const out = await call('new_quest');
     expect(out.value.questId).toBeGreaterThan(0);
-    expect(await labels(api)).toEqual(['Claude: new quest']);
+    expect(await labels(api)).toEqual(['AI: new quest']);
     expect(changes).toHaveLength(1);
   });
 
@@ -32,7 +32,7 @@ describe('quest tools', () => {
     const values = session.quests.get(questId)!.aggregate.values;
     expect(values['quest_template.LogTitle']).toBe('Kobold Camp Cleanup');
     expect(values['quest_template.QuestLevel']).toBe(10);
-    expect(await labels(api)).toEqual(['Claude: new quest', `Claude: edit quest ${questId}`]);
+    expect(await labels(api)).toEqual(['AI: new quest', `AI: edit quest ${questId}`]);
   });
 
   it('set_quest_fields refuses unknown ids and wrong types together, and changes nothing', async () => {
@@ -43,7 +43,7 @@ describe('quest tools', () => {
     expect(out.value.code).toBe('BAD_REQUEST');
     expect(out.value.message).toMatch(/NoSuchField/);
     expect(out.value.message).toMatch(/LogTitle|Title/);
-    expect(await labels(api)).toEqual(['Claude: new quest']);
+    expect(await labels(api)).toEqual(['AI: new quest']);
   });
 
   it('set_quest_fields refuses a field the quest cannot edit', async () => {
@@ -54,7 +54,7 @@ describe('quest tools', () => {
     const out = await call('set_quest_fields', { questId, fields: { 'quest_template.LogTitle': 'x' } });
     expect(out.isError).toBe(true);
     expect(out.value.message).toMatch(/stored text has no representation/);
-    expect(await labels(api)).toEqual(['Claude: new quest']);
+    expect(await labels(api)).toEqual(['AI: new quest']);
   });
 
   it('set_quest_fields on a quest that is not in the project says to open it first', async () => {
@@ -81,7 +81,7 @@ describe('quest tools', () => {
     expect(first.value.aggregate.values['quest_template.LogTitle']).toBe('Kobold Camp Cleanup');
     const again = await call('get_quest', { questId: 33 });
     expect(again.value.inProject).toBe(true);
-    expect(await labels(api)).toEqual(['Claude: open quest 33']);
+    expect(await labels(api)).toEqual(['AI: open quest 33']);
   });
 
   it('list_quests, validate_quest, quest_links and remove_quest work on the project\'s quests', async () => {
@@ -93,6 +93,6 @@ describe('quest tools', () => {
     expect((await call('quest_links', { questIds: [questId] })).isError).toBe(false);
     await call('remove_quest', { questId });
     expect((await call('list_quests')).value).toEqual([]);
-    expect((await labels(api)).at(-1)).toBe(`Claude: remove quest ${questId}`);
+    expect((await labels(api)).at(-1)).toBe(`AI: remove quest ${questId}`);
   });
 });

@@ -19,11 +19,11 @@ contextBridge.exposeInMainWorld('appEvents', {
   onHistory(handler: (list: unknown) => void): void {
     ipcRenderer.on(HISTORY_CHANNEL, (_event, list: unknown) => handler(list));
   },
-  /** The main process connected to a world database on its own (Claude, through MCP). */
+  /** The main process connected to a world database on its own (an AI client, through MCP). */
   onConnected(handler: (summary: unknown) => void): void {
     ipcRenderer.on(CONNECTED_CHANNEL, (_event, summary: unknown) => handler(summary));
   },
-  /** A change the main process made on its own (Claude, through MCP), shaped like an undo result. */
+  /** A change the main process made on its own (an AI client, through MCP), shaped like an undo result. */
   onExternalChange(handler: (change: unknown) => void): void {
     ipcRenderer.on(EXTERNAL_CHANGE_CHANNEL, (_event, change: unknown) => handler(change));
   },

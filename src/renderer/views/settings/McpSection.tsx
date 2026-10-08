@@ -10,10 +10,10 @@ const copy = async (text: string): Promise<void> => {
   }
 };
 
-/** The command that adds this server to Claude Code. */
+/** The command that adds this server to Claude Code (one client among many; the address and token work in any). */
 const addCommand = (s: McpStatus): string => `claude mcp add --transport http awe ${s.url} --header "Authorization: Bearer ${s.token}"`;
 
-/** Lets an MCP client such as Claude work in the open project. Off until switched on; each change applies at once. */
+/** Lets an AI assistant connected over MCP work in the open project. Off until switched on; each change applies at once. */
 export function McpSection(_props: SettingsSectionProps): React.JSX.Element {
   const [status, setStatus] = useState<McpStatus | null>(null);
   const [port, setPort] = useState('47600');
@@ -52,13 +52,13 @@ export function McpSection(_props: SettingsSectionProps): React.JSX.Element {
 
   return (
     <div className="settings-prefs">
-      <h2 className="settings-prefs__heading">Claude</h2>
+      <h2 className="settings-prefs__heading">MCP / AI</h2>
       <p className="settings-mcp__note">
-        Lets Claude, or another MCP client on this computer, read the world and edit the open project. Its edits appear in History as "Claude: …" and can be undone. The world database is never written.
+        Lets an AI assistant on this computer (any MCP client) read the world and edit the open project. Its edits appear in History as "AI: …" and can be undone. The world database is never written.
       </p>
       <label className="settings-prefs__choice">
         <input type="checkbox" checked={status?.enabled ?? false} disabled={status === null} onChange={(e) => void configure(e.target.checked, Number(port))} />
-        Allow Claude to edit this project
+        Allow AI to edit this project
       </label>
       <label className="settings-prefs__choice">
         Port
@@ -92,10 +92,13 @@ export function McpSection(_props: SettingsSectionProps): React.JSX.Element {
             <button type="button" onClick={() => setShowToken((s) => !s)}>
               {showToken ? 'Hide' : 'Show'}
             </button>
+            <button type="button" onClick={() => void copy(status.token)}>
+              Copy token
+            </button>
           </div>
           <div>
             <button type="button" onClick={() => void copy(addCommand(status))}>
-              Copy command for Claude Code
+              Copy Claude Code command
             </button>
             <button type="button" onClick={() => void regenerate()}>
               Make a new token

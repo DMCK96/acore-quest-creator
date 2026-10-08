@@ -18,7 +18,7 @@ export const worldTools = [
     title: 'Place an NPC or object',
     description: `Places a new spawn of an existing NPC (creature) or object (gameobject) entry on a map, and answers its new guid. ${UNITS}`,
     input: { kind, entry: z.number().int().min(1), map: z.number().int().min(0), ...place },
-    write: { kind: 'step', label: ({ kind, entry }: { kind: string; entry: number }) => `Claude: place ${kind} ${entry}` },
+    write: { kind: 'step', label: ({ kind, entry }: { kind: string; entry: number }) => `AI: place ${kind} ${entry}` },
     run: async ({ kind, entry, map, x, y, z, orientation }, ctx) => {
       const out = await ctx.call('worldAddSpawn', kind, entry, map, { x, y, z, orientation, rotation: null });
       return out.ok ? { ok: true, value: { guid: out.value.guid } } : out;
@@ -29,7 +29,7 @@ export const worldTools = [
     title: 'Move or turn a spawn',
     description: `Moves or turns an existing spawn (by its guid; see find_spawns). ${UNITS}`,
     input: { kind, guid, ...place },
-    write: { kind: 'step', label: ({ kind, guid }: { kind: string; guid: number }) => `Claude: move ${kind} ${guid}` },
+    write: { kind: 'step', label: ({ kind, guid }: { kind: string; guid: number }) => `AI: move ${kind} ${guid}` },
     run: async ({ kind, guid, x, y, z, orientation }, ctx) => {
       const out = await ctx.call('worldMoveSpawn', kind, guid, { x, y, z, orientation, rotation: null });
       return out.ok ? { ok: true, value: { moved: { kind, guid } } } : out;
@@ -44,7 +44,7 @@ export const worldTools = [
       points: z.array(z.object({ x: z.number(), y: z.number(), z: z.number() })).min(1).max(500),
       isNew: z.boolean().optional(),
     },
-    write: { kind: 'step', label: ({ pathId }: { pathId: number }) => `Claude: set route ${pathId}` },
+    write: { kind: 'step', label: ({ pathId }: { pathId: number }) => `AI: set route ${pathId}` },
     run: async ({ pathId, points, isNew }, ctx) => {
       const out = await ctx.call('worldSetRoute', pathId, points.map((p) => ({ ...p, rest: {} })), isNew === undefined ? undefined : { isNew });
       return out.ok ? { ok: true, value: { pathId, points: points.length } } : out;
@@ -60,7 +60,7 @@ export const worldTools = [
       wander: z.number().min(0).optional().describe('Wander radius in yards; only for type wander. Default 0.'),
       pathId: z.number().int().min(1).nullable().optional().describe('The path to follow; only for type path (see set_route). Default none.'),
     },
-    write: { kind: 'step', label: ({ guid }: { guid: number }) => `Claude: set movement of ${guid}` },
+    write: { kind: 'step', label: ({ guid }: { guid: number }) => `AI: set movement of ${guid}` },
     run: async ({ guid, type, wander, pathId }, ctx) => {
       const out = await ctx.call('worldSetMovement', guid, { type, wander: wander ?? 0, pathId: pathId ?? null });
       return out.ok ? { ok: true, value: { guid, type } } : out;
@@ -71,7 +71,7 @@ export const worldTools = [
     title: "Set a spawn's respawn time",
     description: 'Sets how long a spawn (by guid) takes to respawn after it dies or is looted, in seconds.',
     input: { kind, guid, seconds: z.number().int().min(0) },
-    write: { kind: 'step', label: ({ kind, guid }: { kind: string; guid: number }) => `Claude: set respawn of ${kind} ${guid}` },
+    write: { kind: 'step', label: ({ kind, guid }: { kind: string; guid: number }) => `AI: set respawn of ${kind} ${guid}` },
     run: async ({ kind, guid, seconds }, ctx) => {
       const out = await ctx.call('worldSetRespawn', kind, guid, seconds);
       return out.ok ? { ok: true, value: { kind, guid, seconds } } : out;
@@ -92,7 +92,7 @@ export const worldTools = [
         z.object({ kind: z.literal('spawnEvents'), guid: z.number().int() }),
       ]),
     },
-    write: { kind: 'step', label: () => 'Claude: revert world change' },
+    write: { kind: 'step', label: () => 'AI: revert world change' },
     run: async ({ target }, ctx) => {
       const out = await ctx.call('worldRevert', target);
       return out.ok ? { ok: true, value: { reverted: target } } : out;

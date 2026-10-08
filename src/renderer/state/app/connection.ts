@@ -49,7 +49,7 @@ export interface ConnectionSlice {
   connect(input: ProfileSave): Promise<void>;
   /** Connects with a saved profile and its stored password. */
   connectProfile(profileId: number): Promise<void>;
-  /** Shows a connection the main process made on its own (Claude, through MCP) as a connect from the window would. */
+  /** Shows a connection the main process made on its own (an AI client, through MCP) as a connect from the window would. */
   adoptConnection(summary: ConnectSummary): Promise<void>;
   /**
    * Saves the draft's rows (world, then dev, then removes a dev row the user removed) and reloads the

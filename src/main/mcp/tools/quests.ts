@@ -67,7 +67,7 @@ export const questTools = [
     description:
       "Reads a quest with every field value and its validation issues. A quest from the world database is IMPORTED onto the project's canvas (one undo step) so it can be edited; a quest already in the project is just read. Use search_quests to find ids.",
     input: { questId },
-    write: { kind: 'step', label: ({ questId }: { questId: number }) => `Claude: open quest ${questId}` },
+    write: { kind: 'step', label: ({ questId }: { questId: number }) => `AI: open quest ${questId}` },
     run: async ({ questId }, ctx) => {
       const opened = await ctx.call('openQuest', questId);
       if (!opened.ok) return opened;
@@ -80,7 +80,7 @@ export const questTools = [
     title: 'Start a new quest',
     description: "Adds an empty new quest to the project, with a free id from the project's id range, and returns it. Fill it in with set_quest_fields.",
     input: {},
-    write: { kind: 'step', label: () => 'Claude: new quest' },
+    write: { kind: 'step', label: () => 'AI: new quest' },
     run: async (_args, ctx) => {
       const made = await ctx.call('newQuest');
       return made.ok ? { ok: true, value: { questId: made.value.questId, aggregate: made.value.aggregate } } : made;
@@ -91,7 +91,7 @@ export const questTools = [
     title: 'Import a quest chain',
     description: "Imports a quest from the world database together with every quest chained to it onto the project's canvas (one undo step). Answers the ids added and whether the chain was cut short.",
     input: { questId },
-    write: { kind: 'step', label: ({ questId }: { questId: number }) => `Claude: add quest chain from ${questId}` },
+    write: { kind: 'step', label: ({ questId }: { questId: number }) => `AI: add quest chain from ${questId}` },
     run: async ({ questId }, ctx) => {
       const chain = await ctx.call('addQuestChain', questId);
       return chain.ok ? { ok: true, value: { questIds: chain.value.questIds, truncated: chain.value.truncated } } : chain;
@@ -103,7 +103,7 @@ export const questTools = [
     description:
       "Sets fields of a quest that is in the project (use get_quest or new_quest first). `fields` maps a field id to its new value; call describe_quest_fields to see the ids and what each takes. Every value is checked first and nothing changes if any is wrong. Answers which fields changed and the quest's validation issues. Text is English (enUS).",
     input: { questId, fields: z.record(z.string(), z.unknown()) },
-    write: { kind: 'step', label: ({ questId }: { questId: number }) => `Claude: edit quest ${questId}` },
+    write: { kind: 'step', label: ({ questId }: { questId: number }) => `AI: edit quest ${questId}` },
     run: async ({ questId, fields }, ctx) => {
       const nodes = await ctx.call('listNodes');
       if (!nodes.ok) return nodes;
@@ -159,7 +159,7 @@ export const questTools = [
     title: 'Remove a quest from the project',
     description: "Takes a quest off the project's canvas (one undo step). The world database is not touched.",
     input: { questId },
-    write: { kind: 'step', label: ({ questId }: { questId: number }) => `Claude: remove quest ${questId}` },
+    write: { kind: 'step', label: ({ questId }: { questId: number }) => `AI: remove quest ${questId}` },
     run: ({ questId }, ctx) => ctx.call('removeNode', questId),
   }),
 ];

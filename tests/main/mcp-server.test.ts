@@ -22,7 +22,7 @@ const huge = defineTool({
 
 const bigWrite = defineTool({
   name: 'big_write', title: 'Big write', description: 'Changes the project and returns a very long answer.', input: {},
-  write: { kind: 'step', label: () => 'Claude: big write' },
+  write: { kind: 'step', label: () => 'AI: big write' },
   run: async (_a, ctx) => { await ctx.call('newQuest'); return { ok: true, value: { sql: 'x'.repeat(300_000) } }; },
 });
 
@@ -83,6 +83,6 @@ describe('the MCP server', () => {
     expect(out.isError).toBe(false);
     expect(out.value.note).toMatch(/too large/i);
     expect(JSON.stringify(out.value).length).toBeLessThan(2000);
-    expect(((await api.historyList()) as any).value.steps.map((s: any) => s.label)).toEqual(['Claude: big write']);
+    expect(((await api.historyList()) as any).value.steps.map((s: any) => s.label)).toEqual(['AI: big write']);
   });
 });

@@ -27,7 +27,7 @@ export const exportTools = [
     description:
       "Writes the quest's SQL patch file into the export folder and answers its path, the SQL and any warnings. A quest with errors is refused with the issues to fix (see validate_quest). Only a file is written; no database is touched, and the user applies the patch themselves.",
     input: { questId },
-    write: { kind: 'step', label: ({ questId }: { questId: number }) => `Claude: export quest ${questId}` },
+    write: { kind: 'step', label: ({ questId }: { questId: number }) => `AI: export quest ${questId}` },
     run: async ({ questId }, ctx) => {
       const out = await ctx.call('exportQuest', questId);
       return out.ok ? { ok: true, value: { path: out.value.path, sql: out.value.sql, warnings: out.value.warnings, issues: out.value.issues } } : out;
@@ -39,7 +39,7 @@ export const exportTools = [
     description:
       "Writes the project patch (new NPCs, objects, items and world changes) and a revert patch into the export folder. Only files are written; no database is touched, and the user applies the patch themselves.",
     input: {},
-    write: { kind: 'step', label: () => 'Claude: export project' },
+    write: { kind: 'step', label: () => 'AI: export project' },
     run: (_args, ctx) => ctx.call('exportProject'),
   }),
 ];

@@ -14,7 +14,7 @@ export interface McpStatus {
   error: string | null;
 }
 
-/** Letting Claude (or another MCP client) work in the open project: on or off, the port, the token */
+/** Letting an AI client (an MCP client) work in the open project: on or off, the port, the token */
 export interface McpApi {
   mcpStatus(): Promise<Result<McpStatus>>;
   /** Turns the server on or off and sets its port; a port that cannot be used leaves it off and says why in `error`. */

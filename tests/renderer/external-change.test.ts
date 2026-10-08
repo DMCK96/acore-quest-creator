@@ -4,7 +4,7 @@ import { makeMockApi, okv, sampleOpen, nodeOf } from './mock-api';
 
 const drift = { missingTables: [], unregistered: [], missingColumns: [], typeMismatches: [] };
 const form = { name: 'w', role: 'world' as const, host: 'h', port: 1, user: 'u', database: 'd', password: 'p' };
-const label = 'Claude: edit quest 60001';
+const label = 'AI: edit quest 60001';
 const change = (over: Record<string, unknown>) => ({
   step: { id: 1, label, kind: 'quest', where: { questId: 60001 } }, direction: 'redo',
   quests: [], positions: false, world: null, entities: null, name: false, skipped: [],
@@ -23,8 +23,8 @@ async function openStore(over: Record<string, any> = {}) {
   return { store, api, open };
 }
 
-describe('a change made from the main process (Claude)', () => {
-  it('shows the open quest as Claude left it, with the history and a note naming the step', async () => {
+describe('a change made from the main process (an AI client)', () => {
+  it('shows the open quest as the AI left it, with the history and a note naming the step', async () => {
     const { store, open } = await openStore();
     const aggregate = { ...open.aggregate, values: { ...open.aggregate.values, 'quest_template.LogTitle': 'Kobold Camp Cleanup' } };
     await store.getState().applyExternalChange(change({ quests: [{ questId: 60001, aggregate }] }));
@@ -55,17 +55,17 @@ describe('a change made from the main process (Claude)', () => {
 
   it('keeps an edit typed while the change is being applied, on top of it', async () => {
     const { store, open } = await openStore();
-    const aggregate = { ...open.aggregate, values: { ...open.aggregate.values, 'quest_template.LogTitle': 'From Claude' } };
+    const aggregate = { ...open.aggregate, values: { ...open.aggregate.values, 'quest_template.LogTitle': 'From the AI' } };
     const pending = store.getState().applyExternalChange(change({ quests: [{ questId: 60001, aggregate }] }));
     store.getState().setValue('quest_template.QuestLevel', 12);
     await pending;
     const values = store.getState().open!.aggregate.values;
-    expect(values['quest_template.LogTitle']).toBe('From Claude');
+    expect(values['quest_template.LogTitle']).toBe('From the AI');
     expect(values['quest_template.QuestLevel']).toBe(12);
   });
 });
 
-describe('a connection made from the main process (Claude)', () => {
+describe('a connection made from the main process (an AI client)', () => {
   const summary = { profileId: 1, schemaHash: 'h', drift, blocking: false, serverData: null, clientDir: null, client: null } as any;
 
   it('leaves the login screen for the app, as a connect from the window would', async () => {

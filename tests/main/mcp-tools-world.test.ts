@@ -11,7 +11,7 @@ describe('world tools', () => {
     const out = await call('add_spawn', { kind: 'creature', entry: 1423, map: 0, ...at });
     expect(out.value.guid).toBeGreaterThan(0);
     expect((await call('world_changes')).value.map((c: any) => c.type)).toEqual(['added']);
-    expect(await labels(api)).toEqual(['Claude: place creature 1423']);
+    expect(await labels(api)).toEqual(['AI: place creature 1423']);
   });
 
   it('move_spawn, set_respawn and set_movement edit a database spawn in the world layer', async () => {
@@ -21,7 +21,7 @@ describe('world tools', () => {
     expect((await call('set_movement', { guid: 80330, type: 'wander', wander: 5, pathId: null })).isError).toBe(false);
     const types = (await call('world_changes')).value.map((c: any) => c.type).sort();
     expect(types).toEqual(['movement', 'respawn', 'spawn']);
-    expect(await labels(api)).toEqual(['Claude: move creature 80330', 'Claude: set respawn of creature 80330', 'Claude: set movement of 80330']);
+    expect(await labels(api)).toEqual(['AI: move creature 80330', 'AI: set respawn of creature 80330', 'AI: set movement of 80330']);
   });
 
   it('set_route stores a path and revert_world_change takes it back out', async () => {
@@ -60,7 +60,7 @@ describe('entity tools', () => {
     const store = (await call('list_project_entities')).value;
     expect(store.npcs).toHaveLength(1);
     expect(store.npcs[0].name).toBe('Marshal Dughan III');
-    expect(await labels(api)).toEqual(['Claude: save npc 1423', 'Claude: save npc 1423']);
+    expect(await labels(api)).toEqual(['AI: save npc 1423', 'AI: save npc 1423']);
   });
 
   it('refuses an entity without an entry and a garbage entity, leaving no step', async () => {
@@ -83,6 +83,6 @@ describe('entity tools', () => {
     await call('upsert_entity', { kind: 'npc', entity: existing });
     await call('delete_entity', { kind: 'npc', entry: 1423 });
     expect((await call('list_project_entities')).value.npcs).toEqual([]);
-    expect((await labels(api)).at(-1)).toBe('Claude: delete npc 1423');
+    expect((await labels(api)).at(-1)).toBe('AI: delete npc 1423');
   });
 });

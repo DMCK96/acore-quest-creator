@@ -40,7 +40,7 @@ async function withinTime(ctx: McpContext, run: () => Promise<Result<unknown>>):
 }
 
 /**
- * Runs tools so that what Claude changes stays one undoable step the window hears about.
+ * Runs tools so that what an AI client changes stays one undoable step the window hears about.
  *
  * Read tools run as they are. Write tools run one at a time: the window is asked to hand over its
  * pending edits, the tool's changes become one history step with the tool's label, and the window

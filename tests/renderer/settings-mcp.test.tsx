@@ -21,17 +21,17 @@ function mount(initial = status(), over: Record<string, any> = {}) {
   return calls;
 }
 
-describe('the Claude settings tab', () => {
+describe('the MCP / AI settings tab', () => {
   it('is off by default and shows no address or token', async () => {
     mount();
-    expect(await screen.findByRole('checkbox', { name: /allow claude/i })).not.toBeChecked();
+    expect(await screen.findByRole('checkbox', { name: /allow ai/i })).not.toBeChecked();
     expect(screen.queryByText(/127\.0\.0\.1/)).toBeNull();
     expect(screen.queryByText('secret-token')).toBeNull();
   });
 
   it('turning it on sends the port and then shows the address', async () => {
     const calls = mount();
-    await userEvent.click(await screen.findByRole('checkbox', { name: /allow claude/i }));
+    await userEvent.click(await screen.findByRole('checkbox', { name: /allow ai/i }));
     await waitFor(() => expect(calls).toEqual([{ enabled: true, port: 47600 }]));
     expect(await screen.findByText('http://127.0.0.1:47600/mcp')).toBeInTheDocument();
   });
@@ -42,7 +42,8 @@ describe('the Claude settings tab', () => {
     expect(screen.queryByText('secret-token')).toBeNull();
     await userEvent.click(screen.getByRole('button', { name: /show/i }));
     expect(screen.getByText('secret-token')).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: /copy command/i })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /claude code command/i })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /copy token/i })).toBeInTheDocument();
   });
 
   it('makes a new token on request', async () => {
@@ -63,7 +64,7 @@ describe('the Claude settings tab', () => {
 
   it('says why when the port could not be used', async () => {
     mount(status(), { mcpConfigure: async () => okv(status({ error: 'Port 47600 is already in use.' })) });
-    await userEvent.click(await screen.findByRole('checkbox', { name: /allow claude/i }));
+    await userEvent.click(await screen.findByRole('checkbox', { name: /allow ai/i }));
     expect(await screen.findByRole('alert')).toHaveTextContent('already in use');
   });
 });

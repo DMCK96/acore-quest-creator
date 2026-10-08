@@ -34,9 +34,9 @@ export function App(): React.JSX.Element {
     window.appEvents?.onFlushRequest(() => store.getState().flushAll());
     // The Undo buttons follow every step the main process records, whatever made it
     window.appEvents?.onHistory?.((list) => store.getState().setHistory(list));
-    // Claude connected the editor to a world database through MCP: leave the login screen
+    // An AI client connected the editor to a world database through MCP: leave the login screen
     window.appEvents?.onConnected?.((summary) => void store.getState().adoptConnection(summary));
-    // What Claude changed through MCP appears as an undo would: the open quest, the canvas, the world
+    // What an AI client changed through MCP appears as an undo would: the open quest, the canvas, the world
     window.appEvents?.onExternalChange?.((change) => void store.getState().applyExternalChange(change));
   }, [store]);
 
