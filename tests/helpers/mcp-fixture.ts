@@ -4,12 +4,14 @@ import { createApi } from '../../src/main/api';
 import { invokeApi } from '../../src/main/api/invoke';
 import { createMcpServer } from '../../src/main/mcp/server';
 import type { McpContext, ToolDef } from '../../src/main/mcp/tool';
-import type { ProjectController } from '../../src/main/project/controller';
+import { createProjectController } from '../../src/main/project/controller';
+import { createRecovery } from '../../src/main/project/recovery';
 import { defaultProjectMeta } from '../../src/main/project/project-file';
 import { createProjectSession } from '../../src/main/project/session';
 import { openStore } from '../../src/main/store/store';
 import type { HistoryResult } from '../../src/shared/history';
 import { forkDb } from './fixtures';
+import { memFs } from './mem-fs';
 
 const box = { encrypt: (s: string) => Uint8Array.from(Buffer.from(s)), decrypt: (b: Uint8Array) => Buffer.from(b).toString() };
 
@@ -29,15 +31,27 @@ export async function mcpFixture(tools: readonly ToolDef[], opts: McpFixtureOpti
   const db = forkDb();
   db.insert('creature_template', { entry: '1423', name: 'Stormwind Guard' });
   db.insert('creature', { guid: '80330', id1: '1423', map: '0', position_x: '-9481.31', position_y: '74.42', position_z: '56.55', orientation: '1.5' });
-  const session = createProjectSession(defaultProjectMeta('P', 'C:\out'));
+  const session = createProjectSession(defaultProjectMeta('P', 'C:/out'));
+  const store = openStore(':memory:', box);
+  const fs = memFs();
+  const now = () => new Date('2026-10-08T12:00:00Z');
+  const projects = createProjectController({
+    session,
+    fs,
+    dialogs: { showSave: async () => null, showOpen: async () => null, confirmUnsaved: async () => 'cancel' },
+    recovery: createRecovery({ dir: 'C:/recovery', fs, now }),
+    recent: store.recent,
+    defaultOutputDir: 'C:/out',
+    now,
+  });
   const api = createApi({
-    store: openStore(':memory:', box),
+    store,
     openWorldDb: async () => db,
     openDevDb: async () => { throw new Error('no dev database in tests'); },
     fs: { writeFile: async () => {}, ensureDir: async () => {}, listDir: async () => [] },
-    now: () => new Date('2026-10-08T12:00:00Z'),
+    now,
     session,
-    projects: {} as ProjectController,
+    projects,
   });
   if (opts.connect !== false) {
     const rec: any = await api.saveProfile({ name: 'w', role: 'world', host: 'h', port: 1, user: 'u', database: 'd', password: 'p' });
