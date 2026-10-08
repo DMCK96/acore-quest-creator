@@ -3,6 +3,7 @@ import { InMemoryTransport } from '@modelcontextprotocol/sdk/inMemory.js';
 import { createApi } from '../../src/main/api';
 import { invokeApi } from '../../src/main/api/invoke';
 import { createMcpServer } from '../../src/main/mcp/server';
+import type { PromptDef } from '../../src/main/mcp/prompts';
 import type { McpContext, ToolDef } from '../../src/main/mcp/tool';
 import { createProjectController } from '../../src/main/project/controller';
 import { createRecovery } from '../../src/main/project/recovery';
@@ -21,6 +22,8 @@ export interface McpFixtureOptions {
   connect?: boolean;
   flushTimeoutMs?: number;
   toolTimeoutMs?: number;
+  /** Prompts the server offers (none by default). */
+  prompts?: readonly PromptDef[];
   /** Whether the user has switched wiki lookups on (default off). */
   wiki?: boolean;
   /** What the wiki answers; absent means nothing is reachable. */
@@ -80,7 +83,7 @@ export async function mcpFixture(tools: readonly ToolDef[], opts: McpFixtureOpti
     ...(opts.flushTimeoutMs !== undefined ? { flushTimeoutMs: opts.flushTimeoutMs } : {}),
     ...(opts.toolTimeoutMs !== undefined ? { toolTimeoutMs: opts.toolTimeoutMs } : {}),
   };
-  const server = createMcpServer(ctx, tools);
+  const server = createMcpServer(ctx, tools, undefined, opts.prompts);
   const client = new Client({ name: 'test', version: '1' });
   const [serverSide, clientSide] = InMemoryTransport.createLinkedPair();
   await Promise.all([server.connect(serverSide), client.connect(clientSide)]);

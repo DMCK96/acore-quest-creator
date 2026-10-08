@@ -2,6 +2,7 @@ import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { z } from 'zod';
 import type { ApiError, Result } from '../../shared/ipc';
 import { TOOL_VERSION } from '../../core/version';
+import type { PromptDef } from './prompts';
 import type { McpContext, ToolDef } from './tool';
 import { createWriteGuard, type WriteGuard } from './write-guard';
 
@@ -13,7 +14,12 @@ const NOT_CONNECTED_HINT = ' Call list_profiles, then connect with a profile id,
 const failure = (error: ApiError) => textResult(error.code === 'NOT_CONNECTED' ? { ...error, message: error.message + NOT_CONNECTED_HINT } : error, true);
 
 /** Builds the MCP server for a tool list. A tool is data; adding one is adding an entry to the list. */
-export function createMcpServer(ctx: McpContext, tools: readonly ToolDef[], runTool: WriteGuard = createWriteGuard()): McpServer {
+export function createMcpServer(
+  ctx: McpContext,
+  tools: readonly ToolDef[],
+  runTool: WriteGuard = createWriteGuard(),
+  prompts: readonly PromptDef[] = [],
+): McpServer {
   const server = new McpServer({ name: 'azeroth-world-editor', version: TOOL_VERSION });
   for (const tool of tools) {
     server.registerTool(tool.name, { title: tool.title, description: tool.description, inputSchema: tool.input }, async (args: z.infer<z.ZodObject<any>>) => {
@@ -36,6 +42,12 @@ export function createMcpServer(ctx: McpContext, tools: readonly ToolDef[], runT
       }
       return answer;
     });
+  }
+  // A server with no prompts does not advertise the capability
+  for (const prompt of prompts) {
+    server.registerPrompt(prompt.name, { title: prompt.title, description: prompt.description, argsSchema: prompt.args }, ((args: Record<string, unknown>) => ({
+      messages: [{ role: 'user' as const, content: { type: 'text' as const, text: prompt.text(args) } }],
+    })) as never);
   }
   return server;
 }

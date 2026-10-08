@@ -14,6 +14,7 @@ import { createMcpController, type McpController } from './mcp/controller';
 import { startMcpHttp } from './mcp/http';
 import { createMcpServer } from './mcp/server';
 import { createMcpSettings } from './mcp/settings';
+import { allPrompts } from './mcp/prompts';
 import { allTools } from './mcp/tools';
 import { createWriteGuard } from './mcp/write-guard';
 import { createApi, type ApiDeps } from './api';
@@ -322,7 +323,7 @@ void app.whenReady().then(() => {
   };
   const mcp = createMcpController({
     settings: createMcpSettings(store),
-    listen: ({ port, token }) => startMcpHttp({ port, token, createServer: () => createMcpServer(mcpContext, allTools, writeGuard) }),
+    listen: ({ port, token }) => startMcpHttp({ port, token, createServer: () => createMcpServer(mcpContext, allTools, writeGuard, allPrompts) }),
   });
   api = createApi(buildDeps(store, session, projects, startupProfileId, client, mcp));
   registerIpc(api);
