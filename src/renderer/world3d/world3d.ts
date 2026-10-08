@@ -22,6 +22,7 @@ import type { Movement } from '@core/world/movement';
 import type { SpawnInfo } from './scene/spawn/SpawnManager';
 import { MarkerLayer, type MarkerDrawing } from './scene/marker/MarkerLayer';
 import type { Frame } from '@core/map/transport-frame';
+import type { Dock } from '@core/map/transport-docks';
 import type { RouteLine as RouteData } from '@core/map/transport-view';
 import { buildRouteLines, disposeRouteLines } from './scene/transport/RouteLine';
 
@@ -165,6 +166,12 @@ export interface World3D {
   groundAt(client: { x: number; y: number }): { x: number; y: number; z: number } | null;
   /** Where the pointer last was over the view, or null. */
   lastPointer(): { x: number; y: number } | null;
+  /** The vessels that stop on this terrain, drawn with their passengers while the camera is near them. */
+  setDocks(docks: readonly Dock[]): void;
+  /** Whether those docked vessels are drawn and picked at all. */
+  setDocksEnabled(enabled: boolean): void;
+  /** The frame of the docked vessel a spawn is drawn on (its row is local to it), or null when it is not on one. */
+  frameOfSpawn(kind: 'creature' | 'object', guid: number): Frame | null;
   /** A spawn still in the view (loaded, though perhaps too far to be drawn), or null. */
   spawnOf(kind: 'creature' | 'object', guid: number): SpawnInfo | null;
   /** A drawn NPC's route as the view has it, or null when it has none. */
@@ -739,6 +746,9 @@ export function createWorld3D(options: World3DOptions): World3D {
     },
     lastPointer: () => controls.lastPointer,
     spawnOf: (kind, guid) => manager.spawnInfo(kind, guid),
+    setDocks: (docks) => manager.setDocks(docks),
+    setDocksEnabled: (enabled) => manager.setDocksEnabled(enabled),
+    frameOfSpawn: (kind, guid) => manager.frameOfSpawn(kind, guid),
     routeOf(guid) {
       const route = manager.spawnRoute(guid);
       return route ? { pathId: route.pathId, points: route.points } : null;
