@@ -92,6 +92,8 @@ const routeObject = (creature: { x: number; y: number; z: number; path: Point[] 
   addArrows(group, stops, mesh);
 
   group.updateMatrixWorld(true);
+  // Moved only by `moveRouteDrawing`, which works its matrices out: the scene's every-frame pass skips it and its hundreds of points
+  group.matrixWorldAutoUpdate = false;
   return group;
 };
 
@@ -152,6 +154,8 @@ const wanderObject = (creature: { x: number; y: number; z: number; wander: numbe
   ring.name = 'wander';
   ring.renderOrder = RENDER_ORDER;
   ring.updateMatrixWorld(true);
+  // Never moved: the scene's every-frame matrix pass skips it
+  ring.matrixWorldAutoUpdate = false;
   return ring;
 };
 

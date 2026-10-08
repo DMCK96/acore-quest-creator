@@ -1219,6 +1219,9 @@ class SpawnManager {
     object.userData.row = spawn;
     // What it was drawn from: a change to any of it means drawing it again, not just moving it
     object.userData.lookKey = lookKeyOf(kind, spawn);
+    // Moved only where the manager and the editor work its matrix out themselves (`updateMatrixWorld(true)`): the
+    // scene's every-frame pass skips it, with what it wears and holds, instead of working out thousands of matrices
+    object.matrixWorldAutoUpdate = false;
     return object;
   }
 

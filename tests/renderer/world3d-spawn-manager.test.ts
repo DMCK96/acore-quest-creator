@@ -348,6 +348,29 @@ describe('standing NPCs on the drawn ground', () => {
   });
 });
 
+describe('spawns left out of the scene’s every-frame matrix pass', () => {
+  it('are skipped by it, with what they hold, yet follow a move the manager makes', async () => {
+    const m = manager({ creatures: [creature(1, 1)], objects: [], capped: { creatures: false, objects: false } });
+    const group = (await m.loadArea(1, 0, box))!;
+    const drawn = group.getObjectByName('creatures')!.children[0]!;
+    expect(drawn.matrixWorldAutoUpdate).toBe(false);
+    // The scene's pass leaves it alone
+    drawn.position.x = 99;
+    group.updateMatrixWorld();
+    expect(drawn.matrixWorld.elements[12]).toBeCloseTo(0);
+    drawn.position.x = 0;
+    // An edit moves it and works its matrix out itself
+    await m.setWorldLayer({ spawns: [{ kind: 'creature', guid: 1, entry: 1, name: 'n', map: 0, original: { x: 0, y: 0, z: 0, orientation: 0, rotation: null }, current: { x: 30, y: 0, z: 0, orientation: 0, rotation: null } }], routes: [], added: [] });
+    expect(drawn.matrixWorld.elements[12]).toBeCloseTo(30);
+  });
+
+  it('include the markers of those that have no model', async () => {
+    const m = manager({ creatures: [creature(2, 0)], objects: [object(4, 77)], capped: { creatures: false, objects: false } });
+    const group = (await m.loadArea(1, 0, box))!;
+    for (const name of ['creatures', 'objects']) expect(group.getObjectByName(name)!.children[0]!.matrixWorldAutoUpdate).toBe(false);
+  });
+});
+
 describe('which routes are drawn', () => {
   it('draws only the routes and wander circles of the active NPCs, however far away they are', async () => {
     const m = manager({
