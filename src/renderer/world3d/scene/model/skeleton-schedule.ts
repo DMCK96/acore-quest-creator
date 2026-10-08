@@ -16,6 +16,16 @@ export function skeletonInterval(distance: number): number {
   return 4;
 }
 
+/** Models further than this hold their last pose: at this range a figure is a few pixels, and its motion cannot be seen */
+const FREEZE_DISTANCE = 250;
+/** A frozen model moves again once nearer than this, so one at the edge does not start and stop with every step of the camera */
+const THAW_DISTANCE = 220;
+
+/** Whether a model's animation is held still, given how far it is and whether it was held a frame ago */
+export function animationFrozen(distance: number, wasFrozen: boolean): boolean {
+  return distance > (wasFrozen ? THAW_DISTANCE : FREEZE_DISTANCE);
+}
+
 /** Whether a model is posed this frame: those that wait are spread over the frames by their id */
 export function skeletonDue(frame: number, id: number, interval: number): boolean {
   return (frame + id) % interval === 0;

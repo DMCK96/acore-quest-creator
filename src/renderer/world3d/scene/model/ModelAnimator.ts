@@ -5,7 +5,7 @@ import { BoneSpec, SequenceSpec } from './loader/types.js';
 import ModelAnimation from './ModelAnimation.js';
 import Model from './Model.js';
 import { getTrackInterpolation } from './util.js';
-import { skeletonDue, skeletonInterval } from './skeleton-schedule.js';
+import { animationFrozen, skeletonDue, skeletonInterval } from './skeleton-schedule.js';
 
 interface Constructor<T> {
   new (...args: any[]): T;
@@ -84,9 +84,13 @@ class ModelAnimator {
         continue;
       }
 
+      const distance = model.boundingSphereWorld.center.distanceTo(_cameraPosition);
+      // Too far to see move: its actions are not run, and it keeps its last pose
+      model.animation.freeze(animationFrozen(distance, model.animation.frozen));
+
       if (model.skinned) {
-        const interval = skeletonInterval(model.boundingSphereWorld.center.distanceTo(_cameraPosition));
-        if (!model.posed || skeletonDue(frame, model.id, interval)) {
+        const interval = skeletonInterval(distance);
+        if (!model.posed || (!model.animation.frozen && skeletonDue(frame, model.id, interval))) {
           model.updateSkeleton(camera);
         } else {
           model.carrySkeleton(camera);

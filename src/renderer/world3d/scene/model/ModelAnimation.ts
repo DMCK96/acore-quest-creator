@@ -13,6 +13,9 @@ class ModelAnimation extends THREE.Object3D {
   textureTransforms: ModelTextureTransform[] = [];
   materialColors: ModelMaterialColor[] = [];
 
+  /** Held on its last pose because it is too far to see move: its actions are not run */
+  frozen = false;
+
   // Skeleton
   skeleton: ModelSkeleton;
 
@@ -54,7 +57,16 @@ class ModelAnimation extends THREE.Object3D {
     }
   }
 
+  /** Holds the animation still, or lets it run again; a model that is hidden is held anyway, see `suspend` */
+  freeze(frozen: boolean) {
+    if (frozen === this.frozen) return;
+    if (frozen) this.suspend();
+    else this.resume();
+    this.frozen = frozen;
+  }
+
   resume() {
+    this.frozen = false;
     for (const action of this.#suspendedActions) {
       action.enabled = true;
       (action.getMixer() as any)._activateAction(action);

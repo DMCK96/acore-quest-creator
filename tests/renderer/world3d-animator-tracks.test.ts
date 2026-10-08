@@ -27,7 +27,8 @@ const specWith = (transform: Partial<Record<'translationTrack' | 'rotationTrack'
     textureTransforms: [{ translationTrack: empty, rotationTrack: empty, scalingTrack: empty, ...transform }],
   }) as unknown as ModelSpec;
 
-const model = { visible: true, skinned: false } as never;
+/** What the animator asks of a model: whether it is shown, how far it is, and its animation (set once made) */
+const newModel = () => ({ visible: true, skinned: false, boundingSphereWorld: new THREE.Sphere(), animation: null as unknown }) as never;
 const camera = new THREE.PerspectiveCamera();
 
 describe('texture transform tracks', () => {
@@ -35,7 +36,9 @@ describe('texture transform tracks', () => {
     // A quarter turn about Z over the loop: halfway through, an eighth of a turn
     const quarter = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 0, 1), Math.PI / 2);
     const animator = createAnimator(specWith({ rotationTrack: looped([0, 0, 0, 1], quarter.toArray()) }))!;
+    const model = newModel();
     const animation = animator.createAnimation(model);
+    (model as { animation: unknown }).animation = animation;
 
     animator.update(LOOP_MS / 2 / 1000, camera);
 
@@ -45,7 +48,9 @@ describe('texture transform tracks', () => {
 
   it('move and scale the texture too', () => {
     const animator = createAnimator(specWith({ translationTrack: looped([0, 0, 0], [1, 0, 0]), scalingTrack: looped([1, 1, 1], [3, 1, 1]) }))!;
+    const model = newModel();
     const animation = animator.createAnimation(model);
+    (model as { animation: unknown }).animation = animation;
 
     animator.update(LOOP_MS / 2 / 1000, camera);
 
