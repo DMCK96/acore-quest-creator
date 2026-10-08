@@ -80,3 +80,25 @@ describe('the server offers the prompts', () => {
     await expect(client.listPrompts()).rejects.toThrow();
   });
 });
+
+describe('placing new things', () => {
+  it('populate_place places new NPCs and objects through upsert_entity with spawn guids from allocate_ids, and add_spawn only for existing ones', () => {
+    const text = allPrompts.find((p) => p.name === 'populate_place')!.text(ARGS.populate_place!);
+    expect(text).toContain('`upsert_entity`');
+    expect(text).toContain('`allocate_ids`');
+    expect(text).toMatch(/add_spawn.{0,120}existing|existing.{0,120}add_spawn/s);
+  });
+
+  it('legendary_item places the guardian, and makes it hostile', () => {
+    const text = allPrompts.find((p) => p.name === 'legendary_item')!.text(ARGS.legendary_item!);
+    expect(text).toContain('`upsert_entity`');
+    expect(text).toMatch(/hostile/i);
+    expect(text.indexOf('`upsert_entity`')).toBeGreaterThan(text.indexOf('`new_entity`'));
+  });
+
+  it('quest_chain says how to add new NPCs too', () => {
+    const text = allPrompts.find((p) => p.name === 'quest_chain')!.text(ARGS.quest_chain!);
+    expect(text).toContain('`new_entity`');
+    expect(text).toContain('`upsert_entity`');
+  });
+});

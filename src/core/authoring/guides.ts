@@ -18,7 +18,8 @@ const SCENE = lines(
   '- `owner` is who the scene runs on, by `entry` for an NPC or object. Use the quest giver for acceptance and hand-in scenes, and the target for kill or use scenes.',
   '- `waitMs` on a step is a pause before it runs. Text can use `$N` for the player\'s name.',
   '- A step that needs "the player" (credit, give or take an item, cast on the player, start an escort) only works when a player sets the scene off, which is every trigger except `signal`, `waypointReached` and `summoned`.',
-  '- `name` is a short label for the author; `id` is chosen for you if you leave it out.',
+  '- `name` is a short label for the author. `id` looks like `s1`, `s2` (the letter s and a number); leave it out and the next free one is chosen.',
+  '- `say`, `moveTo`, `startEscort`, `npcFlags` and `faction` only work on an NPC owner. An area owner cannot wait between steps. `eventCredit` only completes a quest that is set to complete from a script event.',
   '',
   '## Kinds',
   '### Owners',
@@ -69,7 +70,7 @@ const SCENE = lines(
   '- Sending a `signal` nobody listens for, or listening for one nobody sends.',
   '',
   '## What the editor checks',
-  'Every write returns the editor\'s issues for the quest: unfinished steps, owners that cannot carry the trigger, credit for missing objectives, and owners that already run a hand-written script. Fix what it reports; errors stop an export.',
+  'Every write returns the editor\'s issues for the quest. Errors stop an export: `SCENE_STEP_INCOMPLETE` (a step is missing something it needs), `SCENE_WRONG_OWNER` (the owner cannot carry that trigger or step), `SCENE_NO_PLAYER` (a step acts on the player but no player sets the trigger off), `SCENE_CREDIT_EMPTY` (credit for an objective that is not an NPC objective), `SCENE_NO_ESCORT` (the escort a `waypointReached` scene waits for is gone), `SCENE_AREA_WAIT` (an area scene waits) and `SCENE_NO_OWNER`. Warnings: `SCENE_NO_STEPS`, `SCENE_EVENT_FLAG` (the quest will not complete from a script event) and `SCENE_ACCEPT_NOT_GIVER` (the owner does not offer or take back the quest). Fix what it reports.',
 );
 
 const FIGHT = lines(
@@ -78,6 +79,8 @@ const FIGHT = lines(
   '',
   '## How the parts fit',
   '- An ability casts `spellId` on a `target` (`victim`, `secondThreat`, `random`, `randomNotTank`, `self`): first after `firstMinS`–`firstMaxS` seconds, then every `repeatMinS`–`repeatMaxS` (both 0 = once).',
+  '- A new NPC is friendly to everyone (faction 35) and never enters combat. Give an NPC that should fight a hostile `faction` such as 14, and a model.',
+  '- `keepDistance` makes it cast from range (only one ability may have it); `skipIfAuraPresent` skips the cast while the target still has the effect. A `hurtFriend` target only works in a `friendHealthBelow` reaction. `phases` on `aggro`, `death` and `evade` reactions are ignored: they happen in every phase.',
   '- `phases` is a list of names. With none, everything is always on. With some, the fight starts in phase 1, and an ability or reaction with `phases: [2]` only runs in phase 2 (an empty list = every phase).',
   '- A reaction is `when` something happens, run `steps` in order. Spells are numbers from the spell list; use 0 only as a placeholder to finish later.',
   '',
@@ -110,7 +113,7 @@ const FIGHT = lines(
   '- `summonAdds` with entry 0, or credit for an objective the quest lacks.',
   '',
   '## What the editor checks',
-  'Writing a fight returns the editor\'s issues for that NPC: spells it does not know, phases that do not exist, health thresholds out of range, adds with no NPC chosen and credit it cannot match. The NPC also needs a model, a name and levels before an export.',
+  'Writing a fight returns the editor\'s issues for that NPC. Errors stop an export: `FIGHT_NO_SPELL`, `FIGHT_TIMING` (times out of order), `FIGHT_HEALTH_PCT` (not 1 to 99), `FIGHT_HURT_FRIEND`, `FIGHT_NO_ADD`, `FIGHT_PHASE_MISSING`, `FIGHT_TWO_MAIN_SPELLS` and the credit checks (`FIGHT_CREDIT_NO_QUEST`, `FIGHT_CREDIT_QUEST_MISSING`, `FIGHT_CREDIT_EMPTY`). Warnings: `FIGHT_UNKNOWN_SPELL` (not in the server\'s spell list), `FIGHT_PHASE_UNREACHED`, `FIGHT_EMPTY_REACTION` and `FIGHT_TOO_FAST` (repeats faster than every 2 seconds). The NPC also needs a model, a name and levels (see the npc guide).',
 );
 
 const PATROL = lines(
@@ -118,7 +121,7 @@ const PATROL = lines(
   'A patrol belongs to one spawn of a new NPC. The NPC walks `points` in order, pauses, then loops back to where it started and walks again. It is written as a waypoint path when a patch is exported.',
   '',
   '## How the parts fit',
-  '- `pathId` is the waypoint path id. Leave it out (or 0) when using `set_npc_patrol` and a free one is chosen.',
+  '- `pathId` is the waypoint path id. Do not set it: `set_npc_patrol` chooses it, and keeps the spawn\'s own when you set its patrol again.',
   '- `startPace` is `walk` or `run`; a point can change it from there on with `paceFromHere`.',
   '- Each point has `x`, `y`, `z` (world yards: X north, Y west), `waitSecs` (the pause there), and `facing` in radians (0 faces north, growing toward west) or null to keep the way it walked in.',
   '- `actions` happen at the point, each `afterSecs` seconds after arriving.',
@@ -137,10 +140,10 @@ const PATROL = lines(
   '## Common mistakes',
   '- A patrol with fewer than two points walks nowhere.',
   '- Points on different maps or far from the spawn: keep the route near it and on the ground.',
-  '- Two actions at the same point that need the same time; use different `afterSecs`.',
+  '- A point action with nothing chosen (an emote, spell or sound left empty): the editor reports `PATROL_UNPICKED`.',
   '',
   '## What the editor checks',
-  'The editor reports patrols it cannot compile (an action with no choice made, such as an emote or spell left empty) in the NPC\'s issues. Routes of existing database NPCs are edited with `set_route`, not here.',
+  'The editor reports a point action with nothing chosen as `PATROL_UNPICKED`, in the NPC\'s issues. Routes of existing database NPCs are edited with `set_route`, not here.',
 );
 
 const LOOT = lines(
@@ -157,12 +160,13 @@ const LOOT = lines(
   '- `questOnly` — drops only for a player who needs it for a quest.',
   '',
   '## Common mistakes',
-  '- An `item` that does not exist, or a typo in its number: check it with `check_ids` and `lookup_names`.',
-  '- `max` below `min`.',
+  '- An `item` of 0 (`LOOT_NO_ITEM`), a `chance` outside 0 to 100 (`LOOT_CHANCE`), or `min` below 1 or above `max` (`LOOT_COUNT`): errors that stop an export.',
+  '- A typo in an item number. The editor does not check that an item exists: confirm it with `check_ids` and `lookup_names`.',
+  '- The same item twice in one list; the loot table is keyed by item, so list each item once.',
   '- Many 100% rows on a common NPC: it floods the economy.',
   '',
   '## What the editor checks',
-  'The editor reports loot rows for items it cannot find and counts that do not make sense. An existing database NPC or object may have its loot locked because other things share the table; make a new NPC instead.',
+  'The editor reports `LOOT_NO_ITEM`, `LOOT_CHANCE`, `LOOT_COUNT`, `LOOT_QUEST_ITEM` (an item a quest asks for belongs in that quest\'s Objectives, not here) and `LOOT_EMPTY_CHEST` (a chest with nothing in it). It does not check that an item exists. An existing database NPC or object may have its loot locked because other things share the table; make a new NPC instead.',
 );
 
 const NPC = lines(
@@ -170,13 +174,13 @@ const NPC = lines(
   'A new NPC for the project: a creature template with its look, levels, faction and role, any number of spawns (where it stands), its loot and its fight. It is written as database rows when a patch is exported.',
   '',
   '## How the parts fit',
-  'Make it with `new_entity`, then fill it in with `fields` or `upsert_entity`, give it spawns, and use `set_loot`, `set_npc_fight` and `set_npc_patrol` for the nested models.',
+  'Make it with `new_entity`, then use `set_loot`, `set_npc_fight` and `set_npc_patrol` for the nested models. To place it, add entries to its `spawns` with `upsert_entity` (a spawn has `guid`, `map`, `x`, `y`, `z`, `o`, `respawnSecs`, `wander`, `patrol`, `rotation`, `events`), taking each `guid` from `allocate_ids` with kind `creatureSpawn`. `add_spawn` places only NPCs that already exist in the database.',
   '',
   '## Fields',
   '- `entry` — its id; chosen for you by `new_entity`. Do not change it.',
   '- `name`, `subname` — the name and the title under it ("Innkeeper").',
   '- `minLevel`, `maxLevel` — its level range; the minimum is at least 1 and not above the maximum.',
-  '- `faction` — a faction template id: 35 friendly to all, 14 hostile to all, 11 Stormwind, 85 Orgrimmar, 7 monster.',
+  '- `faction` — a faction template id: 35 friendly to all, 14 hostile to all, 11 Stormwind, 85 Orgrimmar, 7 monster. A new NPC starts at 35 and never fights; give one that should fight a hostile faction such as 14.',
   '- `displayId` — its model; 0 means none yet and blocks an export. Copy one from an existing NPC with `entity_template`.',
   '- `scale`, `healthModifier`, `damageModifier` — size and strength multipliers (1 = normal).',
   '- `rank` — `normal`, `elite`, `rareElite`, `boss` or `rare`.',
@@ -192,7 +196,7 @@ const NPC = lines(
   '- Reusing an entry: use `new_entity`, which picks a free one.',
   '',
   '## What the editor checks',
-  'Writing an NPC returns the editor\'s issues for it: missing name or model, bad levels, faction, spawns on the wrong map or too near another, weapons that cannot be held, and the fight and patrol checks.',
+  'Writing an NPC returns the editor\'s issues for it. Errors stop an export: `ENTITY_NO_NAME`, `ENTITY_NO_MODEL` and `ENTITY_LEVELS`. Warnings: `ENTITY_NO_SPAWN` (nothing places it in the world), `ENTITY_SPAWN_ORIGIN` (a spawn is still at 0, 0, 0), `ENTITY_GHOST_GIVER` (it gives quests but only the dead see it), `ENTITY_WEAPON` (a held item that is missing or not held in a hand) and `ENTITY_TAKEN` (the entry already holds something in the database, which it would replace). Its fight and patrols add the `FIGHT_` and `PATROL_UNPICKED` checks.',
 );
 
 const OBJECT = lines(
@@ -200,7 +204,7 @@ const OBJECT = lines(
   'A new object for the project: a chest, a readable book or sign, a door or switch, or a generic thing in the world, with spawns and, for chests, loot. It is written as database rows when a patch is exported.',
   '',
   '## How the parts fit',
-  'Make it with `new_entity`, set its `type`, look and `spawns`, and use `set_loot` for a chest. Readable ones have `pages` of text.',
+  'Make it with `new_entity`, set its `type` and look, and use `set_loot` for a chest. Readable ones have `pages` of text. To place it, add entries to its `spawns` with `upsert_entity`, taking each `guid` from `allocate_ids` with kind `gameobjectSpawn`. `add_spawn` places only objects that already exist in the database.',
   '',
   '## Fields',
   '- `entry` — its id; chosen for you. Do not change it.',
@@ -215,10 +219,10 @@ const OBJECT = lines(
   '## Common mistakes',
   '- No model (`displayId` 0) or no name.',
   '- A readable object with no pages.',
-  '- An all-zero `rotation`: it stands upright facing north, which is rarely what you want next to other objects.',
+  '- A `rotation` of null (the default for a new object) turns it by `o` alone. To match a neighbour, copy its `rotation` from `area_overview`; an all-zero stored rotation reads as upright facing north.',
   '',
   '## What the editor checks',
-  'Writing an object returns the editor\'s issues for it: a missing name or model, spawns, and the loot and page checks.',
+  'Writing an object returns the editor\'s issues for it: `ENTITY_NO_NAME`, `ENTITY_NO_MODEL`, `ENTITY_NO_SPAWN`, `ENTITY_NO_PAGES` for a readable object without pages, and `LOOT_EMPTY_CHEST` for a chest with nothing in it, plus the loot checks.',
 );
 
 const ITEM = lines(
@@ -250,7 +254,7 @@ const ITEM = lines(
   '- A `startsQuest` for a quest that does not exist.',
   '',
   '## What the editor checks',
-  'Writing an item returns the editor\'s issues for it: a missing name or model, columns that do not fit, a quest it starts that does not exist, and weapons an NPC cannot hold.',
+  'Writing an item returns the editor\'s issues for it, such as `ITEM_NO_NAME`, `ITEM_NO_LOOK` (no look chosen), `ITEM_LEVELS`, `ITEM_STACK`, `ITEM_STARTS_UNKNOWN` (the quest it starts does not exist) and `ENTITY_TAKEN` (the entry already holds something in the database). A weapon an NPC cannot hold is reported on that NPC as `ENTITY_WEAPON`.',
 );
 
 const GUIDES: Record<AuthoringModel, string> = {

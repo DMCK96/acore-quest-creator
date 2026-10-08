@@ -24,7 +24,6 @@ const point = (x: number, waitSecs: number, actions: unknown[] = []) => ({ x, y:
 
 function patrolExample(): AuthoringExample {
   const value = {
-    pathId: 900100,
     startPace: 'walk',
     points: [
       point(-9460, 0),

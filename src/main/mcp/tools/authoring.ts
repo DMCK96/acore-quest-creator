@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import { AUTHORING_MODELS, authoringSchema, describeAuthoring } from '../../../core/authoring';
-import { newItem, newNpc, newObject, patrolSchema } from '../../../core/entities/model';
+import { patrolInputSchema } from '../../../core/authoring/models';
+import { newItem, newNpc, newObject } from '../../../core/entities/model';
 import type { QuestAggregate } from '../../../core/model/aggregate';
 import { describeScene } from '../../../core/scripts/describe';
 import { SCRIPTS_FIELD, nextSceneId, readScenes, sceneSchema, writeScenes } from '../../../core/scripts/model';
@@ -8,6 +9,9 @@ import type { Result } from '../../../shared/ipc';
 import { defineTool, type McpContext } from '../tool';
 
 const questId = z.number().int().min(1);
+
+/** What the exporter recognises as one of the editor's scenes. */
+const SCENE_ID = /^s\d+$/;
 
 /** A scene as the assistant writes it: the id may be left out, and is chosen for it. */
 const sceneInput = sceneSchema.extend({ id: z.string().optional() });
@@ -83,6 +87,9 @@ export const authoringTools = [
 
       const existing = readScenes(quest.value.values);
       const given = parsed.data.id;
+      if (given !== undefined && given !== '' && !SCENE_ID.test(given)) {
+        return refused('BAD_REQUEST', `Nothing was changed. Scene ids look like s1, s2 (the letter s and a number, s<number>): "${given}" would not be recognised when the quest is exported again. Leave the id out to have one chosen.`);
+      }
       const id = given !== undefined && given !== '' ? given : nextSceneId(existing);
       const written = { ...parsed.data, id };
       const next = existing.some((s) => s.id === id) ? existing.map((s) => (s.id === id ? written : s)) : [...existing, written];
@@ -146,19 +153,22 @@ async function projectNpc(ctx: McpContext, entry: number): Promise<Result<{ stor
   return { ok: true, value: { store: store.value as Store, npc } };
 }
 
-const patrolInput = patrolSchema.extend({ pathId: z.number().int().optional() });
-
 const entityAuthoringTools = [
   defineTool({
     name: 'new_entity',
     title: 'Make a new NPC, object or item',
     description:
-      "Adds a new NPC, object or item to the project with the editor's defaults and a free entry, and answers it with the editor's issues about it (a new NPC still needs a model, for example). `fields` sets anything else, by the names in describe_authoring for npc, object or item; it may not set entry, origin or spawns. Then use set_npc_fight, set_npc_patrol, set_loot, upsert_entity (to add spawns) and add_spawn.",
+      "Adds a new NPC, object or item to the project with the editor's defaults and a free entry, and answers it with the editor's issues about it (a new NPC still needs a model, for example). `fields` sets anything else, by the names in describe_authoring for npc, object or item; it may not set entry, origin or spawns. Then use set_npc_fight, set_npc_patrol and set_loot. To place a new NPC or object, add spawns to it with upsert_entity, taking each spawn guid from allocate_ids (kind creatureSpawn or gameobjectSpawn); add_spawn only places existing database NPCs and objects.",
     input: { kind: z.enum(['npc', 'object', 'item']), name: z.string().min(1).max(100), fields: z.record(z.string(), z.unknown()).optional() },
     write: { kind: 'step', label: ({ kind }: { kind: string }) => `AI: new ${kind}` },
     run: async ({ kind, name, fields }, ctx) => {
       for (const key of ['entry', 'origin', 'spawns']) {
         if (fields && key in fields) return refused('BAD_REQUEST', `Nothing was changed. "${key}" is chosen by the editor and cannot be set in fields.`);
+      }
+      const known = Object.keys(kind === 'npc' ? newNpc(0) : kind === 'object' ? newObject(0) : newItem(0));
+      const unknown = Object.keys(fields ?? {}).filter((key) => !known.includes(key));
+      if (unknown.length > 0) {
+        return refused('BAD_REQUEST', `Nothing was changed. ${WORDS[kind]}s have no field called ${unknown.join(', ')}. Their fields are: ${known.join(', ')}.`);
       }
       const allocated = await ctx.call('allocateIds', ALLOCATE[kind], 1);
       if (!allocated.ok) return allocated;
@@ -205,7 +215,7 @@ const entityAuthoringTools = [
     name: 'set_npc_patrol',
     title: "Set a spawn's patrol",
     description:
-      "Sets (or, with null, removes) the patrol of one spawn of one of the project's NPCs: points to walk in order and loop, with waits and actions. See describe_authoring with model patrol. Leave `pathId` out and a free one is chosen. The spawn (by guid) must already be on the NPC. The answer includes the editor's issues about the NPC.",
+      "Sets (or, with null, removes) the patrol of one spawn of one of the project's NPCs: points to walk in order and loop, with waits and actions. See describe_authoring with model patrol. The path id is chosen by the editor (any `pathId` you give is ignored). The spawn (by guid) must already be on the NPC. The answer includes the editor's issues about the NPC.",
     input: { entry: z.number().int().min(1), guid: z.number().int().min(1), patrol: z.union([z.record(z.string(), z.unknown()), z.null()]) },
     write: { kind: 'step', label: ({ entry }: { entry: number }) => `AI: set patrol of ${entry}` },
     run: async ({ entry, guid, patrol }, ctx) => {
@@ -217,10 +227,13 @@ const entityAuthoringTools = [
       }
       let next = null;
       if (patrol !== null) {
-        const parsed = patrolInput.safeParse(patrol);
+        const parsed = patrolInputSchema.safeParse(patrol);
         if (!parsed.success) return refused('BAD_REQUEST', `Nothing was changed. ${problemsOf(parsed.error, 'patrol')}`);
-        let pathId = parsed.data.pathId;
-        if (pathId === undefined || pathId === 0) {
+        // The editor owns the path id: any given one is ignored (it could be another route's), and the
+        // spawn keeps the one it already has when its patrol is set again
+        const own = npc.spawns.find((s: { guid: number }) => s.guid === guid)?.patrol?.pathId;
+        let pathId = typeof own === 'number' && own > 0 ? own : 0;
+        if (pathId === 0) {
           const allocated = await ctx.call('patrolPathId', guid);
           if (!allocated.ok) return allocated;
           pathId = allocated.value;

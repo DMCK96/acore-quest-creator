@@ -22,6 +22,9 @@ const SUMMARIES: Record<AuthoringModel, string> = {
   item: 'A new item for the project: its quality, level, stats, spells and text.',
 };
 
+/** A patrol as the assistant writes it: the editor chooses the path id, so it is optional here. */
+export const patrolInputSchema = patrolSchema.extend({ pathId: z.number().int().optional() });
+
 /** The zod schema a value of this model must satisfy. */
 export function authoringSchema(model: AuthoringModel): z.ZodType {
   switch (model) {
@@ -30,7 +33,7 @@ export function authoringSchema(model: AuthoringModel): z.ZodType {
     case 'fight':
       return fightSchema;
     case 'patrol':
-      return patrolSchema;
+      return patrolInputSchema;
     case 'loot':
       return z.array(lootSchema);
     case 'npc':

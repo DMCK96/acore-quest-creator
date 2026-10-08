@@ -139,3 +139,26 @@ describe('set_quest_fields and scenes', () => {
     expect(out.value.message).toMatch(/set_scene/);
   });
 });
+
+describe('scene ids', () => {
+  const scene = (over: Record<string, unknown> = {}) => ({
+    name: 'Greeting', owner: { kind: 'creature', entry: 295 }, trigger: { kind: 'questAccepted' }, gates: [],
+    steps: [{ kind: 'say', text: 'Hello, $N.', style: 'say', waitMs: 0 }], ...over,
+  });
+
+  it('refuses an id that is not s followed by a number, because export would not recognise its rows', async () => {
+    const { call, api } = await mcpFixture(allTools);
+    const { questId } = (await call('new_quest')).value;
+    const out = await call('set_scene', { questId, scene: scene({ id: 'intro boss' }) });
+    expect(out.isError).toBe(true);
+    expect(out.value.code).toBe('BAD_REQUEST');
+    expect(out.value.message).toMatch(/s<number>|s1/);
+    expect(((await api.historyList()) as any).value.steps.map((s: any) => s.label)).toEqual(['AI: new quest']);
+  });
+
+  it('accepts s12', async () => {
+    const { call } = await mcpFixture(allTools);
+    const { questId } = (await call('new_quest')).value;
+    expect((await call('set_scene', { questId, scene: scene({ id: 's12' }) })).value.sceneId).toBe('s12');
+  });
+});

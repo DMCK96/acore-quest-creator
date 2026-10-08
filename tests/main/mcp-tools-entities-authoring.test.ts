@@ -119,13 +119,27 @@ describe('set_npc_patrol', () => {
     expect((await labels(api)).at(-1)).toBe(`AI: set patrol of ${entry}`);
   });
 
-  it('allocates a free path id when none is given, and keeps one that is', async () => {
+  it('chooses the path id itself, ignoring one it is given, so it cannot collide with another route', async () => {
     const { call, entry } = await withSpawn();
     const { pathId: _omitted, ...bare } = patrol;
     await call('set_npc_patrol', { entry, guid: 90100, patrol: bare });
     expect((await call('list_project_entities')).value.npcs[0].spawns[0].patrol.pathId).toBe(901000);
-    await call('set_npc_patrol', { entry, guid: 90100, patrol: { ...patrol, pathId: 555 } });
-    expect((await call('list_project_entities')).value.npcs[0].spawns[0].patrol.pathId).toBe(555);
+    const fresh = (await call('new_entity', { kind: 'npc', name: 'Other' })).value.entity;
+    const other = (await call('list_project_entities')).value.npcs.find((n: any) => n.entry === fresh.entry);
+    await call('upsert_entity', { kind: 'npc', entity: { ...other, spawns: [spawn(90200)] } });
+    await call('set_npc_patrol', { entry: fresh.entry, guid: 90200, patrol: { ...patrol, pathId: 901000 } });
+    const got = (await call('list_project_entities')).value.npcs.find((n: any) => n.entry === fresh.entry).spawns[0].patrol.pathId;
+    expect(got).toBe(902000);
+  });
+
+  it('keeps the spawn\'s own path id when its patrol is set again', async () => {
+    const { call, entry } = await withSpawn();
+    await call('set_npc_patrol', { entry, guid: 90100, patrol });
+    const first = (await call('list_project_entities')).value.npcs[0].spawns[0].patrol.pathId;
+    await call('set_npc_patrol', { entry, guid: 90100, patrol: { ...patrol, points: [point(1), point(2)] } });
+    const second = (await call('list_project_entities')).value.npcs[0].spawns[0].patrol;
+    expect(second.pathId).toBe(first);
+    expect(second.points).toHaveLength(2);
   });
 
   it('names the spawns the NPC has when the guid is wrong', async () => {
@@ -182,5 +196,25 @@ describe('check_project_entities', () => {
     expect(out.isError).toBe(false);
     expect(out.value.some((i: any) => i.code === 'ENTITY_NO_MODEL')).toBe(true);
     expect(order.length).toBe(flushes);
+  });
+});
+
+describe('new_entity fields', () => {
+  it('refuses a field name the entity does not have, and lists the ones it does', async () => {
+    const { call, api } = await mcpFixture(allTools);
+    const out = await call('new_entity', { kind: 'npc', name: 'X', fields: { level: 12, faction_id: 14 } });
+    expect(out.isError).toBe(true);
+    expect(out.value.code).toBe('BAD_REQUEST');
+    expect(out.value.message).toContain('level');
+    expect(out.value.message).toContain('faction_id');
+    expect(out.value.message).toContain('minLevel');
+    expect(((await api.historyList()) as any).value.steps).toEqual([]);
+  });
+
+  it('says in its description how a new NPC or object is placed', () => {
+    const description = allTools.find((t) => t.name === 'new_entity')!.description;
+    expect(description).toContain('upsert_entity');
+    expect(description).toContain('allocate_ids');
+    expect(description).toMatch(/existing/);
   });
 });

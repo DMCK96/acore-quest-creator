@@ -1,3 +1,4 @@
+import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 import { AUTHORING_MODELS, jsonSchemaOf, kindsIn } from '../../src/core/authoring/models';
 import { guideOf } from '../../src/core/authoring/guides';
@@ -34,5 +35,52 @@ describe('the guides', () => {
     const guide = guideOf('npc');
     expect(guide).toContain('35');
     expect(guide).toContain('14');
+  });
+});
+
+describe('the guides tell the truth about the editor', () => {
+  const sources = ['src/core/scripts/validate.ts', 'src/core/combat/validate.ts', 'src/core/entities/validate.ts', 'src/core/patrol/compile.ts']
+    .map((path) => readFileSync(path, 'utf8'))
+    .join('\n');
+
+  it('cite only issue codes the editor really has', () => {
+    for (const model of AUTHORING_MODELS) {
+      const cited = [...guideOf(model).matchAll(/`((?:SCENE|FIGHT|ENTITY|ITEM|LOOT|PATROL)_[A-Z_]+)`/g)].map((m) => m[1]!);
+      for (const code of cited) expect(sources.includes(`'${code}'`), `${model} guide cites ${code}`).toBe(true);
+    }
+  });
+
+  it('cite enough codes that a reader can match what the editor reports', () => {
+    const count = (model: Parameters<typeof guideOf>[0]) => new Set([...guideOf(model).matchAll(/`(?:SCENE|FIGHT|ENTITY|ITEM|LOOT|PATROL)_[A-Z_]+`/g)].map((m) => m[0])).size;
+    expect(count('scene')).toBeGreaterThanOrEqual(4);
+    expect(count('fight')).toBeGreaterThanOrEqual(4);
+    expect(count('npc')).toBeGreaterThanOrEqual(3);
+    expect(count('loot')).toBeGreaterThanOrEqual(2);
+    expect(count('item')).toBeGreaterThanOrEqual(2);
+  });
+
+  it('do not claim checks the editor does not make', () => {
+    expect(guideOf('npc')).not.toMatch(/too near another|wrong map/i);
+    expect(guideOf('loot')).not.toMatch(/cannot find/i);
+    expect(guideOf('patrol')).not.toMatch(/same time/i);
+  });
+
+  it('say how to place a new NPC or object, and that a new NPC is friendly until given a hostile faction', () => {
+    for (const model of ['npc', 'object'] as const) {
+      expect(guideOf(model)).toContain('allocate_ids');
+      expect(guideOf(model)).toContain('upsert_entity');
+    }
+    for (const model of ['npc', 'fight'] as const) {
+      expect(guideOf(model)).toMatch(/friendly/i);
+      expect(guideOf(model)).toContain('14');
+    }
+  });
+
+  it('say scene ids look like s1, s2 and so on', () => {
+    expect(guideOf('scene')).toMatch(/`s1`/);
+  });
+
+  it('say the patrol path id is chosen by the editor', () => {
+    expect(guideOf('patrol')).toMatch(/pathId.*(chosen|allocat)/s);
   });
 });

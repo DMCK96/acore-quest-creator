@@ -46,4 +46,11 @@ describe('the authoring models', () => {
     const js = { properties: { kind: { const: 'a' }, inner: { anyOf: [{ properties: { kind: { const: 'b' } } }, { properties: { kind: { const: 'a' } } }] } } };
     expect(kindsIn(js)).toEqual(['a', 'b']);
   });
+
+  it('write a patrol without a path id: the editor chooses it', () => {
+    const noPath = { startPace: 'walk', points: [] };
+    expect(authoringSchema('patrol').safeParse(noPath).success).toBe(true);
+    const required = (jsonSchemaOf('patrol') as { required?: string[] }).required ?? [];
+    expect(required).not.toContain('pathId');
+  });
 });
