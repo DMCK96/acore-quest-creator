@@ -8,6 +8,7 @@ import { EXTERNAL_CHANGE_CHANNEL, FLUSH_DONE_CHANNEL, FLUSH_REQUEST_CHANNEL, HIS
 import { describeStep } from './project/step-labels';
 import { API_METHODS, channelFor, type Api } from '../shared/ipc';
 import { invokeApi } from './api/invoke';
+import { waitForFlush } from './wait-for-flush';
 import type { McpContext } from './mcp/tool';
 import { createMcpController, type McpController } from './mcp/controller';
 import { startMcpHttp } from './mcp/http';
@@ -181,11 +182,15 @@ const electronDialogs: Dialogs = {
   },
 };
 
-/** Asks a window to hand over any edit it still holds back, and waits until it has. */
-const requestFlush = (win: BrowserWindow): Promise<void> =>
-  new Promise((resolve) => {
-    ipcMain.once(FLUSH_DONE_CHANNEL, () => resolve());
-    win.webContents.send(FLUSH_REQUEST_CHANNEL);
+/** Asks a window to hand over any edit it still holds back, and waits until it has (or the timeout, when given). */
+const requestFlush = (win: BrowserWindow, timeoutMs?: number): Promise<void> =>
+  waitForFlush({
+    listen: (done) => {
+      ipcMain.once(FLUSH_DONE_CHANNEL, done);
+      return () => void ipcMain.removeListener(FLUSH_DONE_CHANNEL, done);
+    },
+    send: () => win.webContents.send(FLUSH_REQUEST_CHANNEL),
+    ...(timeoutMs !== undefined ? { timeoutMs } : {}),
   });
 
 function createWindow(session: ProjectSession, recovery: Recovery, projects: ProjectController): void {
@@ -304,7 +309,8 @@ void app.whenReady().then(() => {
     call: ((method: keyof Api, ...args: unknown[]) => invokeApi(api!, method, args)) as McpContext['call'],
     flush() {
       const win = BrowserWindow.getAllWindows().find((w) => !w.isDestroyed());
-      return win ? requestFlush(win) : Promise.resolve();
+      // The write guard stops waiting at 5 s; this clears the listener just after
+      return win ? requestFlush(win, 6000) : Promise.resolve();
     },
     notify(change) {
       for (const win of BrowserWindow.getAllWindows()) if (!win.isDestroyed()) win.webContents.send(EXTERNAL_CHANGE_CHANNEL, change);
