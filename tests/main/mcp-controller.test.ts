@@ -25,7 +25,7 @@ describe('the MCP controller', () => {
     const { controller, events, settings } = setup();
     const on = await controller.configure({ enabled: true, port: 50000 });
     expect(on).toMatchObject({ enabled: true, running: true, port: 50000, url: 'http://127.0.0.1:50000/mcp', error: null });
-    expect(on.token).toBe(settings.read().token);
+    expect(on.token).toBe(settings.token());
     const off = await controller.configure({ enabled: false, port: 50000 });
     expect(off.running).toBe(false);
     expect(events).toEqual(['listen 50000', 'close 50000']);
@@ -80,5 +80,20 @@ describe('the MCP controller', () => {
     expect(last).toMatchObject({ enabled: false, running: false });
     expect(controller.status().running).toBe(false);
     expect(events).toEqual(['listen 50000', 'close 50000']);
+  });
+
+  it('starts and reports while off on a machine with no secure storage, with an empty token', async () => {
+    const noKeyring = { encrypt: () => { throw new Error('no secure storage'); }, decrypt: () => { throw new Error('no secure storage'); } };
+    const controller = createMcpController({ settings: createMcpSettings(openStore(':memory:', noKeyring)), listen: async (o) => ({ port: o.port, close: async () => {} }) });
+    expect(await controller.start()).toMatchObject({ enabled: false, running: false, token: '', error: null });
+    expect(controller.status().token).toBe('');
+  });
+
+  it('turns itself off and says why when there is no secure storage to hold the token', async () => {
+    const noKeyring = { encrypt: () => { throw new Error('no secure storage'); }, decrypt: () => { throw new Error('no secure storage'); } };
+    const controller = createMcpController({ settings: createMcpSettings(openStore(':memory:', noKeyring)), listen: async (o) => ({ port: o.port, close: async () => {} }) });
+    const out = await controller.configure({ enabled: true, port: 50000 });
+    expect(out).toMatchObject({ enabled: false, running: false });
+    expect(out.error).toMatch(/no secure storage/);
   });
 });

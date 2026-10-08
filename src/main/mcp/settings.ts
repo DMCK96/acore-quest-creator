@@ -12,25 +12,29 @@ const TOKEN = 'mcp.token';
 export interface McpSettingsValues {
   enabled: boolean;
   port: number;
-  token: string;
 }
 
 /**
  * Whether the MCP server runs, on which port, and the token a client must present. Off by default.
- * The token is made on first use and kept sealed in the store; it never leaves the machine except
- * through the Settings tab.
+ * The token is made the first time it is asked for and kept sealed in the store; it never leaves the
+ * machine except through the Settings tab. Reading the other settings never touches it, so a machine
+ * with no secure storage works normally while the server is off.
  */
 export function createMcpSettings(store: Store, random: (bytes: number) => Buffer = randomBytes) {
   const newToken = (): string => random(32).toString('base64url');
   return {
     read(): McpSettingsValues {
+      const port = Number(store.settings.get(PORT));
+      return { enabled: store.settings.get(ENABLED) === '1', port: Number.isInteger(port) && port >= MIN_MCP_PORT ? port : DEFAULT_MCP_PORT };
+    },
+    /** The token a client must present; made and sealed on first use. Throws where there is no secure storage. */
+    token(): string {
       let token = store.settings.getSecret(TOKEN);
       if (token === null) {
         token = newToken();
         store.settings.setSecret(TOKEN, token);
       }
-      const port = Number(store.settings.get(PORT));
-      return { enabled: store.settings.get(ENABLED) === '1', port: Number.isInteger(port) && port >= MIN_MCP_PORT ? port : DEFAULT_MCP_PORT, token };
+      return token;
     },
     setEnabled(on: boolean): void {
       store.settings.set(ENABLED, on ? '1' : '0');

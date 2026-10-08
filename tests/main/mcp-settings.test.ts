@@ -10,8 +10,9 @@ describe('MCP settings', () => {
     const a = settings.read();
     expect(a.enabled).toBe(false);
     expect(a.port).toBe(47600);
-    expect(a.token.length).toBeGreaterThanOrEqual(32);
-    expect(settings.read().token).toBe(a.token);
+    const token = settings.token();
+    expect(token.length).toBeGreaterThanOrEqual(32);
+    expect(settings.token()).toBe(token);
   });
 
   it('remembers enabled, port and token in the store', () => {
@@ -19,16 +20,25 @@ describe('MCP settings', () => {
     const first = createMcpSettings(store);
     first.setEnabled(true);
     first.setPort(50000);
-    const token = first.read().token;
-    expect(createMcpSettings(store).read()).toEqual({ enabled: true, port: 50000, token });
+    const token = first.token();
+    const again = createMcpSettings(store);
+    expect(again.read()).toEqual({ enabled: true, port: 50000 });
+    expect(again.token()).toBe(token);
   });
 
   it('regenerates a different token', () => {
     const settings = createMcpSettings(openStore(':memory:', box));
-    const old = settings.read().token;
+    const old = settings.token();
     const fresh = settings.regenerateToken();
     expect(fresh).not.toBe(old);
-    expect(settings.read().token).toBe(fresh);
+    expect(settings.token()).toBe(fresh);
+  });
+
+  it('does not make a token, or need the keyring, until one is asked for', () => {
+    const noKeyring = { encrypt: () => { throw new Error('no secure storage'); }, decrypt: () => { throw new Error('no secure storage'); } };
+    const settings = createMcpSettings(openStore(':memory:', noKeyring));
+    expect(settings.read()).toEqual({ enabled: false, port: 47600 });
+    expect(() => settings.token()).toThrow(/no secure storage/);
   });
 
   it('refuses a port that is not a whole number from 1024 to 65535', () => {

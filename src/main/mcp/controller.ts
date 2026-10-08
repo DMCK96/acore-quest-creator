@@ -36,7 +36,8 @@ export function createMcpController({ settings, listen }: McpControllerOptions):
 
   const status = (): McpStatus => {
     const s = settings.read();
-    return { enabled: s.enabled, port: s.port, url: `http://127.0.0.1:${s.port}/mcp`, token: s.token, running: listener !== null, error };
+    // The token is only shown while the server runs; reading it is what needs the secure storage
+    return { enabled: s.enabled, port: s.port, url: `http://127.0.0.1:${s.port}/mcp`, token: listener !== null ? settings.token() : '', running: listener !== null, error };
   };
   const stop = async (): Promise<void> => {
     const old = listener;
@@ -49,7 +50,8 @@ export function createMcpController({ settings, listen }: McpControllerOptions):
     const s = settings.read();
     if (s.enabled) {
       try {
-        listener = await listen({ port: s.port, token: () => settings.read().token });
+        settings.token();
+        listener = await listen({ port: s.port, token: () => settings.token() });
       } catch (e) {
         settings.setEnabled(false);
         error = e instanceof Error ? e.message : String(e);
