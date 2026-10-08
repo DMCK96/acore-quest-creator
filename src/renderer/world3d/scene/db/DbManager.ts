@@ -1,5 +1,6 @@
 // @ts-nocheck
-import { ClientDb, ClientDbRecord } from '@wowserhq/format';
+import { ClientDbRecord } from '@wowserhq/format';
+import { LazyClientDb } from './LazyClientDb.js';
 import { AssetHost, loadAsset, normalizePath } from '../asset.js';
 
 interface Constructor<T> {
@@ -12,14 +13,14 @@ type DbManagerOptions = {
 
 class DbManager {
   #host: AssetHost;
-  #loaded = new Map<string, ClientDb<any>>();
-  #loading = new Map<string, Promise<ClientDb<any>>>();
+  #loaded = new Map<string, LazyClientDb<any>>();
+  #loading = new Map<string, Promise<LazyClientDb<any>>>();
 
   constructor(options: DbManagerOptions) {
     this.#host = options.host;
   }
 
-  get<T extends ClientDbRecord>(name: string, RecordClass: Constructor<T>): Promise<ClientDb<T>> {
+  get<T extends ClientDbRecord>(name: string, RecordClass: Constructor<T>): Promise<LazyClientDb<T>> {
     const refId = [normalizePath(name), RecordClass.prototype.constructor.name].join(':');
 
     const loaded = this.#loaded.get(refId);
@@ -42,13 +43,13 @@ class DbManager {
     refId: string,
     name: string,
     RecordClass: Constructor<T>,
-  ): Promise<ClientDb<T>> {
+  ): Promise<LazyClientDb<T>> {
     const path = `DBFilesClient/${name}`;
 
-    let db: ClientDb<T>;
+    let db: LazyClientDb<T>;
     try {
       const data = await loadAsset(this.#host, path);
-      db = new ClientDb(RecordClass).load(data);
+      db = new LazyClientDb(RecordClass).load(data);
 
       this.#loaded.set(refId, db);
     } finally {

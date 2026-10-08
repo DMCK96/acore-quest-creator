@@ -2,7 +2,6 @@
 import * as THREE from 'three';
 import {
   AreaTableRecord,
-  ClientDb,
   Map,
   MAP_AREA_COUNT_Y,
   MAP_CHUNK_COUNT_Y,
@@ -34,6 +33,7 @@ import { GLOBAL_AREA, WHOLE_MAP, globalWmoArea, type GlobalWmo } from './global-
 import { MapAreaSpec, MapSpec } from './loader/types.js';
 import MapLight from './light/MapLight.js';
 import DbManager from '../db/DbManager.js';
+import type { ClientTable } from '../db/LazyClientDb.js';
 import { describeError, reportProblem } from '../diagnostics.js';
 import type { Frame } from '../../../../core/map/transport-frame.js';
 
@@ -102,7 +102,7 @@ class MapManager extends EventTarget {
 
   #mapLight: MapLight;
 
-  #areaTableDb: ClientDb<AreaTableRecord>;
+  #areaTableDb: ClientTable<AreaTableRecord>;
 
   #target = new THREE.Vector2();
   #targetAreaX: number;

@@ -4,7 +4,7 @@
  * scene's DbManager), so a client's custom displays draw too. A display that cannot be drawn resolves
  * to null and its spawn is drawn as a marker.
  */
-import { ClientDb } from '@wowserhq/format';
+import type { ClientTable } from '../db/LazyClientDb.js';
 import { CreatureDisplayInfoRecord, CreatureModelDataRecord, GameObjectDisplayInfoRecord } from '../db/records.js';
 import { modelPath } from '../asset.js';
 import { ViewPreset } from '../../../../core/db/view-spawns.js';
@@ -33,7 +33,7 @@ type BodyLayer = { files: string[]; region: Region | null };
 type BodyTexture = { base: string; layers: BodyLayer[] };
 
 /** The client's tables by name (without `.dbc`); a table the client cannot give resolves to null */
-type DisplayTables = { get(name: string): Promise<ClientDb<any> | null> };
+type DisplayTables = { get(name: string): Promise<ClientTable | null> };
 
 type ModelLook = {
   kind: 'model';
@@ -106,7 +106,7 @@ const folderOf = (path: string) => {
 
 class DisplayResolver {
   #tables: DisplayTables;
-  #loading = new globalThis.Map<string, Promise<ClientDb<any> | null>>();
+  #loading = new globalThis.Map<string, Promise<ClientTable | null>>();
   #warned = new Set<string>();
   #indexes = new globalThis.Map<string, Promise<globalThis.Map<string, any>>>();
   #bodies: Promise<globalThis.Map<number, { race: number; sex: number }>> | null = null;

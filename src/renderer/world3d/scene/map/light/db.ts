@@ -1,7 +1,6 @@
 // @ts-nocheck
 import * as THREE from 'three';
 import {
-  ClientDb,
   LightFloatBandRecord,
   LightIntBandRecord,
   LightParamsRecord,
@@ -11,12 +10,13 @@ import {
 } from '@wowserhq/format';
 import { LIGHT_FLOAT_BAND, LIGHT_INT_BAND } from './const.js';
 import { AreaLight } from './types.js';
+import type { ClientTable } from '../../db/LazyClientDb.js';
 
 const getAreaLightsFromDb = (
-  lightDb: ClientDb<LightRecord>,
-  lightParamsDb: ClientDb<LightParamsRecord>,
-  lightIntBandDb: ClientDb<LightIntBandRecord>,
-  lightFloatBandDb: ClientDb<LightFloatBandRecord>,
+  lightDb: ClientTable<LightRecord>,
+  lightParamsDb: ClientTable<LightParamsRecord>,
+  lightIntBandDb: ClientTable<LightIntBandRecord>,
+  lightFloatBandDb: ClientTable<LightFloatBandRecord>,
 ) => {
   const lights: Record<number, AreaLight[]> = {};
 
@@ -74,7 +74,7 @@ const getAreaLightsFromDb = (
   return lights;
 };
 
-const getFloatBandsForParam = (paramId: number, bandDb: ClientDb<LightFloatBandRecord>) => {
+const getFloatBandsForParam = (paramId: number, bandDb: ClientTable<LightFloatBandRecord>) => {
   const floatBandCount = LIGHT_FLOAT_BAND.NUM_LIGHT_FLOAT_BANDS;
   const floatBands = new Array(floatBandCount);
 
@@ -98,7 +98,7 @@ const getFloatBandsForParam = (paramId: number, bandDb: ClientDb<LightFloatBandR
   return floatBands;
 };
 
-const getIntBandsForParam = (paramId: number, bandDb: ClientDb<LightIntBandRecord>) => {
+const getIntBandsForParam = (paramId: number, bandDb: ClientTable<LightIntBandRecord>) => {
   const intBandCount = LIGHT_INT_BAND.NUM_LIGHT_INT_BANDS;
   const intBands = new Array(intBandCount);
 
