@@ -57,6 +57,22 @@ The assistant can also search and read pages on [warcraft.wiki.gg](https://warcr
 - The wiki covers every expansion, while your server is at Wrath of the Lich King. The assistant is told that later events have not happened in your world's story yet, and that later content is welcome as inspiration, as long as it says where an idea comes from.
 - If the wiki refuses the request, the assistant is told so and carries on without it.
 
+## Scenes, fights, patrols and loot
+
+Beyond quest text, the assistant can write the parts that make a quest or an encounter come alive, in the editor's own terms:
+
+- **Scenes** on a quest: when something happens to an NPC, object or area (the quest is accepted, a player talks to it, it dies, someone enters an area), and only if some conditions hold, a list of steps runs, such as saying a line, giving credit, spawning an NPC or escorting one.
+- **Boss fights** for the NPCs it makes: abilities on timers, reactions at health thresholds, phases, adds and surrender.
+- **Patrol routes** for the spawns of its NPCs, with pauses and actions at each point.
+- **Loot** for its NPCs and chests.
+- **New NPCs, objects and items**, such as a legendary sword and the captain who guards it.
+
+It learns each of these from a built-in guide and examples, and the editor checks everything it writes and tells it what is still wrong, so it can fix it. An existing database NPC's fight or loot is left alone when the editor locks it. None of this changes the database until you export a patch and apply it yourself.
+
+## Ready-made workflows
+
+A client such as Claude Code offers three workflows as slash commands: **quest_chain** (research a zone and build a chain that fits it), **legendary_item** (brainstorm an outline with you first, then build the item, its guardian and the chain) and **populate_place** (add NPCs or objects that fit a place and face the way their neighbours do). Each one works in your open project, labels its steps "AI: …", and asks before exporting.
+
 ## What it cannot do
 
 - It never writes to your world database, and it cannot apply a patch to your dev database. You apply patches yourself, as always.
