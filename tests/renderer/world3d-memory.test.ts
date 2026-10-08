@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { WORLD_MAPS, setClientMaps, type WorldMap } from '../../src/core/map/world-maps';
-import { LAST_PLACE_KEY, readLastPlace, writeLastPlace } from '../../src/renderer/world3d/last-place';
+import { LAST_PLACE_KEY, readLastPlace, readSavedPlace, writeLastPlace } from '../../src/renderer/world3d/last-place';
 import { WELCOME_SEEN_KEY, markWelcomeSeen, projectKey, welcomeSeen } from '../../src/renderer/world3d/welcome-seen';
 
 const fallback = { map: WORLD_MAPS[0]!.id, ...WORLD_MAPS[0]!.start };
@@ -44,6 +44,13 @@ describe('where the world was left', () => {
       localStorage.setItem(LAST_PLACE_KEY, JSON.stringify({ map: 1, x: 10, y: 20, z: 30 }));
       expect(readLastPlace()).toEqual({ map: 1, x: 10, y: 20, z: 30 });
     });
+  });
+  it('keeps a place on a map not known yet, to open once the client\'s maps are read', () => {
+    writeLastPlace({ map: 591, x: 1, y: 2, z: 3, transport: { template: 2, node: 4 } });
+    expect(readLastPlace()).toEqual(fallback);
+    expect(readSavedPlace()).toEqual({ map: 591, x: 1, y: 2, z: 3, transport: { template: 2, node: 4 } });
+    localStorage.setItem(LAST_PLACE_KEY, '{oops');
+    expect(readSavedPlace()).toBeNull();
   });
   it('never throws when storage does', () => {
     vi.spyOn(Storage.prototype, 'getItem').mockImplementation(() => { throw new Error('denied'); });

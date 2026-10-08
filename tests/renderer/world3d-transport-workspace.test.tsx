@@ -9,7 +9,7 @@ import { clearClipboard } from '../../src/renderer/world3d/clipboard';
 import { EMPTY_ENTITIES, newNpc, newSpawn, type ProjectEntities } from '../../src/core/entities/model';
 import { markWelcomeSeen } from '../../src/renderer/world3d/welcome-seen';
 import { setClientMaps, type WorldMap } from '../../src/core/map/world-maps';
-import { writeLastPlace } from '../../src/renderer/world3d/last-place';
+import { LAST_PLACE_KEY, writeLastPlace } from '../../src/renderer/world3d/last-place';
 import { NODE_STOP, type TaxiNode } from '../../src/core/game/taxi-path';
 import { frameOfView, routeLinesOf } from '../../src/core/map/transport-view';
 import { placementToLocal, toWorld } from '../../src/core/map/transport-frame';
@@ -122,6 +122,28 @@ describe('a transport in the World', () => {
     fireEvent.change(screen.getByLabelText('Stop'), { target: { value: '2' } });
     await waitFor(() => expect(worlds.at(-1).options.directory).toBe('azeroth'));
     expect(worlds.at(-1).options).toMatchObject({ map: 591, hostMap: 0 });
+  });
+
+  it('reopens a saved stop once the client\'s maps are read, though it was left on a transport', async () => {
+    writeLastPlace({ map: 591, x: 2000, y: 300, z: 40, transport: { template: 175080, node: 2 } });
+    mount();
+    await waitFor(() => expect(worlds.at(-1)?.options.map).toBe(591));
+    expect(worlds.at(-1).options).toMatchObject({ hostMap: 0, directory: 'azeroth', start: { x: 2000, y: 300, z: 40 } });
+    expect((screen.getByLabelText('Stop') as HTMLSelectElement).value).toBe('2');
+    expect(JSON.parse(localStorage.getItem(LAST_PLACE_KEY)!)).toMatchObject({ map: 591, transport: { template: 175080, node: 2 } });
+  });
+
+  it('leaves the map alone when the author chose another before the client\'s maps came', async () => {
+    writeLastPlace({ map: 591, x: 2000, y: 300, z: 40, transport: { template: 175080, node: 2 } });
+    let answer!: (value: unknown) => void;
+    mount({ overrides: { clientMaps: vi.fn(() => new Promise((resolve) => (answer = resolve))) } });
+    await waitFor(() => expect(worlds).toHaveLength(1));
+    fireEvent.click(screen.getByRole('button', { name: 'Coordinates' }));
+    fireEvent.change(screen.getByLabelText('Map'), { target: { value: '1' } });
+    await waitFor(() => expect(worlds.at(-1).options.map).toBe(1));
+    answer(okv([zeppelin()]));
+    await new Promise((r) => setTimeout(r, 20));
+    expect(worlds.at(-1).options.map).toBe(1);
   });
 
   it('changes the route without reading the passengers again', async () => {

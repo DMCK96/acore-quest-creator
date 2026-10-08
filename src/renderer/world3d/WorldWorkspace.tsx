@@ -32,7 +32,7 @@ import { questLabel } from '@core/links/drag-link';
 import { useFocusFollow } from './useFocusFollow';
 import type { FocusPart, FocusSlice } from '../state/app/focus';
 import { NEEDS_DATABASE } from './menu/section';
-import { readLastPlace, writeLastPlace } from './last-place';
+import { readLastPlace, readSavedPlace, writeLastPlace } from './last-place';
 import { markWelcomeSeen, welcomeSeen } from './welcome-seen';
 import { Welcome } from './Welcome';
 import { useQuestMarkers } from './useQuestMarkers';
@@ -332,6 +332,24 @@ export function WorldWorkspace({
   };
   const backRef = useRef(goBack);
   backRef.current = goBack;
+  // A place left on a map the client holds (a dungeon, a transport) is only known once the client's maps are
+  // read: the World opens there then, at the route and stop it was left at, unless the author went elsewhere first
+  useEffect(() => {
+    const saved = readSavedPlace();
+    if (!saved || saved.map === first.map) return;
+    let live = true;
+    void mapsReady().then(() => {
+      if (!live || mapRef.current !== first.map || !worldMapById(saved.map)) return;
+      goTo({ x: saved.x, y: saved.y, z: saved.z }, saved.map);
+      setChosenView(saved.transport);
+      writeLastPlace(saved);
+    });
+    return () => {
+      live = false;
+    };
+    // Once, for the place the World was opened with
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
   // Picking a map in the Coordinates form already jumped (and remembered where from); the Go that
   // follows is part of the same move, so it does not remember the map's start as a place to go back to
   const mapPicked = useRef(false);
