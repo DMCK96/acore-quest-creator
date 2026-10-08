@@ -98,6 +98,13 @@ export const API_METHODS = [
   'mcpStatus',
   'mcpConfigure',
   'mcpRegenerateToken',
+  'questsInZone',
+  'questSummaries',
+  'areaOverview',
+  'checkNames',
+  'checkIds',
+  'wikiSearch',
+  'wikiPage',
 ] as const satisfies readonly (keyof Api)[];
 
 /** Fails to compile if `Api` gains or loses a method that this list does not follow. */

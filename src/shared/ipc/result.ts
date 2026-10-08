@@ -3,6 +3,8 @@ import type { Issue } from '@core/validate/validate';
 
 export type ErrorCode =
   | 'NOT_CONNECTED'
+  /** A feature the user has not switched on (wiki lookups) */
+  | 'NOT_ENABLED'
   | 'INVALID_QUEST_ID'
   | 'QUEST_NOT_FOUND'
   | 'FIDELITY'

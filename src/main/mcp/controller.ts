@@ -17,6 +17,8 @@ export interface McpController {
   /** Starts the server if it was left enabled; for the app's launch. */
   start(): Promise<McpStatus>;
   configure(c: { enabled: boolean; port: number }): Promise<McpStatus>;
+  /** Whether the user has allowed the assistant to look things up on the wiki. */
+  wikiEnabled(): boolean;
   regenerateToken(): Promise<McpStatus>;
   stop(): Promise<void>;
 }
@@ -62,6 +64,7 @@ export function createMcpController({ settings, listen }: McpControllerOptions):
 
   return {
     status,
+    wikiEnabled: () => false,
     start: () => queued(begin),
     configure: ({ enabled, port }) =>
       queued(async () => {
