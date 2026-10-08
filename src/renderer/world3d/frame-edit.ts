@@ -1,6 +1,7 @@
 import { IDENTITY_FRAME, placementToLocal, type Frame } from '../../core/map/transport-frame';
 import type { Placement } from '../../core/world/layer';
 import type { SpawnEdit } from './edits';
+import type { MenuTarget } from './menu/model';
 
 const isIdentity = (f: Frame): boolean =>
   f.x === IDENTITY_FRAME.x && f.y === IDENTITY_FRAME.y && f.z === IDENTITY_FRAME.z && f.heading === IDENTITY_FRAME.heading;
@@ -27,4 +28,23 @@ export function localiseEdit(edit: SpawnEdit, frame: Frame): SpawnEdit | null {
     default:
       return edit;
   }
+}
+
+/** The frame an edit of a spawn is stored through: its dock's when it stands at one, else the view's own */
+export function frameFor(owner: Frame | null, view: Frame): Frame {
+  return owner ?? view;
+}
+
+/**
+ * Whether a right-click is on a vessel, where walking paths are not edited: the view is a vessel's own, or the
+ * spawn hit, or any selected, stands at a docked one. `frameOf` is the scene's answer for a spawn.
+ */
+export function aboardVessel(
+  target: MenuTarget,
+  viewIsVessel: boolean,
+  frameOf: (kind: 'creature' | 'object', guid: number) => Frame | null,
+): boolean {
+  if (viewIsVessel) return true;
+  const spawns = target.hit?.type === 'spawn' ? [target.hit.spawn, ...target.selection] : target.selection;
+  return spawns.some((spawn) => frameOf(spawn.kind, spawn.guid) !== null);
 }

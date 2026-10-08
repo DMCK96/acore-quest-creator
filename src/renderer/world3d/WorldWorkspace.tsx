@@ -16,7 +16,8 @@ import { newSpawnGuid } from './spawn-guid';
 import { chainOf, questMenuInfo } from './quest-context';
 import { OBJECTIVES_FULL } from './menu/section';
 import { groupWorldMaps, isTerrainMap, worldMapById } from '@core/map/world-maps';
-import { frameOfView, normaliseView, type TransportView } from '@core/map/transport-view';
+import { frameOfView, hostMapIdOf, normaliseView, type TransportView } from '@core/map/transport-view';
+import { docksOn } from '@core/map/transport-docks';
 import { toLocal, toWorld, type Frame } from '@core/map/transport-frame';
 import { TransportBar } from './TransportBar';
 import { useClientMaps } from './useClientMaps';
@@ -232,6 +233,10 @@ export function WorldWorkspace({
   const shownMap = worldMapById(mapId);
   const transportMap = shownMap?.kind === 'transport' ? shownMap : null;
   const transportView = transportMap ? normaliseView(transportMap, chosenView, isTerrainMap) : null;
+  // The vessels that stop on the terrain shown, but for the stop the transport view itself has
+  const hostMapId = transportMap && transportView ? hostMapIdOf(transportMap, transportView) : mapId;
+  const ownStop = transportMap && transportView ? { map: transportMap.id, node: transportView.node } : undefined;
+  const docks = useMemo(() => docksOn(maps, hostMapId, ownStop), [maps, hostMapId, ownStop?.map, ownStop?.node]);
   const viewRef = useRef(transportView);
   viewRef.current = transportView;
   /** Remembers where the camera is on the map shown, with the transport's route and stop there */
@@ -681,6 +686,7 @@ export function WorldWorkspace({
         onMarkerMove={markers.move}
         markerFocus={markerFocus}
         transport={transportMap && transportView ? { map: transportMap, view: transportView } : undefined}
+        docks={docks}
       />
       {transportMap && transportView && (
         <TransportBar map={transportMap} view={transportView} hostName={(id) => worldMapById(id)?.name ?? `Map ${id}`} onView={chooseView} />

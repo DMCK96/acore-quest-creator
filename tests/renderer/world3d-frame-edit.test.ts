@@ -1,7 +1,8 @@
 import { describe, expect, it } from 'vitest';
-import { localiseEdit, localisePlacement } from '../../src/renderer/world3d/frame-edit';
+import { aboardVessel, frameFor, localiseEdit, localisePlacement } from '../../src/renderer/world3d/frame-edit';
 import { IDENTITY_FRAME, placementToWorld } from '../../src/core/map/transport-frame';
 import type { SpawnEdit } from '../../src/renderer/world3d/edits';
+import type { MenuTarget } from '../../src/renderer/world3d/menu/model';
 
 const ref = { kind: 'creature' as const, guid: 5, entry: 3, own: false };
 const frame = { x: 100, y: 200, z: 5, heading: Math.PI / 2 };
@@ -45,5 +46,35 @@ describe('turning the scene’s edits into vessel-local ones', () => {
     const once = localiseEdit({ kind: 'place', spawn: ref, to: placementToWorld(frame, local) }, frame) as Extract<SpawnEdit, { kind: 'place' }>;
     const twice = localiseEdit(once, frame) as Extract<SpawnEdit, { kind: 'place' }>;
     expect(Math.hypot(twice.to.x - once.to.x, twice.to.y - once.to.y)).toBeGreaterThan(1);
+  });
+});
+
+describe('which frame an edit is localised with', () => {
+  const view = { x: 1, y: 2, z: 3, heading: 0.5 };
+  const dockFrame = { x: 100, y: 200, z: 5, heading: 1 };
+  it('is the owning dock’s frame when the spawn stands at a dock, else the view’s', () => {
+    expect(frameFor(dockFrame, view)).toBe(dockFrame);
+    expect(frameFor(null, view)).toBe(view);
+  });
+});
+
+describe('whether a right-click is on a vessel', () => {
+  const spawn = (kind: 'creature' | 'object', guid: number) => ({ kind, guid }) as any;
+  const target = (hit: MenuTarget['hit'], selection: any[] = []): MenuTarget => ({ ground: null, hit, selection });
+  const frameOf = (kind: string, guid: number) => (kind === 'creature' && guid === 7 ? { x: 1, y: 1, z: 1, heading: 0 } : null);
+
+  it('is true when the view is a vessel, whatever was hit', () => {
+    expect(aboardVessel(target(null), true, frameOf)).toBe(true);
+  });
+  it('is true for a hit spawn that stands at a dock', () => {
+    expect(aboardVessel(target({ type: 'spawn', spawn: spawn('creature', 7) }), false, frameOf)).toBe(true);
+  });
+  it('is true when any selected spawn stands at a dock', () => {
+    expect(aboardVessel(target(null, [spawn('creature', 3), spawn('creature', 7)]), false, frameOf)).toBe(true);
+  });
+  it('is false for ground, other spawns and route points on a continent', () => {
+    expect(aboardVessel(target(null), false, frameOf)).toBe(false);
+    expect(aboardVessel(target({ type: 'spawn', spawn: spawn('creature', 3) }), false, frameOf)).toBe(false);
+    expect(aboardVessel(target({ type: 'point', guid: 7, index: 0 }), false, frameOf)).toBe(false);
   });
 });

@@ -9,6 +9,7 @@ import type { ProjectEntities } from '@core/entities/model';
 import type { At, MenuAction, MenuGroup, MenuSpawn, MenuTarget, QuestMenuInfo } from './menu/model';
 import { buildMenu, NEEDS_GROUND } from './menu/section';
 import { subjectOf } from './menu/subject';
+import { aboardVessel } from './frame-edit';
 import { clipEntries, copySpawns, duplicateOffset, entriesOf, layoutAt, pasteable, type ClipEntry } from './clipboard';
 import { placementAt } from './placing';
 import { WorldContextMenu } from './WorldContextMenu';
@@ -150,7 +151,7 @@ export function useWorldMenu(deps: WorldMenuDeps): {
       quest: quest ?? null,
       project: onNewQuest !== undefined,
       marked,
-      vessel: d.current.vessel,
+      vessel: aboardVessel(target, d.current.vessel, (kind, guid) => d.current.world.current?.frameOfSpawn(kind, guid) ?? null),
     });
     if (groups.length > 0) setMenu({ groups, at: client });
   };

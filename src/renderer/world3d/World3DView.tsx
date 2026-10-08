@@ -2,9 +2,10 @@ import { Component, useEffect, useMemo, useRef, useState, type ReactNode } from 
 import { assetUrl } from '@core/client/asset-url';
 import { worldMapById, worldMapDirectory, type WorldMap } from '@core/map/world-maps';
 import { IDENTITY_FRAME, toWorld } from '@core/map/transport-frame';
+import type { Dock } from '@core/map/transport-docks';
 import { frameOfView, hostMapIdOf, routeLinesOf, templateOf, type TransportView } from '@core/map/transport-view';
 import { createWorld3D, type Scenery, type SelectionSummary, type TransportScene, type World3D } from './world3d';
-import { localiseEdit, localisePlacement } from './frame-edit';
+import { frameFor, localiseEdit, localisePlacement } from './frame-edit';
 import { storedPlaceAfter } from './stored-place';
 import type { Tool } from './controls';
 import { FALLOFF_DEFAULT, FALLOFF_MAX, FALLOFF_MIN } from './scene/edit/falloff';
@@ -68,23 +69,25 @@ const CONTROLS: [string, string][] = [
 ];
 
 /** Where the layer checkboxes are remembered, per viewer. */
+const NO_DOCKS: readonly Dock[] = [];
 const LAYERS_KEY = 'acqc.world3d.layers';
 /**
  * What the layers card shows: the world's scenery, its NPCs, objects and their paths, and the game
  * event it is drawn during (with that event's name, kept so the choice reads right out of its range)
  */
-type Layers = SpawnVisibility & Scenery & { eventName?: string; tool: Tool; falloff: boolean; falloffRadius: number };
+type Layers = SpawnVisibility & Scenery & { transports: boolean; eventName?: string; tool: Tool; falloff: boolean; falloffRadius: number };
 /** No event: the everyday world. Event spawns are only in the world while their event runs. */
 const DEFAULT_LAYERS: Layers = {
-  buildings: true, doodads: true, creatures: true, objects: true, paths: true, events: 'none', tool: 'camera', falloff: false, falloffRadius: FALLOFF_DEFAULT,
+  buildings: true, doodads: true, creatures: true, objects: true, paths: true, transports: true, events: 'none', tool: 'camera', falloff: false, falloffRadius: FALLOFF_DEFAULT,
 };
-type Toggle = 'buildings' | 'doodads' | 'creatures' | 'objects' | 'paths';
+type Toggle = 'buildings' | 'doodads' | 'creatures' | 'objects' | 'paths' | 'transports';
 const LAYER_LABELS: [Toggle, string, string?][] = [
   ['buildings', 'Buildings', 'Houses, towers and what is inside them. Hidden, clicks land on the ground under them'],
   ['doodads', 'Trees & props', 'Trees, bushes, fences, carts and the rest of the small scenery'],
   ['creatures', 'NPCs'],
   ['objects', 'Objects'],
   ['paths', 'Paths'],
+  ['transports', 'Transports', 'Vessels at their docks, with the NPCs and objects aboard'],
 ];
 
 const spawnsOf = ({ creatures, objects, paths, events }: Layers): SpawnVisibility => ({ creatures, objects, paths, events });
@@ -176,6 +179,8 @@ interface ViewProps {
   markerFocus?: MarkerFocus;
   /** On a transport's map (`map`): the vessel shown at a stop of one of its routes, on that stop's terrain */
   transport?: { map: WorldMap; view: TransportView };
+  /** The vessels that stop on the terrain shown, drawn at their docks with their passengers (see the Transports layer) */
+  docks?: readonly Dock[];
 }
 
 /** A transport at a stop: the terrain it is on, and what the view draws of it there */
@@ -254,7 +259,7 @@ class Contained extends Component<{ children: ReactNode }, { failure: string | n
 
 function WorldStage({
   map, start, hasClient, own, onSelect, onOwnEdit, focus, showArea = true, onArea, onPlaceChange, onCameraInput, quest, chainIds, onQuestRole, onNewQuest, onOpenQuest, onShowSpawns,
-  onCreateEntity, onEditEntity, onSetLootable, onGoToSpawn, placeRequest, patrolRequest, onRequestEnd, markers, onMarkerMove, markerFocus, transport,
+  onCreateEntity, onEditEntity, onSetLootable, onGoToSpawn, placeRequest, patrolRequest, onRequestEnd, markers, onMarkerMove, markerFocus, transport, docks,
 }: ViewProps): React.JSX.Element {
   const container = useRef<HTMLDivElement>(null);
   const world = useRef<World3D | null>(null);
@@ -373,7 +378,7 @@ function WorldStage({
         ...(target.event && l.events !== 'all' && l.events !== target.event.id ? { events: target.event.id, eventName: target.event.name } : {}),
       }));
       // A passenger's stored place is on its vessel
-      const seen = toWorld(frameNow(), target);
+      const seen = toWorld(frameFor(current.frameOfSpawn(target.kind, target.guid), frameNow()), target);
       current.lookAt(seen.x, seen.y, seen.z + 1, true);
     }
     current.select({ kind: target.kind, guid: target.guid });
@@ -575,7 +580,7 @@ function WorldStage({
     // The quest's own edits are taken at once; world edits wait their turn. One that fails outright is
     // said, and the queue goes on. The scene's places are stored through the vessel's frame, once, here
     const send = (scene: SpawnEdit): Promise<boolean> => {
-      const change = localiseEdit(scene, frameNow());
+      const change = localiseEdit(scene, frameFor(created?.frameOfSpawn(scene.spawn.kind, scene.spawn.guid) ?? null, frameNow()));
       if (!change) return Promise.resolve(false);
       if (change.spawn.own && onOwnEditRef.current) return edit(change);
       waiting += 1;
@@ -678,6 +683,8 @@ function WorldStage({
           });
           created.setSpawnVisibility(spawnsOf(layersRef.current));
           created.setScenery(sceneryOf(layersRef.current));
+          created.setDocksEnabled(layersRef.current.transports);
+          created.setDocks(docksRef.current);
           created.setTool(layersRef.current.tool);
           created.setFalloff({ on: layersRef.current.falloff, radius: layersRef.current.falloffRadius });
           if (looksRef.current.size > 0) created.setLooks(looksRef.current);
@@ -749,6 +756,13 @@ function WorldStage({
     };
   }, [groupsKey]);
 
+  // The docked vessels, as the host lists them
+  const docksRef = useRef<readonly Dock[]>(docks ?? NO_DOCKS);
+  docksRef.current = docks ?? NO_DOCKS;
+  useEffect(() => {
+    world.current?.setDocks(docks ?? NO_DOCKS);
+  }, [docks]);
+
   // The open quest's own spawns, redrawn as they change.
   useEffect(() => {
     if (ownRef.current) world.current?.setOwnSpawns(ownRef.current);
@@ -758,6 +772,7 @@ function WorldStage({
   useEffect(() => {
     world.current?.setSpawnVisibility(spawnsOf(layers));
     world.current?.setScenery(sceneryOf(layers));
+    world.current?.setDocksEnabled(layers.transports);
     world.current?.setTool(layers.tool);
     world.current?.setFalloff({ on: layers.falloff, radius: layers.falloffRadius });
     try {

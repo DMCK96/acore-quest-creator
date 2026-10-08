@@ -24,7 +24,7 @@ vi.mock('../../src/renderer/world3d/world3d', () => ({
       setWorldLayer: vi.fn(), setMode: vi.fn(), setPlacing: vi.fn(), cancelDrag: vi.fn(), setMarked: vi.fn(), setTransport: vi.fn(),
       setScenery: vi.fn(), setTool: vi.fn(), setFalloff: vi.fn(), setPendingMovement: vi.fn(), spawnMovement: vi.fn(() => ({ type: 'idle', wander: 0, pathId: null })),
       startPath: vi.fn(), finishPath: vi.fn(), cancelPath: vi.fn(), undoPoint: vi.fn(), selectedSpawns: vi.fn(() => []), groundAt: vi.fn(() => null), lastPointer: vi.fn(() => null),
-      spawnOf: vi.fn(() => ({})), routeOf: vi.fn(() => null),
+      spawnOf: vi.fn(() => ({})), routeOf: vi.fn(() => null), setDocks: vi.fn(), setDocksEnabled: vi.fn(), frameOfSpawn: vi.fn(() => null),
       camera: () => ({ position: { x: 0, y: 0, z: 0 }, direction: { x: 1, y: 0, z: 0 } }),
       target: () => ({ x: 0, y: 0, z: 0 }), spawnStatus: () => ({ capped: { creatures: false, objects: false }, error: null }) };
     worlds.push(world);
@@ -275,5 +275,69 @@ describe('going to a passenger', () => {
     await userEvent.click(await screen.findByRole('button', { name: /Crew/ }));
     await waitFor(() => expect(world.select).toHaveBeenCalledWith({ kind: 'creature', guid: 9 }));
     lookedAtClose(world, atStop(0));
+  });
+});
+
+describe('docked vessels in the World', () => {
+  const docksGiven = (): string[] | undefined => worlds.at(-1)?.setDocks.mock.lastCall?.[0].map((d: { key: string }) => d.key);
+
+  it('hands a continent the vessels that stop on it', async () => {
+    writeLastPlace({ map: 1, x: 1300, y: -4600, z: 40 });
+    setClientMaps([zeppelin()]);
+    mount();
+    await waitFor(() => expect(docksGiven()).toEqual(['591:0']));
+  });
+
+  it('hands the other continent its own stop', async () => {
+    writeLastPlace({ map: 0, x: 2000, y: 300, z: 40 });
+    setClientMaps([zeppelin()]);
+    mount();
+    await waitFor(() => expect(docksGiven()).toEqual(['591:2']));
+  });
+
+  it('leaves the transport view’s own stop out of the docks, and keeps another stop of the same continent', async () => {
+    const twice: WorldMap = {
+      id: 592, name: 'Ferry', directory: 'kalimdor', kind: 'transport', start: { x: 1, y: 1, z: 1 },
+      transport: {
+        templates: [{ entry: 9, name: 'Ferry', displayId: 5, pathId: 304 }],
+        paths: { 304: [node(0, 1, 100, 100, NODE_STOP), node(1, 1, 150, 150), node(2, 1, 200, 200, NODE_STOP)] },
+      },
+    };
+    mount({ map: twice });
+    await waitFor(() => expect(worlds).toHaveLength(1));
+    fireEvent.click(screen.getByRole('button', { name: 'Coordinates' }));
+    const picker = screen.getByLabelText('Map') as HTMLSelectElement;
+    await waitFor(() => expect(picker.querySelector('optgroup[label="Transports"] option[value="592"]')).toBeTruthy());
+    fireEvent.change(picker, { target: { value: '592' } });
+    await waitFor(() => expect(worlds.at(-1).options.map).toBe(592));
+    await waitFor(() => expect(docksGiven()).toEqual(['592:2']));
+  });
+
+  it('saves an edit of a passenger at a dock vessel-local with that dock’s frame, and drops a walking path', async () => {
+    writeLastPlace({ map: 1, x: 1300, y: -4600, z: 40 });
+    setClientMaps([zeppelin()]);
+    mount();
+    await waitFor(() => expect(docksGiven()).toEqual(['591:0']));
+    const world = worlds.at(-1);
+    const dockFrame = frameOfView(zeppelin(), { template: 175080, node: 0 });
+    // Passenger 7 stands at the dock; the continent's other spawns do not
+    world.frameOfSpawn.mockImplementation((_kind: string, guid: number) => (guid === 7 ? dockFrame : null));
+    world.options.onGesture([placeEdit]);
+    await waitFor(() => expect(api.worldMoveSpawn).toHaveBeenCalledTimes(1));
+    expect(vi.mocked(api.worldMoveSpawn).mock.calls[0]).toEqual(['creature', 7, placementToLocal(dockFrame, placeEdit.to)]);
+    world.options.onGesture([{ ...placeEdit, spawn: { ...placeEdit.spawn, guid: 8 } }]);
+    await waitFor(() => expect(api.worldMoveSpawn).toHaveBeenCalledTimes(2));
+    expect(vi.mocked(api.worldMoveSpawn).mock.calls[1]).toEqual(['creature', 8, placeEdit.to]);
+    world.options.onGesture([{ kind: 'route', spawn: placeEdit.spawn, pathId: 5, points: [{ x: 1, y: 2, z: 3 }] }]);
+    await new Promise((r) => setTimeout(r, 20));
+    expect(api.worldSetRoute).not.toHaveBeenCalled();
+  });
+
+  it('hands a map nothing stops at no docks', async () => {
+    writeLastPlace({ map: 530, x: 0, y: 0, z: 0 });
+    setClientMaps([zeppelin()]);
+    mount();
+    await waitFor(() => expect(worlds.length).toBeGreaterThan(0));
+    expect(docksGiven() ?? []).toEqual([]);
   });
 });

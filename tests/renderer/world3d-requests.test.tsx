@@ -12,7 +12,7 @@ import { makeMockApi, okv } from './mock-api';
 const worlds = vi.hoisted(() => [] as any[]);
 vi.mock('../../src/renderer/world3d/world3d', () => ({
   createWorld3D: (options: any) => {
-    const world = { options, dispose: vi.fn(), cancelPath: vi.fn(), lookAt: vi.fn(), setSpawnVisibility: vi.fn(), setOwnSpawns: vi.fn(), select: vi.fn(),
+    const world = { options, dispose: vi.fn(), cancelPath: vi.fn(), lookAt: vi.fn(), setDocks: vi.fn(), setDocksEnabled: vi.fn(), frameOfSpawn: vi.fn(() => null), setSpawnVisibility: vi.fn(), setOwnSpawns: vi.fn(), select: vi.fn(),
       setWorldLayer: vi.fn(), setMode: vi.fn(), setPlacing: vi.fn(), cancelDrag: vi.fn(), setScenery: vi.fn(), setTool: vi.fn(), setFalloff: vi.fn(),
       startPath: vi.fn(), finishPath: vi.fn(), spawnOf: vi.fn(() => null), selectedSpawns: vi.fn(() => []),
       camera: () => ({ position: { x: 0, y: 0, z: 0 }, direction: { x: 1, y: 0, z: 0 } }), target: () => ({ x: 0, y: 0, z: 0 }),

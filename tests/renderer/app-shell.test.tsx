@@ -8,7 +8,7 @@ vi.mock('../../src/renderer/world3d/world3d', () => ({
   createWorld3D: (options: any) => {
     const world = {
       options, setOwnSpawns: vi.fn(), setWorldLayer: vi.fn(), setMarked: vi.fn(), setPlacing: vi.fn(),
-      dispose: vi.fn(), cancelPath: vi.fn(), lookAt: vi.fn(), select: vi.fn(), setSpawnVisibility: vi.fn(), setScenery: vi.fn(), setTool: vi.fn(), setFalloff: vi.fn(), target: () => ({ x: 0, y: 0, z: 0 }),
+      dispose: vi.fn(), cancelPath: vi.fn(), lookAt: vi.fn(), select: vi.fn(), setDocks: vi.fn(), setDocksEnabled: vi.fn(), frameOfSpawn: vi.fn(() => null), setSpawnVisibility: vi.fn(), setScenery: vi.fn(), setTool: vi.fn(), setFalloff: vi.fn(), target: () => ({ x: 0, y: 0, z: 0 }),
       spawnStatus: () => ({ capped: { creatures: false, objects: false }, error: null, loading: 0 }),
     };
     created.push(world);
