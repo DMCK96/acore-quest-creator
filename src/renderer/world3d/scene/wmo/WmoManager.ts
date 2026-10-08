@@ -8,6 +8,7 @@ import { interiorDoodads } from './doodads.js';
 import { describeError, reportProblem } from '../diagnostics.js';
 import MapLight from '../map/light/MapLight.js';
 import WmoMaterial from './WmoMaterial.js';
+import { PlacementCopies } from './placement-copies.js';
 import LiquidManager from '../map/liquid/LiquidManager.js';
 
 /**
@@ -54,6 +55,8 @@ class WmoManager {
   #loaded = new globalThis.Map<string, WmoResources>();
   #loading = new globalThis.Map<string, Promise<WmoResources>>();
   #areas = new globalThis.Map<number, THREE.Group>();
+  /** The copies of a building that tiles share, of which one is drawn */
+  #copies = new PlacementCopies();
   /** Each area's buildings' furniture and props, in the world, for the doodads to draw */
   #areaDoodads = new globalThis.Map<number, MapDoodadDefSpec[]>();
 
@@ -93,6 +96,7 @@ class WmoManager {
       building.position.set(def.position[0], def.position[1], def.position[2]);
       building.quaternion.set(def.rotation[0], def.rotation[1], def.rotation[2], def.rotation[3]);
       building.userData.placement = def.id;
+      this.#copies.add(`${def.id}|${def.name.toLowerCase()}|${def.position.join(',')}`, areaId, building);
       group.add(building);
     }
 
@@ -113,6 +117,7 @@ class WmoManager {
   }
 
   removeArea(areaId: number) {
+    this.#copies.removeArea(areaId);
     this.#areas.delete(areaId);
     this.#areaDoodads.delete(areaId);
   }
