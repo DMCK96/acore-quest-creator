@@ -419,8 +419,8 @@ export function createWorld3D(options: World3DOptions): World3D {
     onContextClick: (x, y, client) => contextClick(x, y, client),
     onCameraInput: () => options.onCameraInput?.(),
   });
-  // A vessel's deck is ground too, so a click or a drag lands on it
-  const solid = (): THREE.Object3D[] => [...manager.root.children.filter(clickable), manager.decor];
+  // A vessel's deck is ground too, so a click or a drag lands on it: the view's own, and each docked one
+  const solid = (): THREE.Object3D[] => [...manager.root.children.filter(clickable), manager.decor, ...manager.dockDecor];
   // The open quest's positions: a marker let go after a drag along the ground lands on the server's floor there
   const markers = new MarkerLayer(camera, renderer.domElement, scene, solid, {
     moved: async (id, at, lifted) => {

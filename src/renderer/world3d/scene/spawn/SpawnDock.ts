@@ -40,6 +40,7 @@ export function createSpawnDock(dock: Dock, manager: SpawnManager): DockInstance
 
   return {
     root,
+    decor: manager.decor,
     configure(patch: Partial<DockState>) {
       if (disposed) return;
       if ('source' in patch) manager.setSource(patch.source ?? null);

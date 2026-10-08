@@ -22,6 +22,8 @@ export interface DockState {
 export interface DockInstance {
   /** The vessel and its passengers, put under the scene while the dock is in range */
   readonly root: THREE.Object3D;
+  /** The vessel alone, whose deck is ground to stand and drop things on */
+  readonly decor: THREE.Object3D;
   configure(patch: Partial<DockState>): void;
   /** The nearest passenger a ray passes through, with how far along the ray */
   pick(ray: THREE.Ray, maxDistance: number): { spawn: PickedSpawn; distance: number } | null;
@@ -47,6 +49,11 @@ export class DockSet {
   constructor(options: { create(dock: Dock): DockInstance; parent: THREE.Object3D }) {
     this.#create = options.create;
     this.#parent = options.parent;
+  }
+
+  /** The vessels drawn, for the scene to count as ground */
+  get decor(): THREE.Object3D[] {
+    return [...this.#docks.values()].map(({ instance }) => instance.decor);
   }
 
   get size(): number {

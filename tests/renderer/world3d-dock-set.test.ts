@@ -11,6 +11,7 @@ function fake(d: Dock, hit: { guid: number; distance: number } | null = null, ha
   const instance = {
     d,
     root: new THREE.Group(),
+    decor: new THREE.Group(),
     configure: vi.fn(),
     pick: vi.fn(() => (hit ? { spawn: spawn(hit.guid), distance: hit.distance } : null)),
     find: vi.fn((_k: string, guid: number) => (has.includes(guid) ? new THREE.Object3D() : null)),
@@ -97,6 +98,14 @@ describe('the docks in a scene', () => {
     expect(set.frameOf('creature', 7)).toEqual({ x: 2, y: 0, z: 0, heading: 0 });
     expect(set.frameOf('creature', 8)).toBeNull();
     expect(set.find('creature', 8)).toBeNull();
+  });
+
+  it('lists the vessels of the docks drawn, to stand on', () => {
+    const { set, made } = setup();
+    set.sync([dock('a'), dock('b')], always);
+    expect(set.decor).toEqual([made[0]!.decor, made[1]!.decor]);
+    set.sync([dock('b')], always);
+    expect(set.decor).toEqual([made[1]!.decor]);
   });
 
   it('culls every instance, and disposes them all with dispose', () => {

@@ -48,6 +48,11 @@ describe('a dock backed by a spawn manager', () => {
     expect(instance.root.children.some((c) => c.getObjectByName('creatures'))).toBe(true);
   });
 
+  it('hands out the vessel’s group, for the deck to count as ground', () => {
+    const { instance, manager } = build();
+    expect(instance.decor).toBe(manager.decor);
+  });
+
   it('applies visibility to its passengers', async () => {
     const { instance, source } = build();
     instance.configure({ source: source as any });

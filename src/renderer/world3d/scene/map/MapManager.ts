@@ -327,6 +327,11 @@ class MapManager extends EventTarget {
     return this.#root;
   }
 
+  /** The docked vessels in range, drawn at their frames */
+  get dockDecor() {
+    return this.#docks.decor;
+  }
+
   /** The vessel, drawn at its frame; apart from the map's areas */
   get decor() {
     return this.#spawnManager.decor;
