@@ -8,6 +8,7 @@ import type { SpawnGroupsApi } from './spawn-groups';
 import type { HistoryApi } from './history';
 import type { ExportApi } from './export';
 import type { ProjectApi } from './project';
+import type { McpApi } from './mcp';
 
 /** Everything the renderer can ask the main process to do: every area's calls */
 export interface Api
@@ -20,4 +21,5 @@ export interface Api
     SpawnGroupsApi,
     HistoryApi,
     ExportApi,
-    ProjectApi {}
+    ProjectApi,
+    McpApi {}

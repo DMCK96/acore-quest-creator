@@ -95,6 +95,9 @@ export const API_METHODS = [
   'recoveries',
   'restoreRecovery',
   'discardRecovery',
+  'mcpStatus',
+  'mcpConfigure',
+  'mcpRegenerateToken',
 ] as const satisfies readonly (keyof Api)[];
 
 /** Fails to compile if `Api` gains or loses a method that this list does not follow. */

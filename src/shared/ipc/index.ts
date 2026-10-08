@@ -18,6 +18,7 @@ export type * from './spawn-groups';
 export type * from './history';
 export type * from './export';
 export type * from './project';
+export type * from './mcp';
 export type * from './result';
 export type { Api } from './api';
 export { parseRequest } from './requests';

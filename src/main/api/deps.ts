@@ -5,9 +5,12 @@ import type { Store } from '../store/store';
 import type { ServerDataFiles } from '../server-data';
 import type { ProjectSession } from '../project/session';
 import type { ProjectController } from '../project/controller';
+import type { McpController } from '../mcp/controller';
 
 /** Every side effect the API has, given to it so tests can run the real thing against fakes */
 export interface ApiDeps {
+  /** The MCP server's controller; absent where the app does not run one (tests). */
+  mcp?: McpController;
   store: Store;
   openWorldDb(p: ProfileInput): Promise<WorldDb>;
   openDevDb(p: ProfileInput): Promise<DevDb>;
