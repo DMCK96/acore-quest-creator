@@ -40,10 +40,8 @@ export function createLoreApi(s: Services, deps: ApiDeps): LoreApi {
       creature: store.npcs.map((e) => ({ id: e.entry, name: e.name })),
       gameobject: store.objects.map((e) => ({ id: e.entry, name: e.name })),
       item: store.items.map((e) => ({ id: e.entry, name: e.name })),
-      quest: deps.session.quests
-        .list()
-        .map((q) => ({ id: q.questId, name: String(q.aggregate.values['quest_template.LogTitle'] ?? '') }))
-        .filter((q) => q.name.trim() !== ''),
+      // An untitled quest still holds its id, so it stays in; it has no name to clash with
+      quest: deps.session.quests.list().map((q) => ({ id: q.questId, name: String(q.aggregate.values['quest_template.LogTitle'] ?? '') })),
     };
   };
 

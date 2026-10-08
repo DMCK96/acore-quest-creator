@@ -88,4 +88,14 @@ describe('areaOverview vendor stock and drops', () => {
     expect(out.missing).toEqual(['creature_loot_template']);
     expect(out.npcs.find((n) => n.entry === 69)!.drops).toEqual([]);
   });
+
+  it('scales a referenced drop by the chance the reference itself is rolled at', async () => {
+    const db = world();
+    db.insert('item_template', { entry: '5000', name: 'Wolf Collar' });
+    db.insert('creature_loot_template', { Entry: '69', Item: '0', Reference: '25', Chance: '50', GroupId: '0' });
+    db.insert('reference_loot_template', { Entry: '25', Item: '5000', Reference: '0', Chance: '10', GroupId: '0' });
+    const drops = (await areaOverview(db, QUERY, names)).npcs.find((n) => n.entry === 69)!.drops;
+    expect(drops).toContainEqual({ item: 5000, name: 'Wolf Collar', chance: 5, group: 0, viaReference: 25 });
+    expect(drops).toContainEqual({ item: 4656, name: 'Small Pumpkin', chance: 5, group: 0, viaReference: 24 });
+  });
 });

@@ -109,4 +109,19 @@ describe('the MCP controller', () => {
     await controller.configure({ enabled: true, port: 50000, wikiLookups: false });
     expect(controller.wikiEnabled()).toBe(false);
   });
+
+  it('does not restart the running server when only the wiki switch changes', async () => {
+    const { controller, events } = setup();
+    await controller.configure({ enabled: true, port: 50000 });
+    await controller.configure({ enabled: true, port: 50000, wikiLookups: true });
+    expect(events).toEqual(['listen 50000']);
+    expect(controller.status()).toMatchObject({ running: true, wikiLookups: true });
+  });
+
+  it('still restarts when the port changes alongside the wiki switch', async () => {
+    const { controller, events } = setup();
+    await controller.configure({ enabled: true, port: 50000 });
+    await controller.configure({ enabled: true, port: 50001, wikiLookups: true });
+    expect(events).toEqual(['listen 50000', 'close 50000', 'listen 50001']);
+  });
 });

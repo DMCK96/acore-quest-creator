@@ -68,10 +68,13 @@ export function createMcpController({ settings, listen }: McpControllerOptions):
     start: () => queued(begin),
     configure: ({ enabled, port, wikiLookups }) =>
       queued(async () => {
+        const before = settings.read();
         settings.setPort(port);
         settings.setEnabled(enabled);
         if (wikiLookups !== undefined) settings.setWikiLookups(wikiLookups);
-        return begin();
+        // Ticking the wiki box must not cut the connections of a server that is running as asked
+        const unchanged = enabled === before.enabled && port === before.port && (listener !== null) === enabled;
+        return unchanged ? status() : begin();
       }),
     regenerateToken: () =>
       queued(async () => {

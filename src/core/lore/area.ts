@@ -143,10 +143,11 @@ async function vendorAndDrops(
     for (const { row, chance } of own) {
       const reference = num(row, 'Reference');
       if (reference > 0) {
-        // One level only: what a reference table holds, not the references inside it
+        // One level only: what a reference table holds, not the references inside it. The reference
+        // is rolled at the outer row's chance, so a referenced item's chance is scaled by it
         for (const inner of withChances(referenced.filter((r) => num(r, 'Entry') === reference))) {
           if (num(inner.row, 'Reference') > 0) continue;
-          list.push({ item: num(inner.row, 'Item'), name: itemNames.get(num(inner.row, 'Item')) ?? '', chance: inner.chance, group: num(inner.row, 'GroupId'), viaReference: reference });
+          list.push({ item: num(inner.row, 'Item'), name: itemNames.get(num(inner.row, 'Item')) ?? '', chance: round((inner.chance * chance) / 100, 2), group: num(inner.row, 'GroupId'), viaReference: reference });
         }
       } else {
         list.push({ item: num(row, 'Item'), name: itemNames.get(num(row, 'Item')) ?? '', chance, group: num(row, 'GroupId'), viaReference: null });

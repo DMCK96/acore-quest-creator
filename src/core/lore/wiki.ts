@@ -136,6 +136,9 @@ export function createWikiClient(options: WikiClientOptions) {
       } catch {
         throw new WikiError('http', 'The wiki did not answer with data (it may be showing a challenge page).');
       }
+      const failure = (value as { error?: { code?: string; info?: string } } | null)?.error;
+      if (failure) throw new WikiError('http', `The wiki reported an error: ${failure.info ?? failure.code ?? 'unknown'}`);
+      cache.delete(url);
       cache.set(url, { at: now(), value });
       while (cache.size > maxEntries) cache.delete(cache.keys().next().value!);
       return value;
@@ -156,6 +159,9 @@ export function createWikiClient(options: WikiClientOptions) {
     async page(title: string, section?: string): Promise<WikiPageResult> {
       const data = await getJson({ action: 'query', prop: 'extracts', explaintext: '1', titles: title, redirects: '1', format: 'json' });
       const found = Object.values<any>(data?.query?.pages ?? {})[0];
+      if (found && ('invalid' in found || 'special' in found)) {
+        throw new WikiError('missing', `"${title}" is not a valid page title. Try wiki_search to find the right title.`);
+      }
       if (!found || 'missing' in found) {
         throw new WikiError('missing', `The wiki has no page called "${title}". Try wiki_search to find the right title.`);
       }

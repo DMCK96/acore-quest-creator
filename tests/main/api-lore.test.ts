@@ -74,6 +74,19 @@ describe('lore API: the database calls', () => {
   });
 });
 
+describe('lore API: untitled project quests', () => {
+  it('still count when checking ids, though they have no name to clash with', async () => {
+    const { api } = await setup();
+    const quest: any = await api.newQuest();
+    const id = quest.value.questId;
+    const ids: any = await api.checkIds('quest', [id]);
+    expect(ids.value[0].project).not.toBeNull();
+    const names: any = await api.checkNames('quest', ['x']);
+    expect(names.value[0].exact).toEqual([]);
+    expect(names.value[0].similar).toEqual([]);
+  });
+});
+
 describe('lore API: the wiki calls', () => {
   it('are turned off by default: they answer NOT_ENABLED and fetch nothing', async () => {
     const { api, fetched } = await setup({ wiki: false });

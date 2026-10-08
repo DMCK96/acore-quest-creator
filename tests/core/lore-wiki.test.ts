@@ -106,6 +106,22 @@ describe('wiki page', () => {
   });
 });
 
+describe('wiki odd answers', () => {
+  it('reports an error body as an error and does not remember it', async () => {
+    let body: unknown = { error: { code: 'ratelimited', info: 'Slow down.' } };
+    const { client, calls } = setup(() => reply(body));
+    await expect(client.search('x')).rejects.toMatchObject({ kind: 'http', message: expect.stringMatching(/Slow down/) });
+    body = SEARCH;
+    expect((await client.search('x')).results).toHaveLength(2);
+    expect(calls).toHaveLength(2);
+  });
+
+  it('says a page title the wiki calls invalid is not a page', async () => {
+    const { client } = setup(() => reply({ query: { pages: { '-1': { title: 'A<b', invalidreason: 'bad', invalid: '' } } } }));
+    await expect(client.page('A<b')).rejects.toMatchObject({ kind: 'missing', message: expect.stringMatching(/not a valid/i) });
+  });
+});
+
 describe('wiki failures', () => {
   it.each([[403, 'refused'], [429, 'refused'], [503, 'refused'], [500, 'http'], [404, 'http']] as const)('treats HTTP %i as %s', async (status, kind) => {
     const { client } = setup(() => reply('nope', status));
