@@ -232,7 +232,7 @@ const REQUEST_SCHEMAS: Record<keyof Api, z.ZodType<unknown[]>> = {
   restoreRecovery: z.tuple([z.string().max(MAX_RECOVERY_ID)]),
   discardRecovery: z.tuple([z.string().max(MAX_RECOVERY_ID)]),
   mcpStatus: z.tuple([]),
-  mcpConfigure: z.tuple([z.object({ enabled: z.boolean(), port: z.number().int().min(1024).max(65535) })]),
+  mcpConfigure: z.tuple([z.object({ enabled: z.boolean(), port: z.number().int().min(1024).max(65535), wikiLookups: z.boolean().optional() })]),
   mcpRegenerateToken: z.tuple([]),
   questsInZone: z.tuple([
     z.number().int(),

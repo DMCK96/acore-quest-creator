@@ -66,9 +66,9 @@ export const emptyHistoryResult = {
 
 export function makeMockApi(overrides: Partial<Record<keyof Api, (...args: any[]) => any>> = {}): Api {
   const defaults: Record<keyof Api, (...args: any[]) => any> = {
-    mcpStatus: vi.fn(async () => okv({ enabled: false, port: 47600, url: 'http://127.0.0.1:47600/mcp', token: 'tok', running: false, error: null })),
-    mcpConfigure: vi.fn(async (c: { enabled: boolean; port: number }) => okv({ ...c, url: `http://127.0.0.1:${c.port}/mcp`, token: 'tok', running: c.enabled, error: null })),
-    mcpRegenerateToken: vi.fn(async () => okv({ enabled: false, port: 47600, url: 'http://127.0.0.1:47600/mcp', token: 'tok2', running: false, error: null })),
+    mcpStatus: vi.fn(async () => okv({ enabled: false, port: 47600, url: 'http://127.0.0.1:47600/mcp', token: 'tok', running: false, error: null, wikiLookups: false })),
+    mcpConfigure: vi.fn(async (c: { enabled: boolean; port: number; wikiLookups?: boolean }) => okv({ ...c, wikiLookups: c.wikiLookups ?? false, url: `http://127.0.0.1:${c.port}/mcp`, token: 'tok', running: c.enabled, error: null })),
+    mcpRegenerateToken: vi.fn(async () => okv({ enabled: false, port: 47600, url: 'http://127.0.0.1:47600/mcp', token: 'tok2', running: false, error: null, wikiLookups: false })),
     questsInZone: vi.fn(async (zone: number) => okv({ zone: { id: zone, name: `Zone ${zone}` }, quests: [], total: 0, truncated: false })),
     questSummaries: vi.fn(async () => okv({ quests: [], missing: [] })),
     areaOverview: vi.fn(async (map: number, x: number, y: number, radius: number) => okv({ query: { map, x, y, radius }, npcs: [], objects: [], quests: [], factions: [], truncated: { npcs: false, objects: false, quests: false, spawns: false, vendor: false, drops: false }, missing: [] })),

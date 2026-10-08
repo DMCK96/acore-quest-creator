@@ -24,6 +24,9 @@ describe('the MCP settings API', () => {
     expect(status.value.enabled).toBe(false);
     const on: any = await api.mcpConfigure({ enabled: true, port: 50000 });
     expect(on.value.running).toBe(true);
+    const wiki: any = await api.mcpConfigure({ enabled: true, port: 50000, wikiLookups: true });
+    expect(wiki.value.wikiLookups).toBe(true);
+    expect(parseRequest('mcpConfigure', [{ enabled: true, port: 47600, wikiLookups: 'yes' }]).ok).toBe(false);
     const fresh: any = await api.mcpRegenerateToken();
     expect(fresh.value.token).not.toBe(on.value.token);
   });

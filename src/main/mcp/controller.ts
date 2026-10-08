@@ -16,7 +16,7 @@ export interface McpController {
   status(): McpStatus;
   /** Starts the server if it was left enabled; for the app's launch. */
   start(): Promise<McpStatus>;
-  configure(c: { enabled: boolean; port: number }): Promise<McpStatus>;
+  configure(c: { enabled: boolean; port: number; wikiLookups?: boolean }): Promise<McpStatus>;
   /** Whether the user has allowed the assistant to look things up on the wiki. */
   wikiEnabled(): boolean;
   regenerateToken(): Promise<McpStatus>;
@@ -39,7 +39,7 @@ export function createMcpController({ settings, listen }: McpControllerOptions):
   const status = (): McpStatus => {
     const s = settings.read();
     // The token is only shown while the server runs; reading it is what needs the secure storage
-    return { enabled: s.enabled, port: s.port, url: `http://127.0.0.1:${s.port}/mcp`, token: listener !== null ? settings.token() : '', running: listener !== null, error };
+    return { enabled: s.enabled, port: s.port, url: `http://127.0.0.1:${s.port}/mcp`, token: listener !== null ? settings.token() : '', running: listener !== null, error, wikiLookups: s.wikiLookups };
   };
   const stop = async (): Promise<void> => {
     const old = listener;
@@ -64,12 +64,13 @@ export function createMcpController({ settings, listen }: McpControllerOptions):
 
   return {
     status,
-    wikiEnabled: () => false,
+    wikiEnabled: () => settings.read().wikiLookups,
     start: () => queued(begin),
-    configure: ({ enabled, port }) =>
+    configure: ({ enabled, port, wikiLookups }) =>
       queued(async () => {
         settings.setPort(port);
         settings.setEnabled(enabled);
+        if (wikiLookups !== undefined) settings.setWikiLookups(wikiLookups);
         return begin();
       }),
     regenerateToken: () =>

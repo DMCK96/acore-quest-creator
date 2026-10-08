@@ -104,6 +104,7 @@ function buildDeps(
   return {
     store,
     mcp,
+    fetch: globalThis.fetch,
     onClientDir: (dir) => client.setDir(dir),
     clientStatus: () => client.status(),
     clientFile: (path) => client.file(path),

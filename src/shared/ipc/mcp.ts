@@ -12,13 +12,15 @@ export interface McpStatus {
   running: boolean;
   /** Why the server could not start, or null. */
   error: string | null;
+  /** The assistant may look things up on warcraft.wiki.gg (off by default; independent of the server running). */
+  wikiLookups: boolean;
 }
 
 /** Letting an AI client (an MCP client) work in the open project: on or off, the port, the token */
 export interface McpApi {
   mcpStatus(): Promise<Result<McpStatus>>;
   /** Turns the server on or off and sets its port; a port that cannot be used leaves it off and says why in `error`. */
-  mcpConfigure(c: { enabled: boolean; port: number }): Promise<Result<McpStatus>>;
+  mcpConfigure(c: { enabled: boolean; port: number; wikiLookups?: boolean }): Promise<Result<McpStatus>>;
   /** Makes a new token; the old one stops working at once. */
   mcpRegenerateToken(): Promise<Result<McpStatus>>;
 }

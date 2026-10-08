@@ -31,8 +31,8 @@ export function McpSection(_props: SettingsSectionProps): React.JSX.Element {
     void window.api?.mcpStatus().then((r) => (r.ok ? adopt(r.value) : setError(r.error.message)));
   }, []);
 
-  const configure = async (enabled: boolean, wanted: number): Promise<void> => {
-    const r = await window.api.mcpConfigure({ enabled, port: wanted });
+  const configure = async (enabled: boolean, wanted: number, wikiLookups: boolean = status?.wikiLookups ?? false): Promise<void> => {
+    const r = await window.api.mcpConfigure({ enabled, port: wanted, wikiLookups });
     if (r.ok) adopt(r.value);
     else setError(r.error.message);
   };
@@ -74,6 +74,16 @@ export function McpSection(_props: SettingsSectionProps): React.JSX.Element {
           }}
         />
       </label>
+      <label className="settings-prefs__choice">
+        <input
+          type="checkbox"
+          checked={status?.wikiLookups ?? false}
+          disabled={status === null}
+          onChange={(e) => void configure(status?.enabled ?? false, Number(port), e.target.checked)}
+        />
+        Allow lookups on warcraft.wiki.gg
+      </label>
+      <p className="settings-mcp__note">The assistant can search and read pages on warcraft.wiki.gg. Only the text it searches for is sent; nothing else leaves this computer.</p>
       {error !== null && (
         <p role="alert" className="settings-mcp__error">
           {error}

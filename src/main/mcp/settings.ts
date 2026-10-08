@@ -7,11 +7,14 @@ export const MAX_MCP_PORT = 65535;
 
 const ENABLED = 'mcp.enabled';
 const PORT = 'mcp.port';
+const WIKI = 'mcp.wiki';
 const TOKEN = 'mcp.token';
 
 export interface McpSettingsValues {
   enabled: boolean;
   port: number;
+  /** The assistant may look things up on warcraft.wiki.gg; off until the user turns it on */
+  wikiLookups: boolean;
 }
 
 /**
@@ -25,7 +28,11 @@ export function createMcpSettings(store: Store, random: (bytes: number) => Buffe
   return {
     read(): McpSettingsValues {
       const port = Number(store.settings.get(PORT));
-      return { enabled: store.settings.get(ENABLED) === '1', port: Number.isInteger(port) && port >= MIN_MCP_PORT ? port : DEFAULT_MCP_PORT };
+      return {
+        enabled: store.settings.get(ENABLED) === '1',
+        port: Number.isInteger(port) && port >= MIN_MCP_PORT ? port : DEFAULT_MCP_PORT,
+        wikiLookups: store.settings.get(WIKI) === '1',
+      };
     },
     /** The token a client must present; made and sealed on first use. Throws where there is no secure storage. */
     token(): string {
@@ -38,6 +45,9 @@ export function createMcpSettings(store: Store, random: (bytes: number) => Buffe
     },
     setEnabled(on: boolean): void {
       store.settings.set(ENABLED, on ? '1' : '0');
+    },
+    setWikiLookups(on: boolean): void {
+      store.settings.set(WIKI, on ? '1' : '0');
     },
     setPort(port: number): void {
       if (!Number.isInteger(port) || port < MIN_MCP_PORT || port > MAX_MCP_PORT) {

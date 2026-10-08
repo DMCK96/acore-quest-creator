@@ -22,7 +22,7 @@ describe('MCP settings', () => {
     first.setPort(50000);
     const token = first.token();
     const again = createMcpSettings(store);
-    expect(again.read()).toEqual({ enabled: true, port: 50000 });
+    expect(again.read()).toEqual({ enabled: true, port: 50000, wikiLookups: false });
     expect(again.token()).toBe(token);
   });
 
@@ -37,12 +37,22 @@ describe('MCP settings', () => {
   it('does not make a token, or need the keyring, until one is asked for', () => {
     const noKeyring = { encrypt: () => { throw new Error('no secure storage'); }, decrypt: () => { throw new Error('no secure storage'); } };
     const settings = createMcpSettings(openStore(':memory:', noKeyring));
-    expect(settings.read()).toEqual({ enabled: false, port: 47600 });
+    expect(settings.read()).toEqual({ enabled: false, port: 47600, wikiLookups: false });
     expect(() => settings.token()).toThrow(/no secure storage/);
   });
 
   it('refuses a port that is not a whole number from 1024 to 65535', () => {
     const settings = createMcpSettings(openStore(':memory:', box));
     for (const bad of [80, 1023, 65536, 3000.5, Number.NaN]) expect(() => settings.setPort(bad)).toThrow(RangeError);
+  });
+
+  it('keeps wiki lookups off until they are switched on, and remembers the switch', () => {
+    const store = openStore(':memory:', box);
+    const settings = createMcpSettings(store);
+    expect(settings.read().wikiLookups).toBe(false);
+    settings.setWikiLookups(true);
+    expect(createMcpSettings(store).read().wikiLookups).toBe(true);
+    settings.setWikiLookups(false);
+    expect(createMcpSettings(store).read().wikiLookups).toBe(false);
   });
 });

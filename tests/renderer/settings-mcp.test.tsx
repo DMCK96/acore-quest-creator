@@ -7,7 +7,7 @@ import { createAppStore } from '../../src/renderer/state/app-store';
 import { makeMockApi, okv } from './mock-api';
 
 afterEach(() => { cleanup(); delete (window as any).api; });
-const status = (over: Record<string, unknown> = {}) => ({ enabled: false, port: 47600, url: 'http://127.0.0.1:47600/mcp', token: 'secret-token', running: false, error: null, ...over });
+const status = (over: Record<string, unknown> = {}) => ({ enabled: false, port: 47600, url: 'http://127.0.0.1:47600/mcp', token: 'secret-token', running: false, error: null, wikiLookups: false, ...over });
 function mount(initial = status(), over: Record<string, any> = {}) {
   const calls: any[] = [];
   const api = makeMockApi({
@@ -32,7 +32,7 @@ describe('the MCP / AI settings tab', () => {
   it('turning it on sends the port and then shows the address', async () => {
     const calls = mount();
     await userEvent.click(await screen.findByRole('checkbox', { name: /allow ai/i }));
-    await waitFor(() => expect(calls).toEqual([{ enabled: true, port: 47600 }]));
+    await waitFor(() => expect(calls).toEqual([{ enabled: true, port: 47600, wikiLookups: false }]));
     expect(await screen.findByText('http://127.0.0.1:47600/mcp')).toBeInTheDocument();
   });
 
@@ -59,12 +59,31 @@ describe('the MCP / AI settings tab', () => {
     await userEvent.clear(port);
     await userEvent.type(port, '50123');
     await userEvent.tab();
-    await waitFor(() => expect(calls).toEqual([{ enabled: true, port: 50123 }]));
+    await waitFor(() => expect(calls).toEqual([{ enabled: true, port: 50123, wikiLookups: false }]));
   });
 
   it('says why when the port could not be used', async () => {
     mount(status(), { mcpConfigure: async () => okv(status({ error: 'Port 47600 is already in use.' })) });
     await userEvent.click(await screen.findByRole('checkbox', { name: /allow ai/i }));
     expect(await screen.findByRole('alert')).toHaveTextContent('already in use');
+  });
+
+  it('has a wiki lookups checkbox, off by default, that says what is contacted', async () => {
+    mount();
+    const box = await screen.findByRole('checkbox', { name: /lookups on warcraft\.wiki\.gg/i });
+    expect(box).not.toBeChecked();
+    expect(screen.getByText(/only the text it searches for is sent/i)).toBeInTheDocument();
+  });
+
+  it('turning wiki lookups on sends the switch with the current server setting and port', async () => {
+    const calls = mount(status({ enabled: true, running: true }));
+    await userEvent.click(await screen.findByRole('checkbox', { name: /lookups on warcraft\.wiki\.gg/i }));
+    await waitFor(() => expect(calls).toEqual([{ enabled: true, port: 47600, wikiLookups: true }]));
+  });
+
+  it('lets the wiki switch be changed while the server is off', async () => {
+    const calls = mount();
+    await userEvent.click(await screen.findByRole('checkbox', { name: /lookups on warcraft\.wiki\.gg/i }));
+    await waitFor(() => expect(calls).toEqual([{ enabled: false, port: 47600, wikiLookups: true }]));
   });
 });

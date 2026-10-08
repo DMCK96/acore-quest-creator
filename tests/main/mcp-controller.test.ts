@@ -96,4 +96,17 @@ describe('the MCP controller', () => {
     expect(out).toMatchObject({ enabled: false, running: false });
     expect(out.error).toMatch(/no secure storage/);
   });
+
+  it('reports and applies the wiki switch whether or not the server runs, off by default', async () => {
+    const { controller } = setup();
+    expect(controller.status().wikiLookups).toBe(false);
+    expect(controller.wikiEnabled()).toBe(false);
+    const out = await controller.configure({ enabled: false, port: 50000, wikiLookups: true });
+    expect(out).toMatchObject({ running: false, wikiLookups: true });
+    expect(controller.wikiEnabled()).toBe(true);
+    const kept = await controller.configure({ enabled: true, port: 50000 });
+    expect(kept.wikiLookups).toBe(true);
+    await controller.configure({ enabled: true, port: 50000, wikiLookups: false });
+    expect(controller.wikiEnabled()).toBe(false);
+  });
 });
