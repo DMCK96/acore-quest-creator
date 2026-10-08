@@ -23,3 +23,9 @@ export const recentProjects = sqliteTable('recent_projects', {
   name: text('name').notNull(),
   openedAt: text('opened_at').notNull(),
 });
+
+/** Per-machine settings that are neither a profile nor a recent project, by key; secrets are sealed text. */
+export const appSettings = sqliteTable('app_settings', {
+  key: text('key').primaryKey(),
+  value: text('value').notNull(),
+});

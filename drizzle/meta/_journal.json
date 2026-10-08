@@ -57,6 +57,13 @@
       "when": 1790340867095,
       "tag": "0007_profile_export_dir",
       "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "6",
+      "when": 1791493661499,
+      "tag": "0008_app_settings",
+      "breakpoints": true
     }
   ]
 }
