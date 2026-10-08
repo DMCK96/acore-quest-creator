@@ -21,6 +21,11 @@ export interface HistorySlice {
   holdHistory(): () => void;
   setHistory(list: HistoryList): void;
   dismissHistoryNote(): void;
+  /**
+   * Shows a change the main process made on its own (Claude, through MCP). Main already asked this
+   * window for its pending edits, so nothing is sent first; an edit typed while this runs stays on top.
+   */
+  applyExternalChange(change: HistoryResult): Promise<void>;
 }
 
 /** Reads the project history into the store */
@@ -63,7 +68,7 @@ export function createHistorySlice({ api, kit, set, get }: SliceArgs): HistorySl
   }
 
   /** Shows the project as the undo left it: the open quest, the graph, the world layer, the name */
-  async function applyHistory(result: HistoryResult): Promise<void> {
+  async function applyHistory(result: HistoryResult, note?: string): Promise<void> {
     const state = get();
     set({ history: result.history });
     const open = state.open;
@@ -95,7 +100,7 @@ export function createHistorySlice({ api, kit, set, get }: SliceArgs): HistorySl
       const where = result.step.where;
       const gone = where && 'questId' in where && result.quests.some((q) => q.questId === where.questId && q.aggregate === null);
       set({
-        historyNote: { text: `${result.direction === 'undo' ? 'Undid' : 'Redid'}: ${result.step.label}`, where: gone ? null : where, skipped: result.skipped },
+        historyNote: { text: note ?? `${result.direction === 'undo' ? 'Undid' : 'Redid'}: ${result.step.label}`, where: gone ? null : where, skipped: result.skipped },
       });
     }
     if (result.positions || result.quests.length > 0) await get().loadNodes();
@@ -109,6 +114,14 @@ export function createHistorySlice({ api, kit, set, get }: SliceArgs): HistorySl
   return {
     history: { steps: [], current: 0, saved: 0 },
     historyNote: null,
+    async applyExternalChange(change) {
+      kit.lateEdits = new Map();
+      try {
+        await applyHistory(change, change.step?.label);
+      } finally {
+        kit.lateEdits = null;
+      }
+    },
     undo: () => travel(() => api.historyUndo()),
     redo: () => travel(() => api.historyRedo()),
     jumpTo: (stepId) => travel(() => api.historyJump(stepId)),

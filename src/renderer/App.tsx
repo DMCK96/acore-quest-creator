@@ -34,6 +34,8 @@ export function App(): React.JSX.Element {
     window.appEvents?.onFlushRequest(() => store.getState().flushAll());
     // The Undo buttons follow every step the main process records, whatever made it
     window.appEvents?.onHistory?.((list) => store.getState().setHistory(list));
+    // What Claude changed through MCP appears as an undo would: the open quest, the canvas, the world
+    window.appEvents?.onExternalChange?.((change) => void store.getState().applyExternalChange(change));
   }, [store]);
 
   // Both stay in the same slots, so the login screen is not remounted when the canvas appears.
