@@ -20,6 +20,7 @@ export function createSpawnDock(dock: Dock, manager: SpawnManager): DockInstance
   root.add(manager.decor);
   manager.setVessel({ displayId: dock.displayId }).catch(warn(`the vessel at dock ${dock.key}`));
   let disposed = false;
+  let sourced = false;
   let area: THREE.Group | null = null;
 
   const load = (): void => {
@@ -43,7 +44,10 @@ export function createSpawnDock(dock: Dock, manager: SpawnManager): DockInstance
     decor: manager.decor,
     configure(patch: Partial<DockState>) {
       if (disposed) return;
-      if ('source' in patch) manager.setSource(patch.source ?? null);
+      if ('source' in patch) {
+        manager.setSource(patch.source ?? null);
+        sourced = Boolean(patch.source);
+      }
       if (patch.looks) manager.setLooks(patch.looks).catch(warn('edited looks'));
       if (patch.own) manager.setOwnSpawns(patch.own).catch(warn('the quest’s own NPCs and objects'));
       if (patch.visibility) manager.setVisibility(patch.visibility).catch(warn('the NPCs and objects'));
@@ -56,6 +60,14 @@ export function createSpawnDock(dock: Dock, manager: SpawnManager): DockInstance
     picked: (kind, guid) => manager.picked(kind, guid),
     info: (kind, guid) => manager.info(kind, guid),
     cull: (camera, frustum) => manager.cull(camera, frustum),
+    // `load` asks only when the area is not drawn, not on its way and not recently failed
+    update: () => {
+      if (sourced) load();
+    },
+    candidates: (camera) => manager.candidates(camera).spawns,
+    get status() {
+      return manager.status;
+    },
     dispose() {
       disposed = true;
       manager.removeArea(DOCK_AREA);

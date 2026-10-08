@@ -68,6 +68,21 @@ describe('the spawn layer', () => {
     expect(await loading).toBeNull();
   });
 
+  it('frees what it drew when the area was removed while its models were being made', async () => {
+    let finish!: () => void;
+    const gate = new Promise<void>((r) => (finish = r));
+    const model = Object.assign(new THREE.Object3D(), { dispose: vi.fn() });
+    const m = manager({ creatures: [creature(1, 1)], objects: [], capped: { creatures: false, objects: false } }, {
+      createModel: async () => { await gate; return model; },
+    });
+    const loading = m.loadArea(1, 0, box);
+    await new Promise((r) => setTimeout(r, 0));
+    m.removeArea(1);
+    finish();
+    expect(await loading).toBeNull();
+    expect(model.dispose).toHaveBeenCalledTimes(1);
+  });
+
   it('hides and shows each kind without unloading it', async () => {
     const m = manager({ creatures: [creature(1, 1)], objects: [object(3, 2)], capped: { creatures: false, objects: false } });
     const group = (await m.loadArea(1, 0, box))!;

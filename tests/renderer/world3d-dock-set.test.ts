@@ -18,6 +18,9 @@ function fake(d: Dock, hit: { guid: number; distance: number } | null = null, ha
     picked: vi.fn((_k: string, guid: number) => (has.includes(guid) ? spawn(guid) : null)),
     info: vi.fn(() => null),
     cull: vi.fn(),
+    update: vi.fn(),
+    candidates: vi.fn(() => [{ kind: 'creature' as const, guid: d.node + 1, at: { x: 0, y: 0, z: 0 } }]),
+    status: { capped: { creatures: false, objects: false }, error: null as string | null },
     dispose: vi.fn(),
   };
   return instance as unknown as typeof instance & DockInstance;
@@ -37,7 +40,7 @@ describe('the docks in a scene', () => {
     set.sync([dock('a'), dock('b', 9999)], (d) => d.key === 'a');
     expect(made.map((m) => m.d.key)).toEqual(['a']);
     expect(parent.children).toEqual([made[0]!.root]);
-    expect(set.size).toBe(1);
+    expect(set.decor).toHaveLength(1);
   });
 
   it('keeps an instance that stays in range, and disposes one that leaves range or is no longer listed', () => {
@@ -50,7 +53,7 @@ describe('the docks in a scene', () => {
     expect(parent.children).toEqual([made[0]!.root]);
     set.sync([], always);
     expect(made[0]!.dispose).toHaveBeenCalledTimes(1);
-    expect(set.size).toBe(0);
+    expect(set.decor).toHaveLength(0);
   });
 
   it('brings a new instance up to everything set so far, and passes later changes on to all', () => {
@@ -75,7 +78,7 @@ describe('the docks in a scene', () => {
     expect(made[0]!.dispose).toHaveBeenCalledTimes(1);
     set.sync([dock('a')], always);
     expect(made).toHaveLength(1);
-    expect(set.size).toBe(0);
+    expect(set.decor).toHaveLength(0);
     set.setEnabled(true);
     set.sync([dock('a')], always);
     expect(made).toHaveLength(2);
@@ -86,8 +89,8 @@ describe('the docks in a scene', () => {
     const { set } = setup((d) => fake(d, hits.get(d.key)));
     set.sync([dock('a'), dock('b')], always);
     const ray = new THREE.Ray();
-    expect(set.pick(ray)?.guid).toBe(2);
-    expect(set.pick(ray, 5)).toBeNull();
+    expect(set.pickHit(ray)?.spawn.guid).toBe(2);
+    expect(set.pickHit(ray, 5)).toBeNull();
   });
 
   it('finds a spawn in the instance that has it, and says whose frame it stands in', () => {
@@ -106,6 +109,23 @@ describe('the docks in a scene', () => {
     expect(set.decor).toEqual([made[0]!.decor, made[1]!.decor]);
     set.sync([dock('b')], always);
     expect(set.decor).toEqual([made[1]!.decor]);
+  });
+
+  it('lets every instance work between frames, and gathers what a box can catch from them all', () => {
+    const { set, made } = setup((d) => fake({ ...d, node: d.key === 'a' ? 1 : 2 }));
+    set.sync([dock('a'), dock('b')], always);
+    set.update();
+    expect(made.map((m) => m.update.mock.calls.length)).toEqual([1, 1]);
+    expect(set.candidates(new THREE.Vector3()).map((c) => c.guid)).toEqual([2, 3]);
+  });
+
+  it('says why a dock has no passengers, and whether any kind was capped', () => {
+    const { set, made } = setup();
+    expect(set.status).toEqual({ capped: { creatures: false, objects: false }, error: null });
+    set.sync([dock('a'), dock('b')], always);
+    made[1]!.status = { capped: { creatures: true, objects: false }, error: 'not connected' };
+    made[0]!.status = { capped: { creatures: false, objects: true }, error: null };
+    expect(set.status).toEqual({ capped: { creatures: true, objects: true }, error: 'not connected' });
   });
 
   it('culls every instance, and disposes them all with dispose', () => {

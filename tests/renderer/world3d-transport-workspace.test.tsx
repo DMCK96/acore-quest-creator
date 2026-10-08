@@ -295,7 +295,7 @@ describe('docked vessels in the World', () => {
     await waitFor(() => expect(docksGiven()).toEqual(['591:2']));
   });
 
-  it('leaves the transport view’s own stop out of the docks, and keeps another stop of the same continent', async () => {
+  it('leaves every dock of the shown transport map out, so its passengers are never drawn twice', async () => {
     const twice: WorldMap = {
       id: 592, name: 'Ferry', directory: 'kalimdor', kind: 'transport', start: { x: 1, y: 1, z: 1 },
       transport: {
@@ -310,7 +310,7 @@ describe('docked vessels in the World', () => {
     await waitFor(() => expect(picker.querySelector('optgroup[label="Transports"] option[value="592"]')).toBeTruthy());
     fireEvent.change(picker, { target: { value: '592' } });
     await waitFor(() => expect(worlds.at(-1).options.map).toBe(592));
-    await waitFor(() => expect(docksGiven()).toEqual(['592:2']));
+    expect(docksGiven()).toEqual([]);
   });
 
   it('saves an edit of a passenger at a dock vessel-local with that dock’s frame, and drops a walking path', async () => {

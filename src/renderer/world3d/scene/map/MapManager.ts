@@ -96,6 +96,8 @@ class MapManager extends EventTarget {
   /** The vessels docked in range, each with its passengers; the transport view's own vessel is the spawn manager's */
   #docks: DockSet;
   #dockList: readonly Dock[] = [];
+  /** Whether which docks are near may have changed: the list, the layer or the camera's tile */
+  #docksDirty = true;
   #dbManager: DbManager;
 
   #mapLight: MapLight;
@@ -290,7 +292,8 @@ class MapManager extends EventTarget {
 
   /** What a selection box can catch: drawn route points, and spawns within draw distance */
   selectionCandidates(cameraPosition: THREE.Vector3) {
-    return this.#spawnManager.candidates(cameraPosition);
+    const own = this.#spawnManager.candidates(cameraPosition);
+    return { ...own, spawns: [...own.spawns, ...this.#docks.candidates(cameraPosition)] };
   }
 
   /** Moves an NPC's drawn route to points being dragged */
@@ -320,7 +323,10 @@ class MapManager extends EventTarget {
 
   /** Whether the spawn source capped a kind, or why it could give none */
   get spawnStatus() {
-    return { ...this.#spawnManager.status, loading: this.#spawnManager.loading };
+    const own = this.#spawnManager.status;
+    const docked = this.#docks.status;
+    const capped = { creatures: own.capped.creatures || docked.capped.creatures, objects: own.capped.objects || docked.capped.objects };
+    return { ...own, capped, error: own.error ?? docked.error, loading: this.#spawnManager.loading };
   }
 
   get root() {
@@ -340,16 +346,19 @@ class MapManager extends EventTarget {
   /** The vessels that stop on this map's terrain: drawn, with their passengers, while the camera is near */
   setDocks(docks: readonly Dock[]) {
     this.#dockList = docks;
+    this.#docksDirty = true;
   }
 
   /** Whether the docked vessels are drawn and picked at all */
   setDocksEnabled(enabled: boolean) {
     this.#docks.setEnabled(enabled);
+    this.#docksDirty = true;
   }
 
   /** The frame of the docked vessel a spawn is drawn on, or null when it is not on one */
   frameOfSpawn(kind: 'creature' | 'object', guid: number) {
-    return this.#docks.frameOf(kind, guid);
+    // The view's own spawns win, as in `findSpawn`: one drawn there is not on a dock
+    return this.#spawnManager.find(kind, guid) ? null : this.#docks.frameOf(kind, guid);
   }
 
   /** Moves the vessel and its passengers to a new frame */
@@ -395,6 +404,7 @@ class MapManager extends EventTarget {
     const { areaX, areaY, chunkX, chunkY } = Map.getIndicesFromPosition(x, y);
     this.#targetAreaX = areaX;
     this.#targetAreaY = areaY;
+    if (areaX !== previousAreaX || areaY !== previousAreaY) this.#docksDirty = true;
     this.#targetChunkX = chunkX;
     this.#targetChunkY = chunkY;
 
@@ -453,7 +463,11 @@ class MapManager extends EventTarget {
     this.#liquidManager.update(deltaTime);
 
     this.#syncSpawns();
-    this.#docks.sync(this.#dockList, (dock) => dockInRange(dock.frame, { areaX: this.#targetAreaX, areaY: this.#targetAreaY }));
+    if (this.#docksDirty) {
+      this.#docksDirty = false;
+      this.#docks.sync(this.#dockList, (dock) => dockInRange(dock.frame, { areaX: this.#targetAreaX, areaY: this.#targetAreaY }));
+    }
+    this.#docks.update();
     this.#spawnManager.cull(camera.position, this.#cullingFrustum);
     this.#docks.cull(camera.position, this.#cullingFrustum);
   }

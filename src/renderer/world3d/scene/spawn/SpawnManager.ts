@@ -491,6 +491,9 @@ class SpawnManager {
     const redraws = this.#redraws;
     const group = await this.#draw(this.#overlay(answer, box, map));
     if (this.#wanted.get(areaId) !== request) {
+      // Dropped while its models were made: what was drawn is freed, not left animating
+      this.#release(group);
+      group.clear();
       return null;
     }
 

@@ -11,13 +11,14 @@ const passenger = (guid: number, x: number) => ({
 });
 const answer = { creatures: [passenger(1, 2)], objects: [], capped: { creatures: false, objects: false } };
 
-function build(source = vi.fn(async () => answer)) {
+function build(source: any = vi.fn(async () => answer), now?: () => number) {
   const manager = new SpawnManager({
     resolver: { creature: async () => ({ kind: 'model', path: 'a.m2', textures: {}, geosets: null, scale: 1 }), object: async () => null } as any,
     createModel: async () => new THREE.Object3D(),
     createBuilding: async () => new THREE.Group(),
     source: null,
     frame: dock.frame,
+    now,
   });
   return { manager, instance: createSpawnDock(dock, manager), source };
 }
@@ -61,6 +62,45 @@ describe('a dock backed by a spawn manager', () => {
     instance.configure({ visibility: { creatures: false, objects: true, paths: false, events: 'none' } });
     await settle();
     expect(instance.root.getObjectByName('creatures')!.visible).toBe(false);
+  });
+
+  it('asks again for its passengers once a failed answer has aged, and says why meanwhile', async () => {
+    let clock = 0;
+    const source = vi.fn().mockResolvedValueOnce({ error: 'not connected' }).mockResolvedValue(answer);
+    const { instance } = build(source, () => clock);
+    instance.configure({ source });
+    await settle();
+    await settle();
+    expect(instance.status.error).toBe('not connected');
+    instance.update();
+    await settle();
+    expect(source).toHaveBeenCalledTimes(1);
+    clock = 31000;
+    instance.update();
+    await settle();
+    await settle();
+    expect(source).toHaveBeenCalledTimes(2);
+    expect(instance.find('creature', 1)).not.toBeNull();
+    expect(instance.status.error).toBeNull();
+    instance.update();
+    await settle();
+    expect(source).toHaveBeenCalledTimes(2);
+  });
+
+  it('does not ask before it has a source', async () => {
+    const { instance } = build();
+    instance.update();
+    await settle();
+    expect(instance.find('creature', 1)).toBeNull();
+  });
+
+  it('offers its drawn passengers to a selection box', async () => {
+    const { instance, source } = build();
+    instance.configure({ source: source as any });
+    await settle();
+    await settle();
+    instance.cull(new THREE.Vector3(100, 202, 6));
+    expect(instance.candidates(new THREE.Vector3(100, 202, 6)).map((c) => c.guid)).toEqual([1]);
   });
 
   it('draws nothing when disposed before the answer arrives, and frees what it drew', async () => {

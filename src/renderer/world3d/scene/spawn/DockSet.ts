@@ -4,9 +4,13 @@ import type { EntityLooks } from '../../../../core/entities/view-spawns.js';
 import type { Dock } from '../../../../core/map/transport-docks.js';
 import type { Frame } from '../../../../core/map/transport-frame.js';
 import type { WorldLayer } from '../../../../core/world/layer.js';
+import type { Candidates } from '../edit/box.js';
 import type { PickedSpawn, SpawnInfo, SpawnSource, SpawnVisibility } from './SpawnManager.js';
 
 type Kind = 'creature' | 'object';
+
+/** Whether a kind of passenger was capped, and why none could be read */
+export type DockStatus = { capped: { creatures: boolean; objects: boolean }; error: string | null };
 
 /** Everything the scene tells its spawn manager, kept so a dock that comes into range later is told too */
 export interface DockState {
@@ -31,6 +35,11 @@ export interface DockInstance {
   picked(kind: Kind, guid: number): PickedSpawn | null;
   info(kind: Kind, guid: number): SpawnInfo | null;
   cull(camera: THREE.Vector3, frustum?: THREE.Frustum): void;
+  /** Once a frame: asks again for passengers whose answer failed, once it has aged */
+  update(): void;
+  /** What a selection box can catch among the drawn passengers */
+  candidates(camera: THREE.Vector3): Candidates['spawns'];
+  readonly status: DockStatus;
   dispose(): void;
 }
 
@@ -54,10 +63,6 @@ export class DockSet {
   /** The vessels drawn, for the scene to count as ground */
   get decor(): THREE.Object3D[] {
     return [...this.#docks.values()].map(({ instance }) => instance.decor);
-  }
-
-  get size(): number {
-    return this.#docks.size;
   }
 
   /** Off, nothing is drawn or picked and what was drawn is freed */
@@ -99,10 +104,6 @@ export class DockSet {
     return best;
   }
 
-  pick(ray: THREE.Ray, maxDistance = Infinity): PickedSpawn | null {
-    return this.pickHit(ray, maxDistance)?.spawn ?? null;
-  }
-
   find(kind: Kind, guid: number): THREE.Object3D | null {
     return this.#first((i) => i.find(kind, guid));
   }
@@ -119,6 +120,24 @@ export class DockSet {
   frameOf(kind: Kind, guid: number): Frame | null {
     for (const { dock, instance } of this.#docks.values()) if (instance.find(kind, guid)) return dock.frame;
     return null;
+  }
+
+  /** Once a frame: each dock asks again for what failed */
+  update(): void {
+    for (const { instance } of this.#docks.values()) instance.update();
+  }
+
+  candidates(camera: THREE.Vector3): Candidates['spawns'] {
+    return [...this.#docks.values()].flatMap(({ instance }) => instance.candidates(camera));
+  }
+
+  /** The docks' passengers together: any kind capped at one, and the first reason one could not be read */
+  get status(): DockStatus {
+    const all = [...this.#docks.values()].map(({ instance }) => instance.status);
+    return {
+      capped: { creatures: all.some((s) => s.capped.creatures), objects: all.some((s) => s.capped.objects) },
+      error: all.find((s) => s.error)?.error ?? null,
+    };
   }
 
   cull(camera: THREE.Vector3, frustum?: THREE.Frustum): void {

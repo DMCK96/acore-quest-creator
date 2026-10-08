@@ -48,7 +48,7 @@ const sel = (s: Partial<Selection>): Selection => ({ ...EMPTY_SELECTION, ...s })
 const line = (pathId: number, xs: number[], y = 0): Route => ({ pathId, own: false, entry: 1, points: xs.map((x) => ({ x, y, z: 0 })) });
 const key = (code: string) => new KeyboardEvent('keydown', { code });
 
-function setup(opts: { routes?: Record<number, Route>; floor?: number | null; answers?: Record<number, boolean | Promise<boolean>> } = {}) {
+function setup(opts: { routes?: Record<number, Route>; floor?: number | null; aboard?: number[]; answers?: Record<number, boolean | Promise<boolean>> } = {}) {
   const spawns = new Map<string, THREE.Object3D>();
   const npc = (guid: number, x: number, y: number) => {
     const o = new THREE.Object3D();
@@ -74,6 +74,7 @@ function setup(opts: { routes?: Record<number, Route>; floor?: number | null; an
     pickGround: () => groundAt?.clone() ?? null,
     rayAt: () => new THREE.Ray(),
     findSpawn: (kind, guid) => spawns.get(`${kind}:${guid}`) ?? null,
+    aboard: (_kind, guid) => opts.aboard?.includes(guid) ?? false,
     spawnRoute: (guid) => routes.get(guid) ?? null,
     pickRoutePoint: () => null,
     setPendingRoute: (guid, points) => {
@@ -139,6 +140,18 @@ describe('moving and turning a selection in the 3D view', () => {
     expect(t.floorZ).toHaveBeenCalledTimes(2);
     expect(t.gestures).toHaveLength(1);
     expect(placed(t.gestures[0]!)).toEqual([[1, 0, 4, 1], [2, 10, 4, 1]]);
+  });
+
+  it('leaves a spawn aboard a docked vessel on its deck: the continent’s floor under the vessel is not its floor', async () => {
+    const t = setup({ floor: -50, aboard: [2] });
+    t.npc(1, 0, 0);
+    t.npc(2, 10, 0);
+    t.editor.setSelection(sel({ spawns: [{ kind: 'creature', guid: 1 }, { kind: 'creature', guid: 2 }] }));
+    t.editor.update();
+    await t.drag([0, 4, 0]);
+    expect(t.floorZ).toHaveBeenCalledTimes(1);
+    expect(placed(t.gestures[0]!)).toEqual([[1, 0, 4, -50], [2, 10, 4, 0]]);
+    expect(t.notices.at(-1)).toBeNull();
   });
 
   it('the editor keeps no history: Ctrl+Z and Ctrl+Y are left to the app when no path is drawn', () => {

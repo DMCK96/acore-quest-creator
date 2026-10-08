@@ -68,8 +68,8 @@ const CONTROLS: [string, string][] = [
   ['Shift', 'Faster'],
 ];
 
-/** Where the layer checkboxes are remembered, per viewer. */
 const NO_DOCKS: readonly Dock[] = [];
+/** Where the layer checkboxes are remembered, per viewer. */
 const LAYERS_KEY = 'acqc.world3d.layers';
 /**
  * What the layers card shows: the world's scenery, its NPCs, objects and their paths, and the game
@@ -772,7 +772,10 @@ function WorldStage({
   useEffect(() => {
     world.current?.setSpawnVisibility(spawnsOf(layers));
     world.current?.setScenery(sceneryOf(layers));
-    world.current?.setDocksEnabled(layers.transports);
+    // A passenger selected at a dock goes with its vessel: nothing is left selected that is not drawn
+    const shown = world.current;
+    if (shown && !layers.transports && shown.selectedSpawns().some((s) => shown.frameOfSpawn(s.kind, s.guid) !== null)) clearSelection();
+    shown?.setDocksEnabled(layers.transports);
     world.current?.setTool(layers.tool);
     world.current?.setFalloff({ on: layers.falloff, radius: layers.falloffRadius });
     try {

@@ -453,6 +453,7 @@ export function createWorld3D(options: World3DOptions): World3D {
         return raycaster.ray.clone();
       },
       findSpawn: (kind, guid) => manager.findSpawn(kind, guid),
+      aboard: (kind, guid) => manager.frameOfSpawn(kind, guid) !== null,
       spawnRoute: (guid) => manager.spawnRoute(guid),
       pickRoutePoint: (ray, guid) => manager.pickRoutePoint(ray, guid),
       setPendingRoute: (guid, points) => manager.setPendingRoute(guid, points),

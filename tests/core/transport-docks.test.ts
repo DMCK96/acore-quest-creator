@@ -40,9 +40,11 @@ describe('the docks on a continent', () => {
     expect(docksOn([twice], KALIMDOR).map((d) => d.key)).toEqual(['5:0', '5:2']);
   });
 
-  it('leaves out the stop the transport view itself shows', () => {
-    expect(docksOn([zeppelin], KALIMDOR, { map: 591, node: 0 })).toEqual([]);
-    expect(docksOn([zeppelin], EASTERN, { map: 591, node: 0 }).map((d) => d.key)).toEqual(['591:2']);
+  it('leaves out every dock of the map the transport view shows: its passengers are drawn there already', () => {
+    expect(docksOn([zeppelin], KALIMDOR, 591)).toEqual([]);
+    expect(docksOn([zeppelin], EASTERN, 591)).toEqual([]);
+    const ferry = transport(5, [{ entry: 7, displayId: 1, pathId: 9 }], { 9: [node(0, KALIMDOR, 1, 1, NODE_STOP), node(1, KALIMDOR, 90, 90, NODE_STOP)] });
+    expect(docksOn([zeppelin, ferry], KALIMDOR, 591).map((d) => d.key)).toEqual(['5:0', '5:1']);
   });
 
   it('ignores maps that are not transports, and a transport with no templates or no path', () => {

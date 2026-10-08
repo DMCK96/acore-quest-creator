@@ -233,10 +233,9 @@ export function WorldWorkspace({
   const shownMap = worldMapById(mapId);
   const transportMap = shownMap?.kind === 'transport' ? shownMap : null;
   const transportView = transportMap ? normaliseView(transportMap, chosenView, isTerrainMap) : null;
-  // The vessels that stop on the terrain shown, but for the stop the transport view itself has
+  // The vessels that stop on the terrain shown, but for the transport map the view itself shows
   const hostMapId = transportMap && transportView ? hostMapIdOf(transportMap, transportView) : mapId;
-  const ownStop = transportMap && transportView ? { map: transportMap.id, node: transportView.node } : undefined;
-  const docks = useMemo(() => docksOn(maps, hostMapId, ownStop), [maps, hostMapId, ownStop?.map, ownStop?.node]);
+  const docks = useMemo(() => docksOn(maps, hostMapId, transportMap?.id), [maps, hostMapId, transportMap?.id]);
   const viewRef = useRef(transportView);
   viewRef.current = transportView;
   /** Remembers where the camera is on the map shown, with the transport's route and stop there */
