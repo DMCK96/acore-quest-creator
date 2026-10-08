@@ -38,6 +38,25 @@ Connect the editor to your world database first, as you do for any work. The ass
 - **Export:** write a quest's or the project's SQL patch into your export folder.
 - **Undo and redo.**
 
+## Knowing your world
+
+Before it writes, the assistant can look at what already exists, so new content fits in:
+
+- **Quests by zone and level:** the quests listed under a zone (such as Elwynn Forest), filtered by level, and the full text, objectives, rewards and chain links of up to 25 quests at a time, read without importing them.
+- **What is around a point:** the NPCs and objects within a radius (100 yards by default, at most 500), what each does (vendor, innkeeper, quest giver), their level and faction, the quests they offer, what vendors sell and what NPCs drop. Every spawn includes where it stands and **which way it faces**, so the assistant can place its own NPC beside it and match.
+- **Name and id clashes:** whether a name or an id is already used in your database or in your project.
+
+Zones and factions are shown by name when the connection has a server data folder, and by number otherwise.
+
+## Lore from the wiki
+
+The assistant can also search and read pages on [warcraft.wiki.gg](https://warcraft.wiki.gg/) to check new content against the story. This is **off until you turn it on**: in Settings, MCP / AI tab, tick **Allow lookups on warcraft.wiki.gg**.
+
+- Only the words the assistant searches for are sent to the wiki; nothing else leaves your computer. It reads one page at a time, and repeats are remembered for an hour.
+- Every answer carries the page link and the wiki's licence (Creative Commons Attribution-ShareAlike 4.0), so what it borrows can be credited.
+- The wiki covers every expansion, while your server is at Wrath of the Lich King. The assistant is told that later events have not happened in your world's story yet, and that later content is welcome as inspiration, as long as it says where an idea comes from.
+- If the wiki refuses the request, the assistant is told so and carries on without it.
+
 ## What it cannot do
 
 - It never writes to your world database, and it cannot apply a patch to your dev database. You apply patches yourself, as always.
