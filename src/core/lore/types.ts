@@ -1,3 +1,5 @@
+import type { Compass } from './facing';
+
 /**
  * What the lore queries answer. Plain data, shared by the queries, the API contract and the MCP tools.
  */
@@ -81,4 +83,112 @@ export interface QuestSummaries {
   quests: QuestSummary[];
   /** Ids the database has no quest for */
   missing: number[];
+}
+
+/** What an NPC does for a player, from its `npcflag` */
+export type Role =
+  | 'gossip'
+  | 'quest giver'
+  | 'trainer'
+  | 'vendor'
+  | 'repairer'
+  | 'flight master'
+  | 'innkeeper'
+  | 'banker'
+  | 'auctioneer'
+  | 'stable master'
+  | 'battlemaster'
+  | 'spirit healer';
+
+/**
+ * One spawn near the point asked about, with what is needed to place something beside it. World
+ * yards: X north, Y west, Z up. `orientation` is radians, exactly what `add_spawn` takes: 0 faces
+ * north and it grows toward west (π/2 west, π south, 3π/2 east).
+ */
+export interface AreaSpawn {
+  guid: number;
+  x: number;
+  y: number;
+  z: number;
+  /** x and y relative to the point asked about */
+  dx: number;
+  dy: number;
+  /** Yards from the point asked about, along the ground */
+  distance: number;
+  orientation: number;
+  /** The same orientation as a compass word */
+  facing: Compass;
+  /** Yards it roams from its spawn; 0 when it stands or patrols */
+  wander: number;
+  /** The `waypoint_data` path it walks; 0 for none */
+  pathId: number;
+  respawnSecs: number;
+}
+
+export interface AreaObjectSpawn extends Omit<AreaSpawn, 'wander' | 'pathId'> {
+  /** The quaternion x, y, z, w the database stores */
+  rotation: [number, number, number, number];
+}
+
+export interface AreaDrop {
+  item: number;
+  name: string;
+  /** Percent; a group's rows with no chance of their own share what the group has left */
+  chance: number;
+  group: number;
+  /** The reference loot table it comes through, or null when it is the NPC's own row */
+  viaReference: number | null;
+}
+
+export interface AreaNpc {
+  entry: number;
+  name: string;
+  subname: string;
+  level: { min: number; max: number };
+  rank: number;
+  faction: { template: number; name: string | null };
+  roles: Role[];
+  /** How many of it stand in the circle; `spawns` lists the nearest */
+  spawnCount: number;
+  spawns: AreaSpawn[];
+  /** Quests it starts and ends (ids) */
+  starts: number[];
+  ends: number[];
+  /** What it sells, in slot order */
+  vendor: { item: number; name: string }[];
+  drops: AreaDrop[];
+}
+
+export interface AreaObject {
+  entry: number;
+  name: string;
+  /** Its template type (3 is a chest, 8 a spellcaster) or -1 when unknown */
+  type: number;
+  spawnCount: number;
+  spawns: AreaObjectSpawn[];
+  starts: number[];
+  ends: number[];
+}
+
+export interface AreaOverview {
+  query: { map: number; x: number; y: number; radius: number };
+  npcs: AreaNpc[];
+  objects: AreaObject[];
+  /** The quests these NPCs and objects start and end */
+  quests: { id: number; title: string; level: number }[];
+  /** The factions of the NPCs found, with how many NPCs each has */
+  factions: { template: number; name: string | null; npcs: number }[];
+  /** Which lists were cut at their limit */
+  truncated: { npcs: boolean; objects: boolean; quests: boolean; spawns: boolean; vendor: boolean; drops: boolean };
+  /** Tables this fork lacks; a section that needs one is empty */
+  missing: string[];
+}
+
+export interface AreaLimits {
+  npcs: number;
+  objects: number;
+  spawnsPerEntry: number;
+  quests: number;
+  vendorItems: number;
+  drops: number;
 }

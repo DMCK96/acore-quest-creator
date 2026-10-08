@@ -27,6 +27,8 @@ const LOOKUP_TABLES = [
   'pool_template', 'pool_creature', 'pool_gameobject', 'pool_pool',
   // Quest rotations and pools that follow a game event
   'game_event', 'game_event_pool', 'game_event_creature',
+  // What the lore queries read around a point: vendor stock and referenced loot.
+  'npc_vendor', 'reference_loot_template',
 ] as const;
 
 /** An empty in-memory world DB whose tables carry the fork's real DDL. */
