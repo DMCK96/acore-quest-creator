@@ -27,10 +27,9 @@ class ModelAnimation extends THREE.Object3D {
   // Skeleton
   skeleton: ModelSkeleton;
 
-  /** The gait playing, after fallback */
-  gait: Gait = 'stand';
 
   #model: Model;
+  #gait: Gait = 'stand';
   #held = false;
   #gaitActions: Partial<Record<Gait, THREE.AnimationAction>> = {};
   #animator: ModelAnimator;
@@ -79,17 +78,22 @@ class ModelAnimation extends THREE.Object3D {
     this.frozen = frozen;
   }
 
-  /** Crossfades to a gait, or the nearest one the model has; a held animation starts it on `resume` */
+  /** The gait playing, after fallback */
+  get gait(): Gait {
+    return this.#gait;
+  }
+
+  /** Crossfades to a gait, or the nearest one the model can play; a held animation starts it on `resume` */
   setGait(wanted: Gait) {
     let gait: Gait = wanted;
-    while (!this.#animator.sequences.has(GAIT_SEQUENCE[gait]) && GAIT_FALLBACK[gait]) {
+    while (!this.#playable(GAIT_SEQUENCE[gait]) && GAIT_FALLBACK[gait]) {
       gait = GAIT_FALLBACK[gait];
     }
-    if (gait === this.gait) return;
+    if (gait === this.#gait) return;
 
-    const outgoing = this.#gaitActions[this.gait];
+    const outgoing = this.#gaitActions[this.#gait];
     const incoming = this.#gaitActions[gait] ?? this.#startGait(gait);
-    this.gait = gait;
+    this.#gait = gait;
 
     if (outgoing) this.#retire(outgoing);
     if (!incoming) return;
@@ -139,13 +143,18 @@ class ModelAnimation extends THREE.Object3D {
     }
   }
 
-  /** Variations are stored by their index, and some models start past 0 (stand as only 1 and 2) */
-  #firstVariation(id: number) {
-    return this.#animator.sequences.get(id)?.find((variation) => variation !== undefined);
+  /**
+   * The first variation of an animation, when its keyframes are in the model file (flag 0x20): the
+   * others are in external .anim files, which are not loaded, so they would play as an empty clip.
+   * Variations are stored by their index, and some models start past 0 (stand as only 1 and 2).
+   */
+  #playable(id: number) {
+    const sequence = this.#animator.sequences.get(id)?.find((variation) => variation !== undefined);
+    return sequence && sequence.flags & 0x20 ? sequence : undefined;
   }
 
   #startGait(gait: Gait) {
-    const sequence = this.#firstVariation(GAIT_SEQUENCE[gait]);
+    const sequence = this.#playable(GAIT_SEQUENCE[gait]);
     if (!sequence) return undefined;
     const action = this.#animator.getSequence(this, sequence.id, sequence.variationIndex);
     this.#gaitActions[gait] = action;
@@ -204,17 +213,14 @@ class ModelAnimation extends THREE.Object3D {
     }
 
     // Automatically play sequence id 0
-    if (this.#animator.sequences.has(0)) {
-      const sequence = this.#firstVariation(0);
+    const sequence = this.#playable(0);
+    if (sequence) {
+      const action = this.#animator.getSequence(this, sequence.id, sequence.variationIndex);
+      action.play();
 
-      if (sequence && sequence.flags & 0x20) {
-        const action = this.#animator.getSequence(this, sequence.id, sequence.variationIndex);
-        action.play();
-
-        this.#gaitActions.stand = action;
-        this.#actions.add(action);
-        this.#playingActions.add(action);
-      }
+      this.#gaitActions.stand = action;
+      this.#actions.add(action);
+      this.#playingActions.add(action);
     }
   }
 }

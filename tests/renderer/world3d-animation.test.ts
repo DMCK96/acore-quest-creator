@@ -74,4 +74,21 @@ describe('a model\'s gait', () => {
     expect(() => a.resume()).not.toThrow();
     expect(a.gait).toBe('walk');
   });
+
+  it('falls back past a gait whose animation is not in the model file (an external .anim) (I4)', () => {
+    const external = new ModelAnimator(new Uint32Array(), [sequence(0, 0), sequence(4, 0, 0), sequence(5, 0)], []).createAnimation(model);
+    external.setGait('walk');
+    expect(external.gait).toBe('stand');
+    external.setGait('run');
+    expect(external.gait).toBe('run');
+    const noRun = new ModelAnimator(new Uint32Array(), [sequence(0, 0), sequence(4, 0), sequence(5, 0, 0)], []).createAnimation(model);
+    noRun.setGait('run');
+    expect(noRun.gait).toBe('walk');
+  });
+
+  it('cannot have its gait set from outside, only read (M7)', () => {
+    const a = animation([0, 4]);
+    expect(() => { (a as { gait: string }).gait = 'run'; }).toThrow();
+    expect(a.gait).toBe('stand');
+  });
 });
