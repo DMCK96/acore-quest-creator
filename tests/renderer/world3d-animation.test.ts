@@ -42,3 +42,36 @@ describe('a model material whose texture transform has no animation', () => {
     expect(() => material.prepareMaterial(animated)).not.toThrow();
   });
 });
+
+describe('a model\'s gait', () => {
+  const animation = (ids: number[]) => new ModelAnimator(new Uint32Array(), ids.map((id) => sequence(id, 0)), []).createAnimation(model);
+
+  it('starts standing and plays the gait it is told', () => {
+    const a = animation([0, 4, 5]);
+    expect(a.gait).toBe('stand');
+    a.setGait('walk');
+    expect(a.gait).toBe('walk');
+    a.setGait('run');
+    expect(a.gait).toBe('run');
+    a.setGait('stand');
+    expect(a.gait).toBe('stand');
+  });
+
+  it('falls back to walk for a model that cannot run, and to stand for one that cannot walk', () => {
+    const noRun = animation([0, 4]);
+    noRun.setGait('run');
+    expect(noRun.gait).toBe('walk');
+    const stander = animation([0]);
+    stander.setGait('walk');
+    expect(stander.gait).toBe('stand');
+  });
+
+  it('can be changed while held still, taking effect without throwing', () => {
+    const a = animation([0, 4, 5]);
+    a.suspend();
+    expect(() => a.setGait('walk')).not.toThrow();
+    expect(a.gait).toBe('walk');
+    expect(() => a.resume()).not.toThrow();
+    expect(a.gait).toBe('walk');
+  });
+});
