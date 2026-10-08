@@ -32,10 +32,10 @@ test('the MCP server is off until switched on, then answers a client with the to
   const page = await app.firstWindow();
   const port = await freePort();
 
-  const off = await page.evaluate(() => (window as any).api.mcpStatus());
+  const off = await page.evaluate(() => (globalThis as any).api.mcpStatus());
   expect(off.value).toMatchObject({ enabled: false, running: false });
 
-  const on = await page.evaluate((p) => (window as any).api.mcpConfigure({ enabled: true, port: p }), port);
+  const on = await page.evaluate((p) => (globalThis as any).api.mcpConfigure({ enabled: true, port: p }), port);
   expect(on.value).toMatchObject({ enabled: true, running: true, port, error: null });
   const { url, token } = on.value as { url: string; token: string };
 
@@ -50,6 +50,6 @@ test('the MCP server is off until switched on, then answers a client with the to
   expect(JSON.parse(state.content[0].text).name).toBeTruthy();
   await client.close();
 
-  await page.evaluate(() => (window as any).api.mcpConfigure({ enabled: false, port: 47600 }));
+  await page.evaluate(() => (globalThis as any).api.mcpConfigure({ enabled: false, port: 47600 }));
   await expect(fetch(url, { method: 'POST', headers: { authorization: `Bearer ${token}` } })).rejects.toThrow();
 });
