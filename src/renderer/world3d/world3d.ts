@@ -5,6 +5,7 @@ import TextureManager from './scene/texture/TextureManager';
 import { WorldControls, type ClickKeys, type Tool } from './controls';
 import { CharacterTexture } from './scene/character/CharacterTexture';
 import { getAssetUrl } from './scene/asset';
+import { floorHeightBelow } from './scene/spawn/ground-probe';
 import { spawnBounds, type PickedSpawn, type SpawnSource, type SpawnStatus, type SpawnVisibility } from './scene/spawn/SpawnManager';
 import type { ViewSpawns } from '@core/db/view-spawns';
 import type { EntityLooks } from '@core/entities/view-spawns';
@@ -603,7 +604,6 @@ export function createWorld3D(options: World3DOptions): World3D {
   };
   const { textures, databases, characterTexture } = sharedManagers();
   // The drawn ground a short way below a point, for standing NPCs on it
-  const down = new THREE.Raycaster();
   /** Whether a loaded area's terrain or buildings reach over a point; its bounds are worked out once */
   const reaches = (group: THREE.Object3D, x: number, y: number): boolean => {
     let bounds: THREE.Box3 | undefined = group.userData.floorBounds;
@@ -614,12 +614,10 @@ export function createWorld3D(options: World3DOptions): World3D {
     return x >= bounds.min.x && x <= bounds.max.x && y >= bounds.min.y && y <= bounds.max.y;
   };
   const groundBelow = (x: number, y: number, fromZ: number, distance: number): number | null => {
-    down.set(new THREE.Vector3(x, y, fromZ), new THREE.Vector3(0, 0, -1));
-    down.far = distance;
     // Every floor, shown or not: where an NPC stands does not change with what is drawn. Only an
     // area's floors that reach over the point are tried: trying every loaded one took 2 ms a ray.
     const floors = manager.root.children.filter((group) => (group.name === 'terrain' || group.name === 'buildings') && reaches(group, x, y));
-    return down.intersectObjects(floors, true)[0]?.point.z ?? null;
+    return floorHeightBelow(floors, x, y, fromZ, distance);
   };
   const manager = new MapManager({ host: HOST, textureManager: textures, dbManager: databases, characterTexture, groundBelow, frame: options.frame });
   manager.addEventListener('area:change', (event) => {
