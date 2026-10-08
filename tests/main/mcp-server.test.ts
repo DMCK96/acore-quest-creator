@@ -20,6 +20,12 @@ const huge = defineTool({
   run: async () => ({ ok: true, value: { blob: 'x'.repeat(300_000) } }),
 });
 
+const bigWrite = defineTool({
+  name: 'big_write', title: 'Big write', description: 'Changes the project and returns a very long answer.', input: {},
+  write: { kind: 'step', label: () => 'Claude: big write' },
+  run: async (_a, ctx) => { await ctx.call('newQuest'); return { ok: true, value: { sql: 'x'.repeat(300_000) } }; },
+});
+
 describe('the MCP server', () => {
   it('lists the tools with their descriptions', async () => {
     const { client } = await mcpFixture([echo, refuse]);
@@ -61,5 +67,22 @@ describe('the MCP server', () => {
     expect(out.value.code).toBe('BAD_REQUEST');
     expect(out.value.message).toMatch(/too large/i);
     expect(out.value.message).toMatch(/narrow/i);
+  });
+
+  it('tells the caller to connect first when the editor is not connected', async () => {
+    const { call } = await mcpFixture([defineTool({ name: 'needs_db', title: 'Needs db', description: 'Calls a lookup that needs the database.', input: {}, write: false, run: (_a, ctx) => ctx.call('searchQuests', 'x') })], { connect: false });
+    const out = await call('needs_db');
+    expect(out.value.code).toBe('NOT_CONNECTED');
+    expect(out.value.message).toMatch(/connect/i);
+    expect(out.value.message).toMatch(/list_profiles/);
+  });
+
+  it('keeps a change that was made, and says so, when its answer is too large to send', async () => {
+    const { call, api } = await mcpFixture([bigWrite]);
+    const out = await call('big_write');
+    expect(out.isError).toBe(false);
+    expect(out.value.note).toMatch(/too large/i);
+    expect(JSON.stringify(out.value).length).toBeLessThan(2000);
+    expect(((await api.historyList()) as any).value.steps.map((s: any) => s.label)).toEqual(['Claude: big write']);
   });
 });

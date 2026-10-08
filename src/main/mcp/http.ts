@@ -38,12 +38,12 @@ const refuse = (res: http.ServerResponse, status: number, message: string, heade
   res.end(JSON.stringify({ error: message }));
 };
 
-async function readJson(req: http.IncomingMessage): Promise<{ ok: true; body: unknown } | { ok: false }> {
+async function readJson(req: http.IncomingMessage): Promise<{ ok: true; body: unknown } | { ok: false; tooLarge?: true }> {
   const chunks: Buffer[] = [];
   let size = 0;
   for await (const chunk of req) {
     size += (chunk as Buffer).length;
-    if (size > MAX_BODY_BYTES) return { ok: false };
+    if (size > MAX_BODY_BYTES) return { ok: false, tooLarge: true };
     chunks.push(chunk as Buffer);
   }
   try {
@@ -78,6 +78,11 @@ export function startMcpHttp(options: McpHttpOptions): Promise<McpHttp> {
       if (req.method !== 'POST') return refuse(res, 405, 'Use POST.', { allow: 'POST' });
 
       const parsed = await readJson(req);
+      if (!parsed.ok && parsed.tooLarge) {
+        // Stop reading what was sent: answer, then drop the connection
+        res.on('finish', () => req.destroy());
+        return refuse(res, 413, 'The body is too large.', { connection: 'close' });
+      }
       if (!parsed.ok) return refuse(res, 400, 'The body must be JSON.');
 
       const mcp = options.createServer();

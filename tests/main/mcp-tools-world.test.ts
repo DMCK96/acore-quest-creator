@@ -41,6 +41,15 @@ describe('world tools', () => {
   });
 });
 
+describe('movement defaults', () => {
+  it('set_movement needs only the type: idle ignores the radius and path, wander needs no path', async () => {
+    const { call } = await mcpFixture(allTools);
+    expect((await call('set_movement', { guid: 80330, type: 'idle' })).isError).toBe(false);
+    expect((await call('set_movement', { guid: 80330, type: 'wander', wander: 5 })).isError).toBe(false);
+    expect((await call('world_changes')).value.map((c: any) => c.type)).toContain('movement');
+  });
+});
+
 describe('entity tools', () => {
   it('reads an existing NPC, saves it into the project under a new name, and replaces it on a second save', async () => {
     const { call, api } = await mcpFixture(allTools);

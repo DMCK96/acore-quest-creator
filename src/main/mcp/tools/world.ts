@@ -54,10 +54,15 @@ export const worldTools = [
     name: 'set_movement',
     title: "Set an NPC's movement",
     description: "Sets how an NPC spawn (by guid) moves: idle, wander within a radius in yards, or follow a path id (see set_route).",
-    input: { guid, type: z.enum(['idle', 'wander', 'path']), wander: z.number().min(0), pathId: z.number().int().min(1).nullable() },
+    input: {
+      guid,
+      type: z.enum(['idle', 'wander', 'path']),
+      wander: z.number().min(0).optional().describe('Wander radius in yards; only for type wander. Default 0.'),
+      pathId: z.number().int().min(1).nullable().optional().describe('The path to follow; only for type path (see set_route). Default none.'),
+    },
     write: { kind: 'step', label: ({ guid }: { guid: number }) => `Claude: set movement of ${guid}` },
     run: async ({ guid, type, wander, pathId }, ctx) => {
-      const out = await ctx.call('worldSetMovement', guid, { type, wander, pathId });
+      const out = await ctx.call('worldSetMovement', guid, { type, wander: wander ?? 0, pathId: pathId ?? null });
       return out.ok ? { ok: true, value: { guid, type } } : out;
     },
   }),

@@ -74,6 +74,12 @@ describe('the MCP HTTP server', () => {
     expect(res.status).toBe(400);
   });
 
+  it('answers a body over 4 MB with 413 and does not run it', async () => {
+    const { url } = await boot();
+    const res = await fetch(url, { method: 'POST', headers: { authorization: 'Bearer tok', 'content-type': 'application/json', accept: 'application/json, text/event-stream' }, body: JSON.stringify({ pad: 'x'.repeat(5 * 1024 * 1024) }) });
+    expect(res.status).toBe(413);
+  });
+
   it('uses a regenerated token from the next request on', async () => {
     const { url, current } = await boot('old');
     expect((await post(url, { authorization: 'Bearer old' })).status).toBe(200);
