@@ -14,7 +14,8 @@ type WmoGroupSpec = {
   uvs: Float32Array | null;
   /** Baked lighting, red-green-blue-alpha; null when the group has none */
   colors: Uint8Array | null;
-  indices: Uint16Array;
+  /** 16-bit, or 32-bit for a mesh of more than 65,535 vertices */
+  indices: Uint16Array | Uint32Array;
   batches: WmoBatchSpec[];
 };
 
@@ -34,6 +35,7 @@ type WmoDoodadsSpec = {
 
 type WmoSpec = {
   materials: WmoMaterialSpec[];
+  /** The building's meshes: its groups, those near one another joined, each drawn once for each material it uses */
   groups: WmoGroupSpec[];
   /** Its groups' water, magma and slime, in the building's space */
   liquids: LiquidSpec[];

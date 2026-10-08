@@ -5,6 +5,10 @@ import SceneWorker from '../../worker/SceneWorker.js';
 import { AssetHost, loadAsset } from '../../asset.js';
 import { createBuildingLiquidSpec } from './liquid.js';
 import type { LiquidSpec } from '../../map/loader/liquid.js';
+import { mergeGroups } from './merge-groups.js';
+
+/** How many yards across a building's merged meshes are, about: what a building is culled by when part of it is off screen */
+const MESH_SIZE = 80;
 
 const messageOf = (error: unknown): string => (error instanceof Error ? error.message : String(error));
 
@@ -58,7 +62,8 @@ class WmoLoaderWorker extends SceneWorker {
         blend: material.blend,
         textures: material.textures,
       })),
-      groups: groups.filter((group): group is WmoGroupSpec => group !== null && group.indices.length > 0),
+      // Fewer, larger meshes: a draw call for each material of each, not for each batch of each group
+      groups: mergeGroups(groups.filter((group): group is WmoGroupSpec => group !== null && group.indices.length > 0), MESH_SIZE),
       liquids,
       problems,
       doodads: {
