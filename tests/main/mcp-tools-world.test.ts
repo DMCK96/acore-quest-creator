@@ -39,6 +39,26 @@ describe('world tools', () => {
     expect(out.isError).toBe(true);
     expect(await labels(api)).toEqual([]);
   });
+  it('add_spawn places an object with the rotation it is given, and move_spawn can turn it', async () => {
+    const { call, db } = await mcpFixture(allTools);
+    db.insert('gameobject_template', { entry: '500', type: '8', displayId: '1', name: 'Anvil', size: '1' });
+    const turn = [0, 0, 0.7071, 0.7071];
+    const out = await call('add_spawn', { kind: 'gameobject', entry: 500, map: 0, ...at, rotation: turn });
+    expect(out.isError).toBe(false);
+    const added = (await call('world_changes')).value.find((c: any) => c.type === 'added');
+    expect(added.placement.rotation).toEqual(turn);
+    const again = [0, 0, 1, 0];
+    await call('move_spawn', { kind: 'gameobject', guid: out.value.guid, ...at, rotation: again });
+    const moved = (await call('world_changes')).value.find((c: any) => c.type === 'added');
+    expect(moved.placement.rotation).toEqual(again);
+  });
+
+  it('add_spawn without a rotation still places an NPC with none', async () => {
+    const { call } = await mcpFixture(allTools);
+    await call('add_spawn', { kind: 'creature', entry: 1423, map: 0, ...at });
+    const added = (await call('world_changes')).value.find((c: any) => c.type === 'added');
+    expect(added.placement.rotation).toBeNull();
+  });
 });
 
 describe('movement defaults', () => {

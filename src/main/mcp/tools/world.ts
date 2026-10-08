@@ -3,11 +3,13 @@ import { defineTool } from '../tool';
 
 const kind = z.enum(['creature', 'gameobject']);
 const guid = z.number().int().min(1);
+const ROTATION_NOTE = 'An object also takes a `rotation` quaternion [x, y, z, w] (copy it from area_overview to turn it like its neighbour); NPCs leave it out.';
 const place = {
   x: z.number().describe('World yards, X north.'),
   y: z.number().describe('World yards, Y west.'),
   z: z.number().describe('World yards, Z up.'),
   orientation: z.number().describe('Radians.'),
+  rotation: z.tuple([z.number(), z.number(), z.number(), z.number()]).optional().describe('Objects only: the quaternion x, y, z, w.'),
 };
 const UNITS = 'Positions are world yards (X north, Y west, Z up); orientation is in radians. Edits go in the project\'s world layer and become part of the patch; the database is never written.';
 
@@ -16,22 +18,22 @@ export const worldTools = [
   defineTool({
     name: 'add_spawn',
     title: 'Place an NPC or object',
-    description: `Places a new spawn of an existing NPC (creature) or object (gameobject) entry on a map, and answers its new guid. ${UNITS}`,
+    description: `Places a new spawn of an existing NPC (creature) or object (gameobject) entry on a map, and answers its new guid. ${UNITS} ${ROTATION_NOTE}`,
     input: { kind, entry: z.number().int().min(1), map: z.number().int().min(0), ...place },
     write: { kind: 'step', label: ({ kind, entry }: { kind: string; entry: number }) => `AI: place ${kind} ${entry}` },
-    run: async ({ kind, entry, map, x, y, z, orientation }, ctx) => {
-      const out = await ctx.call('worldAddSpawn', kind, entry, map, { x, y, z, orientation, rotation: null });
+    run: async ({ kind, entry, map, x, y, z, orientation, rotation }, ctx) => {
+      const out = await ctx.call('worldAddSpawn', kind, entry, map, { x, y, z, orientation, rotation: rotation ?? null });
       return out.ok ? { ok: true, value: { guid: out.value.guid } } : out;
     },
   }),
   defineTool({
     name: 'move_spawn',
     title: 'Move or turn a spawn',
-    description: `Moves or turns an existing spawn (by its guid; see find_spawns). ${UNITS}`,
+    description: `Moves or turns an existing spawn (by its guid; see find_spawns). ${UNITS} ${ROTATION_NOTE}`,
     input: { kind, guid, ...place },
     write: { kind: 'step', label: ({ kind, guid }: { kind: string; guid: number }) => `AI: move ${kind} ${guid}` },
-    run: async ({ kind, guid, x, y, z, orientation }, ctx) => {
-      const out = await ctx.call('worldMoveSpawn', kind, guid, { x, y, z, orientation, rotation: null });
+    run: async ({ kind, guid, x, y, z, orientation, rotation }, ctx) => {
+      const out = await ctx.call('worldMoveSpawn', kind, guid, { x, y, z, orientation, rotation: rotation ?? null });
       return out.ok ? { ok: true, value: { moved: { kind, guid } } } : out;
     },
   }),
