@@ -132,4 +132,11 @@ describe('questSummaries', () => {
     expect(out.quests[0]!.zone).toEqual({ id: 9999, name: 'Zone 9999' });
     expect(out.quests[1]!.zone).toBeNull();
   });
+
+  it('cuts each text shorter when the caller asks for it, to keep a big batch small', async () => {
+    const db = full();
+    db.insert('quest_template', { ID: '44', LogTitle: 'Long', QuestDescription: 'y'.repeat(2000), QuestLevel: '5' });
+    const q = (await questSummaries(db, [44], zoneName, 600)).quests[0]!;
+    expect(q.text.details).toHaveLength(601);
+  });
 });

@@ -105,4 +105,11 @@ describe('entity tools', () => {
     expect((await call('list_project_entities')).value.npcs).toEqual([]);
     expect((await labels(api)).at(-1)).toBe('AI: delete npc 1423');
   });
+
+  it('tells the model which way orientation 0 points when placing or moving a spawn', () => {
+    for (const name of ['add_spawn', 'move_spawn']) {
+      const tool = allTools.find((t) => t.name === name)!;
+      expect(tool.description).toMatch(/0 faces north/);
+    }
+  });
 });

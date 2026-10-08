@@ -9,6 +9,9 @@ import type { ApiDeps } from './deps';
 import type { Services } from './services';
 import { fail, run } from './errors';
 
+const BIG_BATCH = 10;
+const BIG_BATCH_TEXT = 600;
+
 /** Read-only questions about the world, and lookups on the Warcraft wiki */
 export function createLoreApi(s: Services, deps: ApiDeps): LoreApi {
   const { connected, projectEntities } = s.ctx;
@@ -57,7 +60,8 @@ export function createLoreApi(s: Services, deps: ApiDeps): LoreApi {
       run(async () => {
         const live = connected();
         const zones = await questSortsOf(live);
-        return questSummaries(live.db, questIds, (id) => zones.get(id));
+        // A big batch gets shorter texts, so 25 quests still fit in one answer
+        return questSummaries(live.db, questIds, (id) => zones.get(id), questIds.length > BIG_BATCH ? BIG_BATCH_TEXT : undefined);
       }),
 
     areaOverview: (map, x, y, radius) =>

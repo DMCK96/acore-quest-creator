@@ -5,10 +5,10 @@ import type { ViewCreature, ViewObject } from '../db/view-spawns';
 import { compassOf, normaliseOrientation } from './facing';
 import type { AreaDrop, AreaLimits, AreaNpc, AreaObject, AreaObjectSpawn, AreaOverview, AreaSpawn, Role } from './types';
 
-export const AREA_LIMITS: AreaLimits = { npcs: 40, objects: 20, spawnsPerEntry: 8, quests: 30, vendorItems: 20, drops: 12 };
+export const AREA_LIMITS: AreaLimits = { npcs: 40, objects: 20, spawnsPerEntry: 8, quests: 30, vendorItems: 20, drops: 12, spawnRead: 5000 };
 
-/** More than any real point holds; the circle and the entry limits do the cutting. */
-const SPAWN_READ_LIMIT = 5000;
+/** How many quest ids an NPC or object lists as started (and as ended). */
+const QUESTS_PER_GIVER = 10;
 
 /** Tables the overview reads that a fork may lack; a missing one empties its section and is reported. */
 export const AREA_TABLES = [
@@ -123,16 +123,13 @@ async function vendorAndDrops(
   const references = [...new Set(plain.map((r) => num(r, 'Reference')).filter((id) => id > 0))];
   const referenced = await rowsFor(db, 'reference_loot_template', 'Entry', references);
 
-  const itemIds = [...new Set([...stock.map((r) => num(r, 'item')), ...plain.map((r) => num(r, 'Item')), ...referenced.map((r) => num(r, 'Item'))].filter((id) => id > 0))];
-  const itemNames = itemIds.length === 0 ? new Map<number, string>() : await db.lookupNames('item', itemIds);
-
   const vendor = new Map<number, AreaNpc['vendor']>();
   for (const entry of entries) {
     const sold = stock
       .filter((r) => num(r, 'entry') === entry)
       .sort((a, b) => num(a, 'slot') - num(b, 'slot') || num(a, 'item') - num(b, 'item'));
     if (sold.length > lim.vendorItems) truncated.vendor = true;
-    vendor.set(entry, sold.slice(0, lim.vendorItems).map((r) => ({ item: num(r, 'item'), name: itemNames.get(num(r, 'item')) ?? '' })));
+    vendor.set(entry, sold.slice(0, lim.vendorItems).map((r) => ({ item: num(r, 'item'), name: '' })));
   }
 
   const drops = new Map<number, AreaDrop[]>();
@@ -147,16 +144,22 @@ async function vendorAndDrops(
         // is rolled at the outer row's chance, so a referenced item's chance is scaled by it
         for (const inner of withChances(referenced.filter((r) => num(r, 'Entry') === reference))) {
           if (num(inner.row, 'Reference') > 0) continue;
-          list.push({ item: num(inner.row, 'Item'), name: itemNames.get(num(inner.row, 'Item')) ?? '', chance: round((inner.chance * chance) / 100, 2), group: num(inner.row, 'GroupId'), viaReference: reference });
+          list.push({ item: num(inner.row, 'Item'), name: '', chance: round((inner.chance * chance) / 100, 2), group: num(inner.row, 'GroupId'), viaReference: reference });
         }
       } else {
-        list.push({ item: num(row, 'Item'), name: itemNames.get(num(row, 'Item')) ?? '', chance, group: num(row, 'GroupId'), viaReference: null });
+        list.push({ item: num(row, 'Item'), name: '', chance, group: num(row, 'GroupId'), viaReference: null });
       }
     }
     list.sort((a, b) => b.chance - a.chance || a.item - b.item);
     if (list.length > lim.drops) truncated.drops = true;
     drops.set(entry, list.slice(0, lim.drops));
   }
+
+  // Name only what is listed: a reference table can hold thousands of items
+  const listed = [...new Set([...[...vendor.values()].flat().map((v) => v.item), ...[...drops.values()].flat().map((d) => d.item)].filter((id) => id > 0))];
+  const itemNames = listed.length === 0 ? new Map<number, string>() : await db.lookupNames('item', listed);
+  for (const list of vendor.values()) for (const v of list) v.name = itemNames.get(v.item) ?? '';
+  for (const list of drops.values()) for (const d of list) d.name = itemNames.get(d.item) ?? '';
   return { vendor, drops };
 }
 
@@ -174,12 +177,14 @@ export async function areaOverview(
   if (!db.spawnsForView) throw new Error('This database connection cannot list spawns.');
   const lim: AreaLimits = { ...AREA_LIMITS, ...limits };
   const box = { minX: query.x - query.radius, maxX: query.x + query.radius, minY: query.y - query.radius, maxY: query.y + query.radius };
-  const found = await db.spawnsForView(query.map, box, SPAWN_READ_LIMIT);
+  // One more than the limit, to tell a box that held exactly the limit from one that held more
+  const read = await db.spawnsForView(query.map, box, lim.spawnRead + 1);
+  const found = { creatures: read.creatures.slice(0, lim.spawnRead), objects: read.objects.slice(0, lim.spawnRead) };
 
   const missing: string[] = [];
   for (const table of AREA_TABLES) if ((await db.columns(table)).length === 0) missing.push(table);
 
-  const truncated = { npcs: false, objects: false, quests: false, spawns: false, vendor: false, drops: false };
+  const truncated = { npcs: false, objects: false, quests: false, spawns: false, vendor: false, drops: false, read: read.creatures.length > lim.spawnRead || read.objects.length > lim.spawnRead };
 
   const creatureGroups = byEntry(inCircle(found.creatures, query));
   truncated.npcs = creatureGroups.length > lim.npcs;
@@ -202,6 +207,12 @@ export async function areaOverview(
 
   const { vendor, drops } = await vendorAndDrops(db, templates, npcEntries, lim, truncated);
 
+  /** A giver's quest ids, cut to a few so a quest hub does not fill the answer. */
+  const capped = (ids: number[] | undefined): number[] => {
+    if ((ids?.length ?? 0) > QUESTS_PER_GIVER) truncated.quests = true;
+    return (ids ?? []).slice(0, QUESTS_PER_GIVER);
+  };
+
   const npcs: AreaNpc[] = npcGroups.map((group) => {
     const first = group[0]!.spawn as ViewCreature;
     const t = templates.get(first.entry);
@@ -221,8 +232,8 @@ export async function areaOverview(
         const c = p.spawn as ViewCreature;
         return { ...spawnOf(p, query), orientation: round(c.orientation, 4), facing: compassOf(c.orientation), wander: c.wander, pathId: c.pathId };
       }),
-      starts: creatureStarts.get(first.entry) ?? [],
-      ends: creatureEnds.get(first.entry) ?? [],
+      starts: capped(creatureStarts.get(first.entry)),
+      ends: capped(creatureEnds.get(first.entry)),
       vendor: vendor.get(first.entry) ?? [],
       drops: drops.get(first.entry) ?? [],
     };
@@ -242,8 +253,8 @@ export async function areaOverview(
         const yaw = yawOf(o.rotation);
         return { ...spawnOf(p, query), orientation: round(yaw, 4), facing: compassOf(yaw), rotation: o.rotation };
       }),
-      starts: objectStarts.get(first.entry) ?? [],
-      ends: objectEnds.get(first.entry) ?? [],
+      starts: capped(objectStarts.get(first.entry)),
+      ends: capped(objectEnds.get(first.entry)),
     };
   });
 
@@ -254,7 +265,7 @@ export async function areaOverview(
   const allQuests = questRows
     .map((r) => ({ id: num(r, 'ID'), title: r.LogTitle ?? '', level: num(r, 'QuestLevel') }))
     .sort((a, b) => a.level - b.level || a.id - b.id);
-  truncated.quests = allQuests.length > lim.quests;
+  truncated.quests = truncated.quests || allQuests.length > lim.quests;
 
   const factionCounts = new Map<number, number>();
   for (const npc of npcs) factionCounts.set(npc.faction.template, (factionCounts.get(npc.faction.template) ?? 0) + 1);

@@ -8,10 +8,10 @@ const place = {
   x: z.number().describe('World yards, X north.'),
   y: z.number().describe('World yards, Y west.'),
   z: z.number().describe('World yards, Z up.'),
-  orientation: z.number().describe('Radians.'),
+  orientation: z.number().describe('Radians: 0 faces north and it grows toward west (π/2 west, π south, 3π/2 east).'),
   rotation: z.tuple([z.number(), z.number(), z.number(), z.number()]).optional().describe('Objects only: the quaternion x, y, z, w.'),
 };
-const UNITS = 'Positions are world yards (X north, Y west, Z up); orientation is in radians. Edits go in the project\'s world layer and become part of the patch; the database is never written.';
+const UNITS = 'Positions are world yards (X north, Y west, Z up); orientation is in radians, 0 faces north and it grows toward west (π/2 west, π south, 3π/2 east). Edits go in the project\'s world layer and become part of the patch; the database is never written.';
 
 /** Placing and moving spawns, paths, movement and respawn times in the world. */
 export const worldTools = [

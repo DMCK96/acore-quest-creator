@@ -98,4 +98,24 @@ describe('areaOverview vendor stock and drops', () => {
     expect(drops).toContainEqual({ item: 5000, name: 'Wolf Collar', chance: 5, group: 0, viaReference: 25 });
     expect(drops).toContainEqual({ item: 4656, name: 'Small Pumpkin', chance: 5, group: 0, viaReference: 24 });
   });
+
+  it('names only the items it lists, not every item of a big reference table', async () => {
+    const db = world();
+    for (let i = 0; i < 50; i++) {
+      db.insert('item_template', { entry: String(7000 + i), name: `Trinket ${i}` });
+      db.insert('reference_loot_template', { Entry: '24', Item: String(7000 + i), Reference: '0', Chance: '1', GroupId: '0' });
+    }
+    const asked = new Set<number>();
+    const spy = new Proxy(db, {
+      get(target, key) {
+        if (key === 'lookupNames') return async (kind: string, ids: number[]) => { if (kind === 'item') ids.forEach((id) => asked.add(id)); return target.lookupNames(kind as never, ids); };
+        const value = (target as never)[key];
+        return typeof value === 'function' ? (value as () => unknown).bind(target) : value;
+      },
+    });
+    const out = await areaOverview(spy, QUERY, names, { drops: 2 });
+    expect(out.npcs.find((n) => n.entry === 69)!.drops).toHaveLength(2);
+    // The vendor's two items and the two drops listed, nothing else
+    expect(asked.size).toBeLessThanOrEqual(4);
+  });
 });

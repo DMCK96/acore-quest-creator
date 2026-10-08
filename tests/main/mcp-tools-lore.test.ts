@@ -99,4 +99,8 @@ describe('lore tools', () => {
     expect(order).toEqual([]);
     expect(((await api.historyList()) as any).value.steps).toEqual([]);
   });
+
+  it('area_overview says how an object with no rotation is read', () => {
+    expect(allTools.find((t) => t.name === 'area_overview')!.description).toMatch(/all zeros/);
+  });
 });

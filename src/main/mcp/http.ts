@@ -5,6 +5,8 @@ import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js';
 
 const MAX_BODY_BYTES = 4 * 1024 * 1024;
+/** How much of an oversized upload is read and thrown away before the connection is dropped. */
+const MAX_DRAIN_BYTES = 64 * 1024 * 1024;
 const LOOPBACK_HOSTS = new Set(['127.0.0.1', 'localhost', '[::1]', '::1']);
 
 export interface McpHttpOptions {
@@ -38,16 +40,33 @@ const refuse = (res: http.ServerResponse, status: number, message: string, heade
   res.end(JSON.stringify({ error: message }));
 };
 
-async function readJson(req: http.IncomingMessage): Promise<{ ok: true; body: unknown } | { ok: false; tooLarge?: true }> {
+async function readJson(req: http.IncomingMessage, onTooLarge: () => void): Promise<{ ok: true; body: unknown } | { ok: false; tooLarge?: true }> {
   const chunks: Buffer[] = [];
   let size = 0;
   let tooLarge = false;
-  // Read to the end even when the body is too big (keeping nothing): leaving the loop early destroys
-  // the request, and a client still uploading would see a reset instead of the answer
-  for await (const chunk of req) {
-    size += (chunk as Buffer).length;
-    if (size > MAX_BODY_BYTES) tooLarge = true;
-    else chunks.push(chunk as Buffer);
+  try {
+    // Read to the end even when the body is too big (keeping nothing): leaving the loop early destroys
+    // the request, and a client still uploading would see a reset instead of the answer
+    for await (const chunk of req) {
+      size += (chunk as Buffer).length;
+      if (size <= MAX_BODY_BYTES) {
+        chunks.push(chunk as Buffer);
+        continue;
+      }
+      if (!tooLarge) {
+        tooLarge = true;
+        chunks.length = 0;
+        // Answer at once; the rest of the upload is read and thrown away
+        onTooLarge();
+      }
+      if (size > MAX_DRAIN_BYTES) {
+        req.destroy();
+        break;
+      }
+    }
+  } catch {
+    // The client went away part-way
+    return tooLarge ? { ok: false, tooLarge: true } : { ok: false };
   }
   if (tooLarge) return { ok: false, tooLarge: true };
   try {
@@ -81,8 +100,8 @@ export function startMcpHttp(options: McpHttpOptions): Promise<McpHttp> {
       if (new URL(req.url ?? '/', 'http://127.0.0.1').pathname !== '/mcp') return refuse(res, 404, 'Not found.');
       if (req.method !== 'POST') return refuse(res, 405, 'Use POST.', { allow: 'POST' });
 
-      const parsed = await readJson(req);
-      if (!parsed.ok && parsed.tooLarge) return refuse(res, 413, 'The body is too large.', { connection: 'close' });
+      const parsed = await readJson(req, () => refuse(res, 413, 'The body is too large.', { connection: 'close' }));
+      if (!parsed.ok && parsed.tooLarge) return;
       if (!parsed.ok) return refuse(res, 400, 'The body must be JSON.');
 
       const mcp = options.createServer();

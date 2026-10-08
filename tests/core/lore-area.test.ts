@@ -112,7 +112,7 @@ describe('areaOverview', () => {
 
   it('says nothing was cut when nothing was', async () => {
     const out = await areaOverview(world(), QUERY, names);
-    expect(out.truncated).toEqual({ npcs: false, objects: false, quests: false, spawns: false, vendor: false, drops: false });
+    expect(out.truncated).toEqual({ npcs: false, objects: false, quests: false, spawns: false, vendor: false, drops: false, read: false });
     expect(out.missing).toEqual([]);
   });
 
@@ -135,5 +135,22 @@ describe('areaOverview', () => {
     const db = world();
     const bare = new Proxy(db, { get: (t, k) => (k === 'spawnsForView' ? undefined : (t as never)[k]) });
     await expect(areaOverview(bare, QUERY, names)).rejects.toThrow(/cannot list spawns/);
+  });
+
+  it('says when it only read part of a crowded box, and still answers from what it read', async () => {
+    const out = await areaOverview(world(), QUERY, names, { spawnRead: 2 });
+    expect(out.truncated.read).toBe(true);
+    expect(out.npcs.length).toBeGreaterThan(0);
+  });
+
+  it('caps how many quests an NPC lists as started and ended, and says so', async () => {
+    const db = world();
+    for (let i = 0; i < 12; i++) {
+      db.insert('quest_template', { ID: String(500 + i), LogTitle: `Q${i}`, QuestLevel: '5' });
+      db.insert('creature_queststarter', { id: '295', quest: String(500 + i) });
+    }
+    const out = await areaOverview(db, QUERY, names, { quests: 100 });
+    expect(out.npcs.find((n) => n.entry === 295)!.starts).toHaveLength(10);
+    expect(out.truncated.quests).toBe(true);
   });
 });

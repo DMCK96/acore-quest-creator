@@ -106,6 +106,23 @@ describe('wiki page', () => {
   });
 });
 
+describe('wiki client details', () => {
+  it('answers a cached request at once, even while another request is still in flight', async () => {
+    const hang = new Promise<ReturnType<typeof reply>>(() => {});
+    const { client } = setup((url) => (url.includes('slow') ? hang : reply(SEARCH)));
+    await client.search('a');
+    void client.search('slow').catch(() => undefined);
+    const out = await Promise.race([client.search('a'), new Promise((resolve) => setTimeout(() => resolve('waited'), 200))]);
+    expect(out).not.toBe('waited');
+  });
+
+  it('refuses an answer that says it is too large before reading it', async () => {
+    const big = { ok: true, status: 200, headers: { get: (name: string) => (name.toLowerCase() === 'content-length' ? '5000000' : null) }, text: async (): Promise<string> => { throw new Error('should not be read'); } };
+    const { client } = setup(() => big as never);
+    await expect(client.search('x')).rejects.toMatchObject({ kind: 'too-large' });
+  });
+});
+
 describe('wiki odd answers', () => {
   it('reports an error body as an error and does not remember it', async () => {
     let body: unknown = { error: { code: 'ratelimited', info: 'Slow down.' } };
@@ -163,7 +180,8 @@ describe('wiki requests', () => {
       expect(u.protocol).toBe('https:');
       expect(u.host).toBe('warcraft.wiki.gg');
       expect(u.pathname).toBe('/api.php');
-      expect(Object.keys(init as object)).toEqual(['signal']);
+      expect(Object.keys(init as object).sort()).toEqual(['redirect', 'signal']);
+      expect((init as { redirect?: string }).redirect).toBe('error');
     }
   });
 

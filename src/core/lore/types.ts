@@ -178,8 +178,8 @@ export interface AreaOverview {
   quests: { id: number; title: string; level: number }[];
   /** The factions of the NPCs found, with how many NPCs each has */
   factions: { template: number; name: string | null; npcs: number }[];
-  /** Which lists were cut at their limit */
-  truncated: { npcs: boolean; objects: boolean; quests: boolean; spawns: boolean; vendor: boolean; drops: boolean };
+  /** Which lists were cut at their limit; `read` means the box held more spawns than were read, so the nearest may be missing */
+  truncated: { npcs: boolean; objects: boolean; quests: boolean; spawns: boolean; vendor: boolean; drops: boolean; read: boolean };
   /** Tables this fork lacks; a section that needs one is empty */
   missing: string[];
 }
@@ -191,6 +191,8 @@ export interface AreaLimits {
   quests: number;
   vendorItems: number;
   drops: number;
+  /** Spawns of each kind read from the box before the circle is applied */
+  spawnRead: number;
 }
 
 /** A search on warcraft.wiki.gg */

@@ -80,6 +80,19 @@ describe('the MCP HTTP server', () => {
     expect(res.status).toBe(413);
   });
 
+  it('answers 413 as soon as the body is too big, without waiting for the upload to finish', async () => {
+    const { server } = await boot();
+    const status = await new Promise<number>((resolve, reject) => {
+      const req = http.request({ host: '127.0.0.1', port: server.port, path: '/mcp', method: 'POST', headers: { authorization: 'Bearer tok', 'content-type': 'application/json', accept: 'application/json, text/event-stream' } }, (res) => { res.resume(); resolve(res.statusCode ?? 0); req.destroy(); });
+      req.on('error', () => undefined);
+      const timer = setTimeout(() => { req.destroy(); reject(new Error('no answer while the upload was still open')); }, 3000);
+      req.on('close', () => clearTimeout(timer));
+      // Over the limit, and the request is never ended
+      req.write(Buffer.alloc(5 * 1024 * 1024, 120));
+    });
+    expect(status).toBe(413);
+  });
+
   it('uses a regenerated token from the next request on', async () => {
     const { url, current } = await boot('old');
     expect((await post(url, { authorization: 'Bearer old' })).status).toBe(200);

@@ -13,7 +13,7 @@ const FLAG_WEEKLY = 0x8000;
 
 const num = (row: RawRow | undefined, column: string): number => Number(row?.[column] ?? 0) || 0;
 const text = (row: RawRow | undefined, column: string): string => row?.[column] ?? '';
-const cut = (value: string): string => (value.length > TEXT_LIMIT ? `${value.slice(0, TEXT_LIMIT)}…` : value);
+const cutTo = (limit: number) => (value: string): string => (value.length > limit ? `${value.slice(0, limit)}…` : value);
 const repeatableOf = (flags: number): 'daily' | 'weekly' | null => (flags & FLAG_DAILY ? 'daily' : flags & FLAG_WEEKLY ? 'weekly' : null);
 const range = (n: number): number[] => Array.from({ length: n }, (_, i) => i + 1);
 
@@ -69,8 +69,14 @@ export async function questsInZone(
   return { zone, quests, total: kept.length, truncated: kept.length > shown.length };
 }
 
-/** Quests read as text and facts, without importing them into the project. */
-export async function questSummaries(db: WorldDb, ids: number[], zoneName: (id: number) => string | undefined): Promise<QuestSummaries> {
+/** Quests read as text and facts, without importing them into the project. Each text is cut at `textLimit` characters. */
+export async function questSummaries(
+  db: WorldDb,
+  ids: number[],
+  zoneName: (id: number) => string | undefined,
+  textLimit: number = TEXT_LIMIT,
+): Promise<QuestSummaries> {
+  const cut = cutTo(textLimit);
   const keys = ids.map(String);
   const [templates, addons, rewards, requests] = await Promise.all([
     db.selectRows('quest_template', { ID: keys }),

@@ -74,6 +74,21 @@ describe('lore API: the database calls', () => {
   });
 });
 
+describe('lore API: big quest batches', () => {
+  it('shorten each quest text to 600 characters when more than 10 quests are asked for', async () => {
+    const { api, db } = await setup();
+    const ids: number[] = [];
+    for (let i = 0; i < 11; i++) {
+      ids.push(700 + i);
+      db.insert('quest_template', { ID: String(700 + i), LogTitle: `Q${i}`, QuestLevel: '5', QuestDescription: 'z'.repeat(2000) });
+    }
+    const many: any = await api.questSummaries(ids);
+    expect(many.value.quests[0].text.details).toHaveLength(601);
+    const few: any = await api.questSummaries(ids.slice(0, 10));
+    expect(few.value.quests[0].text.details).toHaveLength(1501);
+  });
+});
+
 describe('lore API: untitled project quests', () => {
   it('still count when checking ids, though they have no name to clash with', async () => {
     const { api } = await setup();

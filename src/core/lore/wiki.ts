@@ -16,7 +16,11 @@ export const WIKI_LICENSE = 'Text from warcraft.wiki.gg, Creative Commons Attrib
 export const WIKI_NOTE =
   'The wiki covers all of Warcraft and all expansions. This server is Wrath of the Lich King (3.3.5), so later events have not happened in its story yet. Later content is fair inspiration for new content; say where an idea comes from.';
 
-export type WikiFetch = (url: string, init?: { signal?: AbortSignal }) => Promise<{ ok: boolean; status: number; text(): Promise<string> }>;
+/** The slice of `fetch` the client uses. `redirect: 'error'` keeps a redirect from taking the request to another host. */
+export type WikiFetch = (
+  url: string,
+  init?: { signal?: AbortSignal; redirect?: 'error' | 'follow' | 'manual' },
+) => Promise<{ ok: boolean; status: number; headers?: { get(name: string): string | null }; text(): Promise<string> }>;
 
 export type WikiErrorKind = 'timeout' | 'network' | 'refused' | 'http' | 'missing' | 'too-large';
 
@@ -88,16 +92,24 @@ export function createWikiClient(options: WikiClientOptions) {
     return next;
   };
 
+  /** A remembered answer that is still fresh; using it makes it the most recently used. */
+  const remembered = (url: string): { value: unknown } | null => {
+    const hit = cache.get(url);
+    if (!hit || now() - hit.at >= ttlMs) return null;
+    cache.delete(url);
+    cache.set(url, hit);
+    return hit;
+  };
+
   /** One request, or the cached answer to it; the parsed JSON body. */
-  const getJson = (params: Record<string, string>): Promise<any> =>
-    queued(async () => {
-      const url = `${API}?${new URLSearchParams(params).toString()}`;
-      const hit = cache.get(url);
-      if (hit && now() - hit.at < ttlMs) {
-        cache.delete(url);
-        cache.set(url, hit);
-        return hit.value;
-      }
+  const getJson = (params: Record<string, string>): Promise<any> => {
+    const url = `${API}?${new URLSearchParams(params).toString()}`;
+    // A remembered answer needs no turn in the queue, so it is not held up by a slow request ahead
+    const early = remembered(url);
+    if (early) return Promise.resolve(early.value);
+    return queued(async () => {
+      const again = remembered(url);
+      if (again) return again.value;
       if (lastRequest !== null) {
         const wait = minGapMs - (now() - lastRequest);
         if (wait > 0) await sleep(wait);
@@ -115,13 +127,16 @@ export function createWikiClient(options: WikiClientOptions) {
       });
       let body: string;
       try {
-        const response = await Promise.race([fetch(url, { signal: controller.signal }), timedOut]);
+        const response = await Promise.race([fetch(url, { signal: controller.signal, redirect: 'error' }), timedOut]);
         if (!response.ok) {
           if ([403, 429, 503].includes(response.status)) {
             throw new WikiError('refused', `The wiki refused the request (HTTP ${response.status}); its protection may be blocking this program.`);
           }
           throw new WikiError('http', `The wiki answered with HTTP ${response.status}.`);
         }
+        // An answer that says how big it is can be refused before it is read
+        const declared = Number(response.headers?.get('content-length'));
+        if (Number.isFinite(declared) && declared > maxChars) throw new WikiError('too-large', 'The wiki answered with more text than this program will read.');
         body = await Promise.race([response.text(), timedOut]);
       } catch (error) {
         if (error instanceof WikiError) throw error;
@@ -143,6 +158,7 @@ export function createWikiClient(options: WikiClientOptions) {
       while (cache.size > maxEntries) cache.delete(cache.keys().next().value!);
       return value;
     });
+  };
 
   return {
     async search(text: string, limit?: number): Promise<WikiSearchResult> {
