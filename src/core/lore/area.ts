@@ -3,7 +3,7 @@ import type { RawRow } from '../db/types';
 import type { WorldDb } from '../db/world-db';
 import type { ViewCreature, ViewObject } from '../db/view-spawns';
 import { compassOf, normaliseOrientation } from './facing';
-import type { AreaLimits, AreaNpc, AreaObject, AreaObjectSpawn, AreaOverview, AreaSpawn, Role } from './types';
+import type { AreaDrop, AreaLimits, AreaNpc, AreaObject, AreaObjectSpawn, AreaOverview, AreaSpawn, Role } from './types';
 
 export const AREA_LIMITS: AreaLimits = { npcs: 40, objects: 20, spawnsPerEntry: 8, quests: 30, vendorItems: 20, drops: 12 };
 
@@ -87,6 +87,78 @@ async function questsByGiver(db: WorldDb, table: string, ids: number[]): Promise
   return out;
 }
 
+
+/** Each loot row with its chance in percent: rows of a group with none of their own share what the group has left. */
+function withChances(rows: RawRow[]): { row: RawRow; chance: number }[] {
+  const explicit = new Map<number, number>();
+  const empty = new Map<number, number>();
+  for (const r of rows) {
+    const group = num(r, 'GroupId');
+    if (group === 0) continue;
+    if (num(r, 'Chance') > 0) explicit.set(group, (explicit.get(group) ?? 0) + num(r, 'Chance'));
+    else empty.set(group, (empty.get(group) ?? 0) + 1);
+  }
+  return rows.map((row) => {
+    const group = num(row, 'GroupId');
+    const own = num(row, 'Chance');
+    const chance = group > 0 && own === 0 ? Math.max(0, (100 - (explicit.get(group) ?? 0)) / (empty.get(group) ?? 1)) : own;
+    return { row, chance: round(chance, 2) };
+  });
+}
+
+const rowsFor = async (db: WorldDb, table: string, column: string, ids: number[]): Promise<RawRow[]> =>
+  ids.length === 0 ? [] : rowsOrNone(db, table, { [column]: ids.map(String) });
+
+/** What each NPC sells, in slot order, cut to the limit; and what each drops, by chance, cut to the limit. */
+async function vendorAndDrops(
+  db: WorldDb,
+  templates: Map<number, RawRow>,
+  entries: number[],
+  lim: AreaLimits,
+  truncated: AreaOverview['truncated'],
+): Promise<{ vendor: Map<number, AreaNpc['vendor']>; drops: Map<number, AreaDrop[]> }> {
+  const stock = await rowsFor(db, 'npc_vendor', 'entry', entries);
+  const lootIds = [...new Set(entries.map((e) => num(templates.get(e), 'lootid')).filter((id) => id > 0))];
+  const plain = await rowsFor(db, 'creature_loot_template', 'Entry', lootIds);
+  const references = [...new Set(plain.map((r) => num(r, 'Reference')).filter((id) => id > 0))];
+  const referenced = await rowsFor(db, 'reference_loot_template', 'Entry', references);
+
+  const itemIds = [...new Set([...stock.map((r) => num(r, 'item')), ...plain.map((r) => num(r, 'Item')), ...referenced.map((r) => num(r, 'Item'))].filter((id) => id > 0))];
+  const itemNames = itemIds.length === 0 ? new Map<number, string>() : await db.lookupNames('item', itemIds);
+
+  const vendor = new Map<number, AreaNpc['vendor']>();
+  for (const entry of entries) {
+    const sold = stock
+      .filter((r) => num(r, 'entry') === entry)
+      .sort((a, b) => num(a, 'slot') - num(b, 'slot') || num(a, 'item') - num(b, 'item'));
+    if (sold.length > lim.vendorItems) truncated.vendor = true;
+    vendor.set(entry, sold.slice(0, lim.vendorItems).map((r) => ({ item: num(r, 'item'), name: itemNames.get(num(r, 'item')) ?? '' })));
+  }
+
+  const drops = new Map<number, AreaDrop[]>();
+  for (const entry of entries) {
+    const lootId = num(templates.get(entry), 'lootid');
+    const own = withChances(plain.filter((r) => num(r, 'Entry') === lootId && lootId > 0));
+    const list: AreaDrop[] = [];
+    for (const { row, chance } of own) {
+      const reference = num(row, 'Reference');
+      if (reference > 0) {
+        // One level only: what a reference table holds, not the references inside it
+        for (const inner of withChances(referenced.filter((r) => num(r, 'Entry') === reference))) {
+          if (num(inner.row, 'Reference') > 0) continue;
+          list.push({ item: num(inner.row, 'Item'), name: itemNames.get(num(inner.row, 'Item')) ?? '', chance: inner.chance, group: num(inner.row, 'GroupId'), viaReference: reference });
+        }
+      } else {
+        list.push({ item: num(row, 'Item'), name: itemNames.get(num(row, 'Item')) ?? '', chance, group: num(row, 'GroupId'), viaReference: null });
+      }
+    }
+    list.sort((a, b) => b.chance - a.chance || a.item - b.item);
+    if (list.length > lim.drops) truncated.drops = true;
+    drops.set(entry, list.slice(0, lim.drops));
+  }
+  return { vendor, drops };
+}
+
 /**
  * What stands around a point on a map: the NPCs and objects inside the circle, each with where it
  * is and which way it faces, the quests they offer, and the factions the NPCs belong to. Everything
@@ -127,6 +199,8 @@ export async function areaOverview(
     questsByGiver(db, 'gameobject_questender', objectEntries),
   ]);
 
+  const { vendor, drops } = await vendorAndDrops(db, templates, npcEntries, lim, truncated);
+
   const npcs: AreaNpc[] = npcGroups.map((group) => {
     const first = group[0]!.spawn as ViewCreature;
     const t = templates.get(first.entry);
@@ -148,8 +222,8 @@ export async function areaOverview(
       }),
       starts: creatureStarts.get(first.entry) ?? [],
       ends: creatureEnds.get(first.entry) ?? [],
-      vendor: [],
-      drops: [],
+      vendor: vendor.get(first.entry) ?? [],
+      drops: drops.get(first.entry) ?? [],
     };
   });
 
