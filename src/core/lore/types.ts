@@ -192,3 +192,24 @@ export interface AreaLimits {
   vendorItems: number;
   drops: number;
 }
+
+/** A search on warcraft.wiki.gg */
+export interface WikiSearchResult {
+  results: { title: string; snippet: string; url: string }[];
+  /** Which era this server is in, for reading the wiki */
+  note: string;
+  /** How the wiki's text may be reused */
+  license: string;
+}
+
+/** One wiki page: its intro, its headings, and, when asked, one section */
+export interface WikiPageResult {
+  title: string;
+  url: string;
+  redirectedFrom: string | null;
+  intro: string;
+  sections: { heading: string; level: number }[];
+  section: { heading: string; text: string } | null;
+  note: string;
+  license: string;
+}
