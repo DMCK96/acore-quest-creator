@@ -181,6 +181,8 @@ interface ViewProps {
   transport?: { map: WorldMap; view: TransportView };
   /** The vessels that stop on the terrain shown, drawn at their docks with their passengers (see the Transports layer) */
   docks?: readonly Dock[];
+  /** Told which vessel was clicked: its transport map and the route it runs */
+  onVessel?(vessel: { map: number; template: number }): void;
 }
 
 /** A transport at a stop: the terrain it is on, and what the view draws of it there */
@@ -259,7 +261,7 @@ class Contained extends Component<{ children: ReactNode }, { failure: string | n
 
 function WorldStage({
   map, start, hasClient, own, onSelect, onOwnEdit, focus, showArea = true, onArea, onPlaceChange, onCameraInput, quest, chainIds, onQuestRole, onNewQuest, onOpenQuest, onShowSpawns,
-  onCreateEntity, onEditEntity, onSetLootable, onGoToSpawn, placeRequest, patrolRequest, onRequestEnd, markers, onMarkerMove, markerFocus, transport, docks,
+  onCreateEntity, onEditEntity, onSetLootable, onGoToSpawn, placeRequest, patrolRequest, onRequestEnd, markers, onMarkerMove, markerFocus, transport, docks, onVessel,
 }: ViewProps): React.JSX.Element {
   const container = useRef<HTMLDivElement>(null);
   const world = useRef<World3D | null>(null);
@@ -277,6 +279,12 @@ function WorldStage({
   const [summary, setSummary] = useState<SelectionSummary | null>(null);
   const onSelectRef = useRef(onSelect);
   onSelectRef.current = onSelect;
+  // A click on the view's own vessel is the transport's map and route shown; on a docked one, its dock's
+  const vesselRef = useRef<(dock: Dock | null) => void>(() => undefined);
+  vesselRef.current = (dock) => {
+    if (dock) onVessel?.({ map: dock.map, template: dock.template });
+    else if (transport) onVessel?.({ map: transport.map.id, template: transport.view.template });
+  };
   const onOwnEditRef = useRef(onOwnEdit);
   onOwnEditRef.current = onOwnEdit;
   const onAreaRef = useRef(onArea);
@@ -435,6 +443,7 @@ function WorldStage({
     floorZ: floorAt,
     toRow: (at) => localisePlacement(at, frameNow()),
     vessel: shownTransport !== null,
+    onVessel: onVessel ? (dock) => vesselRef.current(dock) : undefined,
     placing: placing !== null,
     stopPlacing: () => setPlacing(null),
     clearSelection: () => clearSelection(),

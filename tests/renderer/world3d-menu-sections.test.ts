@@ -24,6 +24,17 @@ const flat = (groups: ReturnType<typeof buildMenu>): MenuItem[] => all(groups.fl
 const item = (groups: ReturnType<typeof buildMenu>, label: string) => flat(groups).find((i) => i.label === label);
 const labels = (groups: ReturnType<typeof buildMenu>) => groups.map((g) => [g.id, g.items.map((i) => i.label)]);
 
+describe('a vessel under the right-click', () => {
+  it('offers its stops on the ground and on a passenger, and not elsewhere', () => {
+    const vessel = { dock: null };
+    const withVessel = (hit: MenuTarget['hit']) => subjectOf({ ground: at, hit, selection: [], vessel }, store);
+    expect(item(buildMenu(withVessel(null), context()), 'Show stops…')?.action).toEqual({ kind: 'vesselStops', dock: null });
+    expect(item(buildMenu(withVessel({ type: 'spawn', spawn: npc() }), context()), 'Show stops…')).toBeDefined();
+    expect(item(buildMenu(ground(), context()), 'Show stops…')).toBeUndefined();
+    expect(item(buildMenu(withVessel(null), context({ placing: true })), 'Show stops…')).toBeUndefined();
+  });
+});
+
 describe('a route point', () => {
   const point = (guid: number, s: ProjectEntities = store): MenuSubject => subjectOf({ ground: at, hit: { type: 'point', guid, index: 2 }, selection: [] }, s);
   const patrolled: ProjectEntities = { ...store, npcs: [{ ...newNpc(12000001), name: 'Hela', spawns: [{ ...newSpawn(6000001) }] }] };
@@ -44,7 +55,7 @@ describe('a route point', () => {
 
 describe('the builder', () => {
   it('registers the sections in the spec order', () => {
-    expect(SECTIONS.map((s) => s.id)).toEqual(['busy', 'create', 'edit', 'loot', 'clipboard', 'coordinates', 'respawn', 'spawn-events', 'spawn-group', 'remove', 'movement', 'route-point', 'quest-parts', 'quest-spawns']);
+    expect(SECTIONS.map((s) => s.id)).toEqual(['busy', 'create', 'edit', 'loot', 'clipboard', 'coordinates', 'respawn', 'spawn-events', 'spawn-group', 'remove', 'movement', 'route-point', 'quest-parts', 'quest-spawns', 'vessel-stops']);
   });
 
   it('runs only sections that apply, joins those of one group, and drops empty groups', () => {

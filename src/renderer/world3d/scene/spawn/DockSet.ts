@@ -1,4 +1,4 @@
-import type * as THREE from 'three';
+import * as THREE from 'three';
 import type { ViewSpawns } from '../../../../core/db/view-spawns.js';
 import type { EntityLooks } from '../../../../core/entities/view-spawns.js';
 import type { Dock } from '../../../../core/map/transport-docks.js';
@@ -100,6 +100,17 @@ export class DockSet {
     for (const { instance } of this.#docks.values()) {
       const hit = instance.pick(ray, maxDistance);
       if (hit && hit.distance <= maxDistance && (!best || hit.distance < best.distance)) best = hit;
+    }
+    return best;
+  }
+
+  /** The nearest docked vessel a ray passes through, no further than `maxDistance`, with its dock and distance */
+  pickVessel(ray: THREE.Ray, maxDistance = Infinity): { dock: Dock; distance: number } | null {
+    const caster = new THREE.Raycaster(ray.origin, ray.direction, 0, maxDistance);
+    let best: { dock: Dock; distance: number } | null = null;
+    for (const { dock, instance } of this.#docks.values()) {
+      const hit = caster.intersectObject(instance.decor, true)[0];
+      if (hit && (!best || hit.distance < best.distance)) best = { dock, distance: hit.distance };
     }
     return best;
   }

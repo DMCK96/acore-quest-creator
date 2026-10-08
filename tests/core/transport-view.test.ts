@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { NODE_STOP, type TaxiNode } from '../../src/core/game/taxi-path';
-import { frameOfView, hostMapIdOf, nodeOptions, normaliseView, routeLinesOf, templateOf } from '../../src/core/map/transport-view';
+import { frameOfView, hostMapIdOf, nodeOptions, normaliseView, routeLinesOf, stopsOf, templateOf } from '../../src/core/map/transport-view';
 import type { WorldMap } from '../../src/core/map/world-maps';
 
 const n = (index: number, map: number, x: number, y: number, flags = 0): TaxiNode => ({ index, map, x, y, z: 1, flags, delay: 0 });
@@ -14,6 +14,10 @@ const map: WorldMap = {
 const drawable = (id: number) => id === 631 || id === 1;
 
 describe('the transport view', () => {
+  it('lists a route’s stops in order, those on drawable terrain, named by `nameOf`', () => {
+    const two = { ...map, transport: { ...map.transport!, paths: { ...map.transport!.paths, 10: [n(0, 1, 0, 0, NODE_STOP), n(1, 631, 10, 0), n(2, 631, 20, 0, NODE_STOP), n(3, 9, 30, 0, NODE_STOP)] } } };
+    expect(stopsOf(two, 1, (at) => `M${at.map}`, drawable).map((s) => [s.node, s.label])).toEqual([[0, 'M1'], [2, 'M631']]);
+  });
   it('starts at the first template’s first stop', () => {
     expect(normaliseView(map, undefined, drawable)).toEqual({ template: 1, node: 1 });
   });

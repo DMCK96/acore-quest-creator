@@ -76,3 +76,21 @@ export function nodeOptions(map: WorldMap, view: TransportView, nameOf: (map: nu
   });
   return [...all.filter((o) => o.stop), ...all.filter((o) => !o.stop)];
 }
+
+export interface RouteStop {
+  node: number;
+  label: string;
+  map: number;
+  x: number;
+  y: number;
+  z: number;
+}
+
+/** The stops of a template's route in the order it runs them, those on terrain the World draws, each named by `nameOf` (the place it is at). */
+export function stopsOf(map: WorldMap, template: number, nameOf: (at: { map: number; x: number; y: number }) => string, drawable: (map: number) => boolean): RouteStop[] {
+  const stops: RouteStop[] = [];
+  nodesOf(map, { template, node: 0 }).forEach((n, node) => {
+    if (n.flags & NODE_STOP && drawable(n.map)) stops.push({ node, label: nameOf(n), map: n.map, x: n.x, y: n.y, z: n.z });
+  });
+  return stops;
+}

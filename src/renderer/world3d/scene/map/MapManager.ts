@@ -243,6 +243,14 @@ class MapManager extends EventTarget {
     return (docked && (!own || docked.distance < own.distance) ? docked : own)?.spawn ?? null;
   }
 
+  /** The nearest vessel a ray passes through, no further than `maxDistance`: a docked one with its dock, or the view's own (no dock) */
+  pickVessel(ray: THREE.Ray, maxDistance = Infinity): { dock: Dock | null; distance: number } | null {
+    const own = new THREE.Raycaster(ray.origin, ray.direction, 0, maxDistance).intersectObject(this.#spawnManager.decor, true)[0];
+    const docked = this.#docks.pickVessel(ray, maxDistance);
+    if (docked && (!own || docked.distance < own.distance)) return docked;
+    return own ? { dock: null, distance: own.distance } : null;
+  }
+
   /** Draws the world layer's edits over the database's spawns and routes */
   setWorldLayer(layer: WorldLayer) {
     this.#spawnManager.setWorldLayer(layer).catch((error) => console.warn(`3D view: the world changes could not be drawn: ${describeError(error)}`));

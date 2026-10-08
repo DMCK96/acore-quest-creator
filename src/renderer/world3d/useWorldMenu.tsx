@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import type { Api, GroupMove, QuestSpawnGroup, SpawnGroup } from '@shared/ipc';
 import type { Placement, WorldLayer } from '@core/world/layer';
+import type { Dock } from '@core/map/transport-docks';
 import { IDLE, type Movement } from '@core/world/movement';
 import type { Role, RoleTarget } from '@core/modules/quest-roles';
 import type { World3D } from './world3d';
@@ -42,6 +43,8 @@ export interface WorldMenuDeps {
   floorZ(x: number, y: number, nearZ: number): Promise<number | null>;
   /** A place in the view as a spawn's row stores it (vessel-local on a transport) */
   toRow(at: Placement): Placement;
+  /** Lists the stops of a vessel right-clicked: a docked one with its dock, or the view's own */
+  onVessel?(dock: Dock | null): void;
   /** The view shows a vessel, where walking paths are not drawn */
   vessel: boolean;
   placing: boolean;
@@ -359,6 +362,9 @@ export function useWorldMenu(deps: WorldMenuDeps): {
         d.current.clearSelection();
         return;
       }
+      case 'vesselStops':
+        d.current.onVessel?.(action.dock);
+        return;
       case 'copyCoordinates': {
         const { x, y, z } = action.at;
         try {

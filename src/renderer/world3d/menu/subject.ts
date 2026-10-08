@@ -3,14 +3,16 @@ import { spawnKindOf } from '@core/entities/entity';
 import { OBJECT_TYPE_VALUE, originOf, type ProjectEntities } from '@core/entities/model';
 import type { At, MenuSpawn, MenuTarget } from './model';
 
+type Vessel = MenuTarget['vessel'];
+
 /**
  * What a right-click landed on, as the menu's sections see it: the ground, a spawn (as an entity,
  * with the 3D view's own spawn record the actions edit through) or a point of a route.
  */
 export type MenuSubject =
-  | { type: 'ground'; at: At | null; selection: MenuSpawn[] }
+  | { type: 'ground'; at: At | null; selection: MenuSpawn[]; vessel?: Vessel }
   /** `stored`: the project holds its NPC or object (made here, or an existing one brought in) */
-  | { type: 'spawn'; target: NpcSpawn | ObjectSpawn; stored: boolean; info: MenuSpawn; at: At | null; selection: MenuSpawn[] }
+  | { type: 'spawn'; target: NpcSpawn | ObjectSpawn; stored: boolean; info: MenuSpawn; at: At | null; selection: MenuSpawn[]; vessel?: Vessel }
   /** `own`: the route is a project NPC's patrol, not one the database has */
   | { type: 'routePoint'; guid: number; index: number; own: boolean; at: At | null };
 
@@ -50,9 +52,9 @@ function storedOf(info: MenuSpawn, store: ProjectEntities): boolean {
 
 /** The subject of a right-click target */
 export function subjectOf(target: MenuTarget, store: ProjectEntities): MenuSubject {
-  const { hit, ground, selection } = target;
-  if (!hit) return { type: 'ground', at: ground, selection };
-  if (hit.type === 'spawn') return { type: 'spawn', target: spawnedEntityOf(hit.spawn, store), stored: storedOf(hit.spawn, store), info: hit.spawn, at: ground, selection };
+  const { hit, ground, selection, vessel } = target;
+  if (!hit) return { type: 'ground', at: ground, selection, vessel };
+  if (hit.type === 'spawn') return { type: 'spawn', target: spawnedEntityOf(hit.spawn, store), stored: storedOf(hit.spawn, store), info: hit.spawn, at: ground, selection, vessel };
   const own = store.npcs.some((n) => n.spawns.some((s) => s.guid === hit.guid));
   return { type: 'routePoint', guid: hit.guid, index: hit.index, own, at: ground };
 }

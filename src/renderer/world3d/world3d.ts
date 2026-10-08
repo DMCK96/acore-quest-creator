@@ -394,6 +394,8 @@ export function createWorld3D(options: World3DOptions): World3D {
       const selected = selection.spawns.some((s) => s.kind === spawn!.kind && s.guid === spawn!.guid);
       if (!selected) setSelection(combine(EMPTY_SELECTION, hit, 'replace'));
     }
+    // A vessel under the pointer (its deck is ground, so it is as near as the ground there)
+    const vessel = manager.pickVessel(raycaster.ray, ground ? ground.distanceTo(camera.position) + 0.01 : Infinity);
     const spawnHit = 'spawns' in hit && hit.spawns.length > 0 ? manager.spawnInfo(hit.spawns[0]!.kind, hit.spawns[0]!.guid) : null;
     const pointHit = 'points' in hit && hit.points.length > 0 ? hit.points[0]! : null;
     options.onContextMenu?.(
@@ -401,6 +403,7 @@ export function createWorld3D(options: World3DOptions): World3D {
         ground: ground ? { x: ground.x, y: ground.y, z: ground.z } : null,
         hit: spawnHit ? { type: 'spawn', spawn: spawnHit } : pointHit ? { type: 'point', guid: pointHit.guid, index: pointHit.index } : null,
         selection: selectedInfo(),
+        vessel: vessel ? { dock: vessel.dock } : null,
       },
       client,
     );

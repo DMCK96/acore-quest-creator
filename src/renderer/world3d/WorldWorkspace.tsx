@@ -16,10 +16,11 @@ import { newSpawnGuid } from './spawn-guid';
 import { chainOf, questMenuInfo } from './quest-context';
 import { OBJECTIVES_FULL } from './menu/section';
 import { groupWorldMaps, isTerrainMap, worldMapById } from '@core/map/world-maps';
-import { frameOfView, hostMapIdOf, normaliseView, type TransportView } from '@core/map/transport-view';
+import { frameOfView, hostMapIdOf, normaliseView, type RouteStop, type TransportView } from '@core/map/transport-view';
 import { docksOn } from '@core/map/transport-docks';
 import { toLocal, toWorld, type Frame } from '@core/map/transport-frame';
 import { TransportBar } from './TransportBar';
+import { VesselStops } from './VesselStops';
 import { useClientMaps } from './useClientMaps';
 import type { TeleportSpot } from '@core/map/teleports';
 import { World3DView, type FocusTarget } from './World3DView';
@@ -311,6 +312,16 @@ export function WorldWorkspace({
     lastCameraMove.current = nowRef.current();
     const { x, y, z } = frameOfView(transportMap, view);
     goTo({ x, y, z });
+  };
+  // The vessel clicked in the World, whose stops are listed
+  const [vessel, setVessel] = useState<{ map: number; template: number } | null>(null);
+  const vesselMap = vessel ? worldMapById(vessel.map) : null;
+  /** A stop of the vessel clicked: the view's own vessel moves there; a docked one's stop is a place on a continent */
+  const goToStop = (stop: RouteStop): void => {
+    if (!vessel) return;
+    setVessel(null);
+    if (vessel.map === transportMap?.id) chooseView({ template: vessel.template, node: stop.node });
+    else jump({ x: stop.x, y: stop.y, z: stop.z }, stop.map);
   };
   // Where the camera has been before each jump, for Back
   const [back, setBack] = useState<CameraPlace[]>([]);
@@ -686,7 +697,11 @@ export function WorldWorkspace({
         markerFocus={markerFocus}
         transport={transportMap && transportView ? { map: transportMap, view: transportView } : undefined}
         docks={docks}
+        onVessel={setVessel}
       />
+      {vessel && vesselMap && (
+        <VesselStops map={vesselMap} template={vessel.template} hostName={(id) => worldMapById(id)?.name ?? `Map ${id}`} onGoTo={goToStop} onClose={() => setVessel(null)} />
+      )}
       {transportMap && transportView && (
         <TransportBar map={transportMap} view={transportView} hostName={(id) => worldMapById(id)?.name ?? `Map ${id}`} onView={chooseView} />
       )}

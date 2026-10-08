@@ -1,5 +1,6 @@
 import type { SpawnInfo } from '../scene/spawn/SpawnManager';
 import type { QuestRoles, Role } from '@core/modules/quest-roles';
+import type { Dock } from '@core/map/transport-docks';
 import type { MenuGroupId } from './section';
 
 /**
@@ -17,6 +18,8 @@ export interface MenuTarget {
   hit: { type: 'spawn'; spawn: MenuSpawn } | { type: 'point'; guid: number; index: number } | null;
   /** The spawns selected once the right-click has selected what it hit */
   selection: MenuSpawn[];
+  /** The vessel under the right-click: a docked one with its dock, or the view's own (no dock) */
+  vessel?: { dock: Dock | null } | null;
 }
 
 export interface QuestMenuInfo {
@@ -82,7 +85,9 @@ export type MenuAction =
   /** The quests an NPC starts and ends, listed in a dialog */
   | { kind: 'findQuests'; spawn: MenuSpawn }
   | { kind: 'showSpawns'; scope: 'quest' | 'chain' }
-  | { kind: 'hideSpawns' };
+  | { kind: 'hideSpawns' }
+  /** The stops of the vessel right-clicked, listed in a dialog */
+  | { kind: 'vesselStops'; dock: Dock | null };
 
 export interface MenuItem {
   id: string;
