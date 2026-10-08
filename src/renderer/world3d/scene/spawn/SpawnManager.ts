@@ -828,6 +828,11 @@ class SpawnManager {
    * (something solid, the ground or a wall, is in front of it).
    */
   pick(ray: THREE.Ray, maxDistance = Infinity): PickedSpawn | null {
+    return this.pickHit(ray, maxDistance)?.spawn ?? null;
+  }
+
+  /** `pick`, with how far along the ray the spawn's bounds were hit, for telling which of several views' spawns is nearer */
+  pickHit(ray: THREE.Ray, maxDistance = Infinity): { spawn: PickedSpawn; distance: number } | null {
     const hit = new THREE.Vector3();
     const hits: { spawn: THREE.Object3D; distance: number; bounds: THREE.Box3 }[] = [];
     for (const group of this.#areas.values()) {
@@ -858,7 +863,7 @@ class SpawnManager {
       if (held.length === 0) break;
       best = nearest(held);
     }
-    return { ...best.spawn.userData.spawn, position: { ...best.spawn.userData.spawn.position } };
+    return { spawn: { ...best.spawn.userData.spawn, position: { ...best.spawn.userData.spawn.position } }, distance: best.distance };
   }
 
   /** The NPCs whose routes are worked on: an NPC's route and wander circle are drawn only while it is one */

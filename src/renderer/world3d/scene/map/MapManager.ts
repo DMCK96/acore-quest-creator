@@ -15,6 +15,7 @@ import DoodadManager from './DoodadManager.js';
 import WmoManager from '../wmo/WmoManager.js';
 import LiquidManager from './liquid/LiquidManager.js';
 import SpawnManager, { SpawnSource, SpawnVisibility } from '../spawn/SpawnManager.js';
+import { DOCK_AREA } from '../spawn/SpawnDock.js';
 import { CharacterTexture } from '../character/CharacterTexture.js';
 import { getAssetUrl } from '../asset.js';
 import DisplayResolver from '../spawn/DisplayResolver.js';
@@ -35,8 +36,6 @@ import type { Frame } from '../../../../core/map/transport-frame.js';
 
 const DEFAULT_VIEW_DISTANCE = 1277.0;
 const DETAIL_DISTANCE_EXTENSION = MAP_CHUNK_HEIGHT;
-/** The one spawn area of a vessel's passengers: no tile has this id */
-const VESSEL_AREA = -1;
 
 /**
  * Works out where everything in a group that never moves is, once, and leaves it out of every later
@@ -469,9 +468,9 @@ class MapManager extends EventTarget {
 
   /** A vessel's passengers: one area over the whole grid, as a one-building map's, loaded whatever terrain is there */
   #syncPassengers() {
-    if (!this.#spawnManager.canLoad(VESSEL_AREA)) return;
+    if (!this.#spawnManager.canLoad(DOCK_AREA)) return;
     this.#spawnManager
-      .loadArea(VESSEL_AREA, this.#spawnMapId, WHOLE_MAP)
+      .loadArea(DOCK_AREA, this.#spawnMapId, WHOLE_MAP)
       .then((group) => {
         if (group) this.#root.add(group);
       })
