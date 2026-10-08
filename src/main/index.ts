@@ -6,7 +6,8 @@ import { openMysqlDevDb } from '../core/db/mysql-dev-db';
 import { openMysqlWorldDb } from '../core/db/mysql-world-db';
 import { FLUSH_DONE_CHANNEL, FLUSH_REQUEST_CHANNEL, HISTORY_CHANNEL } from '../shared/api-methods';
 import { describeStep } from './project/step-labels';
-import { API_METHODS, channelFor, parseRequest, type Api, type ApiError } from '../shared/ipc';
+import { API_METHODS, channelFor, type Api } from '../shared/ipc';
+import { invokeApi } from './api/invoke';
 import { createApi, type ApiDeps } from './api';
 import { seedEnvProfiles } from './env-profiles';
 import { mapDataFiles, nodeServerDataFiles } from './server-data';
@@ -60,11 +61,6 @@ const defaultOutputDir = (): string => join(app.getPath('documents'), 'Azeroth W
  */
 const migrationsFolder = (): string =>
   app.isPackaged ? join(process.resourcesPath, 'drizzle') : join(__dirname, '..', '..', 'drizzle');
-
-const unknownError = (error: unknown): { ok: false; error: ApiError } => ({
-  ok: false,
-  error: { code: 'UNKNOWN', message: error instanceof Error ? error.message : String(error) },
-});
 
 // The scheme must be known before `ready`. The 3D view reads the game client's files through `awe-wow`; its loaders run in workers, which need CORS.
 protocol.registerSchemesAsPrivileged([
@@ -135,16 +131,7 @@ function buildDeps(
  */
 function registerIpc(api: Api): void {
   for (const method of API_METHODS) {
-    ipcMain.handle(channelFor(method), async (_event, ...args: unknown[]) => {
-      const parsed = parseRequest(method, args);
-      if (!parsed.ok) return { ok: false, error: parsed.error };
-      try {
-        const call = api[method] as (...a: unknown[]) => Promise<unknown>;
-        return await call.apply(api, parsed.args);
-      } catch (error) {
-        return unknownError(error);
-      }
-    });
+    ipcMain.handle(channelFor(method), (_event, ...args: unknown[]) => invokeApi(api, method, args));
   }
 }
 

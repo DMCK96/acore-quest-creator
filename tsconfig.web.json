@@ -27,6 +27,6 @@
     "tests/renderer/**/*",
     "tests/helpers/**/*"
   ],
-  // An in-memory stand-in for the main process's project file system: node-only.
-  "exclude": ["tests/helpers/mem-fs.ts"]
+  // Node-only helpers: an in-memory stand-in for the main process's project file system, and the MCP fixture that drives the main process's API.
+  "exclude": ["tests/helpers/mem-fs.ts", "tests/helpers/mcp-fixture.ts"]
 }
