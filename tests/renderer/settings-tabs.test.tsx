@@ -12,8 +12,8 @@ afterEach(() => localStorage.clear());
 const open = () => render(<SettingsDialog store={createAppStore(makeMockApi(), { saveDelayMs: 0 })} onClose={() => {}} />);
 
 describe('Settings tabs', () => {
-  it('registers Connection then Preferences', () => {
-    expect(SETTINGS_SECTIONS.map((s) => s.title)).toEqual(['Connection', 'Preferences']);
+  it('registers Connection, Preferences then Claude', () => {
+    expect(SETTINGS_SECTIONS.map((s) => s.title)).toEqual(['Connection', 'Preferences', 'Claude']);
   });
 
   it('opens on Connection, with the connection card and its Save', () => {
