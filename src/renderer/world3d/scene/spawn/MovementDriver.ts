@@ -1,14 +1,18 @@
-import { createWalker } from '../../../../core/world/walk/walker.js';
+import { createWalker, kindOf } from '../../../../core/world/walk/walker.js';
 import type { GroundFn, Pose, Walker, WalkPlan } from '../../../../core/world/walk/types.js';
 import type { MovementControl } from './movement-control.js';
 
 /** Where an NPC's poses go, and the ground it walks on */
-export type WalkTarget = { apply(pose: Pose): void; ground?: GroundFn };
+export type WalkTarget = { apply(pose: Pose): void; readonly ground?: GroundFn };
 
-/** What to do with an NPC this tick: walk it, hold it at home (it is being worked on), or leave it (out of range) */
-export type Activity = 'move' | 'hold' | 'skip';
+/**
+ * What to do with an NPC this tick: walk it on the ground (in view), walk it without looking for the
+ * ground (out of view; it finds it when seen again), hold it at home (it is being worked on), or leave
+ * it (out of range, or its layer hidden)
+ */
+export type Activity = 'move' | 'unseen' | 'hold' | 'skip';
 
-type Entry = { walker: Walker; plan: WalkPlan; key: string; target: WalkTarget; away: boolean; paused: boolean };
+type Entry = { walker: Walker; plan: WalkPlan; idle: boolean; key: string; target: WalkTarget; away: boolean; paused: boolean };
 
 const DEFAULT_MAX_STEP_MS = 250;
 
@@ -32,14 +36,14 @@ export class MovementDriver {
   }
 
   /**
-   * Starts walking an NPC; the same `key` again only swaps the target, a new `key` gives it the new plan.
-   * A target tracked again is handed the pose the NPC has (standing while paused), so a redraw that put
-   * it home does not leave it there.
+   * Starts walking an NPC; the same `key` again only swaps the target, a new `key` gives it the new plan
+   * (a moved or turned home starts it again from there). A target tracked again is handed the pose the
+   * NPC has (standing while paused), so a redraw that put it home does not leave it there.
    */
   track(guid: number, plan: WalkPlan, key: string, target: WalkTarget): void {
     const entry = this.entries.get(guid);
     if (!entry) {
-      const fresh: Entry = { walker: createWalker(plan, guid), plan, key, target, away: false, paused: false };
+      const fresh: Entry = { walker: createWalker(plan, guid), plan, idle: kindOf(plan) === 'idle', key, target, away: false, paused: false };
       this.entries.set(guid, fresh);
       target.apply(fresh.walker.pose());
       return;
@@ -48,14 +52,20 @@ export class MovementDriver {
     if (entry.key !== key) {
       entry.key = key;
       entry.plan = plan;
+      entry.idle = kindOf(plan) === 'idle';
       entry.walker.retarget(plan);
-      if (plan.type === 'idle') {
-        this.sendHome(entry);
-        return;
-      }
+      entry.away = !isHome(entry.walker.pose(), plan);
     }
+    this.refresh(guid);
+  }
+
+  /** Hands an NPC's target the pose it has again (standing while paused) */
+  refresh(guid: number): void {
+    const entry = this.entries.get(guid);
+    if (!entry) return;
     const pose = entry.walker.pose();
-    target.apply(this.control.playing ? pose : { ...pose, gait: 'stand' });
+    entry.paused = !this.control.playing;
+    entry.target.apply(this.control.playing ? pose : { ...pose, gait: 'stand' });
   }
 
   untrack(guid: number): void {
@@ -68,21 +78,21 @@ export class MovementDriver {
       for (const entry of this.entries.values()) this.sendHome(entry);
     }
     const playing = this.control.playing;
-    for (const [guid, entry] of this.entries) {
-      if (!playing) this.hold(entry);
-      else this.step(entry, dtMs, activity(guid));
-    }
+    // forEach, not for...of over entries: no [guid, entry] pair is made per NPC per frame
+    this.entries.forEach((entry, guid) => {
+      const now = activity(guid);
+      // One being worked on goes home whether or not they walk
+      if (now === 'hold') {
+        if (entry.away) this.sendHome(entry);
+      } else if (!playing) this.hold(entry);
+      else this.step(entry, dtMs, now);
+    });
   }
 
-  private step(entry: Entry, dtMs: number, activity: Activity): void {
+  private step(entry: Entry, dtMs: number, activity: Exclude<Activity, 'hold'>): void {
     entry.paused = false;
-    if (activity === 'skip' || entry.plan.type === 'idle') return;
-    if (activity === 'move' && dtMs <= 0) return;
-    if (activity === 'hold') {
-      if (entry.away) this.sendHome(entry);
-      return;
-    }
-    const pose = entry.walker.advance(Math.min(dtMs, this.maxStepMs), entry.target.ground);
+    if (activity === 'skip' || entry.idle || dtMs <= 0) return;
+    const pose = entry.walker.advance(Math.min(dtMs, this.maxStepMs), activity === 'move' ? entry.target.ground : undefined);
     entry.away = !isHome(pose, entry.plan);
     entry.target.apply(pose);
   }

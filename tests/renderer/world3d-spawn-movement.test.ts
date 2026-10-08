@@ -3,6 +3,7 @@ import * as THREE from 'three';
 import { describe, expect, it, vi } from 'vitest';
 import SpawnManager from '../../src/renderer/world3d/scene/spawn/SpawnManager';
 import { MovementControl } from '../../src/renderer/world3d/scene/spawn/movement-control';
+import { Walkers } from '../../src/renderer/world3d/scene/spawn/walkers';
 
 const creature = (guid: number, extra: object = {}) => ({
   guid, entry: 1, name: 'n', map: 0, x: 0, y: 0, z: 0, orientation: 0, displayId: 1, scale: 1, wander: 0, path: null, equipment: [0, 0, 0] as [number, number, number], own: false, event: null, events: [], removedBy: [], pathId: 0, preset: null, group: null, respawnSecs: 300, ...extra,
@@ -137,6 +138,131 @@ describe('NPCs that walk', () => {
     run(manager, 30);
     expect(drawn(group, 3).name).toBe('marker');
     expect(drawn(group, 3).position.toArray()).toEqual([0, 0, 0]);
+  });
+});
+
+const moveTo = (guid: number, at: { x: number; y: number; z: number; orientation: number }) => ({
+  spawns: [{ kind: 'creature', guid, entry: 1, name: 'n', map: 0, original: { x: 0, y: 0, z: 0, orientation: 0, rotation: null }, current: { ...at, rotation: null } }],
+  routes: [],
+  added: [],
+}) as any;
+/** Ground that is z = -x, found only within the band it is asked to look in */
+const slope = (x: number, _y: number, fromZ: number, distance: number) => (-x <= fromZ && -x >= fromZ - distance ? -x : null);
+
+describe('NPCs that walk, edited (C1)', () => {
+  for (const playing of [false, true]) {
+    for (const [name, row] of [['a path NPC', walker()], ['a wanderer', creature(1, { wander: 6 })]] as const) {
+      it(`draw ${name} moved or turned ${playing ? 'while playing' : 'while paused'} at its new place`, async () => {
+        const { control, manager } = setup([row]);
+        const group = (await manager.loadArea(1, 0, box))!;
+        manager.cull(new THREE.Vector3(0, 0, 0));
+        control.play();
+        run(manager, 12);
+        if (!playing) control.pause();
+        manager.update(0.25, camera);
+        await manager.setWorldLayer(moveTo(1, { x: 0.5, y: 0.25, z: 0, orientation: 0 }));
+        manager.update(0, camera);
+        expect(drawn(group, 1).position.toArray()).toEqual([0.5, 0.25, 0]);
+        await manager.setWorldLayer(moveTo(1, { x: 0.5, y: 0.25, z: 0, orientation: 2 }));
+        manager.update(0, camera);
+        expect(drawn(group, 1).position.toArray()).toEqual([0.5, 0.25, 0]);
+        const turned = new THREE.Euler().setFromQuaternion(drawn(group, 1).quaternion);
+        expect(turned.z).toBeCloseTo(2);
+      });
+    }
+  }
+});
+
+describe('NPCs that walk, on uneven ground (C2)', () => {
+  it('follow a slope down as well as up', async () => {
+    const { control, manager } = setup([creature(2, { wander: 10 })], { groundBelow: slope });
+    const group = (await manager.loadArea(1, 0, box))!;
+    manager.cull(new THREE.Vector3(0, 0, 0));
+    control.play();
+    let worst = 0;
+    for (let i = 0; i < 1200; i++) {
+      manager.update(0.25, camera);
+      const p = drawn(group, 2).position;
+      worst = Math.max(worst, Math.abs(p.z - -p.x));
+    }
+    expect(worst).toBeLessThan(0.6);
+  });
+});
+
+describe('NPCs that walk, held and hidden', () => {
+  it('send a selected NPC home while paused too (I1)', async () => {
+    const { control, manager } = setup([walker()]);
+    const group = (await manager.loadArea(1, 0, box))!;
+    manager.cull(new THREE.Vector3(0, 0, 0));
+    control.play();
+    run(manager, 2);
+    control.pause();
+    manager.update(0.25, camera);
+    expect(drawn(group, 1).position.x).toBeGreaterThan(0);
+    manager.setActiveRoutes([1]);
+    manager.update(0.25, camera);
+    expect(drawn(group, 1).position.x).toBe(0);
+  });
+
+  it('leave NPCs where they are while their layer is hidden (I3)', async () => {
+    const groundBelow = vi.fn(() => 0);
+    const { control, manager } = setup([walker()], { groundBelow });
+    const group = (await manager.loadArea(1, 0, box))!;
+    manager.cull(new THREE.Vector3(0, 0, 0));
+    await manager.setVisibility({ creatures: false, objects: true, paths: true } as any);
+    control.play();
+    run(manager, 2);
+    expect(drawn(group, 1).position.x).toBe(0);
+    await manager.setVisibility({ creatures: true, objects: true, paths: true } as any);
+    run(manager, 2);
+    expect(drawn(group, 1).position.x).toBeCloseTo(5);
+  });
+
+  it('walk an NPC out of view without looking for its ground, and look again once it is seen (I3)', async () => {
+    const groundBelow = vi.fn(() => 0);
+    const { control, manager } = setup([walker()], { groundBelow, createModel: async () => Object.assign(new THREE.Object3D(), { animation: { setGait: () => {} }, boundingSphereWorld: new THREE.Sphere(new THREE.Vector3(), 1) }) });
+    const group = (await manager.loadArea(1, 0, box))!;
+    const away = new THREE.Frustum(new THREE.Plane(new THREE.Vector3(1, 0, 0), -1e6));
+    manager.cull(new THREE.Vector3(0, 0, 0), away);
+    groundBelow.mockClear();
+    control.play();
+    run(manager, 2);
+    expect(drawn(group, 1).position.x).toBeCloseTo(5);
+    expect(groundBelow).not.toHaveBeenCalled();
+    manager.cull(new THREE.Vector3(0, 0, 0), new THREE.Frustum());
+    groundBelow.mockClear();
+    run(manager, 2);
+    // 5 yd walked: a look as it is seen again, then about one per half yard
+    expect(groundBelow.mock.calls.length).toBeGreaterThan(0);
+    expect(groundBelow.mock.calls.length).toBeLessThanOrEqual(11);
+  });
+});
+
+describe('NPCs that walk, redrawn (M2) and drawn twice (M4)', () => {
+  it('track again only the NPCs whose row changed', async () => {
+    const { control, manager } = setup([walker(), creature(2, { wander: 6, x: 0.5 })]);
+    await manager.loadArea(1, 0, box);
+    manager.cull(new THREE.Vector3(0, 0, 0));
+    control.play();
+    run(manager, 2);
+    const track = vi.spyOn(Walkers.prototype, 'track');
+    await manager.setWorldLayer(moveTo(2, { x: 0.25, y: 0.25, z: 0, orientation: 0 }));
+    expect(track.mock.calls.map(([, row]) => row.guid)).toEqual([2]);
+    track.mockRestore();
+  });
+
+  it('walk both drawings of an NPC that two areas draw, and the one left when an area goes', async () => {
+    const { control, manager } = setup([walker()]);
+    const first = (await manager.loadArea(1, 0, box))!;
+    const second = (await manager.loadArea(2, 0, box))!;
+    manager.cull(new THREE.Vector3(0, 0, 0));
+    control.play();
+    run(manager, 2);
+    expect(drawn(first, 1).position.x).toBeCloseTo(5);
+    expect(drawn(second, 1).position.x).toBeCloseTo(5);
+    manager.removeArea(1);
+    run(manager, 1);
+    expect(drawn(second, 1).position.x).toBeCloseTo(7.5);
   });
 });
 

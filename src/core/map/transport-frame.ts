@@ -38,8 +38,18 @@ function turn(p: Point, heading: number): Point {
 }
 
 export function toWorld(frame: Frame, local: Point): Point {
-  const r = turn(local, frame.heading);
-  return { x: frame.x + r.x, y: frame.y + r.y, z: frame.z + r.z };
+  return toWorldInto(frame, local, { x: 0, y: 0, z: 0 });
+}
+
+/** `toWorld` written into `out` (which may be `local`), for callers that run every frame. */
+export function toWorldInto(frame: Frame, local: Point, out: Point): Point {
+  const c = Math.cos(frame.heading);
+  const s = Math.sin(frame.heading);
+  const { x, y, z } = local;
+  out.x = frame.x + x * c - y * s;
+  out.y = frame.y + x * s + y * c;
+  out.z = frame.z + z;
+  return out;
 }
 
 export function toLocal(frame: Frame, world: Point): Point {

@@ -4,7 +4,7 @@ import { MovementDriver, type WalkTarget } from '../../src/renderer/world3d/scen
 import type { Pose, WalkPlan } from '../../src/core/world/walk/types';
 
 const plan = (x = 10): WalkPlan => ({ type: 'path', home: { x: 0, y: 0, z: 0 }, facing: 0, wander: 0, path: [{ x, y: 0, z: 0, delay: 0, run: false }] });
-const target = () => { const poses: Pose[] = []; const t: WalkTarget = { apply: (p) => poses.push(p) }; return { t, poses, last: () => poses[poses.length - 1]! }; };
+const target = () => { const poses: Pose[] = []; const t: WalkTarget = { apply: (p) => poses.push({ ...p }) }; return { t, poses, last: () => poses[poses.length - 1]! }; };
 
 describe('MovementControl', () => {
   it('starts paused, plays, pauses, and counts resets without changing whether it plays', () => {
@@ -152,6 +152,77 @@ describe('MovementDriver', () => {
     driver.tick(1000, () => 'move');
     driver.track(1, { type: 'idle', home: { x: 0, y: 0, z: 0 }, facing: 0, wander: 0, path: null }, 'i', a.t);
     expect(a.last()).toMatchObject({ x: 0, y: 0, gait: 'stand' });
+    const spy = vi.fn(); a.t.apply = spy;
+    driver.tick(1000, () => 'move');
+    expect(spy).not.toHaveBeenCalled();
+  });
+
+  it('puts an NPC moved or turned while paused at its new home, facing its new way (C1)', () => {
+    const { control, driver } = setup();
+    const a = target();
+    driver.track(1, plan(), 'k', a.t);
+    control.play();
+    driver.tick(1000, () => 'move');
+    control.pause();
+    driver.tick(0, () => 'move');
+    const moved: WalkPlan = { ...plan(), home: { x: 50, y: 50, z: 0 } };
+    driver.track(1, moved, 'moved', a.t);
+    expect(a.last()).toEqual({ x: 50, y: 50, z: 0, heading: 0, gait: 'stand' });
+    // and it is home now: nothing is held away
+    const count = a.poses.length;
+    driver.tick(200, () => 'move');
+    expect(a.poses).toHaveLength(count);
+    driver.track(1, { ...moved, facing: 2 }, 'turned', a.t);
+    expect(a.last()).toEqual({ x: 50, y: 50, z: 0, heading: 2, gait: 'stand' });
+  });
+
+  it('puts an NPC moved while playing at its new home, and walks it on from there (C1)', () => {
+    const { control, driver } = setup();
+    const a = target();
+    driver.track(1, plan(), 'k', a.t);
+    control.play();
+    driver.tick(1000, () => 'move');
+    driver.track(1, { ...plan(), home: { x: -10, y: 0, z: 0 } }, 'moved', a.t);
+    expect(a.last()).toMatchObject({ x: -10, y: 0, gait: 'stand' });
+    driver.tick(200, () => 'move');
+    expect(a.last().x).toBeCloseTo(-9.5);
+  });
+
+  it('sends a selected NPC home while paused as well as while playing (I1)', () => {
+    const { control, driver } = setup();
+    const a = target();
+    driver.track(1, plan(), 'k', a.t);
+    control.play();
+    driver.tick(1000, () => 'move');
+    control.pause();
+    driver.tick(200, () => 'move');
+    expect(a.last().x).toBeGreaterThan(0);
+    driver.tick(200, () => 'hold');
+    expect(a.last()).toMatchObject({ x: 0, y: 0, gait: 'stand' });
+    const count = a.poses.length;
+    driver.tick(200, () => 'hold');
+    driver.tick(200, () => 'move');
+    expect(a.poses).toHaveLength(count);
+  });
+
+  it('walks an NPC out of view without looking for its ground (I3)', () => {
+    const { control, driver } = setup();
+    const ground = vi.fn(() => 0);
+    const poses: Pose[] = [];
+    driver.track(1, plan(), 'k', { apply: (p) => poses.push({ ...p }), ground });
+    control.play();
+    driver.tick(200, () => 'unseen');
+    expect(poses[poses.length - 1]!.x).toBeCloseTo(0.5);
+    expect(ground).not.toHaveBeenCalled();
+    driver.tick(200, () => 'move');
+    expect(ground).toHaveBeenCalled();
+  });
+
+  it('leaves a path plan with no points standing, as the walker does (M8)', () => {
+    const { control, driver } = setup();
+    const a = target();
+    driver.track(1, { type: 'path', home: { x: 0, y: 0, z: 0 }, facing: 0, wander: 0, path: [] }, 'k', a.t);
+    control.play();
     const spy = vi.fn(); a.t.apply = spy;
     driver.tick(1000, () => 'move');
     expect(spy).not.toHaveBeenCalled();

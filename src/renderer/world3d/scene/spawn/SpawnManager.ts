@@ -18,6 +18,8 @@ import { Frame, IDENTITY_FRAME, placementToWorld } from '../../../../core/map/tr
 import { framePaths, moveRouteDrawing, routeObject, setBallSelected, wanderObject } from './paths.js';
 import { MovementControl } from './movement-control.js';
 import { Walkers } from './walkers.js';
+import type { Activity } from './MovementDriver.js';
+import { GROUND_REACH } from '../../../../core/world/walk/tuning.js';
 import type { Candidates } from '../edit/box.js';
 import type { SelectedPoint } from '../edit/selection.js';
 
@@ -201,12 +203,6 @@ const SHIELD_POINT = 0;
 /** How long to wait before asking again for an area whose answer failed */
 const RETRY_MS = 30000;
 
-/**
- * A database Z is where the server put an NPC, and the server snaps NPCs to the real floor as they
- * spawn, so a stored Z is often a little below the drawn ground. An NPC is drawn lifted onto the
- * ground when that is within this many yards above its Z; further than that is taken as meant.
- */
-const GROUND_REACH = 1.5;
 /** Where the ground is not there yet (its terrain still loading), asked again this often, this many times */
 const GROUND_RETRY_MS = 2000;
 const GROUND_TRIES = 4;
@@ -364,12 +360,9 @@ class SpawnManager {
     this.#frame = options.frame ?? IDENTITY_FRAME;
     this.decor.name = 'decor';
     this.#walkers = new Walkers(options.movement ?? new MovementControl(), {
-      transformOf: (row) => this.#transformOf('creature', row),
+      frame: () => this.#frame,
       // On a vessel, NPCs walk its flat deck: the ground below is not theirs
-      ground: () => {
-        const below = this.#groundBelow;
-        return below && isIdentity(this.#frame) ? (x, y, z) => below(x, y, z + GROUND_REACH, GROUND_REACH) : undefined;
-      },
+      ground: () => (isIdentity(this.#frame) ? this.#groundBelow : undefined),
     });
   }
 
@@ -407,7 +400,7 @@ class SpawnManager {
           drawn.quaternion.set(...transform.quaternion);
           drawn.updateMatrixWorld(true);
           // A walking NPC is put back where it has walked to, on the vessel where it now is
-          if (kind === 'creature') this.#walkers.track(drawn, row);
+          if (kind === 'creature') this.#walkers.refresh(drawn);
         }
       }
       this.#applyVisibility(group);
@@ -997,6 +990,8 @@ class SpawnManager {
           spawn.userData.drawn = near;
           if (near && name === 'creatures' && grounding > 0 && this.#ground(spawn)) grounding -= 1;
           const seen = near && (!frustum || inView(spawn, frustum));
+          // Walkers look for their ground only while seen
+          spawn.userData.seen = seen;
           if (spawn.show && spawn.hide) {
             if (seen) spawn.show();
             else spawn.hide();
@@ -1050,18 +1045,25 @@ class SpawnManager {
     if (lift > 0.001) {
       data.lift = lift;
       // Drawn again by its walker: lifted at home, and left where it is when it has walked away
-      this.#walkers.track(spawn, data.row);
+      this.#walkers.refresh(spawn);
     }
     return true;
   }
 
   /**
    * Walks the NPCs `deltaTime` seconds on (models animate through the shared model manager): one whose
-   * route is worked on is held at home, and one out of range is left where it is
+   * route is worked on is held at home; one out of range, or with the NPC layer hidden, is left where
+   * it is; one out of view walks without looking for its ground
    */
   update(deltaTime: number, _camera: THREE.Camera) {
-    this.#walkers.tick(deltaTime * 1000, (guid, drawn) => (this.#activeRoutes.has(guid) ? 'hold' : drawn.userData.drawn ? 'move' : 'skip'));
+    this.#walkers.tick(deltaTime * 1000, this.#activity);
   }
+
+  #activity = (guid: number, drawn: THREE.Object3D): Activity => {
+    if (this.#activeRoutes.has(guid)) return 'hold';
+    if (!drawn.userData.drawn || !drawn.parent?.visible) return 'skip';
+    return drawn.userData.seen ? 'move' : 'unseen';
+  };
 
   /** A group with nothing in it yet: the holders for an area's NPCs, objects and their paths */
   #empty(): THREE.Group {
@@ -1089,6 +1091,15 @@ class SpawnManager {
     const containers = { creature: creatures, object: objects };
     const fill = (group.userData.fill ?? 0) + 1;
     group.userData.fill = fill;
+
+    // Routes and wander circles: drawn again only for NPCs whose route, place or wander changed
+    const before: globalThis.Map<number, ViewCreature> = group.userData.creatures ?? new globalThis.Map();
+    const now = new globalThis.Map(spawns.creatures.map((c) => [c.guid, c]));
+    const changed = new globalThis.Set<number>();
+    for (const [guid, creature] of now) if (movesKeyOf(creature) !== (before.has(guid) ? movesKeyOf(before.get(guid)!) : null)) changed.add(guid);
+    for (const guid of before.keys()) if (!now.has(guid)) changed.add(guid);
+    // Moved while dragging: drawn again from the data, which may not have taken the move
+    for (const shown of paths.children) if (shown.userData.previewed) changed.add(shown.userData.guid);
 
     // Each is added as soon as it is made, unless the group was filled again or taken away meanwhile
     const drawing: Promise<void>[] = [];
@@ -1118,7 +1129,8 @@ class SpawnManager {
         wanted.add(spawn.guid);
         const transform = this.#transformOf(kind, spawn);
         const old = drawn.get(spawn.guid);
-        if (old) this.#place(old, kind, spawn, transform);
+        // Walked again only when its route, place, wander or facing changed (a walking NPC keeps where it is)
+        if (old) this.#place(old, kind, spawn, transform, changed.has(spawn.guid) || old.userData.row?.orientation !== (spawn as ViewCreature).orientation);
         if (old && old.userData.lookKey === lookKeyOf(kind, spawn)) continue;
         const resolve = kind === 'creature' ? () => this.#resolver.creature(spawn.displayId, (spawn as ViewCreature).preset ?? null) : () => this.#resolver.object(spawn.displayId);
         drawing.push(this.#drawSpawn(kind, spawn, resolve, transform).then((made) => add(container, made, old)));
@@ -1131,13 +1143,6 @@ class SpawnManager {
     sync('object', spawns.objects);
 
     // Routes and wander circles: drawn again only for NPCs whose route, place or wander changed
-    const before: globalThis.Map<number, ViewCreature> = group.userData.creatures ?? new globalThis.Map();
-    const now = new globalThis.Map(spawns.creatures.map((c) => [c.guid, c]));
-    const changed = new globalThis.Set<number>();
-    for (const [guid, creature] of now) if (movesKeyOf(creature) !== (before.has(guid) ? movesKeyOf(before.get(guid)!) : null)) changed.add(guid);
-    for (const guid of before.keys()) if (!now.has(guid)) changed.add(guid);
-    // Moved while dragging: drawn again from the data, which may not have taken the move
-    for (const shown of paths.children) if (shown.userData.previewed) changed.add(shown.userData.guid);
     for (const shown of [...paths.children]) if (changed.has(shown.userData.guid)) this.#remove(shown);
     for (const guid of changed) {
       const creature = now.get(guid);
@@ -1152,8 +1157,11 @@ class SpawnManager {
     await Promise.all(drawing);
   }
 
-  /** A drawn spawn put where it now stands, and turned; one that moved is stood on the ground again from there */
-  #place(object: THREE.Object3D, kind: 'creature' | 'object', spawn: ViewCreature | ViewObject, transform: Transform) {
+  /**
+   * A drawn spawn put where it now stands, and turned; one that moved is stood on the ground again from
+   * there. A walking NPC whose walk did not change (`walkChanged`) is left where it has walked to.
+   */
+  #place(object: THREE.Object3D, kind: 'creature' | 'object', spawn: ViewCreature | ViewObject, transform: Transform, walkChanged: boolean) {
     const data = object.userData;
     const was = data.spawn.position;
     const moved = was.x !== spawn.x || was.y !== spawn.y || was.z !== spawn.z;
@@ -1165,6 +1173,7 @@ class SpawnManager {
       data.tries = 0;
       data.groundAfter = undefined;
     }
+    if (kind === 'creature' && !walkChanged && this.#walkers.has(object)) return;
     object.position.set(transform.position[0], transform.position[1], transform.position[2] + (data.lift ?? 0));
     object.quaternion.set(...transform.quaternion);
     object.updateMatrixWorld(true);
