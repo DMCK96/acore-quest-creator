@@ -15,9 +15,10 @@ export type WalkPlan = {
 
 export type Pose = Vec3 & { heading: number; gait: Gait };
 
-/** Ground height at (x, y), given the last known z; null where there is no ground. */
-export type GroundFn = (x: number, y: number, z: number) => number | null;
+/** The highest ground at (x, y) at or below `fromZ`, no more than `distance` below it; null where there is none. */
+export type GroundFn = (x: number, y: number, fromZ: number, distance: number) => number | null;
 
+/** Poses are the walker's own object, changed by its next call: copy one to keep it. */
 export interface Walker {
   advance(dtMs: number, ground?: GroundFn): Pose;
   pose(): Pose;

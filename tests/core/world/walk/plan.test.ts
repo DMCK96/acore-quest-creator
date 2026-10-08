@@ -20,6 +20,14 @@ describe('walkPlanOf', () => {
     expect(plan.path!.map((p) => [p.delay, p.run])).toEqual([[1500, true], [0, true], [0, false], [0, false]]);
   });
 
+  it('counts a non-finite or negative wait as none (I2)', () => {
+    const patrol = (waitSecs: number) => ({ x: 0, y: 0, z: 0, carry: { waitSecs, paceFromHere: null } });
+    const plan = walkPlanOf({ ...base, path: [patrol(Number.NaN), patrol(Number.POSITIVE_INFINITY), patrol(-5)] });
+    expect(plan.path!.map((p) => p.delay)).toEqual([0, 0, 0]);
+    const db = walkPlanOf({ ...base, path: [{ x: 0, y: 0, z: 0, carry: { delay: '-500', move_type: '0' } }] });
+    expect(db.path![0]!.delay).toBe(0);
+  });
+
   it('treats points without usable carry as plain walking points', () => {
     const plan = walkPlanOf({ ...base, path: [{ x: 1, y: 1, z: 1 }, { x: 2, y: 2, z: 2, carry: 'junk' }, { x: 3, y: 3, z: 3, carry: { delay: 'x', move_type: null } }] });
     expect(plan.path!.map((p) => [p.delay, p.run])).toEqual([[0, false], [0, false], [0, false]]);

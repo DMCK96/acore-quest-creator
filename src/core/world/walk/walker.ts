@@ -1,11 +1,13 @@
 import { seededRandom } from './random';
-import { RUN_SPEED, WALK_SPEED, WANDER_PAUSE_MAX_MS, WANDER_PAUSE_MIN_MS } from './tuning';
-import type { GroundFn, Pose, Vec3, Walker, WalkPlan } from './types';
+import { GROUND_REACH, MAX_GRADE, PROBE_STEP, RUN_SPEED, WALK_SPEED, WANDER_PAUSE_MAX_MS, WANDER_PAUSE_MIN_MS } from './tuning';
+import type { GroundFn, Pose, Vec3, Walker, WalkPlan, WalkPoint } from './types';
 
 type Kind = WalkPlan['type'];
 
 const EPSILON = 1e-9;
 const MAX_STEPS = 10000;
+/** The shortest walk between two looks at the ground that a slope is worked out over, in yards */
+const MIN_GRADE_RUN = 0.1;
 
 /** The kind a plan really behaves as: a path needs points, a wander needs a radius. */
 export function kindOf(plan: WalkPlan): Kind {
@@ -14,25 +16,50 @@ export function kindOf(plan: WalkPlan): Kind {
   return 'idle';
 }
 
+/** A point's wait in ms: one that is not a number, or is below 0, is no wait. */
+const delayOf = (point: WalkPoint): number => (Number.isFinite(point.delay) && point.delay > 0 ? point.delay : 0);
+
+/** Whether a new plan puts the NPC somewhere else: another kind, or a moved or turned home. */
+const movesHome = (from: WalkPlan, to: WalkPlan): boolean =>
+  kindOf(from) !== kindOf(to) || from.home.x !== to.home.x || from.home.y !== to.home.y || from.home.z !== to.home.z || from.facing !== to.facing;
+
 type Mode = 'walking' | 'waiting' | 'stopped';
 
 export function createWalker(initialPlan: WalkPlan, seed: number): Walker {
   let plan = initialPlan;
-  let rng = seededRandom(seed);
-  let pos: Vec3 = { ...plan.home };
-  let heading = plan.facing;
-  let mode: Mode = 'stopped';
-  let waitMs = 0;
+  let kind: Kind;
+  let rng!: () => number;
+  // Where it is; on a path, z is the height between the points (the ground's lift is kept apart)
+  const pos: Vec3 = { x: 0, y: 0, z: 0 };
+  let heading!: number;
+  let mode!: Mode;
+  let waitMs!: number;
   // Path: the point being walked to, or waited at; -1 before the first leg leaves home.
-  let index = 0;
+  let index!: number;
   // Path: the point the current leg leaves, or null for the first leg from home.
-  let fromIndex: number | null = null;
-  let running = false;
-  let target: Vec3 = pos;
-  let legStartZ = 0;
-  let legLength = 0;
+  let fromIndex!: number | null;
+  let running!: boolean;
+  let target!: Vec3;
+  let legStartZ!: number;
+  let legLength!: number;
+
+  // The ground: looked for once a leg starts and then every PROBE_STEP yards walked
+  /** Yards walked since the ground was last looked for */
+  let unprobed!: number;
+  let probeSoon!: boolean;
+  /** Path: how far above the height between the points the ground was found */
+  let lift!: number;
+  /** Wander: yards along the leg; the height last known there and whether it was found on the ground; the slope since */
+  let along!: number;
+  let refAlong!: number;
+  let refZ!: number;
+  let refOnGround!: boolean;
+  let grade!: number;
+
+  const out: Pose = { x: 0, y: 0, z: 0, heading: 0, gait: 'stand' };
 
   const dist = (a: Vec3, b: Vec3) => Math.hypot(b.x - a.x, b.y - a.y);
+  const speedOf = () => (running ? RUN_SPEED : WALK_SPEED);
 
   function pause() {
     waitMs = WANDER_PAUSE_MIN_MS + rng() * (WANDER_PAUSE_MAX_MS - WANDER_PAUSE_MIN_MS);
@@ -45,6 +72,11 @@ export function createWalker(initialPlan: WalkPlan, seed: number): Walker {
     legStartZ = pos.z;
     legLength = dist(pos, to);
     if (legLength > EPSILON) heading = Math.atan2(to.y - pos.y, to.x - pos.x);
+    along = 0;
+    refAlong = 0;
+    refZ = pos.z;
+    grade = 0;
+    probeSoon = true;
     mode = 'walking';
   }
 
@@ -54,30 +86,52 @@ export function createWalker(initialPlan: WalkPlan, seed: number): Walker {
     beginLeg({ x: plan.home.x + r * Math.cos(a), y: plan.home.y + r * Math.sin(a), z: pos.z }, false);
   }
 
+  /** The next leg; a point it already stands on is arrived at once (waited at, and its pace kept for the leg after) */
   function pickPathTarget() {
-    const points = plan.path ?? [];
-    const here = index;
-    for (let tries = 1; tries <= points.length; tries++) {
-      const next = (here + tries) % points.length;
-      if (dist(pos, points[next]) <= EPSILON) continue;
-      index = next;
-      fromIndex = here >= 0 ? here : null;
-      beginLeg(points[next], here >= 0 && points[here].run);
-      return;
+    const points = plan.path!;
+    let here = index;
+    for (let tries = 0; tries < points.length; tries++) {
+      const next = (here + 1) % points.length;
+      const point = points[next]!;
+      if (dist(pos, point) > EPSILON) {
+        index = next;
+        fromIndex = here >= 0 ? here : null;
+        beginLeg(point, here >= 0 && points[here]!.run);
+        return;
+      }
+      here = next;
+      pos.z = point.z;
+      if (delayOf(point) > 0) {
+        index = next;
+        waitMs = delayOf(point);
+        mode = 'waiting';
+        return;
+      }
     }
-    mode = 'stopped'; // every leg is zero-length
+    index = here;
+    mode = 'stopped'; // every point is where it stands, with no wait
   }
 
   function chooseNext() {
-    if (kindOf(plan) === 'wander') pickWanderTarget();
+    if (kind === 'wander') pickWanderTarget();
     else pickPathTarget();
   }
 
+  /** Walks `yards` on: a wanderer's height follows the slope last found */
+  function walked(yards: number) {
+    unprobed += yards;
+    along += yards;
+    if (kind === 'wander') pos.z = refZ + grade * (along - refAlong);
+  }
+
   function arrive() {
-    pos = { ...target };
-    const points = plan.path ?? [];
-    if (kindOf(plan) === 'path') {
-      waitMs = points[index].delay;
+    const rest = dist(pos, target);
+    pos.x = target.x;
+    pos.y = target.y;
+    walked(rest);
+    if (kind === 'path') {
+      pos.z = target.z;
+      waitMs = delayOf(plan.path![index]!);
       mode = 'waiting';
     } else {
       pause();
@@ -85,19 +139,34 @@ export function createWalker(initialPlan: WalkPlan, seed: number): Walker {
   }
 
   function start() {
+    kind = kindOf(plan);
     rng = seededRandom(seed);
-    pos = { ...plan.home };
+    pos.x = plan.home.x;
+    pos.y = plan.home.y;
+    pos.z = plan.home.z;
     heading = plan.facing;
     fromIndex = null;
     index = -1;
     running = false;
-    const kind = kindOf(plan);
+    target = plan.home;
+    legStartZ = pos.z;
+    legLength = 0;
+    unprobed = 0;
+    probeSoon = true;
+    lift = 0;
+    along = 0;
+    refAlong = 0;
+    refZ = pos.z;
+    // Home is the row's height, which may sit under the drawn ground: no slope is worked out from it
+    refOnGround = false;
+    grade = 0;
     if (kind === 'path') {
       waitMs = 0;
       mode = 'waiting';
     } else if (kind === 'wander') {
       pause();
     } else {
+      waitMs = 0;
       mode = 'stopped';
     }
   }
@@ -107,16 +176,39 @@ export function createWalker(initialPlan: WalkPlan, seed: number): Walker {
     const remaining = dist(pos, target);
     const step = (ms * speedOf()) / 1000;
     const ratio = step / remaining;
-    pos = { x: pos.x + (target.x - pos.x) * ratio, y: pos.y + (target.y - pos.y) * ratio, z: pos.z };
-    if (kindOf(plan) === 'path') pos.z = legStartZ + (target.z - legStartZ) * (1 - (remaining - step) / legLength);
+    pos.x += (target.x - pos.x) * ratio;
+    pos.y += (target.y - pos.y) * ratio;
+    walked(step);
+    if (kind === 'path') pos.z = legStartZ + (target.z - legStartZ) * (1 - (remaining - step) / legLength);
   }
 
-  const speedOf = () => (running ? RUN_SPEED : WALK_SPEED);
+  /**
+   * Looks for the ground where it now is. A path walker is lifted onto ground up to GROUND_REACH above
+   * the height between its points; a wanderer takes the ground within reach above or below it, the
+   * reach growing with how far it walked unlooked (out of view), and keeps its height where none is found.
+   */
+  function probe(ground: GroundFn) {
+    if (kind === 'path') {
+      const found = ground(pos.x, pos.y, pos.z + GROUND_REACH, GROUND_REACH);
+      lift = found === null ? 0 : Math.min(Math.max(found - pos.z, 0), GROUND_REACH);
+    } else {
+      const reach = GROUND_REACH + unprobed;
+      const found = ground(pos.x, pos.y, pos.z + reach, 2 * reach);
+      if (found !== null) {
+        const run = along - refAlong;
+        if (refOnGround && run >= MIN_GRADE_RUN) grade = Math.min(Math.max((found - refZ) / run, -MAX_GRADE), MAX_GRADE);
+        refZ = found;
+        refAlong = along;
+        refOnGround = true;
+        pos.z = found;
+      }
+    }
+    unprobed = 0;
+    probeSoon = false;
+  }
 
   function advance(dtMs: number, ground?: GroundFn): Pose {
     let left = Number.isFinite(dtMs) && dtMs > 0 ? dtMs : 0;
-    const wandering = kindOf(plan) === 'wander';
-    const before = pos;
     for (let guard = 0; guard < MAX_STEPS && mode !== 'stopped'; guard++) {
       if (mode === 'walking') {
         const need = (dist(pos, target) * 1000) / speedOf();
@@ -137,37 +229,39 @@ export function createWalker(initialPlan: WalkPlan, seed: number): Walker {
         chooseNext();
       }
     }
-    if (wandering && ground && pos !== before) {
-      const z = ground(pos.x, pos.y, pos.z);
-      if (z !== null) pos.z = z;
-    }
+    if (ground && kind !== 'idle' && unprobed > 0 && (probeSoon || unprobed >= PROBE_STEP)) probe(ground);
     return pose();
   }
 
+  /** The walker's own pose object, changed by its next call: copy it to keep it */
   function pose(): Pose {
-    const gait = mode === 'walking' ? (running ? 'run' : 'walk') : 'stand';
-    return { x: pos.x, y: pos.y, z: pos.z, heading, gait };
+    out.x = pos.x;
+    out.y = pos.y;
+    out.z = pos.z + lift;
+    out.heading = heading;
+    out.gait = mode === 'walking' ? (running ? 'run' : 'walk') : 'stand';
+    return out;
   }
 
   function retarget(next: WalkPlan) {
-    const sameKind = kindOf(next) === kindOf(plan);
+    const restart = movesHome(plan, next);
     plan = next;
-    if (!sameKind) {
+    if (restart) {
       start();
       return;
     }
-    if (kindOf(plan) === 'path') retargetPath();
-    else if (kindOf(plan) === 'wander') retargetWander();
+    if (kind === 'path') retargetPath();
+    else if (kind === 'wander') retargetWander();
   }
 
   function retargetPath() {
     const points = plan.path!;
     index = Math.min(index, points.length - 1);
     if (mode === 'walking') {
-      const run = fromIndex !== null && points[Math.min(fromIndex, points.length - 1)].run;
-      beginLeg(points[index], run);
+      const run = fromIndex !== null && points[Math.min(fromIndex, points.length - 1)]!.run;
+      beginLeg(points[index]!, run);
     } else if (mode === 'waiting') {
-      if (index >= 0) waitMs = Math.min(waitMs, points[index].delay);
+      if (index >= 0) waitMs = Math.min(waitMs, delayOf(points[index]!));
     } else {
       chooseNext();
     }
