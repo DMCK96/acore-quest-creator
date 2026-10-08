@@ -25,6 +25,14 @@ export interface McpController {
 export function createMcpController({ settings, listen }: McpControllerOptions): McpController {
   let listener: McpListener | null = null;
   let error: string | null = null;
+  // Start, configure and regenerate run one at a time, so a switch-off cannot overtake a start that
+  // is still opening its port and leave the server running while the setting says off
+  let tail: Promise<unknown> = Promise.resolve();
+  const queued = <T,>(work: () => Promise<T>): Promise<T> => {
+    const next = tail.then(work, work);
+    tail = next.catch(() => undefined);
+    return next;
+  };
 
   const status = (): McpStatus => {
     const s = settings.read();
@@ -52,16 +60,18 @@ export function createMcpController({ settings, listen }: McpControllerOptions):
 
   return {
     status,
-    start: begin,
-    async configure({ enabled, port }) {
-      settings.setPort(port);
-      settings.setEnabled(enabled);
-      return begin();
-    },
-    async regenerateToken() {
-      settings.regenerateToken();
-      return status();
-    },
-    stop,
+    start: () => queued(begin),
+    configure: ({ enabled, port }) =>
+      queued(async () => {
+        settings.setPort(port);
+        settings.setEnabled(enabled);
+        return begin();
+      }),
+    regenerateToken: () =>
+      queued(async () => {
+        settings.regenerateToken();
+        return status();
+      }),
+    stop: () => queued(stop),
   };
 }

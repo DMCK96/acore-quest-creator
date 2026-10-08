@@ -24,6 +24,8 @@ export interface HistorySlice {
   /**
    * Shows a change the main process made on its own (Claude, through MCP). Main already asked this
    * window for its pending edits, so nothing is sent first; an edit typed while this runs stays on top.
+   * Known gap: an edit to the same quest typed after that flush and before this runs is sent from the
+   * window's older copy of the quest (closing it needs a revision check in updateQuest).
    */
   applyExternalChange(change: HistoryResult): Promise<void>;
 }

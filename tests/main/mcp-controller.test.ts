@@ -62,4 +62,23 @@ describe('the MCP controller', () => {
     await controller.stop();
     expect(events).toEqual(['listen 50002', 'close 50002']);
   });
+
+  it('does not leave the server running when it is switched off while it is still starting', async () => {
+    const events: string[] = [];
+    let finish!: () => void;
+    const starting = new Promise<void>((resolve) => { finish = resolve; });
+    const settings = createMcpSettings(openStore(':memory:', box));
+    const controller = createMcpController({
+      settings,
+      listen: async (o) => { await starting; events.push(`listen ${o.port}`); return { port: o.port, close: async () => { events.push(`close ${o.port}`); } }; },
+    });
+    const on = controller.configure({ enabled: true, port: 50000 });
+    const off = controller.configure({ enabled: false, port: 50000 });
+    finish();
+    await on;
+    const last = await off;
+    expect(last).toMatchObject({ enabled: false, running: false });
+    expect(controller.status().running).toBe(false);
+    expect(events).toEqual(['listen 50000', 'close 50000']);
+  });
 });
