@@ -10,6 +10,7 @@ import { defaultProjectMeta } from '../../src/main/project/project-file';
 import { createProjectSession } from '../../src/main/project/session';
 import { openStore } from '../../src/main/store/store';
 import type { HistoryResult } from '../../src/shared/history';
+import type { ConnectSummary } from '../../src/shared/ipc';
 import { forkDb } from './fixtures';
 import { memFs } from './mem-fs';
 
@@ -54,12 +55,11 @@ export async function mcpFixture(tools: readonly ToolDef[], opts: McpFixtureOpti
     session,
     projects,
   });
-  if (opts.connect !== false) {
-    const rec: any = await api.saveProfile({ name: 'w', role: 'world', host: 'h', port: 1, user: 'u', database: 'd', password: 'p' });
-    await api.connect(rec.value.id);
-  }
+  const rec: any = await api.saveProfile({ name: 'w', role: 'world', host: 'h', port: 1, user: 'u', database: 'd', password: 'p' });
+  if (opts.connect !== false) await api.connect(rec.value.id);
 
   const changes: HistoryResult[] = [];
+  const connections: ConnectSummary[] = [];
   const order: string[] = [];
   const ctx: McpContext = {
     api,
@@ -69,6 +69,7 @@ export async function mcpFixture(tools: readonly ToolDef[], opts: McpFixtureOpti
       order.push('flush');
       await opts.flush?.();
     },
+    notifyConnected: (summary) => { connections.push(summary); },
     notify: (change) => { order.push('notify'); changes.push(change); },
     ...(opts.flushTimeoutMs !== undefined ? { flushTimeoutMs: opts.flushTimeoutMs } : {}),
     ...(opts.toolTimeoutMs !== undefined ? { toolTimeoutMs: opts.toolTimeoutMs } : {}),
@@ -96,5 +97,5 @@ export async function mcpFixture(tools: readonly ToolDef[], opts: McpFixtureOpti
     }
   };
 
-  return { api, db, session, client, call, changes, order, ctx };
+  return { api, db, session, client, call, changes, connections, order, ctx, profileId: rec.value.id as number };
 }

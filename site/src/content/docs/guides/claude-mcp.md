@@ -27,7 +27,7 @@ claude mcp add --transport http awe http://127.0.0.1:47600/mcp --header "Authori
 
 Other MCP clients that support HTTP servers need the address, and the header `Authorization: Bearer <your token>`.
 
-Connect the editor to your world database first (as you do for any work), then ask for what you want.
+Connect the editor to your world database first, as you do for any work. Claude can also connect for you using one of your saved connections. Then ask for what you want.
 
 ## What Claude can do
 

@@ -17,7 +17,11 @@ export const projectTools = [
     description: 'Connects the editor to a saved profile (see list_profiles). Call this first when other tools answer NOT_CONNECTED. The database is only ever read.',
     input: { profileId: z.number().int().describe('The id of a profile from list_profiles.') },
     write: false,
-    run: ({ profileId }, ctx) => ctx.call('connect', profileId),
+    run: async ({ profileId }, ctx) => {
+      const connected = await ctx.call('connect', profileId);
+      if (connected.ok) ctx.notifyConnected(connected.value);
+      return connected;
+    },
   }),
   defineTool({
     name: 'project_state',

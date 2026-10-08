@@ -1,5 +1,5 @@
 import type { z } from 'zod';
-import type { Api, Result } from '../../shared/ipc';
+import type { Api, ConnectSummary, Result } from '../../shared/ipc';
 import type { HistoryResult } from '../../shared/history';
 import type { ProjectSession } from '../project/session';
 
@@ -13,6 +13,8 @@ export interface McpContext {
   flush(): Promise<void>;
   /** Tells the window what changed in the project, so it shows the project as it now is. */
   notify(change: HistoryResult): void;
+  /** Tells the window it was connected, so it leaves the login screen. */
+  notifyConnected(summary: ConnectSummary): void;
   /** How long to wait for `flush` before going on; 5000 when absent. */
   flushTimeoutMs?: number;
   /** How long a write tool may run before it is given up on; 120000 when absent. */

@@ -4,7 +4,7 @@ import { mkdir, readdir, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { openMysqlDevDb } from '../core/db/mysql-dev-db';
 import { openMysqlWorldDb } from '../core/db/mysql-world-db';
-import { EXTERNAL_CHANGE_CHANNEL, FLUSH_DONE_CHANNEL, FLUSH_REQUEST_CHANNEL, HISTORY_CHANNEL } from '../shared/api-methods';
+import { CONNECTED_CHANNEL, EXTERNAL_CHANGE_CHANNEL, FLUSH_DONE_CHANNEL, FLUSH_REQUEST_CHANNEL, HISTORY_CHANNEL } from '../shared/api-methods';
 import { describeStep } from './project/step-labels';
 import { API_METHODS, channelFor, type Api } from '../shared/ipc';
 import { invokeApi } from './api/invoke';
@@ -311,6 +311,9 @@ void app.whenReady().then(() => {
       const win = BrowserWindow.getAllWindows().find((w) => !w.isDestroyed());
       // The write guard stops waiting at 5 s; this clears the listener just after
       return win ? requestFlush(win, 6000) : Promise.resolve();
+    },
+    notifyConnected(summary) {
+      for (const win of BrowserWindow.getAllWindows()) if (!win.isDestroyed()) win.webContents.send(CONNECTED_CHANNEL, summary);
     },
     notify(change) {
       for (const win of BrowserWindow.getAllWindows()) if (!win.isDestroyed()) win.webContents.send(EXTERNAL_CHANGE_CHANNEL, change);

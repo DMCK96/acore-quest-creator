@@ -79,4 +79,18 @@ describe('the whole tool list', () => {
     expect(names).not.toContain('apply_to_dev');
     expect(names.filter((n) => /profile/.test(n))).toEqual(['list_profiles']);
   });
+
+  it('connect tells the window the connection it made, so the login screen is left behind', async () => {
+    const { call, connections, profileId } = await mcpFixture(allTools, { connect: false });
+    const out = await call('connect', { profileId });
+    expect(out.isError).toBe(false);
+    expect(connections).toHaveLength(1);
+    expect(connections[0]!.profileId).toBe(profileId);
+  });
+
+  it('a connect that fails tells the window nothing', async () => {
+    const { call, connections } = await mcpFixture(allTools, { connect: false });
+    expect((await call('connect', { profileId: 999 })).isError).toBe(true);
+    expect(connections).toHaveLength(0);
+  });
 });

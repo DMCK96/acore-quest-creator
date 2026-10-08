@@ -64,3 +64,24 @@ describe('a change made from the main process (Claude)', () => {
     expect(values['quest_template.QuestLevel']).toBe(12);
   });
 });
+
+describe('a connection made from the main process (Claude)', () => {
+  const summary = { profileId: 1, schemaHash: 'h', drift, blocking: false, serverData: null, clientDir: null, client: null } as any;
+
+  it('leaves the login screen for the app, as a connect from the window would', async () => {
+    const api = makeMockApi();
+    const store = createAppStore(api, { saveDelayMs: 50 });
+    expect(store.getState().screen).toBe('connect');
+    await store.getState().adoptConnection(summary);
+    expect(store.getState().screen).toBe('pick');
+    expect(store.getState().summary).toBe(summary);
+    expect(store.getState().connection).toBe(1);
+  });
+
+  it('stays on the login screen and says why when the database cannot be worked with', async () => {
+    const store = createAppStore(makeMockApi(), { saveDelayMs: 50 });
+    await store.getState().adoptConnection({ ...summary, blocking: true, drift: { ...drift, missingTables: ['quest_template'] } });
+    expect(store.getState().screen).toBe('connect');
+    expect(store.getState().error).toMatch(/quest_template/);
+  });
+});
