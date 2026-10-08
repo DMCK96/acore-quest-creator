@@ -47,7 +47,7 @@ const patrolPointSchema = z.object({
 });
 
 /** A route a new NPC's spawn walks forever, looping back to where it stands. */
-const patrolSchema = z.object({
+export const patrolSchema = z.object({
   /** The `waypoint_data` path, allocated once and pinned like a guid. */
   pathId: int,
   startPace: z.enum(PACES),
@@ -131,7 +131,7 @@ const originSchema = z.discriminatedUnion('kind', [
 ]);
 const NEW_ORIGIN = { kind: 'new' } as const;
 
-const lootSchema = z.object({ item: int, chance: num, min: int, max: int, questOnly: z.boolean() });
+export const lootSchema = z.object({ item: int, chance: num, min: int, max: int, questOnly: z.boolean() });
 
 const npcFields = z.object({
   entry: int,
