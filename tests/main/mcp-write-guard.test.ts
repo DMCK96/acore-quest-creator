@@ -80,4 +80,38 @@ describe('the write guard', () => {
     expect(changes.at(-1)!.positions).toBe(true);
     expect(changes.at(-1)!.step).toBeNull();
   });
+
+  it('labels the step when the window did not answer the flush, so the history says it may be out of step', async () => {
+    const { call, api } = await mcpFixture([newQuests('late', 1)], { flushTimeoutMs: 20, flush: () => new Promise(() => {}) });
+    await call('late');
+    const list: any = await api.historyList();
+    expect(list.value.steps.map((s: any) => s.label)).toEqual(['Claude: late (window did not answer)']);
+  });
+
+  it('gives up on a tool that hangs, closes its step and lets the next write run', async () => {
+    const hang = defineTool({ name: 'hang', title: 'Hang', description: 'Never finishes.', input: {}, write: { kind: 'step', label: () => 'Claude: hang' }, run: () => new Promise(() => {}) });
+    const { call, api } = await mcpFixture([hang, newQuests('after', 1)], { toolTimeoutMs: 30 });
+    const out = await call('hang');
+    expect(out.isError).toBe(true);
+    expect(out.value.message).toMatch(/did not finish/i);
+    expect((await call('after')).isError).toBe(false);
+    const list: any = await api.historyList();
+    expect(list.value.steps.map((s: any) => s.label)).toEqual(['Claude: after']);
+  });
+
+  it('sends the window the whole project when something else changed it during the write', async () => {
+    const interrupted = defineTool({
+      name: 'interrupted', title: 'Interrupted', description: 'Is undone from the window part-way through.', input: {},
+      write: { kind: 'step', label: () => 'Claude: interrupted' },
+      run: async (_a, ctx) => { await ctx.call('newQuest'); await ctx.call('historyUndo'); await ctx.call('newQuest'); return { ok: true, value: 1 }; },
+    });
+    const { call, session, changes } = await mcpFixture([interrupted]);
+    await call('interrupted');
+    const last = changes.at(-1)!;
+    expect(last.positions).toBe(true);
+    expect(last.world).not.toBeNull();
+    expect(last.entities).not.toBeNull();
+    expect(last.quests.map((q) => q.questId).sort()).toEqual(session.quests.list().map((q) => q.questId).sort());
+    expect(last.quests.every((q) => q.aggregate !== null)).toBe(true);
+  });
 });

@@ -50,3 +50,23 @@ export function resultOfSteps(
     history,
   };
 }
+
+/**
+ * The whole project as the window should now show it, for when something other than the step in hand
+ * changed it as well (the user undid part of a Claude write): every quest, the canvas, the world
+ * layer, the entities and the name.
+ */
+export function resultOfProject(session: ProjectSession, history: HistoryList): HistoryResult {
+  const layer = session.world.get();
+  return {
+    step: null,
+    direction: 'redo',
+    quests: session.quests.list().map((q) => ({ questId: q.questId, aggregate: q.aggregate })),
+    positions: true,
+    world: { ...layer, movements: movementsOf(layer) },
+    entities: session.entities.get(),
+    name: true,
+    skipped: [],
+    history,
+  };
+}

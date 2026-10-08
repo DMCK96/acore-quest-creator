@@ -15,6 +15,8 @@ export interface McpContext {
   notify(change: HistoryResult): void;
   /** How long to wait for `flush` before going on; 5000 when absent. */
   flushTimeoutMs?: number;
+  /** How long a write tool may run before it is given up on; 120000 when absent. */
+  toolTimeoutMs?: number;
 }
 
 /**

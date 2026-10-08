@@ -19,6 +19,7 @@ export interface McpFixtureOptions {
   /** Connect the API to the world database (default true). */
   connect?: boolean;
   flushTimeoutMs?: number;
+  toolTimeoutMs?: number;
   flush?: () => Promise<void>;
 }
 
@@ -70,6 +71,7 @@ export async function mcpFixture(tools: readonly ToolDef[], opts: McpFixtureOpti
     },
     notify: (change) => { order.push('notify'); changes.push(change); },
     ...(opts.flushTimeoutMs !== undefined ? { flushTimeoutMs: opts.flushTimeoutMs } : {}),
+    ...(opts.toolTimeoutMs !== undefined ? { toolTimeoutMs: opts.toolTimeoutMs } : {}),
   };
   const server = createMcpServer(ctx, tools);
   const client = new Client({ name: 'test', version: '1' });
