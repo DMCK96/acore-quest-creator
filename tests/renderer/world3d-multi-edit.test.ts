@@ -614,6 +614,23 @@ describe('a drag dropped by an undo', () => {
   });
 });
 
+describe('the gizmo mode', () => {
+  it('is told once for each real change, from the buttons and from the G and R keys', () => {
+    const t = setup();
+    const modes: string[] = [];
+    const editor = new Editor(t.world, { onMode: (m) => modes.push(m) });
+    editor.setMode('move');
+    expect(modes).toEqual([]);
+    editor.setMode('rotate');
+    editor.setMode('rotate');
+    expect(editor.keyDown(key('KeyR'))).toBe(true);
+    expect(modes).toEqual(['rotate']);
+    editor.keyDown(key('KeyG'));
+    editor.keyDown(key('KeyG'));
+    expect(modes).toEqual(['rotate', 'move']);
+  });
+});
+
 describe('a gesture on its way', () => {
   it('holds undo from the release until its edits are sent, while the floor is looked up', async () => {
     const t = setup({ floor: 1 });

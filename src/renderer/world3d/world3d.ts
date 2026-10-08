@@ -84,6 +84,8 @@ export interface World3DOptions {
   onCameraInput?(): void;
   /** Told when falloff was switched or its radius changed by a key or the wheel. */
   onFalloff?(falloff: Falloff): void;
+  /** Told when the gizmo changed between move and rotate (buttons or the G and R keys). */
+  onMode?(mode: 'move' | 'rotate'): void;
   /** Told when a new path starts or stops being drawn, and how many points it has. */
   onDrawing?(drawing: { guid: number; points: number } | null): void;
   /** Asked for the right-click menu: what was right-clicked (selected first), and where in the window. */
@@ -479,6 +481,7 @@ export function createWorld3D(options: World3DOptions): World3D {
       // A delete or an insert changed the picked points
       onSelection: (next) => setSelection(next, false),
       onFalloff: (next) => options.onFalloff?.(next),
+      onMode: (mode) => options.onMode?.(mode),
       onDrawing: (drawing) => options.onDrawing?.(drawing),
     },
   );

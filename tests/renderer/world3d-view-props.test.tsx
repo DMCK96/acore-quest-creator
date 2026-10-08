@@ -3,14 +3,14 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { act, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 
-type Fake = { setScenery: ReturnType<typeof vi.fn>; setSpawnVisibility: ReturnType<typeof vi.fn>; setDocks: ReturnType<typeof vi.fn>; setDocksEnabled: ReturnType<typeof vi.fn>; select: ReturnType<typeof vi.fn>; selectedSpawns: ReturnType<typeof vi.fn>; frameOfSpawn: ReturnType<typeof vi.fn>; at: { x: number; y: number; z: number }; area: (name: string) => void };
+type Fake = { setScenery: ReturnType<typeof vi.fn>; setSpawnVisibility: ReturnType<typeof vi.fn>; setDocks: ReturnType<typeof vi.fn>; setDocksEnabled: ReturnType<typeof vi.fn>; select: ReturnType<typeof vi.fn>; selectedSpawns: ReturnType<typeof vi.fn>; frameOfSpawn: ReturnType<typeof vi.fn>; at: { x: number; y: number; z: number }; area: (name: string) => void; setMovementPlaying: ReturnType<typeof vi.fn>; resetMovement: ReturnType<typeof vi.fn>; setMode: ReturnType<typeof vi.fn>; mode: (m: 'move' | 'rotate') => void };
 const created = vi.hoisted(() => [] as Fake[]);
 const nearby = vi.hoisted(() => ({ list: [] as { id: number; name: string }[] }));
 
 vi.mock('../../src/renderer/world3d/world3d', () => ({
-  createWorld3D: (options: { onArea?: (name: string) => void }) => {
+  createWorld3D: (options: { onArea?: (name: string) => void; onMode?: (m: 'move' | 'rotate') => void }) => {
     const world = {
-      at: { x: 1, y: 2, z: 3 }, setScenery: vi.fn(), setTool: vi.fn(), setFalloff: vi.fn(), dispose: vi.fn(), cancelPath: vi.fn(), lookAt: vi.fn(), setSpawnVisibility: vi.fn(), setDocks: vi.fn(), setDocksEnabled: vi.fn(), frameOfSpawn: vi.fn(() => null), select: vi.fn(), selectedSpawns: vi.fn(() => []),
+      at: { x: 1, y: 2, z: 3 }, setScenery: vi.fn(), setTool: vi.fn(), setFalloff: vi.fn(), dispose: vi.fn(), cancelPath: vi.fn(), lookAt: vi.fn(), setSpawnVisibility: vi.fn(), setDocks: vi.fn(), setDocksEnabled: vi.fn(), setMovementPlaying: vi.fn(), resetMovement: vi.fn(), setMode: vi.fn(), mode: (m: 'move' | 'rotate') => options.onMode?.(m), frameOfSpawn: vi.fn(() => null), select: vi.fn(), selectedSpawns: vi.fn(() => []),
       spawnStatus: () => ({ capped: { creatures: false, objects: false }, error: null, loading: 0, events: nearby.list }),
       target() { return world.at; }, area: (name: string) => options.onArea?.(name),
     };
@@ -196,5 +196,43 @@ describe('the 3D view in a workspace', () => {
     render(<World3DView map={0} start={start} hasClient />);
     expect(screen.getByRole('combobox', { name: 'Event' })).toHaveDisplayValue('No event');
     localStorage.removeItem('acqc.world3d.layers');
+  });
+});
+
+describe('the NPC movement controls', () => {
+  const toolbar = () => screen.getByRole('toolbar', { name: 'Tools' });
+
+  it('start paused, play and pause the movement, and reset it', async () => {
+    clientHasEverything();
+    render(<World3DView map={0} start={start} hasClient />);
+    await waitFor(() => expect(created).toHaveLength(1));
+    const world = created[0]!;
+    expect(world.setMovementPlaying).toHaveBeenLastCalledWith(false);
+    const user = userEvent.setup();
+    await user.click(within(toolbar()).getByRole('button', { name: 'Play' }));
+    expect(world.setMovementPlaying).toHaveBeenLastCalledWith(true);
+    expect(within(toolbar()).getByRole('button', { name: 'Pause' })).toHaveAttribute('aria-pressed', 'true');
+    await user.click(within(toolbar()).getByRole('button', { name: 'Reset' }));
+    expect(world.resetMovement).toHaveBeenCalledTimes(1);
+    await user.click(within(toolbar()).getByRole('button', { name: 'Pause' }));
+    expect(world.setMovementPlaying).toHaveBeenLastCalledWith(false);
+  });
+
+  it('offer Move and Rotate under the Select tool, kept in step with the G and R keys', async () => {
+    clientHasEverything();
+    render(<World3DView map={0} start={start} hasClient />);
+    await waitFor(() => expect(created).toHaveLength(1));
+    const world = created[0]!;
+    const user = userEvent.setup();
+    expect(within(toolbar()).queryByRole('button', { name: 'Rotate' })).toBeNull();
+    await user.click(within(toolbar()).getByRole('button', { name: 'Select' }));
+    expect(within(toolbar()).getByRole('button', { name: 'Move' })).toHaveAttribute('aria-pressed', 'true');
+    await user.click(within(toolbar()).getByRole('button', { name: 'Rotate' }));
+    expect(world.setMode).toHaveBeenLastCalledWith('rotate');
+    act(() => world.mode('rotate'));
+    expect(within(toolbar()).getByRole('button', { name: 'Rotate' })).toHaveAttribute('aria-pressed', 'true');
+    act(() => world.mode('move')); // the G key reports through onMode
+    expect(within(toolbar()).getByRole('button', { name: 'Move' })).toHaveAttribute('aria-pressed', 'true');
+    expect(within(toolbar()).getByRole('button', { name: 'Rotate' })).toHaveAttribute('aria-pressed', 'false');
   });
 });
