@@ -29,9 +29,10 @@ describe('the spawn layer', () => {
     const m = manager({ creatures: [creature(1, 1), creature(2, 0)], objects: [object(3, 2), object(4, 77)], capped: { creatures: false, objects: false } });
     const group = (await m.loadArea(1, 0, box))!;
     const creatures = group.getObjectByName('creatures')!.children;
-    expect(creatures.map((c) => [c.userData.spawn.guid, c.name])).toEqual([[1, ''], [2, 'marker']]);
+    // Each is added as it is made, so a marker comes first
+    expect(creatures.map((c) => [c.userData.spawn.guid, c.name]).sort()).toEqual([[1, ''], [2, 'marker']]);
     const objects = group.getObjectByName('objects')!.children;
-    expect(objects.map((o) => [o.userData.spawn.guid, o.name])).toEqual([[3, ''], [4, 'marker']]);
+    expect(objects.map((o) => [o.userData.spawn.guid, o.name]).sort()).toEqual([[3, ''], [4, 'marker']]);
   });
 
   it('draws a marker, and the rest, when making one model fails', async () => {
@@ -81,6 +82,98 @@ describe('the spawn layer', () => {
     finish();
     expect(await loading).toBeNull();
     expect(model.dispose).toHaveBeenCalledTimes(1);
+  });
+
+  describe('showing an area as its spawns are made', () => {
+    const answer = (...c: ReturnType<typeof creature>[]) => ({ creatures: c, objects: [], capped: { creatures: false, objects: false } });
+    /** A model per display id that is made when its gate is let go */
+    function gated() {
+      const gates = new Map<number, (() => void)[]>();
+      const asked: number[] = [];
+      const make = async (look: { path: string }) => {
+        const id = Number(look.path.replace('m', ''));
+        asked.push(id);
+        await new Promise<void>((r) => gates.set(id, [...(gates.get(id) ?? []), r]));
+        return new THREE.Object3D();
+      };
+      const release = (id: number) => gates.get(id)?.splice(0).forEach((r) => r());
+      const releaseAll = () => [...gates.keys()].forEach(release);
+      const resolver = { creature: async (id: number) => ({ kind: 'model', path: `m${id}`, textures: {}, geosets: null, scale: 1 }), object: async () => null } as any;
+      return { gates, asked, make, resolver, release, releaseAll };
+    }
+    const tick = () => new Promise((r) => setTimeout(r, 0));
+
+    it('hands over the area’s group before any model is made, and adds each spawn as its model is ready', async () => {
+      const g = gated();
+      const m = manager(answer(creature(1, 11), creature(2, 12), creature(3, 13)), { createModel: g.make as any, resolver: g.resolver });
+      const shown: THREE.Group[] = [];
+      const loading = m.loadArea(1, 0, box, (group) => shown.push(group));
+      await tick();
+      await tick();
+      expect(shown).toHaveLength(1);
+      const creatures = shown[0]!.getObjectByName('creatures')!;
+      expect(creatures.children).toHaveLength(0);
+      expect(m.loading).toBe(1);
+      g.release(12);
+      await tick();
+      expect(creatures.children.map((c) => c.userData.spawn.guid)).toEqual([2]);
+      g.release(11);
+      g.release(13);
+      const group = await loading;
+      expect(group).toBe(shown[0]);
+      expect(creatures.children.map((c) => c.userData.spawn.guid).sort()).toEqual([1, 2, 3]);
+      expect(m.loading).toBe(0);
+    });
+
+    it('starts with the spawns nearest the camera', async () => {
+      const g = gated();
+      const m = manager(answer(creature(1, 11, { x: 90 }), creature(2, 12, { x: 5 }), creature(3, 13, { x: 40 })), { createModel: g.make as any, resolver: g.resolver });
+      m.cull(new THREE.Vector3(0, 0, 0));
+      const loading = m.loadArea(1, 0, { minX: -1000, maxX: 1000, minY: -1000, maxY: 1000 });
+      await tick();
+      await tick();
+      expect(g.asked).toEqual([12, 13, 11]);
+      g.releaseAll();
+      await loading;
+    });
+
+    it('draws nothing more, and frees what finishes, once the area is removed', async () => {
+      const g = gated();
+      const made: THREE.Object3D[] = [];
+      const make = async (look: { path: string }) => {
+        const object = Object.assign(await g.make(look), { dispose: vi.fn() });
+        made.push(object);
+        return object;
+      };
+      const m = manager(answer(creature(1, 11), creature(2, 12)), { createModel: make as any, resolver: g.resolver });
+      const shown: THREE.Group[] = [];
+      const loading = m.loadArea(1, 0, box, (group) => shown.push(group));
+      await tick();
+      await tick();
+      m.removeArea(1);
+      g.releaseAll();
+      expect(await loading).toBeNull();
+      expect(shown[0]!.children).toHaveLength(0);
+      expect(made).toHaveLength(2);
+      expect(made.every((o) => (o as any).dispose.mock.calls.length === 1)).toBe(true);
+    });
+
+    it('ends with every spawn drawn once when the world layer changes while they are being made', async () => {
+      const g = gated();
+      const m = manager(answer(creature(1, 11), creature(2, 12)), { createModel: g.make as any, resolver: g.resolver });
+      const shown: THREE.Group[] = [];
+      const loading = m.loadArea(1, 0, box, (group) => shown.push(group));
+      await tick();
+      await tick();
+      const redrawn = m.setWorldLayer({ spawns: [], routes: [], added: [] });
+      await tick();
+      g.releaseAll();
+      await tick();
+      g.releaseAll();
+      await redrawn;
+      await loading;
+      expect(shown[0]!.getObjectByName('creatures')!.children.map((c) => c.userData.spawn.guid).sort()).toEqual([1, 2]);
+    });
   });
 
   it('hides and shows each kind without unloading it', async () => {
@@ -356,10 +449,11 @@ it('draws an own spawn placed while its area was still being drawn', async () =>
   });
   const loading = m.loadArea(1, 0, box);
   await new Promise((r) => setTimeout(r, 0));
-  await m.setOwnSpawns({ creatures: [creature(6, 1, { own: true, x: 0.5, y: 0.5 })], objects: [], capped: { creatures: false, objects: false } });
+  const placed = m.setOwnSpawns({ creatures: [creature(6, 1, { own: true, x: 0.5, y: 0.5 })], objects: [], capped: { creatures: false, objects: false } });
   made();
+  await placed;
   const group = (await loading)!;
-  expect(group.getObjectByName('creatures')!.children.map((c) => c.userData.spawn.guid)).toEqual([5, 6]);
+  expect(group.getObjectByName('creatures')!.children.map((c) => c.userData.spawn.guid).sort()).toEqual([5, 6]);
   expect(m.info('creature', 6)).toMatchObject({ guid: 6, own: true });
 });
 

@@ -500,18 +500,20 @@ class MapManager extends EventTarget {
       }
     }
 
-    // Came near: asked for, unless already drawn, on its way, or recently failed (the spawn manager knows)
-    for (const areaId of this.#terrainGroups.keys()) {
-      if (!wanted.has(keyOf(areaId)) || !this.#spawnManager.canLoad(areaId)) {
-        continue;
-      }
+    // Came near: asked for, unless already drawn, on its way, or recently failed (the spawn manager knows).
+    // The area the camera is over first, so its NPCs are the first to come
+    const near = (areaId: number) => {
+      const { areaX, areaY } = this.#getAreaIndex(areaId);
+      return Math.abs(areaX - this.#targetAreaX) + Math.abs(areaY - this.#targetAreaY);
+    };
+    const asked = [...this.#terrainGroups.keys()].filter((areaId) => wanted.has(keyOf(areaId)) && this.#spawnManager.canLoad(areaId));
+    for (const areaId of asked.sort((a, b) => near(a) - near(b))) {
       const { areaX, areaY } = this.#getAreaIndex(areaId);
       this.#spawnAsked.add(areaId);
       this.#spawnManager
-        .loadArea(areaId, this.#spawnMapId, this.#globalWmo ? WHOLE_MAP : areaBox(areaX, areaY))
-        .then((group) => {
-          // Null when it failed or was dropped meanwhile; a stale answer never replaces a newer one
-          if (group && this.#spawnAsked.has(areaId) && this.#terrainGroups.has(areaId)) {
+        .loadArea(areaId, this.#spawnMapId, this.#globalWmo ? WHOLE_MAP : areaBox(areaX, areaY), (group) => {
+          // Shown while it fills; not if the area was left behind meanwhile (a stale answer never replaces a newer one)
+          if (this.#spawnAsked.has(areaId) && this.#terrainGroups.has(areaId)) {
             this.#spawnGroups.set(areaId, group);
             this.#root.add(group);
           }
@@ -524,10 +526,7 @@ class MapManager extends EventTarget {
   #syncPassengers() {
     if (!this.#spawnManager.canLoad(DOCK_AREA)) return;
     this.#spawnManager
-      .loadArea(DOCK_AREA, this.#spawnMapId, WHOLE_MAP)
-      .then((group) => {
-        if (group) this.#root.add(group);
-      })
+      .loadArea(DOCK_AREA, this.#spawnMapId, WHOLE_MAP, (group) => this.#root.add(group))
       .catch((error) => console.warn(`3D view: the passengers could not be drawn: ${describeError(error)}`));
   }
 

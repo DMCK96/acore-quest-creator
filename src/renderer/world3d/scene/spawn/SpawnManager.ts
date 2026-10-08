@@ -302,9 +302,12 @@ class SpawnManager {
   #responses = new globalThis.Map<number, { map: number; box: Box; spawns: ViewSpawns }>();
   /** Areas asked for and not removed since; a removal while asking drops the answer */
   #wanted = new globalThis.Map<number, number>();
+  /** Areas whose group is shown and still being filled as models get made */
+  #filling = new globalThis.Map<number, THREE.Group>();
+  /** Where the camera last was, for starting with the spawns nearest it */
+  #focus = new THREE.Vector3();
+  #focused = false;
   #requests = 0;
-  /** Rises with each redraw: an area still being drawn meanwhile missed it and is brought up to date */
-  #redraws = 0;
   #visibility: SpawnVisibility = { ...DEFAULT_VISIBILITY };
   /** Looks of edited existing entities, drawn on their database spawns */
   #looks: EntityLooks = new globalThis.Map();
@@ -436,7 +439,7 @@ class SpawnManager {
   /** Areas asked for and not yet drawn (their spawns on their way, or their models loading) */
   get loading(): number {
     let count = 0;
-    for (const areaId of this.#wanted.keys()) if (!this.#areas.has(areaId)) count += 1;
+    for (const areaId of this.#wanted.keys()) if (!this.#areas.has(areaId) || this.#filling.has(areaId)) count += 1;
     return count;
   }
 
@@ -458,8 +461,12 @@ class SpawnManager {
     return retryAt === undefined || this.#now() >= retryAt;
   }
 
-  /** The area's spawns as a group, or null when there are none to draw or it was removed meanwhile */
-  async loadArea(areaId: number, map: number, box: Box): Promise<THREE.Group | null> {
+  /**
+   * An area's spawns as a group, or null when it was removed meanwhile. The group is handed to `show` as soon as
+   * the area's rows are in, empty; each spawn is added as its model is ready, the ones nearest the camera
+   * first. The group is returned once all are.
+   */
+  async loadArea(areaId: number, map: number, box: Box, show?: (group: THREE.Group) => void): Promise<THREE.Group | null> {
     if (!this.#source) {
       return null;
     }
@@ -488,19 +495,16 @@ class SpawnManager {
     this.#responses.set(areaId, { map, box, spawns: answer });
     this.status = { capped: { ...answer.capped }, error: null, events: eventsIn(this.#responses.values()) };
 
-    const redraws = this.#redraws;
-    const group = await this.#draw(this.#overlay(answer, box, map));
-    if (this.#wanted.get(areaId) !== request) {
-      // Dropped while its models were made: what was drawn is freed, not left animating
-      this.#release(group);
-      group.clear();
-      return null;
-    }
-
+    const group = this.#empty();
     this.#areas.set(areaId, group);
-    // Own spawns, the layer or the shown events changed while it was drawn: what it draws is out of date
-    if (this.#redraws !== redraws) await this.#patch(group, this.#overlay(answer, box, map));
-    return group;
+    this.#filling.set(areaId, group);
+    show?.(group);
+    try {
+      await this.#patch(group, this.#overlay(answer, box, map));
+    } finally {
+      if (this.#filling.get(areaId) === group) this.#filling.delete(areaId);
+    }
+    return this.#wanted.get(areaId) === request ? group : null;
   }
 
   /** Drops an area's spawns and frees them; an answer still on its way for it is dropped too */
@@ -514,6 +518,7 @@ class SpawnManager {
     this.#wanted.delete(areaId);
     this.#responses.delete(areaId);
     this.#areas.delete(areaId);
+    this.#filling.delete(areaId);
     this.status = { ...this.status, events: eventsIn(this.#responses.values()) };
   }
 
@@ -816,7 +821,6 @@ class SpawnManager {
 
   /** Redraws every loaded area from its last answer, without asking again */
   async #redraw() {
-    this.#redraws += 1;
     await Promise.all(
       [...this.#areas.entries()].map(([areaId, group]) => {
         const response = this.#responses.get(areaId);
@@ -962,6 +966,8 @@ class SpawnManager {
 
   /** Draws only the spawns within the draw distance of the camera; a hidden model stops animating */
   cull(cameraPosition: THREE.Vector3, frustum?: THREE.Frustum) {
+    this.#focus.copy(cameraPosition);
+    this.#focused = true;
     let grounding = GROUNDS_PER_FRAME;
     for (const group of this.#areas.values()) {
       for (const name of ['creatures', 'objects'] as const) {
@@ -1032,97 +1038,61 @@ class SpawnManager {
   /** Models animate through the shared model manager; nothing of the spawns' own moves yet */
   update(_deltaTime: number, _camera: THREE.Camera) {}
 
-  async #draw(spawns: ViewSpawns) {
+  /** A group with nothing in it yet: the holders for an area's NPCs, objects and their paths */
+  #empty(): THREE.Group {
     const group = new THREE.Group();
     group.name = 'spawns';
     group.matrixAutoUpdate = false;
-    await this.#fill(group, spawns);
+    for (const name of ['creatures', 'objects', 'paths']) {
+      const holder = new THREE.Group();
+      holder.name = name;
+      // Never moved themselves: only what is in them is worked out each frame
+      holder.matrixAutoUpdate = false;
+      group.add(holder);
+    }
+    group.userData.creatures = new globalThis.Map();
+    group.userData.objects = new globalThis.Map();
     return group;
   }
 
-  /**
-   * Fills an area's group with its spawns, freeing what it held. The new spawns are made aside and
-   * swapped in at the end; a fill overtaken by a later one frees what it made instead.
-   */
-  async #fill(group: THREE.Group, spawns: ViewSpawns) {
-    const fill = (group.userData.fill ?? 0) + 1;
-    group.userData.fill = fill;
-
-    const creatures = new THREE.Group();
-    creatures.name = 'creatures';
-    const objects = new THREE.Group();
-    objects.name = 'objects';
-    const paths = new THREE.Group();
-    paths.name = 'paths';
-    const made = [creatures, objects, paths];
-    // Never moved themselves: only what is in them is worked out each frame
-    for (const holder of made) holder.matrixAutoUpdate = false;
-
-    const drawnCreatures = await Promise.all(
-      spawns.creatures.map((creature) =>
-        this.#drawSpawn('creature', creature, () => this.#resolver.creature(creature.displayId, creature.preset ?? null), this.#transformOf('creature', creature)),
-      ),
-    );
-    for (const drawn of drawnCreatures) creatures.add(drawn);
-
-    // How they move: patrol routes and wander circles, in world coordinates
-    // One at a time: add() with nothing to add (an NPC that stands still) logs an error
-    for (const creature of spawns.creatures) for (const shown of movesOf(creature)) paths.add(shown);
-
-    const drawnObjects = await Promise.all(
-      spawns.objects.map((object) =>
-        this.#drawSpawn('object', object, () => this.#resolver.object(object.displayId), this.#transformOf('object', object)),
-      ),
-    );
-    for (const drawn of drawnObjects) objects.add(drawn);
-
-    if (group.userData.fill !== fill) {
-      for (const part of made) this.#release(part);
-      return;
-    }
-
-    this.#release(group);
-    group.clear();
-    group.add(...made);
-    // The creatures as drawn, so a route can be read back as the view has it, and the objects for the menu
-    group.userData.creatures = new globalThis.Map(spawns.creatures.map((c) => [c.guid, c]));
-    group.userData.objects = new globalThis.Map(spawns.objects.map((o) => [o.guid, o]));
-    this.#applyVisibility(group);
-    group.updateMatrixWorld(true);
-  }
-
-  /**
-   * Brings an area's drawn spawns up to date with what it should show, changing only what differs, so
-   * an edit shows at once and costs only itself: a spawn that moved or turned is moved; one that is new,
-   * or whose look changed, is drawn and swapped in once ready (until then the old one stands in, already
-   * moved); one no longer there is taken out; only the routes and wander circles that changed are drawn
-   * again. An area not yet filled is filled whole.
-   */
   async #patch(group: THREE.Group, spawns: ViewSpawns) {
-    const creatures = holderOf(group, 'creatures');
-    const objects = holderOf(group, 'objects');
-    const paths = holderOf(group, 'paths');
-    if (!creatures || !objects || !paths) {
-      await this.#fill(group, spawns);
-      return;
-    }
+    const creatures = holderOf(group, 'creatures')!;
+    const objects = holderOf(group, 'objects')!;
+    const paths = holderOf(group, 'paths')!;
     const containers = { creature: creatures, object: objects };
     const fill = (group.userData.fill ?? 0) + 1;
     group.userData.fill = fill;
 
-    const drawing: Promise<{ container: THREE.Object3D; made: THREE.Object3D; old: THREE.Object3D | undefined }>[] = [];
+    // Each is added as soon as it is made, unless the group was filled again or taken away meanwhile
+    const drawing: Promise<void>[] = [];
+    const add = (container: THREE.Object3D, made: THREE.Object3D, old: THREE.Object3D | undefined) => {
+      if (group.userData.fill !== fill) {
+        this.#remove(made);
+        return;
+      }
+      if (old) this.#remove(old);
+      container.add(made);
+      made.updateMatrixWorld(true);
+    };
+    // The ones nearest the camera are asked for first, so their models are the first made
+    const nearestFirst = <T extends { x: number; y: number; z: number }>(list: T[]): T[] => {
+      if (!this.#focused || list.length < 2) return list;
+      const { x, y, z } = this.#focus;
+      const away = new globalThis.Map(list.map((s) => [s, (s.x - x) ** 2 + (s.y - y) ** 2 + (s.z - z) ** 2]));
+      return [...list].sort((a, b) => away.get(a)! - away.get(b)!);
+    };
     const sync = (kind: 'creature' | 'object', list: (ViewCreature | ViewObject)[]) => {
       const container = containers[kind];
       const drawn = new globalThis.Map(container.children.map((c) => [c.userData.spawn.guid, c]));
       const wanted = new globalThis.Set<number>();
-      for (const spawn of list) {
+      for (const spawn of nearestFirst(list)) {
         wanted.add(spawn.guid);
         const transform = this.#transformOf(kind, spawn);
         const old = drawn.get(spawn.guid);
         if (old) this.#place(old, kind, spawn, transform);
         if (old && old.userData.lookKey === lookKeyOf(kind, spawn)) continue;
         const resolve = kind === 'creature' ? () => this.#resolver.creature(spawn.displayId, (spawn as ViewCreature).preset ?? null) : () => this.#resolver.object(spawn.displayId);
-        drawing.push(this.#drawSpawn(kind, spawn, resolve, transform).then((made) => ({ container, made, old })));
+        drawing.push(this.#drawSpawn(kind, spawn, resolve, transform).then((made) => add(container, made, old)));
       }
       for (const [guid, object] of drawn) {
         if (!wanted.has(guid)) this.#remove(object);
@@ -1150,16 +1120,7 @@ class SpawnManager {
     this.#applyVisibility(group);
     group.updateMatrixWorld(true);
 
-    const made = await Promise.all(drawing);
-    if (group.userData.fill !== fill) {
-      for (const { made: object } of made) this.#remove(object);
-      return;
-    }
-    for (const { container, made: object, old } of made) {
-      if (old) this.#remove(old);
-      container.add(object);
-    }
-    group.updateMatrixWorld(true);
+    await Promise.all(drawing);
   }
 
   /** A drawn spawn put where it now stands, and turned; one that moved is stood on the ground again from there */

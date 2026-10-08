@@ -26,15 +26,14 @@ export function createSpawnDock(dock: Dock, manager: SpawnManager): DockInstance
   const load = (): void => {
     if (disposed || !manager.canLoad(DOCK_AREA)) return;
     manager
-      .loadArea(DOCK_AREA, dock.map, WHOLE_MAP)
-      .then((group) => {
-        if (!group) return;
-        if (disposed) {
-          manager.removeArea(DOCK_AREA);
-          return;
-        }
+      .loadArea(DOCK_AREA, dock.map, WHOLE_MAP, (group) => {
+        // Shown while it fills; not if the dock went meanwhile
+        if (disposed) return;
         area = group;
         root.add(group);
+      })
+      .then(() => {
+        if (disposed) manager.removeArea(DOCK_AREA);
       })
       .catch(warn(`the passengers at dock ${dock.key}`));
   };
