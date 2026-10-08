@@ -41,11 +41,15 @@ const refuse = (res: http.ServerResponse, status: number, message: string, heade
 async function readJson(req: http.IncomingMessage): Promise<{ ok: true; body: unknown } | { ok: false; tooLarge?: true }> {
   const chunks: Buffer[] = [];
   let size = 0;
+  let tooLarge = false;
+  // Read to the end even when the body is too big (keeping nothing): leaving the loop early destroys
+  // the request, and a client still uploading would see a reset instead of the answer
   for await (const chunk of req) {
     size += (chunk as Buffer).length;
-    if (size > MAX_BODY_BYTES) return { ok: false, tooLarge: true };
-    chunks.push(chunk as Buffer);
+    if (size > MAX_BODY_BYTES) tooLarge = true;
+    else chunks.push(chunk as Buffer);
   }
+  if (tooLarge) return { ok: false, tooLarge: true };
   try {
     return { ok: true, body: JSON.parse(Buffer.concat(chunks).toString('utf8')) };
   } catch {
@@ -78,11 +82,7 @@ export function startMcpHttp(options: McpHttpOptions): Promise<McpHttp> {
       if (req.method !== 'POST') return refuse(res, 405, 'Use POST.', { allow: 'POST' });
 
       const parsed = await readJson(req);
-      if (!parsed.ok && parsed.tooLarge) {
-        // Stop reading what was sent: answer, then drop the connection
-        res.on('finish', () => req.destroy());
-        return refuse(res, 413, 'The body is too large.', { connection: 'close' });
-      }
+      if (!parsed.ok && parsed.tooLarge) return refuse(res, 413, 'The body is too large.', { connection: 'close' });
       if (!parsed.ok) return refuse(res, 400, 'The body must be JSON.');
 
       const mcp = options.createServer();
