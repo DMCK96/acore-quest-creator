@@ -68,6 +68,21 @@ describe('the spawn layer', () => {
     expect(await loading).toBeNull();
   });
 
+  it('frees what it drew when the area was removed while its models were being made', async () => {
+    let finish!: () => void;
+    const gate = new Promise<void>((r) => (finish = r));
+    const model = Object.assign(new THREE.Object3D(), { dispose: vi.fn() });
+    const m = manager({ creatures: [creature(1, 1)], objects: [], capped: { creatures: false, objects: false } }, {
+      createModel: async () => { await gate; return model; },
+    });
+    const loading = m.loadArea(1, 0, box);
+    await new Promise((r) => setTimeout(r, 0));
+    m.removeArea(1);
+    finish();
+    expect(await loading).toBeNull();
+    expect(model.dispose).toHaveBeenCalledTimes(1);
+  });
+
   it('hides and shows each kind without unloading it', async () => {
     const m = manager({ creatures: [creature(1, 1)], objects: [object(3, 2)], capped: { creatures: false, objects: false } });
     const group = (await m.loadArea(1, 0, box))!;
@@ -981,5 +996,97 @@ describe('an NPC being dragged', () => {
     const line = route.children.find((c) => c instanceof THREE.Line) as THREE.Line;
     expect(Array.from(line.geometry.getAttribute('position').array).slice(0, 3)).toEqual([0, 0, 0]);
     expect((group.getObjectByName('wander') as THREE.LineLoop).position.toArray()).toEqual([0, 0, 0]);
+  });
+});
+
+describe('drawing spawns through a vessel’s frame', () => {
+  const spawns = (creatures: object[], objects: object[] = []) => ({ creatures, objects, capped: { creatures: false, objects: false } });
+  const frame = { x: 100, y: 200, z: 5, heading: Math.PI / 2 };
+  const yaw = (o: THREE.Object3D) => new THREE.Euler().setFromQuaternion(o.quaternion).z;
+
+  it('puts a vessel-local NPC on the deck: moved, turned, and still local on its card', async () => {
+    const m = manager(spawns([creature(1, 1, { x: 1, y: 0, z: 0, orientation: 0 })]), { frame });
+    const group = (await m.loadArea(1, 0, box))!;
+    const npc = group.getObjectByName('creatures')!.children[0]!;
+    expect([npc.position.x, npc.position.y, npc.position.z].map((v) => Math.round(v * 1e4) / 1e4)).toEqual([100, 201, 5]);
+    expect(yaw(npc)).toBeCloseTo(Math.PI / 2);
+    expect(npc.userData.spawn.position).toEqual({ x: 1, y: 0, z: 0 });
+  });
+
+  it('turns an object with the vessel too', async () => {
+    const m = manager(spawns([], [object(3, 2, { x: 0, y: 0, z: 0 })]), { frame });
+    const obj = (await m.loadArea(1, 0, box))!.getObjectByName('objects')!.children[0]!;
+    expect(yaw(obj)).toBeCloseTo(Math.PI / 2);
+  });
+
+  it('never lifts an NPC onto terrain while in a frame', async () => {
+    const asked = vi.fn(() => 50);
+    const m = manager(spawns([creature(1, 1, { z: 10 })]), { frame, groundBelow: asked });
+    const group = (await m.loadArea(1, 0, box))!;
+    m.cull(new THREE.Vector3(100, 200, 15));
+    expect(asked).not.toHaveBeenCalled();
+    expect(group.getObjectByName('creatures')!.children[0]!.position.z).toBeCloseTo(15);
+  });
+
+  it('moves everything when the frame changes', async () => {
+    const m = manager(spawns([creature(1, 1, { x: 1, y: 0, z: 0 })], [object(3, 2, { x: 0, y: 2, z: 0 })]), { frame });
+    const group = (await m.loadArea(1, 0, box))!;
+    m.setFrame({ x: 0, y: 0, z: 0, heading: 0 });
+    const npc = group.getObjectByName('creatures')!.children[0]!;
+    const obj = group.getObjectByName('objects')!.children[0]!;
+    expect([npc.position.x, npc.position.y]).toEqual([1, 0]);
+    expect([obj.position.x, obj.position.y]).toEqual([0, 2]);
+    expect(yaw(npc)).toBeCloseTo(0);
+  });
+
+  it('draws the vessel at the frame, outside every area, and takes it away again', async () => {
+    const m = manager(spawns([]), { frame });
+    await m.setVessel({ displayId: 2 });
+    expect(m.decor.children).toHaveLength(1);
+    const vessel = m.decor.children[0]!;
+    expect([vessel.position.x, vessel.position.y, vessel.position.z]).toEqual([100, 200, 5]);
+    expect(yaw(vessel)).toBeCloseTo(Math.PI / 2);
+    expect(m.pick(new THREE.Ray(new THREE.Vector3(100, 200, 500), new THREE.Vector3(0, 0, -1)))).toBeNull();
+    m.setFrame({ x: 7, y: 8, z: 9, heading: 0 });
+    expect([m.decor.children[0]!.position.x, m.decor.children[0]!.position.y]).toEqual([7, 8]);
+    await m.setVessel(null);
+    expect(m.decor.children).toHaveLength(0);
+  });
+
+  it('draws without a vessel when its model is missing', async () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const m = manager(spawns([]), { frame });
+    await m.setVessel({ displayId: 404 });
+    expect(m.decor.children).toHaveLength(0);
+    warn.mockRestore();
+  });
+
+  it('hides walking paths on a vessel, and shows them again off it', async () => {
+    const m = manager(spawns([creature(1, 1, { path: [{ x: 10, y: 0, z: 0 }, { x: 20, y: 0, z: 0 }] })]), { frame });
+    const group = (await m.loadArea(1, 0, box))!;
+    m.setActiveRoutes([1]);
+    m.cull(new THREE.Vector3(0, 0, 0));
+    expect(group.getObjectByName('paths')!.visible).toBe(false);
+    expect(m.pickRoutePoint(new THREE.Ray(new THREE.Vector3(10, 0, 50), new THREE.Vector3(0, 0, -1)), 1)).toBeNull();
+    m.setFrame({ x: 0, y: 0, z: 0, heading: 0 });
+    expect(group.getObjectByName('paths')!.visible).toBe(true);
+    expect(m.pickRoutePoint(new THREE.Ray(new THREE.Vector3(10, 0, 50), new THREE.Vector3(0, 0, -1)), 1)).toBe(0);
+  });
+
+  it('tells the menu where a spawn stands in the view, carried by the vessel', async () => {
+    const m = manager(spawns([creature(1, 1, { x: 1, y: 0, z: 0, orientation: 0 })], [object(3, 2, { x: 0, y: 2, z: 0 })]), { frame });
+    await m.loadArea(1, 0, box);
+    const npc = m.info('creature', 1)!.placement;
+    expect([npc.x, npc.y, npc.z].map((v) => Math.round(v * 1e4) / 1e4)).toEqual([100, 201, 5]);
+    expect(npc.orientation).toBeCloseTo(Math.PI / 2);
+    const obj = m.info('object', 3)!.placement;
+    expect([obj.x, obj.y].map((v) => Math.round(v * 1e4) / 1e4)).toEqual([98, 200]);
+    expect(obj.orientation).toBeCloseTo(Math.PI / 2);
+  });
+
+  it('is the identity by default', async () => {
+    const m = manager(spawns([creature(1, 1, { x: 4, y: 5, z: 6 })]));
+    const npc = (await m.loadArea(1, 0, box))!.getObjectByName('creatures')!.children[0]!;
+    expect([npc.position.x, npc.position.y, npc.position.z]).toEqual([4, 5, 6]);
   });
 });

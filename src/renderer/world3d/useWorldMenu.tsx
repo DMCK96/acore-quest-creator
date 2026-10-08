@@ -9,6 +9,7 @@ import type { ProjectEntities } from '@core/entities/model';
 import type { At, MenuAction, MenuGroup, MenuSpawn, MenuTarget, QuestMenuInfo } from './menu/model';
 import { buildMenu, NEEDS_GROUND } from './menu/section';
 import { subjectOf } from './menu/subject';
+import { aboardVessel } from './frame-edit';
 import { clipEntries, copySpawns, duplicateOffset, entriesOf, layoutAt, pasteable, type ClipEntry } from './clipboard';
 import { placementAt } from './placing';
 import { WorldContextMenu } from './WorldContextMenu';
@@ -39,6 +40,10 @@ export interface WorldMenuDeps {
   setNote(note: string | null): void;
   /** The server's floor nearest a height at a place, or null when it has none there */
   floorZ(x: number, y: number, nearZ: number): Promise<number | null>;
+  /** A place in the view as a spawn's row stores it (vessel-local on a transport) */
+  toRow(at: Placement): Placement;
+  /** The view shows a vessel, where walking paths are not drawn */
+  vessel: boolean;
   placing: boolean;
   stopPlacing(): void;
   clearSelection(): void;
@@ -146,6 +151,7 @@ export function useWorldMenu(deps: WorldMenuDeps): {
       quest: quest ?? null,
       project: onNewQuest !== undefined,
       marked,
+      vessel: aboardVessel(target, d.current.vessel, (kind, guid) => d.current.world.current?.frameOfSpawn(kind, guid) ?? null),
     });
     if (groups.length > 0) setMenu({ groups, at: client });
   };
@@ -155,8 +161,9 @@ export function useWorldMenu(deps: WorldMenuDeps): {
 
   /** Puts one spawn down: a quest's own goes to the quest, the rest to the world layer. The edit that did it, or null */
   const putOne = async (put: Put): Promise<SpawnEdit | null> => {
-    const { api, map, onOwnEdit, setNote, takeLayer } = d.current;
+    const { api, map, onOwnEdit, setNote, takeLayer, toRow } = d.current;
     if (!api) return null;
+    const at = toRow(put.at);
     if (put.own) {
       if (!onOwnEdit) return null;
       const made = await newSpawnGuid(api, put.kind);
@@ -164,16 +171,16 @@ export function useWorldMenu(deps: WorldMenuDeps): {
         setNote(made.error);
         return null;
       }
-      const edit: SpawnEdit = { kind: 'presence', spawn: { kind: put.kind, guid: made.guid, entry: put.entry, own: true }, present: true, at: put.at, map };
+      const edit: SpawnEdit = { kind: 'presence', spawn: { kind: put.kind, guid: made.guid, entry: put.entry, own: true }, present: true, at, map };
       return onOwnEdit(edit) === false ? null : edit;
     }
-    const result = await api.worldAddSpawn(put.kind === 'object' ? 'gameobject' : 'creature', put.entry, map, put.at);
+    const result = await api.worldAddSpawn(put.kind === 'object' ? 'gameobject' : 'creature', put.entry, map, at);
     if (!result.ok) {
       setNote(result.error.message);
       return null;
     }
     takeLayer(result.value.layer);
-    return { kind: 'presence', spawn: { kind: put.kind, guid: result.value.guid, entry: put.entry, own: false }, present: true, at: put.at, map };
+    return { kind: 'presence', spawn: { kind: put.kind, guid: result.value.guid, entry: put.entry, own: false }, present: true, at, map };
   };
 
   /** Puts spawns down one after another, selects them, and makes them one undo step; how many went down */
@@ -320,7 +327,7 @@ export function useWorldMenu(deps: WorldMenuDeps): {
         setPlace({ what: action.what, at: action.at });
         return;
       case 'newEntity':
-        await d.current.onCreateEntity?.(action.what, await floored(facingCamera(action.at, action.what)));
+        await d.current.onCreateEntity?.(action.what, d.current.toRow(await floored(facingCamera(action.at, action.what))));
         return;
       case 'editEntity':
         d.current.onEditEntity?.(action.spawn.kind, action.spawn.entry);

@@ -15,7 +15,11 @@ import { ownEdit } from './own-edit';
 import { newSpawnGuid } from './spawn-guid';
 import { chainOf, questMenuInfo } from './quest-context';
 import { OBJECTIVES_FULL } from './menu/section';
-import { groupWorldMaps, worldMapById } from '@core/map/world-maps';
+import { groupWorldMaps, isTerrainMap, worldMapById } from '@core/map/world-maps';
+import { frameOfView, hostMapIdOf, normaliseView, type TransportView } from '@core/map/transport-view';
+import { docksOn } from '@core/map/transport-docks';
+import { toLocal, toWorld, type Frame } from '@core/map/transport-frame';
+import { TransportBar } from './TransportBar';
 import { useClientMaps } from './useClientMaps';
 import type { TeleportSpot } from '@core/map/teleports';
 import { World3DView, type FocusTarget } from './World3DView';
@@ -29,7 +33,7 @@ import { questLabel } from '@core/links/drag-link';
 import { useFocusFollow } from './useFocusFollow';
 import type { FocusPart, FocusSlice } from '../state/app/focus';
 import { NEEDS_DATABASE } from './menu/section';
-import { readLastPlace, writeLastPlace } from './last-place';
+import { readLastPlace, readSavedPlace, writeLastPlace } from './last-place';
 import { markWelcomeSeen, welcomeSeen } from './welcome-seen';
 import { Welcome } from './Welcome';
 import { useQuestMarkers } from './useQuestMarkers';
@@ -224,6 +228,38 @@ export function WorldWorkspace({
   const [at, setAt] = useState<Point>({ x: first.x, y: first.y, z: first.z });
   const mapRef = useRef(mapId);
   mapRef.current = mapId;
+  // On a transport's map: the route and stop its vessel is shown at, as last chosen (made valid for the map below)
+  const [chosenView, setChosenView] = useState<Partial<TransportView> | undefined>(first.transport);
+  const shownMap = worldMapById(mapId);
+  const transportMap = shownMap?.kind === 'transport' ? shownMap : null;
+  const transportView = transportMap ? normaliseView(transportMap, chosenView, isTerrainMap) : null;
+  // The vessels that stop on the terrain shown, but for the transport map the view itself shows
+  const hostMapId = transportMap && transportView ? hostMapIdOf(transportMap, transportView) : mapId;
+  const docks = useMemo(() => docksOn(maps, hostMapId, transportMap?.id), [maps, hostMapId, transportMap?.id]);
+  const viewRef = useRef(transportView);
+  viewRef.current = transportView;
+  /** Remembers where the camera is on the map shown, with the transport's route and stop there */
+  const remember = (point: Point): void => writeLastPlace({ map: mapRef.current, ...point, ...(viewRef.current && { transport: viewRef.current }) });
+  /** The vessel a transport map's passengers are shown on: at the stop shown on the open map, else at its dock, where opening it starts */
+  const vesselFrame = (map: number): Frame | null => {
+    const transportOf = worldMapById(map);
+    if (transportOf?.kind !== 'transport') return null;
+    return frameOfView(transportOf, map === mapRef.current && viewRef.current ? viewRef.current : normaliseView(transportOf, undefined, isTerrainMap));
+  };
+  /** Where a spawn's stored place is in the World: a passenger's vessel-local place, carried by its vessel */
+  const inWorld = (map: number, stored: Point): Point => {
+    const frame = vesselFrame(map);
+    if (!frame) return stored;
+    const { x, y, z } = toWorld(frame, stored);
+    return { x, y, z };
+  };
+  /** A place in the World as a spawn on `map` stores it, to measure from it to spawns */
+  const asStored = (map: number, point: Point): Point => {
+    const frame = vesselFrame(map);
+    if (!frame) return point;
+    const { x, y, z } = toLocal(frame, point);
+    return { x, y, z };
+  };
   // The coordinates being typed; they only move the camera on Go.
   const [typed, setTyped] = useState({ x: String(first.x), y: String(first.y), z: String(first.z) });
   const [area, setArea] = useState<string | null>(null);
@@ -252,12 +288,29 @@ export function WorldWorkspace({
 
   /** Moves the camera to a point, on the map given (this one by default), and remembers it */
   const goTo = (point: Point, map = mapRef.current): void => {
-    if (map !== mapRef.current) setMapId(map);
+    if (map !== mapRef.current) {
+      setMapId(map);
+      // Another map starts at its own route's first stop
+      setChosenView(undefined);
+      viewRef.current = null;
+    }
     mapRef.current = map;
     setAt(point);
     placeRef.current = point;
     setTyped({ x: String(point.x), y: String(point.y), z: String(point.z) });
-    writeLastPlace({ map, ...point });
+    remember(point);
+  };
+  /**
+   * Another route or stop of the transport shown: the camera goes to the vessel there. Not a jump Back
+   * returns from: the place left may be on another continent's terrain than the one the vessel is now on
+   */
+  const chooseView = (view: TransportView): void => {
+    if (!transportMap) return;
+    setChosenView(view);
+    viewRef.current = view;
+    lastCameraMove.current = nowRef.current();
+    const { x, y, z } = frameOfView(transportMap, view);
+    goTo({ x, y, z });
   };
   // Where the camera has been before each jump, for Back
   const [back, setBack] = useState<CameraPlace[]>([]);
@@ -283,6 +336,24 @@ export function WorldWorkspace({
   };
   const backRef = useRef(goBack);
   backRef.current = goBack;
+  // A place left on a map the client holds (a dungeon, a transport) is only known once the client's maps are
+  // read: the World opens there then, at the route and stop it was left at, unless the author went elsewhere first
+  useEffect(() => {
+    const saved = readSavedPlace();
+    if (!saved || saved.map === first.map) return;
+    let live = true;
+    void mapsReady().then(() => {
+      if (!live || mapRef.current !== first.map || !worldMapById(saved.map)) return;
+      goTo({ x: saved.x, y: saved.y, z: saved.z }, saved.map);
+      setChosenView(saved.transport);
+      writeLastPlace(saved);
+    });
+    return () => {
+      live = false;
+    };
+    // Once, for the place the World was opened with
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
   // Picking a map in the Coordinates form already jumped (and remembered where from); the Go that
   // follows is part of the same move, so it does not remember the map's start as a place to go back to
   const mapPicked = useRef(false);
@@ -299,7 +370,7 @@ export function WorldWorkspace({
   // Show on the undo note: the camera goes to where the step happened
   useEffect(() => {
     if (!goToRequest || !worldMapById(goToRequest.map)) return;
-    jump({ x: goToRequest.x, y: goToRequest.y, z: goToRequest.z }, goToRequest.map);
+    jump(inWorld(goToRequest.map, { x: goToRequest.x, y: goToRequest.y, z: goToRequest.z }), goToRequest.map);
     // Only a new request moves the camera
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [goToRequest?.nonce]);
@@ -309,7 +380,7 @@ export function WorldWorkspace({
    * nothing of it is placed, or why it could not be told.
    */
   const placeOf = async (target: ShowTarget): Promise<{ spawn: FoundSpawn | null; name?: string } | { error: string }> => {
-    const from = { map: mapRef.current, ...placeRef.current };
+    const from = { map: mapRef.current, ...asStored(mapRef.current, placeRef.current) };
     const only = 'kind' in target ? { kind: target.kind, entry: target.entry } : undefined;
     if (!api) return { error: NEEDS_DATABASE };
     // The client's other maps count as drawable once they are read
@@ -346,12 +417,13 @@ export function WorldWorkspace({
       followed.current = 'spawn' in place ? place.spawn : null;
       return place;
     },
-    jump: ({ map, ...point }) => jump(point, map),
+    jump: ({ map, ...point }) => jump(inWorld(map, point), map),
     select: ({ kind, guid }) => {
       const spawn = followed.current;
       if (!spawn || spawn.kind !== kind || spawn.guid !== guid || spawn.map !== mapRef.current) return;
       // The camera went to it, and closes in; one the author has moved away from is selected only while it is in view
-      const there = Math.hypot(spawn.x - placeRef.current.x, spawn.y - placeRef.current.y, spawn.z - placeRef.current.z) <= 1;
+      const seen = inWorld(spawn.map, spawn);
+      const there = Math.hypot(seen.x - placeRef.current.x, seen.y - placeRef.current.y, seen.z - placeRef.current.z) <= 1;
       bringIntoView(spawn, !there);
     },
     note: (text) => {
@@ -392,7 +464,7 @@ export function WorldWorkspace({
   }
   const find = (spawn: FoundSpawn): void => {
     setFinding(false);
-    jump({ x: spawn.x, y: spawn.y, z: spawn.z }, spawn.map);
+    jump(inWorld(spawn.map, spawn), spawn.map);
     bringIntoView(spawn);
     selectSpawn(spawn);
   };
@@ -402,7 +474,7 @@ export function WorldWorkspace({
     const placed = view.members.filter((m) => m.at);
     if (placed.length > 0) {
       const mean = (axis: 'x' | 'y' | 'z'): number => placed.reduce((sum, m) => sum + m.at![axis], 0) / placed.length;
-      jump({ x: mean('x'), y: mean('y'), z: mean('z') }, view.map);
+      jump(inWorld(view.map, { x: mean('x'), y: mean('y'), z: mean('z') }), view.map);
     }
     const first = view.members.find((m) => m.type === 'spawn' && m.at);
     const [prefix, guid] = first?.key.split(':') ?? [];
@@ -570,7 +642,7 @@ export function WorldWorkspace({
         onArea={setArea}
         onPlaceChange={(place) => {
           placeRef.current = place;
-          writeLastPlace({ map: mapRef.current, ...place });
+          remember(place);
         }}
         onCameraInput={() => {
           lastCameraMove.current = nowRef.current();
@@ -602,7 +674,7 @@ export function WorldWorkspace({
         onCreateEntity={createEntity}
         onEditEntity={(kind, entry) => void editEntity(kind, entry)}
         onGoToSpawn={({ map, ...target }) => {
-          jump({ x: target.x, y: target.y, z: target.z }, map);
+          jump(inWorld(map, target), map);
           setFocus((previous) => ({ ...target, nonce: (previous?.nonce ?? 0) + 1 }));
         }}
         onSetLootable={setLootable}
@@ -612,7 +684,12 @@ export function WorldWorkspace({
         markers={markers.shown}
         onMarkerMove={markers.move}
         markerFocus={markerFocus}
+        transport={transportMap && transportView ? { map: transportMap, view: transportView } : undefined}
+        docks={docks}
       />
+      {transportMap && transportView && (
+        <TransportBar map={transportMap} view={transportView} hostName={(id) => worldMapById(id)?.name ?? `Map ${id}`} onView={chooseView} />
+      )}
       {showing && (
         <p role="status" className="world3d__placing">
           Showing {showing}
@@ -703,10 +780,10 @@ export function WorldWorkspace({
           onClose={() => leaveWelcome()}
         />
       )}
-      {finding && <FindDialog from={{ map: mapId, ...at }} onGo={find} onGoToGroup={findGroup} onClose={() => setFinding(false)} />}
+      {finding && <FindDialog from={{ map: mapId, ...asStored(mapId, at) }} onGo={find} onGoToGroup={findGroup} onClose={() => setFinding(false)} />}
       {preset && (
         <FindDialog
-          from={{ map: mapId, ...at }}
+          from={{ map: mapId, ...asStored(mapId, at) }}
           preset={preset}
           onGo={(spawn) => {
             setPreset(null);

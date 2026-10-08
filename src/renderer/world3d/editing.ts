@@ -37,6 +37,8 @@ export interface EditingWorld {
   /** The ray from the camera through a place on screen */
   rayAt(ndcX: number, ndcY: number): THREE.Ray;
   findSpawn(kind: Kind, guid: number): THREE.Object3D | null;
+  /** Whether a spawn stands aboard a docked vessel, whose deck is its floor, not the server's under the vessel */
+  aboard?(kind: Kind, guid: number): boolean;
   spawnRoute(guid: number): { pathId: number; own: boolean; entry: number; points: EditPoint[] } | null;
   pickRoutePoint(ray: THREE.Ray, guid: number): number | null;
   /** Draws a route as edited until the host stores it */
@@ -541,6 +543,7 @@ export class Editor {
         const floorZ = this.#options.floorZ;
         const asks = [
           ...spawns.map(async (s) => {
+            if (this.#world.aboard?.(s.kind, s.guid)) return true;
             const floor = await floorZ(s.object.position.x, s.object.position.y, s.object.position.z);
             if (floor !== null) s.object.position.z = floor;
             return floor !== null;

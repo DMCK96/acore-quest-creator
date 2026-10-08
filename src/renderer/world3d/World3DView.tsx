@@ -1,7 +1,12 @@
 import { Component, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { assetUrl } from '@core/client/asset-url';
-import { worldMapById, worldMapDirectory } from '@core/map/world-maps';
-import { createWorld3D, type Scenery, type SelectionSummary, type World3D } from './world3d';
+import { worldMapById, worldMapDirectory, type WorldMap } from '@core/map/world-maps';
+import { IDENTITY_FRAME, toWorld } from '@core/map/transport-frame';
+import type { Dock } from '@core/map/transport-docks';
+import { frameOfView, hostMapIdOf, routeLinesOf, templateOf, type TransportView } from '@core/map/transport-view';
+import { createWorld3D, type Scenery, type SelectionSummary, type TransportScene, type World3D } from './world3d';
+import { frameFor, localiseEdit, localisePlacement } from './frame-edit';
+import { storedPlaceAfter } from './stored-place';
 import type { Tool } from './controls';
 import { FALLOFF_DEFAULT, FALLOFF_MAX, FALLOFF_MIN } from './scene/edit/falloff';
 import { summaryText } from './summary';
@@ -63,24 +68,26 @@ const CONTROLS: [string, string][] = [
   ['Shift', 'Faster'],
 ];
 
+const NO_DOCKS: readonly Dock[] = [];
 /** Where the layer checkboxes are remembered, per viewer. */
 const LAYERS_KEY = 'acqc.world3d.layers';
 /**
  * What the layers card shows: the world's scenery, its NPCs, objects and their paths, and the game
  * event it is drawn during (with that event's name, kept so the choice reads right out of its range)
  */
-type Layers = SpawnVisibility & Scenery & { eventName?: string; tool: Tool; falloff: boolean; falloffRadius: number };
+type Layers = SpawnVisibility & Scenery & { transports: boolean; eventName?: string; tool: Tool; falloff: boolean; falloffRadius: number };
 /** No event: the everyday world. Event spawns are only in the world while their event runs. */
 const DEFAULT_LAYERS: Layers = {
-  buildings: true, doodads: true, creatures: true, objects: true, paths: true, events: 'none', tool: 'camera', falloff: false, falloffRadius: FALLOFF_DEFAULT,
+  buildings: true, doodads: true, creatures: true, objects: true, paths: true, transports: true, events: 'none', tool: 'camera', falloff: false, falloffRadius: FALLOFF_DEFAULT,
 };
-type Toggle = 'buildings' | 'doodads' | 'creatures' | 'objects' | 'paths';
+type Toggle = 'buildings' | 'doodads' | 'creatures' | 'objects' | 'paths' | 'transports';
 const LAYER_LABELS: [Toggle, string, string?][] = [
   ['buildings', 'Buildings', 'Houses, towers and what is inside them. Hidden, clicks land on the ground under them'],
   ['doodads', 'Trees & props', 'Trees, bushes, fences, carts and the rest of the small scenery'],
   ['creatures', 'NPCs'],
   ['objects', 'Objects'],
   ['paths', 'Paths'],
+  ['transports', 'Transports', 'Vessels at their docks, with the NPCs and objects aboard'],
 ];
 
 const spawnsOf = ({ creatures, objects, paths, events }: Layers): SpawnVisibility => ({ creatures, objects, paths, events });
@@ -170,6 +177,18 @@ interface ViewProps {
   onMarkerMove?(id: string, to: { x: number; y: number; z: number }): void;
   /** A marker to select, once its world is there (the host takes the camera to it) */
   markerFocus?: MarkerFocus;
+  /** On a transport's map (`map`): the vessel shown at a stop of one of its routes, on that stop's terrain */
+  transport?: { map: WorldMap; view: TransportView };
+  /** The vessels that stop on the terrain shown, drawn at their docks with their passengers (see the Transports layer) */
+  docks?: readonly Dock[];
+}
+
+/** A transport at a stop: the terrain it is on, and what the view draws of it there */
+function transportSceneOf(map: WorldMap, view: TransportView): { hostMap: number; scene: TransportScene } {
+  return {
+    hostMap: hostMapIdOf(map, view),
+    scene: { frame: frameOfView(map, view), vessel: { displayId: templateOf(map, view).displayId }, route: routeLinesOf(map, view) },
+  };
 }
 
 /** How often, and how many times once the world has loaded its NPCs, a patrol request looks for its NPC in the view */
@@ -240,7 +259,7 @@ class Contained extends Component<{ children: ReactNode }, { failure: string | n
 
 function WorldStage({
   map, start, hasClient, own, onSelect, onOwnEdit, focus, showArea = true, onArea, onPlaceChange, onCameraInput, quest, chainIds, onQuestRole, onNewQuest, onOpenQuest, onShowSpawns,
-  onCreateEntity, onEditEntity, onSetLootable, onGoToSpawn, placeRequest, patrolRequest, onRequestEnd, markers, onMarkerMove, markerFocus,
+  onCreateEntity, onEditEntity, onSetLootable, onGoToSpawn, placeRequest, patrolRequest, onRequestEnd, markers, onMarkerMove, markerFocus, transport, docks,
 }: ViewProps): React.JSX.Element {
   const container = useRef<HTMLDivElement>(null);
   const world = useRef<World3D | null>(null);
@@ -308,6 +327,12 @@ function WorldStage({
   endPatrolRef.current = endPatrol;
   /** A layer from the Project changes list (after a revert): kept and drawn */
   const takeLayer = (next: WorldLayer): void => {
+    // The card follows the selected spawn to where the layer now stores it (back where it was, after an undo or a revert)
+    const before = layerRef.current;
+    setSelected((s) => {
+      const stored = s && !s.own ? storedPlaceAfter(before, next, s.kind, s.guid) : null;
+      return stored ? { ...s!, position: stored } : s;
+    });
     layerRef.current = next;
     setLayer(next);
     setProjectLayer.current?.(next);
@@ -352,7 +377,9 @@ function WorldStage({
         [target.kind === 'creature' ? 'creatures' : 'objects']: true,
         ...(target.event && l.events !== 'all' && l.events !== target.event.id ? { events: target.event.id, eventName: target.event.name } : {}),
       }));
-      current.lookAt(target.x, target.y, target.z + 1, true);
+      // A passenger's stored place is on its vessel
+      const seen = toWorld(frameFor(current.frameOfSpawn(target.kind, target.guid), frameNow()), target);
+      current.lookAt(seen.x, seen.y, seen.z + 1, true);
     }
     current.select({ kind: target.kind, guid: target.guid });
     setSelected({
@@ -372,7 +399,14 @@ function WorldStage({
   ownRef.current = own;
   // A stable key, so the world is told only when the quest's spawns really change
   const ownKey = JSON.stringify(own ?? null);
-  const directory = worldMapDirectory(map);
+  // On a transport, the terrain is its stop's and the spawns are its passengers, stored vessel-local
+  const shownTransport = transport ? transportSceneOf(transport.map, transport.view) : null;
+  const hostMap = shownTransport?.hostMap ?? map;
+  const transportRef = useRef<TransportScene | null>(null);
+  transportRef.current = shownTransport?.scene ?? null;
+  /** The frame the spawns' rows are in: a place in the view is stored through it */
+  const frameNow = () => transportRef.current?.frame ?? IDENTITY_FRAME;
+  const directory = worldMapDirectory(hostMap);
   const mapRef = useRef(map);
   mapRef.current = map;
   // Edits as the view sends them, set by the world that is up; paths started here, which the database lacks
@@ -384,8 +418,9 @@ function WorldStage({
   const newPaths = useRef(new Set<number>());
   /** A path the database does not have: started here, or found in the layer made from nothing (before a restart) */
   const isNewPath = (pathId: number): boolean => newPaths.current.has(pathId) || layerRef.current.routes.some((r) => r.pathId === pathId && r.original.length === 0);
-  /** The server's floor nearest a height at a place on this map, or null when it has none there */
+  /** The server's floor nearest a height at a place on this map, or null when it has none there (a vessel's deck has none) */
   const floorAt = async (x: number, y: number, nearZ: number): Promise<number | null> => {
+    if (transportRef.current) return null;
     const answer = await apiRef.current?.mapFloors(mapRef.current, x, y);
     if (!answer?.ok || 'reason' in answer.value) return null;
     return chooseZ(floorCandidates(answer.value), nearZ);
@@ -398,6 +433,8 @@ function WorldStage({
     takeLayer: (next) => takeLayer(next),
     setNote,
     floorZ: floorAt,
+    toRow: (at) => localisePlacement(at, frameNow()),
+    vessel: shownTransport !== null,
     placing: placing !== null,
     stopPlacing: () => setPlacing(null),
     clearSelection: () => clearSelection(),
@@ -504,6 +541,8 @@ function WorldStage({
     const place = async ({ target, at }: PlaceRequest): Promise<void> => {
       const current = apiRef.current;
       if (!current) return;
+      // Where it is stored, and shown on its card: on a vessel, vessel-local
+      const row = localisePlacement(at, frameNow());
       const entities = projectEntitiesRef.current;
       const own = onOwnEditRef.current && (target.kind === 'object' ? entities?.objects : entities?.npcs)?.find((e) => e.entry === target.entry);
       if (own) {
@@ -516,12 +555,12 @@ function WorldStage({
         const spawn = { kind: target.kind, guid: made.guid, entry: target.entry, own: true };
         if (!(await send({ kind: 'presence', spawn, present: true, at, map }))) return;
         created?.select({ kind: target.kind, guid: made.guid });
-        setSelected({ ...spawn, name: own.name, added: false, pathId: 0, event: null, position: { x: at.x, y: at.y, z: at.z } });
+        setSelected({ ...spawn, name: own.name, added: false, pathId: 0, event: null, position: { x: row.x, y: row.y, z: row.z } });
         setNote(null);
         return;
       }
       const kind = target.kind === 'object' ? 'gameobject' : 'creature';
-      const result = await current.worldAddSpawn(kind, target.entry, map, at);
+      const result = await current.worldAddSpawn(kind, target.entry, map, row);
       if (!live) return;
       if (!result.ok) {
         setNote(result.error.message);
@@ -533,14 +572,16 @@ function WorldStage({
       created?.select({ kind: target.kind, guid });
       setSelected({
         kind: target.kind, guid, entry: target.entry, name: added?.name ?? '', own: false, added: true, pathId: 0, event: null,
-        position: { x: at.x, y: at.y, z: at.z },
+        position: { x: row.x, y: row.y, z: row.z },
       });
       setNote(null);
     };
     const floorZ = floorAt;
     // The quest's own edits are taken at once; world edits wait their turn. One that fails outright is
-    // said, and the queue goes on
-    const send = (change: SpawnEdit): Promise<boolean> => {
+    // said, and the queue goes on. The scene's places are stored through the vessel's frame, once, here
+    const send = (scene: SpawnEdit): Promise<boolean> => {
+      const change = localiseEdit(scene, frameFor(created?.frameOfSpawn(scene.spawn.kind, scene.spawn.guid) ?? null, frameNow()));
+      if (!change) return Promise.resolve(false);
       if (change.spawn.own && onOwnEditRef.current) return edit(change);
       waiting += 1;
       const kept = queue
@@ -590,7 +631,9 @@ function WorldStage({
             container: element,
             directory,
             map,
-            wmo: worldMapById(map)?.wmo,
+            hostMap,
+            wmo: worldMapById(hostMap)?.wmo,
+            ...transportRef.current,
             start: startRef.current,
             onArea: (name) => {
               setArea(name);
@@ -622,7 +665,8 @@ function WorldStage({
             onTool: (tool) => live && setLayers((l) => ({ ...l, tool })),
             onCameraInput: () => live && onCameraInputRef.current?.(),
             onFalloff: (falloff) => live && setLayers((l) => ({ ...l, falloff: falloff.on, falloffRadius: falloff.radius })),
-            floorZ,
+            // A vessel's deck is the only floor there: a drag or a placing stays on it, with no word about the server's
+            floorZ: transportRef.current ? undefined : floorZ,
             beforeRouteEdit,
             onNotice: (message) => live && setNote(message),
             onPlace: (request) => placeStep(request),
@@ -639,6 +683,8 @@ function WorldStage({
           });
           created.setSpawnVisibility(spawnsOf(layersRef.current));
           created.setScenery(sceneryOf(layersRef.current));
+          created.setDocksEnabled(layersRef.current.transports);
+          created.setDocks(docksRef.current);
           created.setTool(layersRef.current.tool);
           created.setFalloff({ on: layersRef.current.falloff, radius: layersRef.current.falloffRadius });
           if (looksRef.current.size > 0) created.setLooks(looksRef.current);
@@ -662,7 +708,13 @@ function WorldStage({
       created?.dispose();
       world.current = null;
     };
-  }, [directory, map, hasClient]);
+  }, [directory, map, hostMap, hasClient]);
+
+  // Another stop on the same terrain, or another route: the vessel moves without the world being built again
+  const transportKey = JSON.stringify(transportRef.current);
+  useEffect(() => {
+    if (transportRef.current) world.current?.setTransport(transportRef.current);
+  }, [transportKey]);
 
   // Edited existing NPCs and objects, drawn with their new look
   const looks = useMemo(() => looksOf(projectEntities ?? EMPTY_ENTITIES), [projectEntities]);
@@ -704,6 +756,13 @@ function WorldStage({
     };
   }, [groupsKey]);
 
+  // The docked vessels, as the host lists them
+  const docksRef = useRef<readonly Dock[]>(docks ?? NO_DOCKS);
+  docksRef.current = docks ?? NO_DOCKS;
+  useEffect(() => {
+    world.current?.setDocks(docks ?? NO_DOCKS);
+  }, [docks]);
+
   // The open quest's own spawns, redrawn as they change.
   useEffect(() => {
     if (ownRef.current) world.current?.setOwnSpawns(ownRef.current);
@@ -713,6 +772,10 @@ function WorldStage({
   useEffect(() => {
     world.current?.setSpawnVisibility(spawnsOf(layers));
     world.current?.setScenery(sceneryOf(layers));
+    // A passenger selected at a dock goes with its vessel: nothing is left selected that is not drawn
+    const shown = world.current;
+    if (shown && !layers.transports && shown.selectedSpawns().some((s) => shown.frameOfSpawn(s.kind, s.guid) !== null)) clearSelection();
+    shown?.setDocksEnabled(layers.transports);
     world.current?.setTool(layers.tool);
     world.current?.setFalloff({ on: layers.falloff, radius: layers.falloffRadius });
     try {

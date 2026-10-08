@@ -3,14 +3,14 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { act, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 
-type Fake = { setScenery: ReturnType<typeof vi.fn>; setSpawnVisibility: ReturnType<typeof vi.fn>; at: { x: number; y: number; z: number }; area: (name: string) => void };
+type Fake = { setScenery: ReturnType<typeof vi.fn>; setSpawnVisibility: ReturnType<typeof vi.fn>; setDocks: ReturnType<typeof vi.fn>; setDocksEnabled: ReturnType<typeof vi.fn>; select: ReturnType<typeof vi.fn>; selectedSpawns: ReturnType<typeof vi.fn>; frameOfSpawn: ReturnType<typeof vi.fn>; at: { x: number; y: number; z: number }; area: (name: string) => void };
 const created = vi.hoisted(() => [] as Fake[]);
 const nearby = vi.hoisted(() => ({ list: [] as { id: number; name: string }[] }));
 
 vi.mock('../../src/renderer/world3d/world3d', () => ({
   createWorld3D: (options: { onArea?: (name: string) => void }) => {
     const world = {
-      at: { x: 1, y: 2, z: 3 }, setScenery: vi.fn(), setTool: vi.fn(), setFalloff: vi.fn(), dispose: vi.fn(), cancelPath: vi.fn(), lookAt: vi.fn(), setSpawnVisibility: vi.fn(),
+      at: { x: 1, y: 2, z: 3 }, setScenery: vi.fn(), setTool: vi.fn(), setFalloff: vi.fn(), dispose: vi.fn(), cancelPath: vi.fn(), lookAt: vi.fn(), setSpawnVisibility: vi.fn(), setDocks: vi.fn(), setDocksEnabled: vi.fn(), frameOfSpawn: vi.fn(() => null), select: vi.fn(), selectedSpawns: vi.fn(() => []),
       spawnStatus: () => ({ capped: { creatures: false, objects: false }, error: null, loading: 0, events: nearby.list }),
       target() { return world.at; }, area: (name: string) => options.onArea?.(name),
     };
@@ -98,6 +98,63 @@ describe('the 3D view in a workspace', () => {
     expect(within(screen.getByRole('group', { name: 'Layers' })).getByRole('checkbox', { name: 'Buildings' })).not.toBeChecked();
     expect(created[1]!.setScenery).toHaveBeenLastCalledWith({ buildings: false, doodads: false });
     localStorage.removeItem('acqc.world3d.layers');
+  });
+
+  it('has a Transports layer, on by default, that switches the docked vessels and is remembered', async () => {
+    clientHasEverything();
+    localStorage.removeItem('acqc.world3d.layers');
+    const first = render(<World3DView map={0} start={start} hasClient />);
+    await waitFor(() => expect(created).toHaveLength(1));
+    const transports = within(screen.getByRole('group', { name: 'Layers' })).getByRole('checkbox', { name: 'Transports' });
+    expect(transports).toBeChecked();
+    expect(created[0]!.setDocksEnabled).toHaveBeenLastCalledWith(true);
+    await userEvent.click(transports);
+    expect(created[0]!.setDocksEnabled).toHaveBeenLastCalledWith(false);
+    first.unmount();
+    render(<World3DView map={0} start={start} hasClient />);
+    await waitFor(() => expect(created).toHaveLength(2));
+    expect(within(screen.getByRole('group', { name: 'Layers' })).getByRole('checkbox', { name: 'Transports' })).not.toBeChecked();
+    expect(created[1]!.setDocksEnabled).toHaveBeenLastCalledWith(false);
+    localStorage.removeItem('acqc.world3d.layers');
+  });
+
+  it('lets go of a selected passenger when Transports is switched off, and of nothing else', async () => {
+    clientHasEverything();
+    localStorage.removeItem('acqc.world3d.layers');
+    render(<World3DView map={0} start={start} hasClient />);
+    await waitFor(() => expect(created).toHaveLength(1));
+    const world = created[0]!;
+    const transports = within(screen.getByRole('group', { name: 'Layers' })).getByRole('checkbox', { name: 'Transports' });
+    // A selected NPC on the continent stays selected
+    world.selectedSpawns.mockReturnValue([{ kind: 'creature', guid: 3 }]);
+    await userEvent.click(transports);
+    expect(world.select).not.toHaveBeenCalledWith(null);
+    await userEvent.click(transports);
+    // One standing at a dock goes with its vessel
+    world.selectedSpawns.mockReturnValue([{ kind: 'creature', guid: 3 }, { kind: 'creature', guid: 5 }]);
+    world.frameOfSpawn.mockImplementation((_kind: string, guid: number) => (guid === 5 ? { x: 0, y: 0, z: 0, heading: 0 } : null));
+    await userEvent.click(transports);
+    expect(world.select).toHaveBeenCalledWith(null);
+    localStorage.removeItem('acqc.world3d.layers');
+  });
+
+  it('reads a saved layer set from before Transports existed as Transports on', async () => {
+    clientHasEverything();
+    localStorage.setItem('acqc.world3d.layers', JSON.stringify({ buildings: false }));
+    render(<World3DView map={0} start={start} hasClient />);
+    await waitFor(() => expect(created).toHaveLength(1));
+    expect(within(screen.getByRole('group', { name: 'Layers' })).getByRole('checkbox', { name: 'Transports' })).toBeChecked();
+    localStorage.removeItem('acqc.world3d.layers');
+  });
+
+  it('gives the world the docks it is handed, and again when they change', async () => {
+    clientHasEverything();
+    const a = { key: '591:0', map: 591, template: 1, node: 0, displayId: 1, frame: { x: 0, y: 0, z: 0, heading: 0 } };
+    const view = render(<World3DView map={0} start={start} hasClient docks={[a]} />);
+    await waitFor(() => expect(created).toHaveLength(1));
+    expect(created[0]!.setDocks).toHaveBeenLastCalledWith([a]);
+    view.rerender(<World3DView map={0} start={start} hasClient docks={[]} />);
+    expect(created[0]!.setDocks).toHaveBeenLastCalledWith([]);
   });
 
   it('shows the world during one event at a time, from those with spawns nearby, with no event by default and all events last', async () => {

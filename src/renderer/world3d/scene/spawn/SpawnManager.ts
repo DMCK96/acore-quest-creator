@@ -14,6 +14,7 @@ import type { Placement } from '../../../../core/world/layer.js';
 import type { SpawnEvents } from '../../../../core/entities/model.js';
 import { BodyTexture, DisplayResolver, Look, ModelLook } from './DisplayResolver.js';
 import { creatureTransform, objectTransform, Transform } from './placement.js';
+import { Frame, IDENTITY_FRAME, placementToWorld } from '../../../../core/map/transport-frame.js';
 import { moveRouteDrawing, routeObject, setBallSelected, wanderObject } from './paths.js';
 import type { Candidates } from '../edit/box.js';
 import type { SelectedPoint } from '../edit/selection.js';
@@ -44,6 +45,7 @@ export type SpawnInfo = {
   pathId: number;
   wander: number;
   map: number;
+  /** Where it stands in the view: on a vessel, its row's place carried by the vessel's frame */
   placement: Placement;
   /** The spawn group it is in (as the world layer has the groups), or null */
   group: number | null;
@@ -158,7 +160,12 @@ type SpawnManagerOptions = {
    * down than `distance`; null when there is none (or the terrain there has not loaded yet)
    */
   groundBelow?(x: number, y: number, fromZ: number, distance: number): number | null;
+  /** The vessel the spawns' rows are local to (default: none, rows are in the world) */
+  frame?: Frame;
 };
+
+/** Whether a frame leaves every place where it is */
+const isIdentity = (frame: Frame): boolean => frame.x === 0 && frame.y === 0 && frame.z === 0 && frame.heading === 0;
 
 /** Whether a kind was capped, why none could be read, and how many areas are still loading */
 type SpawnStatus = { capped: { creatures: boolean; objects: boolean }; error: string | null; loading?: number; events: ViewEvent[] };
@@ -305,6 +312,12 @@ class SpawnManager {
   #warned = new Set<string>();
   #now: () => number;
   #groundBelow: SpawnManagerOptions['groundBelow'];
+  /** The vessel rows are local to: each spawn is drawn at its row's place carried by this */
+  #frame: Frame;
+  /** The vessel itself, drawn at the frame; no part of any area, never picked or edited */
+  readonly decor = new THREE.Group();
+  /** Rises with each `setVessel`: a vessel still loading when another was asked for is dropped */
+  #vessels = 0;
   /** Areas whose answer failed, and when they may be asked for again */
   #failed = new globalThis.Map<number, number>();
 
@@ -338,6 +351,86 @@ class SpawnManager {
     this.#source = options.source;
     this.#now = options.now ?? Date.now;
     this.#groundBelow = options.groundBelow;
+    this.#frame = options.frame ?? IDENTITY_FRAME;
+    this.decor.name = 'decor';
+  }
+
+  /** The row's drawn place: its own, carried by the frame */
+  #transformOf(kind: 'creature' | 'object', spawn: ViewCreature | ViewObject): Transform {
+    if (isIdentity(this.#frame)) return kind === 'creature' ? creatureTransform(spawn as ViewCreature) : objectTransform(spawn as ViewObject);
+    const row = spawn as ViewCreature & ViewObject;
+    const world = placementToWorld(this.#frame, {
+      x: spawn.x,
+      y: spawn.y,
+      z: spawn.z,
+      orientation: kind === 'creature' ? row.orientation || 0 : 0,
+      rotation: kind === 'object' ? row.rotation : null,
+    });
+    return kind === 'creature'
+      ? creatureTransform({ ...world, scale: spawn.scale })
+      : objectTransform({ ...world, rotation: world.rotation ?? row.rotation, scale: spawn.scale });
+  }
+
+  /** Moves the vessel, and with it every drawn spawn and the vessel's own model, to a new frame */
+  setFrame(frame: Frame) {
+    this.#frame = frame;
+    for (const group of this.#areas.values()) {
+      for (const [name, kind] of [['creatures', 'creature'], ['objects', 'object']] as const) {
+        for (const drawn of holderOf(group, name)?.children ?? []) {
+          const row = drawn.userData.row;
+          if (!row) continue;
+          const data = drawn.userData;
+          data.lift = 0;
+          data.grounded = false;
+          data.tries = 0;
+          data.groundAfter = undefined;
+          const transform = this.#transformOf(kind, row);
+          drawn.position.set(...transform.position);
+          drawn.quaternion.set(...transform.quaternion);
+          drawn.updateMatrixWorld(true);
+        }
+      }
+      this.#applyVisibility(group);
+      group.updateMatrixWorld(true);
+    }
+    this.#placeVessel();
+  }
+
+  /** Draws the vessel's building or model at the frame, in place of the last; null takes it away */
+  async setVessel(vessel: { displayId: number } | null): Promise<void> {
+    const turn = ++this.#vessels;
+    for (const old of [...this.decor.children]) this.#remove(old);
+    if (!vessel) return;
+    let drawn: THREE.Object3D | null = null;
+    let scale = 1;
+    try {
+      const look = await this.#resolver.object(vessel.displayId);
+      if (look) {
+        scale = look.scale;
+        drawn = look.kind === 'building' ? await this.#createBuilding(look.path) : await this.#createModel(look);
+      } else {
+        this.#warnOnce(`vessel:${vessel.displayId}`, `3D view: vessel (display ${vessel.displayId}) has no model the client knows; left out`);
+      }
+    } catch (error) {
+      this.#warnOnce(`vessel:${vessel.displayId}`, `3D view: vessel (display ${vessel.displayId}) could not be drawn: ${error instanceof Error ? error.message : String(error)}`);
+    }
+    if (!drawn) return;
+    if (this.#vessels !== turn) {
+      this.#remove(drawn);
+      return;
+    }
+    drawn.scale.setScalar(scale);
+    this.decor.add(drawn);
+    this.#placeVessel();
+  }
+
+  #placeVessel() {
+    const frame = this.#frame;
+    for (const drawn of this.decor.children) {
+      drawn.position.set(frame.x, frame.y, frame.z);
+      drawn.quaternion.setFromAxisAngle(new THREE.Vector3(0, 0, 1), frame.heading);
+      drawn.updateMatrixWorld(true);
+    }
   }
 
   /** Areas asked for and not yet drawn (their spawns on their way, or their models loading) */
@@ -398,6 +491,9 @@ class SpawnManager {
     const redraws = this.#redraws;
     const group = await this.#draw(this.#overlay(answer, box, map));
     if (this.#wanted.get(areaId) !== request) {
+      // Dropped while its models were made: what was drawn is freed, not left animating
+      this.#release(group);
+      group.clear();
       return null;
     }
 
@@ -643,7 +739,12 @@ class SpawnManager {
     return creature.wander > 0 ? { type: 'wander', wander: creature.wander, pathId } : { type: 'idle', wander: 0, pathId };
   }
 
-  /** A drawn spawn as the right-click menu describes it, or null when it is not drawn */
+  /** A row's place as the view has it: carried by the frame, like everything else the scene hands out */
+  #inView(placement: Placement): Placement {
+    return isIdentity(this.#frame) ? placement : placementToWorld(this.#frame, placement);
+  }
+
+  /** A drawn spawn as the right-click menu describes it (where it stands in the view), or null when it is not drawn */
   info(kind: 'creature' | 'object', guid: number): SpawnInfo | null {
     for (const group of this.#areas.values()) {
       const data: ViewCreature | ViewObject | undefined = (kind === 'creature' ? group.userData.creatures : group.userData.objects)?.get(guid);
@@ -651,11 +752,11 @@ class SpawnManager {
       const base = { kind, guid, entry: data.entry, name: data.name, own: data.own, added: data.added ?? false, map: data.map, group: data.group ?? null, respawnSecs: data.respawnSecs ?? 300 };
       if (kind === 'creature') {
         const c = data as ViewCreature;
-        return { ...base, pathId: c.pathId ?? 0, wander: c.wander, placement: { x: c.x, y: c.y, z: c.z, orientation: c.orientation, rotation: null }, spawnEvents: c.spawnEvents === undefined ? 'npc' : c.spawnEvents, eventsNow: { during: c.events, gone: c.removedBy } };
+        return { ...base, pathId: c.pathId ?? 0, wander: c.wander, placement: this.#inView({ x: c.x, y: c.y, z: c.z, orientation: c.orientation, rotation: null }), spawnEvents: c.spawnEvents === undefined ? 'npc' : c.spawnEvents, eventsNow: { during: c.events, gone: c.removedBy } };
       }
       const o = data as ViewObject;
       const objectType = o.objectType ?? -1;
-      return { ...base, pathId: 0, wander: 0, placement: { x: o.x, y: o.y, z: o.z, orientation: facingOf(o.rotation), rotation: o.rotation }, ...(objectType >= 0 ? { objectType } : {}) };
+      return { ...base, pathId: 0, wander: 0, placement: this.#inView({ x: o.x, y: o.y, z: o.z, orientation: facingOf(o.rotation), rotation: o.rotation }), ...(objectType >= 0 ? { objectType } : {}) };
     }
     return null;
   }
@@ -685,6 +786,8 @@ class SpawnManager {
 
   /** Which of an NPC's route points a ray passes within a yard of (the nearest along it), or null */
   pickRoutePoint(ray: THREE.Ray, guid: number): number | null {
+    // A vessel's walking paths are not drawn, so none of their points is there to pick
+    if (!isIdentity(this.#frame)) return null;
     let best: { point: number; distance: number } | null = null;
     for (const group of this.#areas.values()) {
       for (const shown of holderOf(group, 'paths')?.children ?? []) {
@@ -728,6 +831,11 @@ class SpawnManager {
    * (something solid, the ground or a wall, is in front of it).
    */
   pick(ray: THREE.Ray, maxDistance = Infinity): PickedSpawn | null {
+    return this.pickHit(ray, maxDistance)?.spawn ?? null;
+  }
+
+  /** `pick`, with how far along the ray the spawn's bounds were hit, for telling which of several views' spawns is nearer */
+  pickHit(ray: THREE.Ray, maxDistance = Infinity): { spawn: PickedSpawn; distance: number } | null {
     const hit = new THREE.Vector3();
     const hits: { spawn: THREE.Object3D; distance: number; bounds: THREE.Box3 }[] = [];
     for (const group of this.#areas.values()) {
@@ -758,7 +866,7 @@ class SpawnManager {
       if (held.length === 0) break;
       best = nearest(held);
     }
-    return { ...best.spawn.userData.spawn, position: { ...best.spawn.userData.spawn.position } };
+    return { spawn: { ...best.spawn.userData.spawn, position: { ...best.spawn.userData.spawn.position } }, distance: best.distance };
   }
 
   /** The NPCs whose routes are worked on: an NPC's route and wander circle are drawn only while it is one */
@@ -901,7 +1009,7 @@ class SpawnManager {
    */
   #ground(spawn: THREE.Object3D): boolean {
     const data = spawn.userData;
-    if (!this.#groundBelow || data.grounded || !data.spawn || spawn.name === 'marker') return false;
+    if (!this.#groundBelow || !isIdentity(this.#frame) || data.grounded || !data.spawn || spawn.name === 'marker') return false;
     const now = this.#now();
     if (data.groundAfter !== undefined && now < data.groundAfter) return false;
     const { x, y, z } = data.spawn.position;
@@ -952,7 +1060,7 @@ class SpawnManager {
 
     const drawnCreatures = await Promise.all(
       spawns.creatures.map((creature) =>
-        this.#drawSpawn('creature', creature, () => this.#resolver.creature(creature.displayId, creature.preset ?? null), creatureTransform(creature)),
+        this.#drawSpawn('creature', creature, () => this.#resolver.creature(creature.displayId, creature.preset ?? null), this.#transformOf('creature', creature)),
       ),
     );
     for (const drawn of drawnCreatures) creatures.add(drawn);
@@ -963,7 +1071,7 @@ class SpawnManager {
 
     const drawnObjects = await Promise.all(
       spawns.objects.map((object) =>
-        this.#drawSpawn('object', object, () => this.#resolver.object(object.displayId), objectTransform(object)),
+        this.#drawSpawn('object', object, () => this.#resolver.object(object.displayId), this.#transformOf('object', object)),
       ),
     );
     for (const drawn of drawnObjects) objects.add(drawn);
@@ -1009,7 +1117,7 @@ class SpawnManager {
       const wanted = new globalThis.Set<number>();
       for (const spawn of list) {
         wanted.add(spawn.guid);
-        const transform = kind === 'creature' ? creatureTransform(spawn as ViewCreature) : objectTransform(spawn as ViewObject);
+        const transform = this.#transformOf(kind, spawn);
         const old = drawn.get(spawn.guid);
         if (old) this.#place(old, kind, spawn, transform);
         if (old && old.userData.lookKey === lookKeyOf(kind, spawn)) continue;
@@ -1060,6 +1168,7 @@ class SpawnManager {
     const was = data.spawn.position;
     const moved = was.x !== spawn.x || was.y !== spawn.y || was.z !== spawn.z;
     data.spawn = spawnDataOf(kind, spawn);
+    data.row = spawn;
     if (moved) {
       data.lift = 0;
       data.grounded = false;
@@ -1145,6 +1254,8 @@ class SpawnManager {
     object.quaternion.set(...transform.quaternion);
     object.scale.setScalar(transform.scale * (drawn ? lookScale : 1));
     object.userData.spawn = spawnDataOf(kind, spawn);
+    // The row itself, so a new frame can place it again
+    object.userData.row = spawn;
     // What it was drawn from: a change to any of it means drawing it again, not just moving it
     object.userData.lookKey = lookKeyOf(kind, spawn);
     return object;
@@ -1179,10 +1290,11 @@ class SpawnManager {
     return marker;
   }
 
+  /** Walking paths stay hidden on a vessel: they are vessel-local, and come with animation (phase 2) */
   #applyVisibility(group: THREE.Group) {
     for (const name of ['creatures', 'objects', 'paths'] as const) {
       const child = holderOf(group, name);
-      if (child) child.visible = this.#visibility[name];
+      if (child) child.visible = this.#visibility[name] && (name !== 'paths' || isIdentity(this.#frame));
     }
   }
 

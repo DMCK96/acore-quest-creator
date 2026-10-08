@@ -10,7 +10,7 @@ import { addPoint, newPatrol } from '../../src/core/map/patrol';
 const worlds = vi.hoisted(() => [] as any[]);
 vi.mock('../../src/renderer/world3d/world3d', () => ({
   createWorld3D: (options: any) => {
-    const world = { options, dispose: vi.fn(), cancelPath: vi.fn(), lookAt: vi.fn(), setSpawnVisibility: vi.fn(), setOwnSpawns: vi.fn(), select: vi.fn(),
+    const world = { options, dispose: vi.fn(), cancelPath: vi.fn(), lookAt: vi.fn(), setDocks: vi.fn(), setDocksEnabled: vi.fn(), frameOfSpawn: vi.fn(() => null), setSpawnVisibility: vi.fn(), setOwnSpawns: vi.fn(), select: vi.fn(),
       setWorldLayer: vi.fn(), setMode: vi.fn(), cancelDrag: vi.fn(),
       setScenery: vi.fn(), setTool: vi.fn(), setFalloff: vi.fn(), target: () => ({ x: 0, y: 0, z: 0 }), spawnStatus: () => ({ capped: { creatures: false, objects: false }, error: null }) };
     worlds.push(world);
@@ -98,6 +98,17 @@ describe('editing in the 3D view', () => {
     world.options.onSelect({ kind: 'creature', guid: 80330, entry: 1423, name: 'Guard', own: false, event: null, position: { x: 0, y: 0, z: 0 }, pathId: 0 });
     world.options.onGesture([place(false, 80330, 1423)]);
     expect(await screen.findByText('X 1.00 · Y 2.00 · Z 3.00')).toBeTruthy();
+  });
+
+  it('shows the selected spawn back where it was when its move is taken back', async () => {
+    const worldChanges = vi.fn(async () => okv([{ ...moved.spawns[0], type: 'spawn', drifted: false }]));
+    const { world } = await ownView(makeMockApi({ worldLayer: vi.fn(async () => okv(EMPTY)), worldMoveSpawn: vi.fn(async () => okv(moved)), worldChanges, worldRevert: vi.fn(async () => okv(EMPTY)) }));
+    act(() => world.options.onSelect({ kind: 'creature', guid: 80330, entry: 1423, name: 'Guard', own: false, event: null, position: { x: 0, y: 0, z: 0 }, pathId: 0 }));
+    world.options.onGesture([place(false, 80330, 1423)]);
+    expect(await screen.findByText('X 1.00 · Y 2.00 · Z 3.00')).toBeTruthy();
+    await userEvent.click(await screen.findByRole('button', { name: /^Project changes \(\d+\)$/ }));
+    await userEvent.click(await screen.findByRole('button', { name: 'Revert Guard' }));
+    expect(await screen.findByText('X 0.00 · Y 0.00 · Z 0.00')).toBeTruthy();
   });
 
   it('puts the spawn back and says why when the world edit fails', async () => {

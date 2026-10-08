@@ -20,6 +20,7 @@ export const NEEDS_GROUND = 'Right-click the ground';
 export const NEEDS_DATABASE = 'Needs the world database';
 export const COPY_FIRST = 'Copy something first';
 export const WALKS_A_PATH = 'Walks a path: remove the path first';
+export const ON_A_VESSEL = "Paths on a ship or zeppelin can't be edited yet";
 export const OBJECTIVES_FULL = 'All four objectives are in use';
 
 export function buildMenu(subject: MenuSubject, context: MenuContext, sections: readonly MenuSection[] = SECTIONS): MenuGroup[] {

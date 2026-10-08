@@ -15,6 +15,10 @@ import DoodadManager from './DoodadManager.js';
 import WmoManager from '../wmo/WmoManager.js';
 import LiquidManager from './liquid/LiquidManager.js';
 import SpawnManager, { SpawnSource, SpawnVisibility } from '../spawn/SpawnManager.js';
+import { DOCK_AREA, createSpawnDock } from '../spawn/SpawnDock.js';
+import { DockSet } from '../spawn/DockSet.js';
+import { dockInRange } from '../spawn/dock-range.js';
+import type { Dock } from '../../../../core/map/transport-docks.js';
 import { CharacterTexture } from '../character/CharacterTexture.js';
 import { getAssetUrl } from '../asset.js';
 import DisplayResolver from '../spawn/DisplayResolver.js';
@@ -31,6 +35,7 @@ import { MapAreaSpec, MapSpec } from './loader/types.js';
 import MapLight from './light/MapLight.js';
 import DbManager from '../db/DbManager.js';
 import { describeError, reportProblem } from '../diagnostics.js';
+import type { Frame } from '../../../../core/map/transport-frame.js';
 
 const DEFAULT_VIEW_DISTANCE = 1277.0;
 const DETAIL_DISTANCE_EXTENSION = MAP_CHUNK_HEIGHT;
@@ -54,6 +59,8 @@ type MapManagerOptions = {
   viewDistance?: number;
   /** The drawn ground nearest below a point, for standing NPCs on it; see `SpawnManager` */
   groundBelow?(x: number, y: number, fromZ: number, distance: number): number | null;
+  /** A vessel's frame: the spawns are its passengers, stored vessel-local (see `SpawnManager`) */
+  frame?: Frame;
 };
 
 class MapManager extends EventTarget {
@@ -75,7 +82,10 @@ class MapManager extends EventTarget {
   #scenery = { buildings: true, doodads: true };
   /** Areas whose spawns were asked for and not dropped since (drawn, on their way, or failed) */
   #spawnAsked = new Set<number>();
-  #mapId: number;
+  /** The map whose spawns are drawn: the terrain's own, or a transport's */
+  #spawnMapId: number;
+  /** Whether the spawns are a vessel's passengers, all asked for at once (their rows are not tied to tiles) */
+  #framed: boolean;
 
   #textureManager: TextureManager;
   #terrainManager: TerrainManager;
@@ -83,6 +93,11 @@ class MapManager extends EventTarget {
   #wmoManager: WmoManager;
   #liquidManager: LiquidManager;
   #spawnManager: SpawnManager;
+  /** The vessels docked in range, each with its passengers; the transport view's own vessel is the spawn manager's */
+  #docks: DockSet;
+  #dockList: readonly Dock[] = [];
+  /** Whether which docks are near may have changed: the list, the layer or the camera's tile */
+  #docksDirty = true;
   #dbManager: DbManager;
 
   #mapLight: MapLight;
@@ -158,20 +173,26 @@ class MapManager extends EventTarget {
       },
       register: (path, texture) => this.#textureManager.register(path, texture),
     });
-    this.#spawnManager = new SpawnManager({
-      resolver,
-      createModel: (look) => this.#doodadManager.modelManager.get(look.path, look),
-      createBuilding: (path) => this.#wmoManager.createInstance(path),
-      source: null,
-      bodyTexture: (body) => characterTexture.build(body),
-      groundBelow: options.groundBelow,
-    });
+    const spawnManagerOf = (frame: Frame | undefined, groundBelow: MapManagerOptions['groundBelow']) =>
+      new SpawnManager({
+        resolver,
+        createModel: (look) => this.#doodadManager.modelManager.get(look.path, look),
+        createBuilding: (path) => this.#wmoManager.createInstance(path),
+        source: null,
+        bodyTexture: (body) => characterTexture.build(body),
+        groundBelow,
+        frame,
+      });
+    this.#spawnManager = spawnManagerOf(options.frame, options.groundBelow);
+    this.#framed = options.frame !== undefined;
 
     // Never moved, so never worked out again; what is under it is still visited (spawns move). The
     // scene must not force it either (see world3d.ts), or every frame works out every object's matrix.
     this.#root = new THREE.Group();
     this.#root.matrixAutoUpdate = false;
     this.#root.add(this.#doodadManager.batches);
+    // A docked vessel's passengers stand on its deck, not on the ground, so a dock's manager is given no ground
+    this.#docks = new DockSet({ parent: this.#root, create: (dock) => createSpawnDock(dock, spawnManagerOf(dock.frame, undefined)) });
   }
 
   get clearColor() {
@@ -189,16 +210,19 @@ class MapManager extends EventTarget {
   /** Where the NPCs and objects come from; null draws none */
   setSpawnSource(source: SpawnSource | null) {
     this.#spawnManager.setSource(source);
+    this.#docks.configure({ source });
   }
 
   /** The looks of edited existing NPCs and objects, drawn on their database spawns */
   setLooks(looks: EntityLooks) {
     this.#spawnManager.setLooks(looks).catch((error) => console.warn(`3D view: edited looks could not be drawn: ${describeError(error)}`));
+    this.#docks.configure({ looks });
   }
 
   /** The open quest's own NPCs and objects, drawn with the world's */
   setOwnSpawns(spawns: ViewSpawns) {
     this.#spawnManager.setOwnSpawns(spawns).catch((error) => console.warn(`3D view: the quest's own NPCs and objects could not be drawn: ${describeError(error)}`));
+    this.#docks.configure({ own: spawns });
   }
 
   /** Shows or hides buildings and doodads; a hidden kind is not drawn and not hit by a click */
@@ -209,21 +233,26 @@ class MapManager extends EventTarget {
 
   setSpawnVisibility(visibility: SpawnVisibility) {
     this.#spawnManager.setVisibility(visibility).catch((error) => console.warn(`3D view: the NPCs and objects could not be redrawn: ${describeError(error)}`));
+    this.#docks.configure({ visibility });
   }
 
   /** The nearest drawn NPC or object along a ray, no further than `maxDistance` */
-  pickSpawn(ray: THREE.Ray, maxDistance?: number) {
-    return this.#spawnManager.pick(ray, maxDistance);
+  pickSpawn(ray: THREE.Ray, maxDistance = Infinity) {
+    const own = this.#spawnManager.pickHit(ray, maxDistance);
+    const docked = this.#docks.pickHit(ray, maxDistance);
+    return (docked && (!own || docked.distance < own.distance) ? docked : own)?.spawn ?? null;
   }
 
   /** Draws the world layer's edits over the database's spawns and routes */
   setWorldLayer(layer: WorldLayer) {
     this.#spawnManager.setWorldLayer(layer).catch((error) => console.warn(`3D view: the world changes could not be drawn: ${describeError(error)}`));
+    this.#docks.configure({ layer });
   }
 
   /** Every spawn under each top-level layer group with an event, through all its levels, by group id */
   setGroupSpawns(byGroup: ReadonlyMap<number, readonly { kind: 'npc' | 'object'; guid: number }[]>) {
     this.#spawnManager.setGroupSpawns(byGroup).catch((error) => console.warn(`3D view: the spawn groups' events could not be drawn: ${describeError(error)}`));
+    this.#docks.configure({ groups: byGroup });
   }
 
   /** Which of an NPC's route points a ray passes close to, or null */
@@ -263,7 +292,8 @@ class MapManager extends EventTarget {
 
   /** What a selection box can catch: drawn route points, and spawns within draw distance */
   selectionCandidates(cameraPosition: THREE.Vector3) {
-    return this.#spawnManager.candidates(cameraPosition);
+    const own = this.#spawnManager.candidates(cameraPosition);
+    return { ...own, spawns: [...own.spawns, ...this.#docks.candidates(cameraPosition)] };
   }
 
   /** Moves an NPC's drawn route to points being dragged */
@@ -278,38 +308,80 @@ class MapManager extends EventTarget {
 
   /** A drawn spawn as a click would pick it, or null */
   pickedSpawn(kind: 'creature' | 'object', guid: number) {
-    return this.#spawnManager.picked(kind, guid);
+    return this.#spawnManager.picked(kind, guid) ?? this.#docks.picked(kind, guid);
   }
 
   /** A drawn spawn as the right-click menu describes it, or null */
   spawnInfo(kind: 'creature' | 'object', guid: number) {
-    return this.#spawnManager.info(kind, guid);
+    return this.#spawnManager.info(kind, guid) ?? this.#docks.info(kind, guid);
   }
 
   /** A spawn's drawn object, while it is drawn */
   findSpawn(kind: 'creature' | 'object', guid: number) {
-    return this.#spawnManager.find(kind, guid);
+    return this.#spawnManager.find(kind, guid) ?? this.#docks.find(kind, guid);
   }
 
   /** Whether the spawn source capped a kind, or why it could give none */
   get spawnStatus() {
-    return { ...this.#spawnManager.status, loading: this.#spawnManager.loading };
+    const own = this.#spawnManager.status;
+    const docked = this.#docks.status;
+    const capped = { creatures: own.capped.creatures || docked.capped.creatures, objects: own.capped.objects || docked.capped.objects };
+    return { ...own, capped, error: own.error ?? docked.error, loading: this.#spawnManager.loading };
   }
 
   get root() {
     return this.#root;
   }
 
+  /** The docked vessels in range, drawn at their frames */
+  get dockDecor() {
+    return this.#docks.decor;
+  }
+
+  /** The vessel, drawn at its frame; apart from the map's areas */
+  get decor() {
+    return this.#spawnManager.decor;
+  }
+
+  /** The vessels that stop on this map's terrain: drawn, with their passengers, while the camera is near */
+  setDocks(docks: readonly Dock[]) {
+    this.#dockList = docks;
+    this.#docksDirty = true;
+  }
+
+  /** Whether the docked vessels are drawn and picked at all */
+  setDocksEnabled(enabled: boolean) {
+    this.#docks.setEnabled(enabled);
+    this.#docksDirty = true;
+  }
+
+  /** The frame of the docked vessel a spawn is drawn on, or null when it is not on one */
+  frameOfSpawn(kind: 'creature' | 'object', guid: number) {
+    // The view's own spawns win, as in `findSpawn`: one drawn there is not on a dock
+    return this.#spawnManager.find(kind, guid) ? null : this.#docks.frameOf(kind, guid);
+  }
+
+  /** Moves the vessel and its passengers to a new frame */
+  setFrame(frame: Frame) {
+    this.#spawnManager.setFrame(frame);
+  }
+
+  /** Draws the vessel by its display, in place of the last; null takes it away */
+  setVessel(vessel: { displayId: number } | null) {
+    this.#spawnManager.setVessel(vessel).catch((error) => console.warn(`3D view: the vessel could not be drawn: ${describeError(error)}`));
+  }
+
   /** The one building of a map without terrain tiles: drawn in place of them, with every spawn in one area */
   #globalWmo: GlobalWmo | null = null;
 
-  load(mapName: string, mapId?: number, globalWmo: GlobalWmo | null = null) {
+  /** `mapId` is the terrain's (its light and fog); `spawnMapId`, whose spawns are drawn, defaults to it */
+  load(mapName: string, mapId?: number, globalWmo: GlobalWmo | null = null, spawnMapId = mapId) {
     this.#globalWmo = globalWmo;
     this.#mapName = mapName;
     this.#mapDir = `world/maps/${mapName}`;
 
     this.#mapLight.mapId = mapId;
-    this.#mapId = mapId ?? 0;
+    this.#spawnMapId = spawnMapId ?? 0;
 
     this.#root.name = `map:${mapName}`;
 
@@ -332,6 +404,7 @@ class MapManager extends EventTarget {
     const { areaX, areaY, chunkX, chunkY } = Map.getIndicesFromPosition(x, y);
     this.#targetAreaX = areaX;
     this.#targetAreaY = areaY;
+    if (areaX !== previousAreaX || areaY !== previousAreaY) this.#docksDirty = true;
     this.#targetChunkX = chunkX;
     this.#targetChunkY = chunkY;
 
@@ -390,7 +463,13 @@ class MapManager extends EventTarget {
     this.#liquidManager.update(deltaTime);
 
     this.#syncSpawns();
+    if (this.#docksDirty) {
+      this.#docksDirty = false;
+      this.#docks.sync(this.#dockList, (dock) => dockInRange(dock.frame, { areaX: this.#targetAreaX, areaY: this.#targetAreaY }));
+    }
+    this.#docks.update();
     this.#spawnManager.cull(camera.position, this.#cullingFrustum);
+    this.#docks.cull(camera.position, this.#cullingFrustum);
   }
 
   /**
@@ -399,6 +478,10 @@ class MapManager extends EventTarget {
    * area it is in.
    */
   #syncSpawns() {
+    if (this.#framed) {
+      this.#syncPassengers();
+      return;
+    }
     // A one-building map has its one area, with every spawn of the map
     const wanted = this.#globalWmo ? new Set([`${GLOBAL_AREA.areaX}:${GLOBAL_AREA.areaY}`]) : nearbyAreas(this.#targetAreaX, this.#targetAreaY);
     const keyOf = (areaId: number) => {
@@ -425,7 +508,7 @@ class MapManager extends EventTarget {
       const { areaX, areaY } = this.#getAreaIndex(areaId);
       this.#spawnAsked.add(areaId);
       this.#spawnManager
-        .loadArea(areaId, this.#mapId, this.#globalWmo ? WHOLE_MAP : areaBox(areaX, areaY))
+        .loadArea(areaId, this.#spawnMapId, this.#globalWmo ? WHOLE_MAP : areaBox(areaX, areaY))
         .then((group) => {
           // Null when it failed or was dropped meanwhile; a stale answer never replaces a newer one
           if (group && this.#spawnAsked.has(areaId) && this.#terrainGroups.has(areaId)) {
@@ -437,8 +520,20 @@ class MapManager extends EventTarget {
     }
   }
 
+  /** A vessel's passengers: one area over the whole grid, as a one-building map's, loaded whatever terrain is there */
+  #syncPassengers() {
+    if (!this.#spawnManager.canLoad(DOCK_AREA)) return;
+    this.#spawnManager
+      .loadArea(DOCK_AREA, this.#spawnMapId, WHOLE_MAP)
+      .then((group) => {
+        if (group) this.#root.add(group);
+      })
+      .catch((error) => console.warn(`3D view: the passengers could not be drawn: ${describeError(error)}`));
+  }
+
   /** Stops every worker this map started; managers it was handed (textures, tables) are left to their owner */
   dispose() {
+    this.#docks.dispose();
     this.#liquidManager.dispose();
     this.#wmoManager.dispose();
     this.#doodadManager.dispose();

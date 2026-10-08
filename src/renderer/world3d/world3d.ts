@@ -21,6 +21,10 @@ import type { MenuTarget } from './menu/model';
 import type { Movement } from '@core/world/movement';
 import type { SpawnInfo } from './scene/spawn/SpawnManager';
 import { MarkerLayer, type MarkerDrawing } from './scene/marker/MarkerLayer';
+import type { Frame } from '@core/map/transport-frame';
+import type { Dock } from '@core/map/transport-docks';
+import type { RouteLine as RouteData } from '@core/map/transport-view';
+import { buildRouteLines, disposeRouteLines } from './scene/transport/RouteLine';
 
 /**
  * The 3D world: the game's own terrain, props and models for one map, read from the client's
@@ -32,7 +36,16 @@ export interface World3DOptions {
   container: HTMLElement;
   /** The client folder of the map's terrain, e.g. `azeroth`. */
   directory: string;
+  /** The map whose NPCs and objects are drawn: the terrain's own, or a transport's */
   map: number;
+  /** The terrain's map, for its light and fog; `map` by default */
+  hostMap?: number;
+  /** On a transport, where its vessel stands: the spawns' rows are vessel-local, drawn through this */
+  frame?: Frame;
+  /** The vessel drawn at the frame */
+  vessel?: { displayId: number } | null;
+  /** The transport's route over the terrain, with its stops */
+  route?: RouteData[];
   /** The one building of a map without terrain tiles (a dungeon stored as a single building), drawn in their place. */
   wmo?: { path: string; doodadSet: number };
   /** Where the camera starts looking. */
@@ -92,6 +105,9 @@ export type GroupDrawing = {
 
 export type SelectionSummary = { creatures: number; objects: number; points: number; routes: number };
 
+/** A transport as the view draws it at one stop: the vessel's frame, the vessel, and its route */
+export type TransportScene = { frame: Frame; vessel: { displayId: number } | null; route: RouteData[] };
+
 /** Which of the world's scenery is drawn */
 export type Scenery = { buildings: boolean; doodads: boolean };
 
@@ -150,6 +166,12 @@ export interface World3D {
   groundAt(client: { x: number; y: number }): { x: number; y: number; z: number } | null;
   /** Where the pointer last was over the view, or null. */
   lastPointer(): { x: number; y: number } | null;
+  /** The vessels that stop on this terrain, drawn with their passengers while the camera is near them. */
+  setDocks(docks: readonly Dock[]): void;
+  /** Whether those docked vessels are drawn and picked at all. */
+  setDocksEnabled(enabled: boolean): void;
+  /** The frame of the docked vessel a spawn is drawn on (its row is local to it), or null when it is not on one. */
+  frameOfSpawn(kind: 'creature' | 'object', guid: number): Frame | null;
   /** A spawn still in the view (loaded, though perhaps too far to be drawn), or null. */
   spawnOf(kind: 'creature' | 'object', guid: number): SpawnInfo | null;
   /** A drawn NPC's route as the view has it, or null when it has none. */
@@ -160,6 +182,8 @@ export interface World3D {
   setMarkers(markers: readonly MarkerDrawing[]): void;
   /** Selects a quest marker (letting go of any spawns) or none; false when it is not drawn. */
   selectMarker(id: string | null): boolean;
+  /** Moves the transport to another stop on the same terrain (or shows another of the map's routes) */
+  setTransport(transport: TransportScene): void;
   dispose(): void;
 }
 
@@ -249,7 +273,7 @@ export function createWorld3D(options: World3DOptions): World3D {
   const clickable = (group: THREE.Object3D): boolean => group.name === 'terrain' || (group.name === 'buildings' && scenery.buildings);
   const pick = (x: number, y: number): THREE.Vector3 | null => {
     raycaster.setFromCamera(new THREE.Vector2(x, y), camera);
-    return raycaster.intersectObjects(manager.root.children.filter(clickable), true)[0]?.point ?? null;
+    return raycaster.intersectObjects(solid(), true)[0]?.point ?? null;
   };
   // What is selected: spawns, points of active routes, and the routes being worked on
   let selection: Selection = EMPTY_SELECTION;
@@ -395,7 +419,8 @@ export function createWorld3D(options: World3DOptions): World3D {
     onContextClick: (x, y, client) => contextClick(x, y, client),
     onCameraInput: () => options.onCameraInput?.(),
   });
-  const solid = (): THREE.Object3D[] => manager.root.children.filter(clickable);
+  // A vessel's deck is ground too, so a click or a drag lands on it: the view's own, and each docked one
+  const solid = (): THREE.Object3D[] => [...manager.root.children.filter(clickable), manager.decor, ...manager.dockDecor];
   // The open quest's positions: a marker let go after a drag along the ground lands on the server's floor there
   const markers = new MarkerLayer(camera, renderer.domElement, scene, solid, {
     moved: async (id, at, lifted) => {
@@ -428,6 +453,7 @@ export function createWorld3D(options: World3DOptions): World3D {
         return raycaster.ray.clone();
       },
       findSpawn: (kind, guid) => manager.findSpawn(kind, guid),
+      aboard: (kind, guid) => manager.frameOfSpawn(kind, guid) !== null,
       spawnRoute: (guid) => manager.spawnRoute(guid),
       pickRoutePoint: (ray, guid) => manager.pickRoutePoint(ray, guid),
       setPendingRoute: (guid, points) => manager.setPendingRoute(guid, points),
@@ -595,12 +621,26 @@ export function createWorld3D(options: World3DOptions): World3D {
     const floors = manager.root.children.filter((group) => (group.name === 'terrain' || group.name === 'buildings') && reaches(group, x, y));
     return down.intersectObjects(floors, true)[0]?.point.z ?? null;
   };
-  const manager = new MapManager({ host: HOST, textureManager: textures, dbManager: databases, characterTexture, groundBelow });
+  const manager = new MapManager({ host: HOST, textureManager: textures, dbManager: databases, characterTexture, groundBelow, frame: options.frame });
   manager.addEventListener('area:change', (event) => {
     const name = (event as CustomEvent<{ areaName?: string }>).detail.areaName;
     if (name) options.onArea?.(name);
   });
   scene.add(manager.root);
+  scene.add(manager.decor);
+  let route = buildRouteLines(options.route ?? []);
+  scene.add(route);
+  let vessel = options.vessel ?? null;
+  const showTransport = (next: TransportScene): void => {
+    manager.setFrame(next.frame);
+    // Another stop only moves the vessel; another route may run another one
+    if (next.vessel?.displayId !== vessel?.displayId) manager.setVessel(next.vessel);
+    vessel = next.vessel;
+    disposeRouteLines(route);
+    route.removeFromParent();
+    route = buildRouteLines(next.route);
+    scene.add(route);
+  };
   clearProblems();
   const stopProblems = onProblems((all) => options.onProblems?.([...all]));
 
@@ -613,7 +653,8 @@ export function createWorld3D(options: World3DOptions): World3D {
 
   try {
     manager.setSpawnSource(options.spawns ?? null);
-    manager.load(options.directory, options.map, options.wmo ?? null);
+    manager.load(options.directory, options.hostMap ?? options.map, options.wmo ?? null, options.map);
+    if (vessel) manager.setVessel(vessel);
     lookAt(options.start.x, options.start.y, options.start.z);
   } catch (error) {
     options.onError?.(error instanceof Error ? error.message : String(error));
@@ -706,6 +747,9 @@ export function createWorld3D(options: World3DOptions): World3D {
     },
     lastPointer: () => controls.lastPointer,
     spawnOf: (kind, guid) => manager.spawnInfo(kind, guid),
+    setDocks: (docks) => manager.setDocks(docks),
+    setDocksEnabled: (enabled) => manager.setDocksEnabled(enabled),
+    frameOfSpawn: (kind, guid) => manager.frameOfSpawn(kind, guid),
     routeOf(guid) {
       const route = manager.spawnRoute(guid);
       return route ? { pathId: route.pathId, points: route.points } : null;
@@ -724,6 +768,7 @@ export function createWorld3D(options: World3DOptions): World3D {
       refreshEscape();
       return found;
     },
+    setTransport: showTransport,
     camera() {
       const direction = camera.getWorldDirection(new THREE.Vector3());
       return { position: { ...camera.position }, direction: { x: direction.x, y: direction.y, z: direction.z } };
@@ -733,7 +778,7 @@ export function createWorld3D(options: World3DOptions): World3D {
       cancelAnimationFrame(frame);
       observer.disconnect();
       // Nothing here may throw: this runs while React unmounts the view, and a throw would take the whole screen with it.
-      for (const step of [() => controls.dispose?.(), () => renderer.domElement.removeEventListener('keydown', onKeyDown), () => editor.dispose(), () => markers.dispose(), stopProblems, () => manager.dispose(), () => release(manager.root), () => outlines.forEach(release), () => rings.forEach((ring) => ring.removeFromParent()), () => marks.forEach((ring) => ring.removeFromParent()), () => groupRings.forEach((ring) => ring.removeFromParent()), () => groupLines.removeFromParent(), () => groupLines.geometry.dispose(), () => groupMaterial.dispose(), () => ringGeometry.dispose(), () => ringMaterial.dispose(), () => markMaterial.dispose(), () => renderer.dispose()]) {
+      for (const step of [() => controls.dispose?.(), () => renderer.domElement.removeEventListener('keydown', onKeyDown), () => editor.dispose(), () => markers.dispose(), stopProblems, () => manager.dispose(), () => release(manager.root), () => release(manager.decor), () => disposeRouteLines(route), () => outlines.forEach(release), () => rings.forEach((ring) => ring.removeFromParent()), () => marks.forEach((ring) => ring.removeFromParent()), () => groupRings.forEach((ring) => ring.removeFromParent()), () => groupLines.removeFromParent(), () => groupLines.geometry.dispose(), () => groupMaterial.dispose(), () => ringGeometry.dispose(), () => ringMaterial.dispose(), () => markMaterial.dispose(), () => renderer.dispose()]) {
         try {
           step();
         } catch (error) {
