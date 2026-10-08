@@ -1076,7 +1076,7 @@ function WorldStage({
           <button type="button" className="world3d__tool" onMouseDown={keepFocus} aria-pressed={layers.tool === 'select'} title="Select: left-drag draws a box, Alt+drag orbits (Tab)" onClick={() => setLayers((l) => ({ ...l, tool: 'select' }))}>
             Select
           </button>
-          <button type="button" className="world3d__tool" onMouseDown={keepFocus} aria-pressed={playing} title={playing ? 'Pause NPC movement' : 'Play NPC movement'} onClick={() => setPlaying((p) => !p)}>
+          <button type="button" className="world3d__tool" onMouseDown={keepFocus} title={playing ? 'Pause NPC movement' : 'Play NPC movement'} onClick={() => setPlaying((p) => !p)}>
             {playing ? 'Pause' : 'Play'}
           </button>
           <button type="button" className="world3d__tool" onMouseDown={keepFocus} title="Send every NPC back to where it stands" onClick={() => world.current?.resetMovement()}>
@@ -1089,7 +1089,6 @@ function WorldStage({
               className="world3d__tool"
               onMouseDown={keepFocus}
               aria-pressed={gizmoMode === mode}
-              aria-label={mode === 'move' ? 'Move' : 'Rotate'}
               title={mode === 'move' ? 'Move (G)' : 'Rotate (R)'}
               onClick={() => world.current?.setMode(mode)}
             >

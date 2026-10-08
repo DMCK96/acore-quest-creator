@@ -211,7 +211,8 @@ describe('the NPC movement controls', () => {
     const user = userEvent.setup();
     await user.click(within(toolbar()).getByRole('button', { name: 'Play' }));
     expect(world.setMovementPlaying).toHaveBeenLastCalledWith(true);
-    expect(within(toolbar()).getByRole('button', { name: 'Pause' })).toHaveAttribute('aria-pressed', 'true');
+    // Its label says what a press does; it is not also a pressed toggle (M6)
+    expect(within(toolbar()).getByRole('button', { name: 'Pause' })).not.toHaveAttribute('aria-pressed');
     await user.click(within(toolbar()).getByRole('button', { name: 'Reset' }));
     expect(world.resetMovement).toHaveBeenCalledTimes(1);
     await user.click(within(toolbar()).getByRole('button', { name: 'Pause' }));
@@ -227,6 +228,8 @@ describe('the NPC movement controls', () => {
     expect(within(toolbar()).queryByRole('button', { name: 'Rotate' })).toBeNull();
     await user.click(within(toolbar()).getByRole('button', { name: 'Select' }));
     expect(within(toolbar()).getByRole('button', { name: 'Move' })).toHaveAttribute('aria-pressed', 'true');
+    // named by their visible text alone (M6)
+    expect(within(toolbar()).getByRole('button', { name: 'Move' })).not.toHaveAttribute('aria-label');
     await user.click(within(toolbar()).getByRole('button', { name: 'Rotate' }));
     expect(world.setMode).toHaveBeenLastCalledWith('rotate');
     act(() => world.mode('rotate'));
