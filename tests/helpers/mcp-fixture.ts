@@ -21,6 +21,10 @@ export interface McpFixtureOptions {
   connect?: boolean;
   flushTimeoutMs?: number;
   toolTimeoutMs?: number;
+  /** Whether the user has switched wiki lookups on (default off). */
+  wiki?: boolean;
+  /** What the wiki answers; absent means nothing is reachable. */
+  fetch?: (url: string) => { ok: boolean; status: number; text(): Promise<string> };
   flush?: () => Promise<void>;
 }
 
@@ -54,6 +58,8 @@ export async function mcpFixture(tools: readonly ToolDef[], opts: McpFixtureOpti
     now,
     session,
     projects,
+    mcp: { wikiEnabled: () => opts.wiki ?? false } as never,
+    ...(opts.fetch ? { fetch: async (url: string) => opts.fetch!(url) } : {}),
   });
   const rec: any = await api.saveProfile({ name: 'w', role: 'world', host: 'h', port: 1, user: 'u', database: 'd', password: 'p' });
   if (opts.connect !== false) await api.connect(rec.value.id);
