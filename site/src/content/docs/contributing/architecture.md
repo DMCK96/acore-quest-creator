@@ -42,6 +42,7 @@ The app is built around the **World**: the game world in 3D, drawn from the user
 - **Loaders run in Web Workers;** the main thread only builds Three.js objects from what they return.
 - **World units are the server's:** yards, X north, Y west, Z up. A spawn's `position_x/y/z` is its place in the scene, with no conversion anywhere. Keep it that way.
 - **`world3d.ts` is the scene's API** (the `World3D` interface): React drives it through calls such as `lookAt`, `select`, `setWorldLayer` and `setPlacing`, and hears back through callbacks. React components never reach into Three.js objects. `World3DView.tsx` wires the scene to the app; `WorldWorkspace.tsx` is the workspace around it (the place card, Find, Teleport, the welcome).
+- **NPC movement is a preview, never data.** The walkers in `src/core/world/walk/` are pure (no Three.js): each drawn NPC's walk plan comes from its path or wander distance (`plan.ts`), and `walker.ts` steps it at the server's default speeds. In the scene, `scene/spawn/walkers.ts` and `MovementDriver.ts` move the drawn models while the one `MovementControl` plays (the toolbar's **Play**, paused on every open); NPCs on a docked vessel walk through its frame, and the vessel never moves.
 - **Spawns are read per map tile** through the `viewSpawns` call (`src/core/db/view-spawns.ts`): the camera's tile and the eight round it, capped per tile.
 
 ### Rules it keeps
