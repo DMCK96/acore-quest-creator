@@ -186,6 +186,17 @@ const selectLightsForPosition = (
     availableWeight -= weight;
   }
 
+  // Without a default light to take what is left, the weights sum to less than one and the blend (fog
+  // colour, sun, fog distance) shrinks towards black. The lights in range share the whole instead
+  if (selectedLights.length > 0) {
+    const claimed = 1.0 - availableWeight;
+    if (claimed > 0.0) {
+      for (const selectedLight of selectedLights) selectedLight.weight /= claimed;
+    } else {
+      selectedLights[0].weight = 1.0;
+    }
+  }
+
   return selectedLights;
 };
 
