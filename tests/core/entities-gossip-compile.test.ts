@@ -82,6 +82,21 @@ describe('compiling a new NPC\'s gossip', () => {
     expect(foreign.inserts.creature_template![0]).toMatchObject({ gossip_menu_id: '777' });
   });
 
+  it('leaves a menu a quest scene wrote options into alone: its id is kept and its rows are not removed', () => {
+    const context = {
+      ...EMPTY_ENTITY_CONTEXT,
+      creatures: [{ entry: '12000001', gossip_menu_id: '1' }],
+      gossipOptions: [{ MenuID: '1', OptionID: '0' }],
+      gossipMenus: [{ MenuID: '1', TextID: '5' }],
+      gossipUsers: [{ MenuID: '1', Entry: '12000001' }],
+      gossipScripted: [{ event_param1: '1', event_param2: '0' }],
+    };
+    const out = compile([{ ...host, gossipMenu: null }], context);
+    expect(out.inserts.creature_template![0]).toMatchObject({ gossip_menu_id: '1' });
+    expect(out.deletes.gossip_menu).toBeUndefined();
+    expect(out.deletes.gossip_menu_option).toBeUndefined();
+  });
+
   it('never deletes a menu an object uses', () => {
     const context = {
       ...EMPTY_ENTITY_CONTEXT,

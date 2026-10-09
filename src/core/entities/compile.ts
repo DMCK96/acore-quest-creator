@@ -122,6 +122,9 @@ export function compileEntities(input: {
     const users = context.gossipUsers.filter((u) => num(u.MenuID) === menu);
     return users.length > 0 && users.every((u) => projectNpcs.has(num(u.Entry)));
   };
+  // A menu a quest scene wrote options into (a gossip-select script names it) is the scene's too: it is never cleared or removed here
+  const sceneMenus = new Set(context.gossipScripted.map((r) => num(r.event_param1)));
+  const removable = (menu: number): boolean => ownedMenu(menu) && !sceneMenus.has(menu);
   const creatureGuids = new Set<number>();
   const objectGuids = new Set<number>();
 
@@ -142,7 +145,7 @@ export function compileEntities(input: {
       ...seenByColumns(npc.seenBy ?? 'living', existing ?? {}),
       // A fight or things to do on its patrol run on SmartAI; otherwise keep what quest scripting may have set.
       AIName: fightIsEmpty(npc.fight) && !hasPointActions(npc) ? (existing?.AIName ?? '') : 'SmartAI', // Its root menu; without one, what the database has, unless that menu is this project's own and is going
-      gossip_menu_id: npc.gossipMenu ? text(npc.gossipMenu.menus[0]!.menuId) : ownedMenu(num(existing?.gossip_menu_id)) ? '0' : (existing?.gossip_menu_id ?? '0'),
+      gossip_menu_id: npc.gossipMenu ? text(npc.gossipMenu.menus[0]!.menuId) : removable(num(existing?.gossip_menu_id)) ? '0' : (existing?.gossip_menu_id ?? '0'),
       // Creature loot is looked up by `lootid`; the NPC's own entry keeps its loot rows its own.
       ...(lootWritten > 0 ? { lootid: text(npc.entry) } : {}),
     });
@@ -337,7 +340,7 @@ export function compileEntities(input: {
   }
   const heldMenuIds = new Set(heldMenus.map((m) => m.menuId));
   for (const r of context.gossipMenus) {
-    if (!owned(num(r.MenuID)) || heldMenuIds.has(num(r.MenuID))) continue;
+    if (!removable(num(r.MenuID)) || heldMenuIds.has(num(r.MenuID))) continue;
     menuKeys.set(`${num(r.MenuID)}/${num(r.TextID)}`, { MenuID: text(num(r.MenuID)), TextID: text(num(r.TextID)) });
     textKeys.set(num(r.TextID), { ID: text(num(r.TextID)) });
   }
