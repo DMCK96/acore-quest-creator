@@ -92,3 +92,11 @@ describe('the 3D view’s right-click menu', () => {
     expect(screen.getByRole('menuitem', { name: /Paste here/ })).toHaveFocus();
   });
 });
+
+describe('a menu item\'s hint', () => {
+  it('is shown after the label', () => {
+    const items: MenuGroup[] = [{ id: 'world', items: [{ id: 'edit-vendor-stock', label: 'Edit vendor stock…', hint: '2 items', action: { kind: 'hideSpawns' } }] }];
+    render(<WorldContextMenu groups={items} at={{ x: 10, y: 20 }} onPick={vi.fn()} onClose={vi.fn()} />);
+    expect(screen.getByRole('menuitem', { name: /Edit vendor stock…/ })).toHaveTextContent('2 items');
+  });
+});

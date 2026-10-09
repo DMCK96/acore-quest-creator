@@ -72,7 +72,7 @@ export interface WorldMenuDeps {
   /** Makes a new project NPC or object with one spawn at `at`, as one step */
   onCreateEntity?(what: 'creature' | 'object', at: Placement): Promise<void>;
   /** Opens the editor on one of the project's NPCs or objects */
-  onEditEntity?(kind: 'creature' | 'object', entry: number): void;
+  onEditEntity?(kind: 'creature' | 'object', entry: number, tab?: string): void;
   /** Makes a project object lootable, or no longer */
   onSetLootable?(entry: number, on: boolean): Promise<void>;
   /** The project's NPCs, objects and items: whether a right-clicked spawn's NPC or object is the project's own */
@@ -343,7 +343,7 @@ export function useWorldMenu(deps: WorldMenuDeps): {
         await d.current.onCreateEntity?.(action.what, d.current.toRow(await floored(facingCamera(action.at, action.what))));
         return;
       case 'editEntity':
-        d.current.onEditEntity?.(action.spawn.kind, action.spawn.entry);
+        d.current.onEditEntity?.(action.spawn.kind, action.spawn.entry, action.tab);
         return;
       case 'setLootable':
         await d.current.onSetLootable?.(action.spawn.entry, action.on);

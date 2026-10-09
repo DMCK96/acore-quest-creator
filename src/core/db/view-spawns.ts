@@ -81,6 +81,8 @@ export interface ViewCreature {
   preset: ViewPreset | null;
   /** The spawn group (pool) it is in, or null when it is in none */
   group: number | null;
+  /** Its template's `npcflag` (128 is a vendor), when the query gave it */
+  npcFlags?: number;
   /** The top-level group its database group sits in (itself when not nested), when the query gave it */
   poolTop?: number | null;
   /** The event that top-level group follows in the database (game_event_pool), which `events` or `removedBy` holds */
@@ -237,6 +239,7 @@ export function toViewCreature(row: Row, path: ViewPoint[] | null, equipment: [n
     ...eventListOf(row),
     preset,
     group: groupOf(row),
+    ...(row.npcflag === null || row.npcflag === undefined ? {} : { npcFlags: num(row.npcflag) }),
     respawnSecs: num(row.spawntimesecs, DEFAULT_RESPAWN_SECS),
   };
 }

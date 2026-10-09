@@ -56,7 +56,8 @@ export type MenuAction =
   | { kind: 'placeHere'; what: 'creature' | 'object'; at: At }
   /** A new project NPC or object standing here, attached to no quest */
   | { kind: 'newEntity'; what: 'creature' | 'object'; at: At }
-  | { kind: 'editEntity'; spawn: MenuSpawn }
+  /** `tab`: the editor tab to open on */
+  | { kind: 'editEntity'; spawn: MenuSpawn; tab?: string }
   | { kind: 'setLootable'; spawn: MenuSpawn; on: boolean }
   | { kind: 'copy' }
   | { kind: 'paste'; at: At }
@@ -95,6 +96,8 @@ export interface MenuItem {
   action?: MenuAction;
   /** Why the item cannot run now; it is shown, disabled, with this */
   disabledReason?: string;
+  /** Muted text after the label, such as how many things a vendor sells */
+  hint?: string;
   /** A role the target has (shown with a check) or not */
   checked?: boolean;
   children?: MenuItem[];

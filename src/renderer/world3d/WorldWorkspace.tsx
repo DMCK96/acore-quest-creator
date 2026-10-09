@@ -168,12 +168,12 @@ export function WorldWorkspace({
   };
 
   /** Edit NPC… / Edit object…: an existing one is brought into the project first, then its editor opens */
-  const editEntity = async (what: 'creature' | 'object' | 'item', entry: number): Promise<void> => {
+  const editEntity = async (what: 'creature' | 'object' | 'item', entry: number, tab?: string): Promise<void> => {
     if (!project) return;
     const kind = what === 'creature' ? 'npc' : what;
     const error = await project.ensure({ kind, entry });
     if (error) setNote(error);
-    else setEditor({ kind, entry, isNew: false });
+    else setEditor({ kind, entry, isNew: false, ...(tab ? { tab } : {}) });
   };
 
   /**
@@ -684,7 +684,7 @@ export function WorldWorkspace({
         onOpenQuest={onOpenQuest}
         onShowSpawns={(groups, scope) => setPreset(presetOf(groups, scope))}
         onCreateEntity={createEntity}
-        onEditEntity={(kind, entry) => void editEntity(kind, entry)}
+        onEditEntity={(kind, entry, tab) => void editEntity(kind, entry, tab)}
         onGoToSpawn={({ map, ...target }) => {
           jump(inWorld(map, target), map);
           setFocus((previous) => ({ ...target, nonce: (previous?.nonce ?? 0) + 1 }));

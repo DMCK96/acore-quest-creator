@@ -169,3 +169,10 @@ describe('an NPC dressed by a display preset (creature_display_preset)', () => {
     expect(pickPreset(rows, 4242, 50)).toBeNull();
   });
 });
+
+describe('a creature spawn\'s NPC flags', () => {
+  it('carries the template\'s npcflag when the query gave it, and none otherwise', () => {
+    expect(toViewCreature({ ...creatureRow, npcflag: '129' }, null, [0, 0, 0]).npcFlags).toBe(129);
+    expect(toViewCreature(creatureRow, null, [0, 0, 0])).not.toHaveProperty('npcFlags');
+  });
+});

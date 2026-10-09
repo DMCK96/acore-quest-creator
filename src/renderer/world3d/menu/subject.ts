@@ -27,13 +27,18 @@ export function spawnedEntityOf(info: MenuSpawn, store: ProjectEntities): NpcSpa
   const spawn: SpawnPoint = { guid: info.guid, map: info.map, placement: info.placement, origin: info.own || info.added ? 'new' : 'existing', group: info.group ?? null };
   if (kind === 'npc') {
     const stored = store.npcs.find((n) => n.entry === info.entry);
-    return { kind, entry: info.entry, name: info.name, origin: stored ? originOf(stored) : 'existing', pathId: info.pathId, wander: info.wander, spawn };
+    // The project's stock is counted; a database NPC the project has not opened is a vendor by its flags
+    const vendor = stored ? { sells: stored.vendor.length > 0, count: stored.vendor.length } : { sells: ((info.npcFlags ?? 0) & VENDOR_FLAG) !== 0, count: null };
+    return { kind, entry: info.entry, name: info.name, origin: stored ? originOf(stored) : 'existing', pathId: info.pathId, wander: info.wander, vendor, spawn };
   }
   const stored = store.objects.find((o) => o.entry === info.entry);
   const typeLocked = stored?.origin.kind === 'existing' && stored.origin.locked.includes('type');
   const lootable = stored ? (typeLocked ? null : stored.type === 'chest') : lootableByType(info.objectType);
   return { kind, entry: info.entry, name: info.name, origin: stored ? originOf(stored) : 'existing', lootable, spawn };
 }
+
+/** `npcflag` bit of an NPC that sells things */
+const VENDOR_FLAG = 128;
 
 /** The object types the editor models besides a chest: quest giver, generic, text and goober */
 const MODELLED_TYPES = new Set([OBJECT_TYPE_VALUE.questGiver, OBJECT_TYPE_VALUE.generic, OBJECT_TYPE_VALUE.text, OBJECT_TYPE_VALUE.goober]);

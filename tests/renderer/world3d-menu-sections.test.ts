@@ -55,7 +55,7 @@ describe('a route point', () => {
 
 describe('the builder', () => {
   it('registers the sections in the spec order', () => {
-    expect(SECTIONS.map((s) => s.id)).toEqual(['busy', 'create', 'edit', 'loot', 'clipboard', 'coordinates', 'respawn', 'spawn-events', 'spawn-group', 'remove', 'movement', 'route-point', 'quest-parts', 'quest-spawns', 'vessel-stops']);
+    expect(SECTIONS.map((s) => s.id)).toEqual(['busy', 'create', 'edit', 'loot', 'vendor', 'clipboard', 'coordinates', 'respawn', 'spawn-events', 'spawn-group', 'remove', 'movement', 'route-point', 'quest-parts', 'quest-spawns', 'vessel-stops']);
   });
 
   it('runs only sections that apply, joins those of one group, and drops empty groups', () => {
@@ -119,14 +119,14 @@ describe('the ground', () => {
 describe('a spawn', () => {
   it('a database NPC can be edited too; offline it needs the database', () => {
     const world = buildMenu(on(npc()), context()).find((g) => g.id === 'world')!;
-    expect(world.items.map((i) => i.label)).toEqual(['Edit NPC…', 'Copy', 'Duplicate', 'Copy coordinates', 'Respawn time…', 'Event…']);
+    expect(world.items.map((i) => i.label)).toEqual(['Edit NPC…', 'Make vendor…', 'Copy', 'Duplicate', 'Copy coordinates', 'Respawn time…', 'Event…']);
     expect(item(buildMenu(on(npc()), context({ connected: false })), 'Edit NPC…')!.disabledReason).toBe('Needs the world database');
     expect(item(buildMenu(on(hela), context({ connected: false })), 'Edit NPC…')!.action).toBeDefined();
   });
 
   it('a project NPC: edit first, and remove last', () => {
     const world = buildMenu(on(hela), context()).find((g) => g.id === 'world')!;
-    expect(world.items.map((i) => i.label)).toEqual(['Edit NPC…', 'Copy', 'Duplicate', 'Copy coordinates', 'Respawn time…', 'Event…', 'Remove']);
+    expect(world.items.map((i) => i.label)).toEqual(['Edit NPC…', 'Make vendor…', 'Copy', 'Duplicate', 'Copy coordinates', 'Respawn time…', 'Event…', 'Remove']);
     expect(item(buildMenu(on(hela), context()), 'Edit NPC…')!.action).toEqual({ kind: 'editEntity', spawn: hela });
   });
 
@@ -277,5 +277,39 @@ describe('spawn events', () => {
   it('offline, a database spawn needs the database; a project one does not', () => {
     expect(item(buildMenu(on(npc()), context({ connected: false })), 'Event…')!.disabledReason).toBe('Needs the world database');
     expect(item(buildMenu(on(hela), context({ connected: false })), 'Event…')!.action).toBeDefined();
+  });
+});
+
+describe('the vendor section', () => {
+  const stock = { item: 1, maxCount: 0, restockSecs: 0, extendedCost: 0 };
+  const vendorStore: ProjectEntities = { ...store, npcs: [{ ...newNpc(12000001), name: 'Hela', vendor: [stock, { ...stock, item: 2 }] }] };
+  const oneStore: ProjectEntities = { ...store, npcs: [{ ...newNpc(12000001), name: 'Hela', vendor: [stock] }] };
+
+  it('offers Make vendor… on an NPC without stock, opening the Vendor tab', () => {
+    const entry = item(buildMenu(on(hela), context()), 'Make vendor…')!;
+    expect(entry.action).toEqual({ kind: 'editEntity', spawn: hela, tab: 'vendor' });
+    expect(entry.hint).toBeUndefined();
+  });
+  it('offers Edit vendor stock… with the count on a project NPC that has stock', () => {
+    expect(item(buildMenu(on(hela, vendorStore), context()), 'Edit vendor stock…')!.hint).toBe('2 items');
+    expect(item(buildMenu(on(hela, oneStore), context()), 'Edit vendor stock…')!.hint).toBe('1 item');
+    expect(item(buildMenu(on(hela, vendorStore), context()), 'Make vendor…')).toBeUndefined();
+  });
+  it('reads a database NPC the project has not opened from its flags', () => {
+    expect(item(buildMenu(on(npc({ npcFlags: 129 })), context()), 'Edit vendor stock…')!.hint).toBeUndefined();
+    expect(item(buildMenu(on(npc({ npcFlags: 129 })), context()), 'Make vendor…')).toBeUndefined();
+    expect(item(buildMenu(on(npc({ npcFlags: 1 })), context()), 'Make vendor…')).toBeDefined();
+    expect(item(buildMenu(on(npc()), context()), 'Make vendor…')).toBeDefined();
+  });
+  it('needs the world database for a database NPC, not for a project one', () => {
+    expect(item(buildMenu(on(npc()), context({ connected: false })), 'Make vendor…')!.disabledReason).toBe('Needs the world database');
+    expect(item(buildMenu(on(hela), context({ connected: false })), 'Make vendor…')!.action).toBeDefined();
+  });
+  it('is not offered on an object', () => {
+    expect(item(buildMenu(on(chest), context()), 'Make vendor…')).toBeUndefined();
+  });
+  it('waits while an AI client writes', async () => {
+    const { editsProject } = await import('../../src/renderer/world3d/menu/model');
+    expect(editsProject({ kind: 'editEntity', spawn: hela, tab: 'vendor' })).toBe(true);
   });
 });

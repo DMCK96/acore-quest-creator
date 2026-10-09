@@ -61,6 +61,8 @@ export type SpawnInfo = {
   eventsNow?: { during: ViewEvent[]; gone: ViewEvent[] };
   /** An object's template type (3 is a chest); absent for an NPC or when it is not known */
   objectType?: number;
+  /** An NPC's template `npcflag` (128 is a vendor); absent for an object or when it is not known */
+  npcFlags?: number;
 };
 
 /** An object's facing: its turn about Z, from 0 to a whole turn */
@@ -769,7 +771,7 @@ class SpawnManager {
       const base = { kind, guid, entry: data.entry, name: data.name, own: data.own, added: data.added ?? false, map: data.map, group: data.group ?? null, respawnSecs: data.respawnSecs ?? 300 };
       if (kind === 'creature') {
         const c = data as ViewCreature;
-        return { ...base, pathId: c.pathId ?? 0, wander: c.wander, placement: this.#inView({ x: c.x, y: c.y, z: c.z, orientation: c.orientation, rotation: null }), spawnEvents: c.spawnEvents === undefined ? 'npc' : c.spawnEvents, eventsNow: { during: c.events, gone: c.removedBy } };
+        return { ...base, pathId: c.pathId ?? 0, wander: c.wander, placement: this.#inView({ x: c.x, y: c.y, z: c.z, orientation: c.orientation, rotation: null }), spawnEvents: c.spawnEvents === undefined ? 'npc' : c.spawnEvents, eventsNow: { during: c.events, gone: c.removedBy }, ...(c.npcFlags === undefined ? {} : { npcFlags: c.npcFlags }) };
       }
       const o = data as ViewObject;
       const objectType = o.objectType ?? -1;

@@ -153,6 +153,7 @@ function Item({ item, open, onOpen, onPick }: { item: MenuItem; open: boolean; o
           {item.checked ? '✓' : ''}
         </span>
         <span className="world3d-menu__label">{item.label}</span>
+        {item.hint && <span className="world3d-menu__reason">{item.hint}</span>}
         {parent && (
           <span className="world3d-menu__more" aria-hidden="true">
             ›
