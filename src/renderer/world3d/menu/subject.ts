@@ -1,6 +1,6 @@
 import type { NpcSpawn, ObjectSpawn, SpawnPoint } from '@core/entities/entity';
 import { spawnKindOf } from '@core/entities/entity';
-import { OBJECT_TYPE_VALUE, originOf, vendorUnread, type ProjectEntities } from '@core/entities/model';
+import { OBJECT_TYPE_VALUE, originOf, trainerUnread, vendorUnread, type ProjectEntities } from '@core/entities/model';
 import type { At, MenuSpawn, MenuTarget } from './model';
 
 type Vessel = MenuTarget['vessel'];
@@ -29,7 +29,10 @@ export function spawnedEntityOf(info: MenuSpawn, store: ProjectEntities): NpcSpa
     const stored = store.npcs.find((n) => n.entry === info.entry);
     // The project's stock is counted; stock it has not read (an NPC it has not opened, or opened before vendors) is the database's, by its flags
     const vendor = stored && !vendorUnread(stored) ? { sells: stored.vendor.length > 0, count: stored.vendor.length } : { sells: ((info.npcFlags ?? 0) & VENDOR_FLAG) !== 0, count: null };
-    return { kind, entry: info.entry, name: info.name, origin: stored ? originOf(stored) : 'existing', pathId: info.pathId, wander: info.wander, vendor, spawn };
+    const trainer = stored && !trainerUnread(stored)
+      ? { teaches: stored.trainer !== null, count: stored.trainer?.spells.length ?? 0 }
+      : { teaches: ((info.npcFlags ?? 0) & TRAINER_FLAG) !== 0, count: null };
+    return { kind, entry: info.entry, name: info.name, origin: stored ? originOf(stored) : 'existing', pathId: info.pathId, wander: info.wander, vendor, trainer, spawn };
   }
   const stored = store.objects.find((o) => o.entry === info.entry);
   const typeLocked = stored?.origin.kind === 'existing' && stored.origin.locked.includes('type');
@@ -39,6 +42,8 @@ export function spawnedEntityOf(info: MenuSpawn, store: ProjectEntities): NpcSpa
 
 /** `npcflag` bit of an NPC that sells things */
 const VENDOR_FLAG = 128;
+/** `npcflag` bit of an NPC that teaches spells */
+const TRAINER_FLAG = 16;
 
 /** The object types the editor models besides a chest: quest giver, generic, text and goober */
 const MODELLED_TYPES = new Set([OBJECT_TYPE_VALUE.questGiver, OBJECT_TYPE_VALUE.generic, OBJECT_TYPE_VALUE.text, OBJECT_TYPE_VALUE.goober]);

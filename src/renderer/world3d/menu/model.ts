@@ -12,7 +12,7 @@ import type { MenuGroupId } from './section';
 export type At = { x: number; y: number; z: number };
 export type MenuSpawn = SpawnInfo;
 /** The editor tabs the menu can open an NPC on */
-export type MenuEditorTab = 'vendor';
+export type MenuEditorTab = 'vendor' | 'trainer';
 
 export interface MenuTarget {
   /** The ground under the right-click, or null for sky */

@@ -12,7 +12,7 @@ const store = { ...EMPTY_ENTITIES, npcs: [{ ...newNpc(12000001), name: 'Hela' }]
 describe('the clicked thing as an entity', () => {
   it('a database NPC is existing, with its spawn existing too', () => {
     expect(spawnedEntityOf(info(), store)).toEqual({
-      kind: 'npc', entry: 1423, name: 'Guard', origin: 'existing', pathId: 801, wander: 0, vendor: { sells: false, count: null },
+      kind: 'npc', entry: 1423, name: 'Guard', origin: 'existing', pathId: 801, wander: 0, vendor: { sells: false, count: null }, trainer: { teaches: false, count: null },
       spawn: { guid: 80330, map: 0, placement, origin: 'existing', group: null },
     });
   });
@@ -35,6 +35,19 @@ describe('the clicked thing as an entity', () => {
     const unread = { ...store, npcs: [{ ...newNpc(1423), origin: { kind: 'existing' as const, original: {}, sharedLoot: 0, spawnCount: 1, locked: [] } }] };
     expect(spawnedEntityOf(info({ npcFlags: 129 }), unread)).toMatchObject({ vendor: { sells: true, count: null } });
     expect(spawnedEntityOf(info({ npcFlags: 1 }), unread)).toMatchObject({ vendor: { sells: false, count: null } });
+  });
+
+  it('an NPC says whether it teaches: the trainer the project holds counted, an unopened database NPC by its flags', () => {
+    const lesson = { spell: 78, cost: 0, reqLevel: 0, reqSkill: 0, reqSkillRank: 0, reqSpells: [] };
+    const teaching = { ...store, npcs: [{ ...newNpc(12000001), trainer: { trainerId: 900033, type: 'class' as const, requirement: 1, greeting: '', spells: [lesson] } }] };
+    expect(spawnedEntityOf(info({ entry: 12000001, own: true }), teaching)).toMatchObject({ trainer: { teaches: true, count: 1 } });
+    expect(spawnedEntityOf(info({ entry: 12000001, own: true }), store)).toMatchObject({ trainer: { teaches: false, count: 0 } });
+    expect(spawnedEntityOf(info({ npcFlags: 51 }), store)).toMatchObject({ trainer: { teaches: true, count: null } });
+    expect(spawnedEntityOf(info({ npcFlags: 3 }), store)).toMatchObject({ trainer: { teaches: false, count: null } });
+    // A trainer the project never read is the database's, by its flags
+    const unread = { ...store, npcs: [{ ...newNpc(1423), origin: { kind: 'existing' as const, original: {}, sharedLoot: 0, spawnCount: 1, sharedTrainer: 0, locked: [] } }] };
+    expect(spawnedEntityOf(info({ npcFlags: 51 }), unread)).toMatchObject({ trainer: { teaches: true, count: null } });
+    expect(spawnedEntityOf(info({ npcFlags: 1 }), unread)).toMatchObject({ trainer: { teaches: false, count: null } });
   });
 
   it('an object says whether it can be looted: a project chest yes, a project goober no, a database one cannot be changed', () => {

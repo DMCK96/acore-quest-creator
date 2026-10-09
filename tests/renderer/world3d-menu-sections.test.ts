@@ -55,7 +55,7 @@ describe('a route point', () => {
 
 describe('the builder', () => {
   it('registers the sections in the spec order', () => {
-    expect(SECTIONS.map((s) => s.id)).toEqual(['busy', 'create', 'edit', 'loot', 'vendor', 'clipboard', 'coordinates', 'respawn', 'spawn-events', 'spawn-group', 'remove', 'movement', 'route-point', 'quest-parts', 'quest-spawns', 'vessel-stops']);
+    expect(SECTIONS.map((s) => s.id)).toEqual(['busy', 'create', 'edit', 'loot', 'vendor', 'trainer', 'clipboard', 'coordinates', 'respawn', 'spawn-events', 'spawn-group', 'remove', 'movement', 'route-point', 'quest-parts', 'quest-spawns', 'vessel-stops']);
   });
 
   it('runs only sections that apply, joins those of one group, and drops empty groups', () => {
@@ -119,14 +119,14 @@ describe('the ground', () => {
 describe('a spawn', () => {
   it('a database NPC can be edited too; offline it needs the database', () => {
     const world = buildMenu(on(npc()), context()).find((g) => g.id === 'world')!;
-    expect(world.items.map((i) => i.label)).toEqual(['Edit NPC…', 'Make vendor…', 'Copy', 'Duplicate', 'Copy coordinates', 'Respawn time…', 'Event…']);
+    expect(world.items.map((i) => i.label)).toEqual(['Edit NPC…', 'Make vendor…', 'Make trainer…', 'Copy', 'Duplicate', 'Copy coordinates', 'Respawn time…', 'Event…']);
     expect(item(buildMenu(on(npc()), context({ connected: false })), 'Edit NPC…')!.disabledReason).toBe('Needs the world database');
     expect(item(buildMenu(on(hela), context({ connected: false })), 'Edit NPC…')!.action).toBeDefined();
   });
 
   it('a project NPC: edit first, and remove last', () => {
     const world = buildMenu(on(hela), context()).find((g) => g.id === 'world')!;
-    expect(world.items.map((i) => i.label)).toEqual(['Edit NPC…', 'Make vendor…', 'Copy', 'Duplicate', 'Copy coordinates', 'Respawn time…', 'Event…', 'Remove']);
+    expect(world.items.map((i) => i.label)).toEqual(['Edit NPC…', 'Make vendor…', 'Make trainer…', 'Copy', 'Duplicate', 'Copy coordinates', 'Respawn time…', 'Event…', 'Remove']);
     expect(item(buildMenu(on(hela), context()), 'Edit NPC…')!.action).toEqual({ kind: 'editEntity', spawn: hela });
   });
 
@@ -311,5 +311,37 @@ describe('the vendor section', () => {
   it('waits while an AI client writes', async () => {
     const { editsProject } = await import('../../src/renderer/world3d/menu/model');
     expect(editsProject({ kind: 'editEntity', spawn: hela, tab: 'vendor' })).toBe(true);
+  });
+});
+
+describe('the trainer section', () => {
+  const lesson = { spell: 78, cost: 0, reqLevel: 0, reqSkill: 0, reqSkillRank: 0, reqSpells: [] };
+  const taught = (n: number): ProjectEntities => ({ ...store, npcs: [{ ...newNpc(12000001), name: 'Hela', trainer: { trainerId: 900033, type: 'class', requirement: 1, greeting: '', spells: Array.from({ length: n }, () => lesson) } }] });
+
+  it('offers Make trainer… on an NPC that teaches nothing, opening the Trainer tab', () => {
+    const entry = item(buildMenu(on(hela), context()), 'Make trainer…')!;
+    expect(entry.action).toEqual({ kind: 'editEntity', spawn: hela, tab: 'trainer' });
+    expect(entry.hint).toBeUndefined();
+  });
+  it('offers Edit trainer spells… with the count on a project trainer', () => {
+    expect(item(buildMenu(on(hela, taught(2)), context()), 'Edit trainer spells…')!.hint).toBe('2 spells');
+    expect(item(buildMenu(on(hela, taught(1)), context()), 'Edit trainer spells…')!.hint).toBe('1 spell');
+    expect(item(buildMenu(on(hela, taught(0)), context()), 'Edit trainer spells…')!.hint).toBeUndefined();
+    expect(item(buildMenu(on(hela, taught(2)), context()), 'Make trainer…')).toBeUndefined();
+  });
+  it('reads an unopened database NPC from the trainer bit of its flags', () => {
+    expect(item(buildMenu(on(npc({ npcFlags: 51 })), context()), 'Edit trainer spells…')!.hint).toBeUndefined();
+    expect(item(buildMenu(on(npc({ npcFlags: 129 })), context()), 'Make trainer…')).toBeDefined();
+    expect(item(buildMenu(on(npc()), context()), 'Make trainer…')).toBeDefined();
+  });
+  it('needs the world database for a database NPC, not for a project one; not on objects', () => {
+    expect(item(buildMenu(on(npc()), context({ connected: false })), 'Make trainer…')!.disabledReason).toBe('Needs the world database');
+    expect(item(buildMenu(on(hela), context({ connected: false })), 'Make trainer…')!.action).toBeDefined();
+    expect(item(buildMenu(on(chest), context()), 'Make trainer…')).toBeUndefined();
+  });
+  it('a trainer the project never read falls back to the flags', () => {
+    const unread = { ...store, npcs: [{ ...newNpc(1423), origin: { kind: 'existing' as const, original: {}, sharedLoot: 0, spawnCount: 1, sharedTrainer: 0, locked: [] } }] };
+    expect(item(buildMenu(on(npc({ npcFlags: 51 }), unread), context()), 'Edit trainer spells…')).toBeDefined();
+    expect(item(buildMenu(on(npc({ npcFlags: 3 }), unread), context()), 'Make trainer…')).toBeDefined();
   });
 });
