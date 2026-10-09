@@ -32,7 +32,7 @@ describe('the guides', () => {
     expect(guideOf(model)).toContain('## Kinds');
   });
 
-  it.each(['loot', 'npc', 'object', 'item'] as const)('%s guide has a Fields section', (model) => {
+  it.each(['loot', 'npc', 'object', 'item', 'gossip'] as const)('%s guide has a Fields section', (model) => {
     expect(guideOf(model)).toContain('## Fields');
   });
 
@@ -54,13 +54,13 @@ describe('the guides tell the truth about the editor', () => {
 
   it('cite only issue codes the editor really has', () => {
     for (const model of AUTHORING_MODELS) {
-      const cited = [...guideOf(model).matchAll(/`((?:SCENE|FIGHT|ENTITY|ITEM|LOOT|PATROL|VENDOR|TRAINER)_[A-Z_]+)`/g)].map((m) => m[1]!);
+      const cited = [...guideOf(model).matchAll(/`((?:SCENE|FIGHT|ENTITY|ITEM|LOOT|PATROL|VENDOR|TRAINER|GOSSIP)_[A-Z_]+)`/g)].map((m) => m[1]!);
       for (const code of cited) expect(sources.includes(`'${code}'`), `${model} guide cites ${code}`).toBe(true);
     }
   });
 
   it('cite enough codes that a reader can match what the editor reports', () => {
-    const count = (model: Parameters<typeof guideOf>[0]) => new Set([...guideOf(model).matchAll(/`(?:SCENE|FIGHT|ENTITY|ITEM|LOOT|PATROL|VENDOR|TRAINER)_[A-Z_]+`/g)].map((m) => m[0])).size;
+    const count = (model: Parameters<typeof guideOf>[0]) => new Set([...guideOf(model).matchAll(/`(?:SCENE|FIGHT|ENTITY|ITEM|LOOT|PATROL|VENDOR|TRAINER|GOSSIP)_[A-Z_]+`/g)].map((m) => m[0])).size;
     expect(count('scene')).toBeGreaterThanOrEqual(4);
     expect(count('fight')).toBeGreaterThanOrEqual(4);
     expect(count('npc')).toBeGreaterThanOrEqual(3);
@@ -106,6 +106,23 @@ describe('the guides tell the truth about the editor', () => {
     const trainerExample = examplesOf('npc').find((e) => (e.value as { trainer?: unknown }).trainer)!;
     expect((trainerExample.value as { trainer: { trainerId: number } }).trainer.trainerId).toBeGreaterThan(1_000_000_000);
     expect(guide).toMatch(/every class/);
+  });
+
+  it('gossip guide, example and the NPC guide cover what a menu is and cite its codes', async () => {
+    const { examplesOf } = await import('../../src/core/authoring/examples');
+    const guide = guideOf('gossip');
+    const words = ['`menuId`', '`textId`', '`optionId`', '`kept`', '`locked`', 'allocate_ids', 'Give it its own copy', '`gossipMenu`',
+      '`GOSSIP_KEPT_REMOVED`', '`GOSSIP_NO_ID`', '`GOSSIP_OPTION_NO_TEXT`', '`GOSSIP_NO_GREETING`', '`GOSSIP_ID_TAKEN`', '`GOSSIP_ID_DUPLICATE`', '`GOSSIP_SHARED`',
+      '`GOSSIP_EMPTY_GREETING`', '`GOSSIP_UNKNOWN_MENU`', '`GOSSIP_UNREACHABLE`', '`GOSSIP_SERVICE_FLAG`', '`GOSSIP_SCENE`', '`GOSSIP_LOCKED`', '`GOSSIP_NOT_TALKABLE`', '`GOSSIP_NOT_READ`'];
+    for (const word of words) expect(guide).toContain(word);
+    for (const service of ['vendor', 'trainer', 'innkeeper', 'banker']) expect(guide.toLowerCase()).toContain(service);
+    expect(guide).toContain('`close`');
+    expect(guideOf('npc')).toContain('`gossipMenu`');
+    expect(guideOf('npc')).toMatch(/describe_authoring/);
+    const example = examplesOf('gossip')[0]!;
+    expect((example.value as { menus: { menuId: number }[] }).menus[0]!.menuId).toBeGreaterThan(1_000_000_000);
+    expect(jsonSchemaOf('npc')).toHaveProperty('properties.gossipMenu');
+    expect(authoringSummary('gossip')).toMatch(/gossip/i);
   });
 
   it('say scene ids look like s1, s2 and so on', () => {

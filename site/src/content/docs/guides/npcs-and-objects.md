@@ -56,6 +56,7 @@ An NPC holds a weapon by its item's display alone, so any item works, even one y
 - **Loot**: what it drops. See [Loot](/azeroth-world-editor/guides/loot/).
 - **Vendor**: what it sells. See [Selling things](#selling-things) below.
 - **Trainer**: the spells it teaches. See [Teaching spells](#teaching-spells) below.
+- **Gossip**: what it says when talked to. See [Talking](#talking) below.
 - **Placement**: where it stands. **Add spawn** and paste the output of the in-game `.gps` command, or choose **Place in world** to put it down in [the World](/azeroth-world-editor/guides/the-world/#your-own-npcs-from-their-editor). Each spawn has its own **Event**, which starts as **Same as the NPC**.
 
 ### Selling things
@@ -97,6 +98,25 @@ This database also keeps an older table of shared spell lists, `npc_trainer`. If
 In [the World](/azeroth-world-editor/guides/the-world/#the-right-click-menu), right-click an NPC and choose **Make trainer…**, or **Edit trainer spells…** when it already teaches; both open this tab. Checks: a spell row with no spell, the same spell twice, a spell that needs itself, a trainer with no ID, a trainer ID that another NPC already uses (in the database or in the project), and an edit that would overwrite a trainer other NPCs use are errors; a class trainer with no class, an empty trainer, a spell the server does not have, and an edit to a shared trainer that is not written are warnings.
 
 Translated greetings are not edited here.
+
+### Talking
+
+Any NPC can have a gossip menu: the window that opens when a player talks to it. On the **Gossip** tab, **Give this NPC a gossip menu** adds a greeting and turns **Can be talked to** on. A menu has:
+
+- **Greeting**: one or more variants, each with a **Text**, a **Female text** (optional) and a **Chance**. One is chosen by weight each time. **Add variant** and **Remove variant** change the list.
+- **Options**: each with an **Icon** (the symbol beside it), its **Text**, and what it **Does**: **Closes the window**, **Opens menu…** (another menu of this NPC, a **New menu…**, or a menu ID the database has), or opens a service window: **Vendor**, **Flight master**, **Trainer**, **Innkeeper**, **Banker**, **Petitions**, **Tabard designer**, **Battlemaster**, **Auctioneer**, **Stable master**, **Armorer** or **Unlearn talents**. A service sets its icon when the icon is 0. **Up**, **Down** and **Remove** order and remove them; the order is only how they are shown.
+
+A service option shows only to an NPC that can do it, so one that is not a vendor, trainer or the like gets a note, with a button that goes to the **Vendor** or **Trainer** tab.
+
+An NPC the database already gives a menu opens with it loaded, with every menu its options open. Opening it changes nothing; the patch writes only the menus you change, and the revert patch puts the original rows back. Most NPCs share their menu with others, so a shared menu shows read-only, says how many other NPCs or objects use it, and offers **Give it its own copy** (and **Copy the whole menu tree**). A menu that only a shared menu opens is shared too. A copy is a new menu with the same content; a map marker, a money box or a translation on an option stays with the original.
+
+Some options are **kept as they are**: the database ties them to a condition (for example, only one faction sees it) or to a script (something happens when it is picked). Their text and icon can change; they cannot be removed or made to do something else, and neither can the menu that holds one. Scripts and conditions are not edited here.
+
+Changing the text of an option or a greeting clears its translations, so other-language clients show the new text. **Remove gossip menu** makes only this NPC stop having one, even when the menu is shared. **Copy menu from…** replaces the tree with a copy of another NPC's.
+
+In [the World](/azeroth-world-editor/guides/the-world/#the-right-click-menu), right-click an NPC and choose **Add gossip menu…**, or **Edit gossip menu…** when it has one; both open this tab. Checks: an option with no text, a greeting nothing could choose, a menu or text ID that another NPC or object already uses (in the database or in the project), an edit that would overwrite a menu others use, and a kept option that was removed are errors; a service the NPC cannot do, a menu no option reaches, an option opening a menu that does not exist, a menu that cannot be opened because **Can be talked to** is off, and an edit to a shared menu that is not written are warnings.
+
+A quest scene that is started by a gossip option makes its own option and menu and does not know the menu made here. Both work; they stay separate.
 
 ### Visibility
 

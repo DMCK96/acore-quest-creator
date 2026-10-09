@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import { fightSchema } from '../combat/model';
-import { lootSchema, patrolSchema, projectEntitiesSchema } from '../entities/model';
+import { gossipTreeSchema, lootSchema, patrolSchema, projectEntitiesSchema } from '../entities/model';
 import { sceneSchema } from '../scripts/model';
 
 /**
@@ -9,7 +9,7 @@ import { sceneSchema } from '../scripts/model';
  * so a kind added to a model later shows up here with no further work.
  */
 
-export const AUTHORING_MODELS = ['scene', 'fight', 'patrol', 'loot', 'npc', 'object', 'item'] as const;
+export const AUTHORING_MODELS = ['scene', 'fight', 'patrol', 'loot', 'npc', 'object', 'item', 'gossip'] as const;
 export type AuthoringModel = (typeof AUTHORING_MODELS)[number];
 
 const SUMMARIES: Record<AuthoringModel, string> = {
@@ -20,6 +20,7 @@ const SUMMARIES: Record<AuthoringModel, string> = {
   npc: 'A new NPC for the project: its name, level, look, faction, role, spawns, loot, what it sells, what it teaches and fight.',
   object: 'A new object for the project: a chest, book, door or other thing in the world.',
   item: 'A new item for the project: its quality, level, stats, spells and text.',
+  gossip: 'An NPC gossip menu tree: what it says when talked to, and options that close, open another menu or open a service window.',
 };
 
 /** A patrol as the assistant writes it: the editor chooses the path id, so it is optional here. */
@@ -42,6 +43,8 @@ export function authoringSchema(model: AuthoringModel): z.ZodType {
       return projectEntitiesSchema.shape.objects.element;
     case 'item':
       return projectEntitiesSchema.shape.items.element;
+    case 'gossip':
+      return gossipTreeSchema;
   }
 }
 

@@ -190,7 +190,7 @@ const NPC = lines(
   '- `equipment` — items in `mainHand`, `offHand` and `ranged`.',
   '- `vendor` — what it sells, in the order shown: `{ item, maxCount, restockSecs, extendedCost }`. `maxCount` 0 is unlimited (and `restockSecs` is then ignored); otherwise `maxCount` is 1 to 255 and `restockSecs` must be above 0, since the stock comes back every `restockSecs` seconds. A negative `item` is another vendor\'s whole list (minus the NPC entry). `extendedCost` is an `ItemExtendedCost.dbc` id for honor, arena points or tokens, 0 for gold alone (the gold price is the buy price of the item). An NPC with any stock is a vendor; none, not. Writing it replaces the whole list. An existing database vendor arrives with its stock already in `vendor`; if its `origin.original` has no `npc_vendor` it was brought in before stock was read, so its `vendor` is not written.',
   '- `trainer` — `null` (not a trainer) or what it teaches: `{ trainerId, type, requirement, greeting, spells }`. `trainerId` comes from `allocate_ids` with kind `trainer`; it must be the NPC\'s own, never one that exists or that another NPC holds. `type` is `class`, `mount`, `profession` or `pet`. `requirement` is the class a `class` or `pet` trainer serves (1 warrior, 2 paladin, 3 hunter, 4 rogue, 5 priest, 6 death knight, 7 shaman, 8 mage, 9 warlock, 11 druid; other ids are this fork\'s own classes), 0 for none (every class can use it), and is kept as read for the other types. Each spell is `{ spell, cost, reqLevel, reqSkill, reqSkillRank, reqSpells }`: `cost` is in copper and `reqSpells` is up to 3 spells to know first. Writing it replaces the whole trainer. An existing trainer arrives in `trainer`; one other NPCs share is locked (`origin.locked` has `trainer`) and is not written, so ask the author to use Give it its own copy in the editor. The fork\'s older `npc_trainer` lists are not edited.',
-  '- `gossipMenu` — `null`, or `{ menus }`: what it says when talked to; each option has an `action` of kind `close`, `menu` or `service`.',
+  '- `gossipMenu` — `null`, or `{ menus }`, what it says when talked to (see `describe_authoring` `gossip`); an option action is `close`, `menu` or `service`.',
   '- `seenBy` — who sees it: `living` players (the default), only the `dead` (a spirit healer) or `both`.',
   '- `events` — `asIs`, or a rule `{ mode, events }` for the game events its spawns follow: `during` puts them in the world only while one of the listed events runs, `except` takes them out while one runs.',
   '- `origin` — `new`, or `existing` for a database NPC the project took over; an existing one may be `locked` for `fight` or `loot`.',
@@ -265,6 +265,32 @@ const ITEM = lines(
   'Writing an item returns the editor\'s issues for it, such as `ITEM_NO_NAME`, `ITEM_NO_LOOK` (no look chosen), `ITEM_LEVELS`, `ITEM_STACK`, `ITEM_STARTS_UNKNOWN` (the quest it starts does not exist) and `ENTITY_TAKEN` (the entry already holds something in the database). A weapon an NPC cannot hold is reported on that NPC as `ENTITY_WEAPON`.',
 );
 
+const GOSSIP = lines(
+  '## What it is',
+  'The menu an NPC opens when talked to: a greeting and options. An option can close the window, open another menu, or open a service window (vendor, trainer, banker and the rest). It is the `gossipMenu` of an NPC, written with `upsert_entity`, and compiled into the database when a patch is exported.',
+  '',
+  '## How the parts fit',
+  'A tree is `{ menus }`; the first menu is the one the NPC opens with, the others are reached by options whose action is `menu`. Each menu has its own `menuId` and `textId`, taken from `allocate_ids` with kind `gossipMenu` and `gossipText`; they must be the NPC own, never an id that exists. The NPC needs `gossip` on to be talked to, and a service option needs the NPC to have what it opens (a vendor option on an NPC with `vendor` stock, a trainer option on an NPC with a `trainer`).',
+  '',
+  '## Fields',
+  '- `menus` — the menus, root first.',
+  '- `menuId`, `textId` — the menu and the text it greets with.',
+  '- `greeting` — one to eight variants `{ text, textFemale, probability }`; one is chosen by weight.',
+  '- `options` — each `{ optionId, icon, text, action, kept }`. A new option takes one more than the menu highest `optionId`; an id never changes or moves.',
+  '- `action` — what choosing the option does, by its `kind`: `close` the window, open another `menu` (give its `menuId`), or open a `service` window (give its `type` and `npcFlag`). Services: vendor 3/128, flight master 4/8192, trainer 5/16, innkeeper 8/65536, banker 9/131072, petitions 10/262144, tabard designer 11/524288, battlemaster 12/1048576, auctioneer 13/2097152, stable master 14/4194304, armorer 15/4096, unlearn talents 16/16 (type/npcFlag).',
+  '- `locked` — a menu other NPCs or objects use. It is not written; ask the author to use Give it its own copy in the editor, then edit the copy.',
+  '- `kept` — an option the database ties to a condition or a script: it cannot be removed or have its action changed, but its text and icon can.',
+  '',
+  '## Common mistakes',
+  '- A `menuId` or `textId` that exists, or that another NPC holds: use `allocate_ids`.',
+  '- An option that opens a menu id that is not in `menus` and not in the database.',
+  '- A service option on an NPC that cannot do it, or `gossip` off.',
+  '- Dropping a `kept` option, or a menu holding one.',
+  '- Scripts: what happens when an option is chosen is not part of this; options tied to a script are kept as they are.',
+  '',
+  '## What the editor checks',
+  'Errors stop an export: `GOSSIP_NO_ID`, `GOSSIP_OPTION_NO_TEXT`, `GOSSIP_NO_GREETING` (every variant has chance 0), `GOSSIP_ID_TAKEN` (another NPC, object or menu uses the id), `GOSSIP_ID_DUPLICATE` (two project NPCs hold one id), `GOSSIP_SHARED` (an edit would overwrite a menu others use) and `GOSSIP_KEPT_REMOVED`. Warnings: `GOSSIP_EMPTY_GREETING`, `GOSSIP_UNKNOWN_MENU`, `GOSSIP_UNREACHABLE`, `GOSSIP_SERVICE_FLAG` (the NPC cannot do what the option opens), `GOSSIP_SCENE` (a quest scene gives the NPC a gossip option of its own), `GOSSIP_LOCKED` (an edit to a shared menu is not written), `GOSSIP_NOT_TALKABLE` and `GOSSIP_NOT_READ` (gossip on an NPC whose gossip was never read is not written).',
+);
 const GUIDES: Record<AuthoringModel, string> = {
   scene: SCENE,
   fight: FIGHT,
@@ -273,6 +299,7 @@ const GUIDES: Record<AuthoringModel, string> = {
   npc: NPC,
   object: OBJECT,
   item: ITEM,
+  gossip: GOSSIP,
 };
 
 /** The guide for an authoring model: markdown, at most 6000 characters. */

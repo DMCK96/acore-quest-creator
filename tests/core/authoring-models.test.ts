@@ -4,8 +4,8 @@ import { emptyFight } from '../../src/core/combat/model';
 import { newItem, newNpc, newObject } from '../../src/core/entities/model';
 
 describe('the authoring models', () => {
-  it('are the seven the assistant can author', () => {
-    expect(AUTHORING_MODELS).toEqual(['scene', 'fight', 'patrol', 'loot', 'npc', 'object', 'item']);
+  it('are the eight the assistant can author', () => {
+    expect(AUTHORING_MODELS).toEqual(['scene', 'fight', 'patrol', 'loot', 'npc', 'object', 'item', 'gossip']);
   });
 
   it.each(AUTHORING_MODELS)('%s has a one-sentence summary and a JSON Schema that is not huge', (model) => {
@@ -34,6 +34,7 @@ describe('the authoring models', () => {
     expect(authoringSchema('npc').safeParse(newNpc(90001)).success).toBe(true);
     expect(authoringSchema('object').safeParse(newObject(90002)).success).toBe(true);
     expect(authoringSchema('item').safeParse(newItem(90003)).success).toBe(true);
+    expect(authoringSchema('gossip').safeParse({ menus: [{ menuId: 2000000001, textId: 2000000002, locked: false, greeting: [{ text: 'Hi', textFemale: '', probability: 1 }], options: [{ optionId: 0, icon: 0, text: 'Bye', action: { kind: 'close' }, kept: false }] }] }).success).toBe(true);
     expect(authoringSchema('loot').safeParse([{ item: 769, chance: 50, min: 1, max: 1, questOnly: false }]).success).toBe(true);
   });
 

@@ -64,7 +64,7 @@ Beyond quest text, the assistant can write the parts that make a quest or an enc
 - **Scenes** on a quest: when something happens to an NPC, object or area (the quest is accepted, a player talks to it, it dies, someone enters an area), and only if some conditions hold, a list of steps runs, such as saying a line, giving credit, spawning an NPC or escorting one.
 - **Boss fights** for the NPCs it makes: abilities on timers, reactions at health thresholds, phases, adds and surrender.
 - **Patrol routes** for the spawns of its NPCs, with pauses and actions at each point.
-- **Loot** for its NPCs and chests, **what its NPCs sell**, and **what its NPCs teach**.
+- **Loot** for its NPCs and chests, **what its NPCs sell**, **what its NPCs teach**, and **what its NPCs say** (gossip menus).
 - **New NPCs, objects and items**, such as a legendary sword and the captain who guards it.
 
 It learns each of these from a built-in guide and examples, and the editor checks everything it writes and tells it what is still wrong, so it can fix it. If a scene stored on a quest cannot be read (an older or hand-edited one), the assistant is told its id and leaves it exactly as it is, and moving a marker in the World does the same, so it is never erased by a save. An existing database NPC's fight or loot is left alone when the editor locks it. None of this changes the database until you export a patch and apply it yourself.

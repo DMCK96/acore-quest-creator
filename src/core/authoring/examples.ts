@@ -103,6 +103,32 @@ function trainerExample(): AuthoringExample {
   };
 }
 
+function gossipExample(): AuthoringExample {
+  // Only the shape: real ids come from allocate_ids (kinds gossipMenu and gossipText)
+  const value = {
+    menus: [
+      {
+        menuId: 2000000001,
+        textId: 2000000002,
+        locked: false,
+        greeting: [{ text: 'Welcome, traveller. What can I do for you?', textFemale: '', probability: 1 }],
+        options: [
+          { optionId: 0, icon: 1, text: 'Let me browse your goods.', action: { kind: 'service' as const, type: 3, npcFlag: 128 }, kept: false },
+          { optionId: 1, icon: 0, text: 'Tell me about this place.', action: { kind: 'menu' as const, menuId: 2000000003 }, kept: false },
+        ],
+      },
+      {
+        menuId: 2000000003,
+        textId: 2000000004,
+        locked: false,
+        greeting: [{ text: 'The old road runs north, past the mill.', textFemale: '', probability: 1 }],
+        options: [{ optionId: 0, icon: 0, text: 'Thank you.', action: { kind: 'close' as const }, kept: false }],
+      },
+    ],
+  };
+  return { title: 'A shopkeeper who talks about the place', value, reading: 'Greets with one line. Offers a vendor window, or a second menu about the place that ends with a thank-you that closes the window.' };
+}
+
 function objectExample(): AuthoringExample {
   const value = { ...newObject(90002), name: "Rellick's Strongbox", type: 'chest' as const, displayId: 259, spawns: [{ ...newSpawn(90200), x: -9462, y: 32, z: 200 }] };
   return { title: 'A chest with one spawn', value, reading: "Rellick's Strongbox, a chest standing at one spawn." };
@@ -150,5 +176,7 @@ export function examplesOf(model: AuthoringModel): AuthoringExample[] {
       return [objectExample()];
     case 'item':
       return [itemExample()];
+    case 'gossip':
+      return [gossipExample()];
   }
 }
