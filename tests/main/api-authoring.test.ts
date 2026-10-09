@@ -41,6 +41,24 @@ describe('projectIssues', () => {
     expect(noModel.message).toMatch(/^NPC "Captain Rellick":/);
   });
 
+  it('warns about vendor stock that neither the database nor the project has', async () => {
+    const db = forkDb();
+    db.insert('item_template', { entry: '159', name: 'Refreshing Spring Water' });
+    const api = createApi({
+      store: openStore(':memory:', box), openWorldDb: async () => db, openDevDb: async () => { throw new Error('x'); },
+      fs: { writeFile: async () => {}, ensureDir: async () => {}, listDir: async () => [] }, now: () => new Date(),
+      session: createProjectSession(defaultProjectMeta('P', 'C:/out')), projects: {} as ProjectController,
+    });
+    const rec: any = await api.saveProfile({ name: 'w', role: 'world', host: 'h', port: 1, user: 'u', database: 'd', password: 'p' });
+    await api.connect(rec.value.id);
+    const stock = (item: number) => ({ item, maxCount: 0, restockSecs: 0, extendedCost: 0 });
+    await api.putProjectEntities({ npcs: [{ ...newNpc(90001), name: 'Seller', displayId: 1, vendor: [stock(159), stock(999999)] }], objects: [], items: [] });
+    const out: any = await api.projectIssues();
+    const unknown = out.value.filter((i: any) => i.code === 'VENDOR_UNKNOWN_ITEM');
+    expect(unknown).toHaveLength(1);
+    expect(unknown[0].message).toContain('item 999999');
+  });
+
   it('takes no arguments', () => {
     expect(parseRequest('projectIssues', []).ok).toBe(true);
     expect(parseRequest('projectIssues', [1]).ok).toBe(false);

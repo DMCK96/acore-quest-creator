@@ -29,6 +29,8 @@ export function entityIssues(input: {
   knownQuest?: ((id: number) => boolean) | null;
   /** `item_template` column name to its data type; null skips the check of advanced values. */
   itemColumnTypes?: ReadonlyMap<string, string> | null;
+  /** Whether an item is in the world database or the project; null skips the check of what an NPC sells. */
+  knownItem?: ((id: number) => boolean) | null;
 }): Issue[] {
   const questItems = new Set(input.questItems ?? []);
   const issues: Issue[] = [];
@@ -87,6 +89,27 @@ export function entityIssues(input: {
       else if (questItems.has(row.item)) add('warning', 'LOOT_QUEST_ITEM', `item ${row.item} is one this quest asks for; set where it drops in Objectives.`);
       if (row.chance < 0 || row.chance > 100) add('error', 'LOOT_CHANCE', 'a drop chance must be between 0 and 100%.');
       if (row.min < 1 || row.min > row.max) add('error', 'LOOT_COUNT', 'the least dropped must be at least 1 and no more than the most.');
+    }
+    if ('vendor' in entity) {
+      const seen = new Set<string>();
+      const repeated = new Set<string>();
+      const unknown = new Set<number>();
+      for (const row of entity.vendor) {
+        if (row.item <= 0) {
+          add('error', 'VENDOR_NO_ITEM', 'a stock row has no item.');
+          continue;
+        }
+        const pair = `${row.item}/${row.extendedCost}`;
+        if (seen.has(pair) && !repeated.has(pair)) {
+          repeated.add(pair);
+          add('error', 'VENDOR_DUPLICATE', `item ${row.item} is listed twice with the same extended cost; the database allows each pair once.`);
+        }
+        seen.add(pair);
+        if (input.knownItem && !input.knownItem(row.item) && !unknown.has(row.item)) {
+          unknown.add(row.item);
+          add('warning', 'VENDOR_UNKNOWN_ITEM', `item ${row.item} is neither in the world database nor in this project.`);
+        }
+      }
     }
     if ('fight' in entity && entity.fight) issues.push(...fightIssues(entity.fight, label, input.knownSpell ?? null, input.objectives ?? null));
     const held = existing ? undefined : input.dbNames.get(`${kind}:${entity.entry}`);

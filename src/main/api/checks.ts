@@ -82,10 +82,14 @@ export function createChecks(ctx: ApiContext) {
     const held = [...new Set(entities.npcs.flatMap((n) => [n.equipment.mainHand, n.equipment.offHand, n.equipment.ranged]).filter((i) => i > 0))];
     const items = held.length > 0 ? await rowsOrNone(live.db, 'item_template', { entry: held.map(String) }) : [];
     const itemInventoryTypes = new Map(items.map((r) => [Number(r.entry), Number(r.InventoryType ?? 0)]));
+    // What NPCs sell: an item the world database or the project has
+    const sold = [...new Set(entities.npcs.flatMap((n) => n.vendor.map((v) => v.item)).filter((i) => i > 0))];
+    const soldRows = sold.length > 0 ? await rowsOrNone(live.db, 'item_template', { entry: sold.map(String) }) : [];
+    const knownItems = new Set([...soldRows.map((r) => Number(r.entry)), ...entities.items.map((i) => i.entry)]);
     return entityIssues({
       entities, dbNames, questItems: [...new Set(quests.list().flatMap((q) => questItemsOf(q.aggregate)))], objectives: objectivesByQuest(),
       knownSpell: spells ? (id) => spells.get(id) !== undefined : null, itemInventoryTypes,
-      knownQuest: (id) => knownQuests.has(id), itemColumnTypes: itemColumnTypes.size > 0 ? itemColumnTypes : null,
+      knownQuest: (id) => knownQuests.has(id), knownItem: (id) => knownItems.has(id), itemColumnTypes: itemColumnTypes.size > 0 ? itemColumnTypes : null,
     });
   }
 
