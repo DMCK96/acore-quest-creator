@@ -131,7 +131,12 @@ export function createPatches(ctx: ApiContext) {
     // Existing entities edited here: their own rows, written over and put back
     // One given its first loot takes a free loot id when its entry is already someone else's list
     const loot = await newLootIds(live.db, store);
-    const existing = existingStatements(store, givers, loot.ids);
+    const edited = existingStatements(store, givers, loot.ids);
+    // A row the editor writes new (stock, a trainer's spells) sets only its own columns: the table's other columns take their defaults
+    const existing = {
+      ...edited,
+      apply: edited.apply.map((st): PatchStatement => (st.kind === 'insert' && schema.tables[st.table] ? { ...st, row: { ...defaultColumnValues(st.table, schema), ...st.row } } : st)),
+    };
     // NPC spawns' game events: an existing NPC's rule covers every spawn the database has now
     const dbGuids = new Map<number, number[]>();
     for (const npc of store.npcs) if (npc.origin.kind === 'existing') dbGuids.set(npc.entry, await npcSpawnGuids(live.db, npc.entry));
