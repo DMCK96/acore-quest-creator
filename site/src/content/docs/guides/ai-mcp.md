@@ -43,7 +43,7 @@ Connect the editor to your world database first, as you do for any work. The ass
 Before it writes, the assistant can look at what already exists, so new content fits in:
 
 - **Quests by zone and level:** the quests listed under a zone (such as Elwynn Forest), filtered by level, and the full text, objectives, rewards and chain links of up to 25 quests at a time, read without importing them.
-- **What is around a point:** the NPCs and objects within a radius (100 yards by default, at most 500), what each does (vendor, innkeeper, quest giver), their level and faction, the quests they offer, what vendors sell and what NPCs drop. Every spawn includes where it stands and **which way it faces**, so the assistant can place its own NPC beside it and match.
+- **What is around a point:** the NPCs and objects within a radius (100 yards by default, at most 500), what each does (vendor, innkeeper, quest giver), their level and faction, the quests they offer, what vendors sell and what NPCs drop. Every spawn includes where it stands and **which way it faces**, so the assistant knows what is already there and can aim its own NPC at something sensible, such as a campfire or a doorway, rather than at a tent, a wall or the NPC beside it.
 - **Name and id clashes:** whether a name or an id is already used in your database or in your project.
 
 Zones and factions are shown by name when the connection has a server data folder, and by number otherwise.
@@ -67,16 +67,26 @@ Beyond quest text, the assistant can write the parts that make a quest or an enc
 - **Loot** for its NPCs and chests.
 - **New NPCs, objects and items**, such as a legendary sword and the captain who guards it.
 
-It learns each of these from a built-in guide and examples, and the editor checks everything it writes and tells it what is still wrong, so it can fix it. An existing database NPC's fight or loot is left alone when the editor locks it. None of this changes the database until you export a patch and apply it yourself.
+It learns each of these from a built-in guide and examples, and the editor checks everything it writes and tells it what is still wrong, so it can fix it. If a scene stored on a quest cannot be read (an older or hand-edited one), the assistant is told its id and leaves it exactly as it is, and moving a marker in the World does the same, so it is never erased by a save. An existing database NPC's fight or loot is left alone when the editor locks it. None of this changes the database until you export a patch and apply it yourself.
 
 ## Ready-made workflows
 
-A client such as Claude Code offers three workflows as slash commands: **quest_chain** (research a zone and build a chain that fits it), **legendary_item** (brainstorm an outline with you first, then build the item, its guardian and the chain) and **populate_place** (add NPCs or objects that fit a place and face the way their neighbours do). Each one works in your open project, labels its steps "AI: …", and asks before exporting.
+A client such as Claude Code offers three workflows as slash commands: **quest_chain** (research a zone and build a chain that fits it), **legendary_item** (brainstorm an outline with you first, then build the item, its guardian and the chain) and **populate_place** (add NPCs or objects that fit a place and face what they are there for, such as a campfire or a road). Each one works in your open project, labels its steps "AI: …", and asks before exporting.
 
 ## What it cannot do
 
 - It never writes to your world database, and it cannot apply a patch to your dev database. You apply patches yourself, as always.
 - It has no access to your connection passwords.
+
+## While it writes
+
+A write usually takes a moment. While one runs, editing in the window pauses so your changes and the assistant's cannot cross:
+
+- Panels that edit the project grey out and take no clicks or typing. An open quest editor shows *The assistant is changing this quest. Editing is paused for a moment.*
+- In the World you can still look around and move the camera, but gizmos, placing, deleting and the right-click menu's editing items wait (the menu says why). A drag under way is dropped and the part goes back where it was. Copying and looking things up still work.
+- Anything you typed in a quest meanwhile is kept and put on top of the assistant's change when it arrives, and closing the app never loses an edit.
+
+The pause only shows if the write takes longer than a moment.
 
 ## Undoing its work
 
