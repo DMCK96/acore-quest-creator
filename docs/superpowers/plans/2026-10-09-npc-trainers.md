@@ -17,7 +17,7 @@
 - Tables and columns (verified against `acore_world`, 2026-10-09): `creature_default_trainer(CreatureId PK, TrainerId)`; `trainer(Id PK, Type tinyint, Requirement mediumint, Greeting mediumtext, VerifiedBuild)`; `trainer_spell(TrainerId+SpellId PK, MoneyCost, ReqSkillLine, ReqSkillRank, ReqAbility1, ReqAbility2, ReqAbility3, ReqLevel tinyint, VerifiedBuild)`.
 - `trainer.Type`: 0 class, 1 mount, 2 profession, 3 pet. `Requirement` is the class id for class trainers and 0 otherwise.
 - `npcflag`: trainer bit is 16. A new NPC also gets the sub-type bit of its type: class 32; mount and profession 64; pet none. Existing NPCs keep every bit but 16 (and 16 only changes when the trainer list changes between trainer and not).
-- Model shapes (zod, `src/core/entities/model.ts`): `trainerSpell = { spell: int.positive-or-0 (0 = unpicked), cost: int.min(0), reqLevel: int.min(0).max(255), reqSkill: int.min(0), reqSkillRank: int.min(0), reqSpells: array(int.positive()).max(3) }`; `trainer = { trainerId: int, type: enum('class','mount','profession','pet'), requirement: int.min(0), greeting: string, spells: array(trainerSpell) }`; `CustomNpc.trainer: trainer.nullable().default(null)`.
+- Model shapes (zod, `src/core/entities/model.ts`): `trainerSpell = { spell: int.min(0) (0 = not picked yet), cost: int.min(0), reqLevel: int.min(0).max(255), reqSkill: int.min(0), reqSkillRank: int.min(0), reqSpells: array(int.positive()).max(3) }`; `trainer = { trainerId: int, type: enum('class','mount','profession','pet'), requirement: int.min(0), greeting: string, spells: array(trainerSpell) }`; `CustomNpc.trainer: trainer.nullable().default(null)`.
 - `trainerId` is allocated once (above the database's highest `trainer.Id` and every project trainer id) and pinned; an existing NPC keeps the id it reads.
 - Opening an existing NPC changes nothing; trainer statements are written only when the trainer differs by value from what was read (rows compared by field, never by JSON key order).
 - A shared trainer (other NPCs use the same `TrainerId`) is locked (`EntityLock` `'trainer'`) and never written. **Give it its own copy** allocates a new `trainerId` and removes `'trainer'` from `origin.locked`; the trainer it was read from is never deleted or rewritten.
@@ -54,7 +54,7 @@
 - Produces: `trainerUnread(npc: { origin: StoredOrigin }): boolean` — true for an existing NPC whose `origin.original` has no own key `creature_default_trainer`; `sameTrainer(a: Trainer | null, b: Trainer | null): boolean` — field-by-field equality including the spells in order (spell arrays compared in order, `reqSpells` in order).
 - Produces: existing origin gains `sharedTrainer: z.number().int().min(0).default(0)`; `ExistingCounts` gains `sharedTrainer: number` (callers that build counts for items/objects pass 0); `EntityLock` gains `'trainer'`; `origin.locked` enum gains `'trainer'`.
 - Produces: `readOriginalRows(db, 'npc', entry)` includes `creature_default_trainer`, `trainer`, `trainer_spell` and `npc_trainer` (the NPC's own rows by `ID`) — each key present only when the table exists (use `db.columns`, as `npc_vendor` does); `trainer` and `trainer_spell` rows are those of the NPC's `TrainerId` (empty arrays when it has none).
-- Produces: `npcFromRows(entry, rows, counts)` fills `trainer` when `rows.creature_default_trainer?.[0]` and a `trainer` row for its `TrainerId` exist (`type` from `Type` by `TRAINER_TYPE_VALUE`, unknown types read as `profession`... see behavior below), and adds `'trainer'` to `locked` when `counts.sharedTrainer > 0`.
+- Produces: `npcFromRows(entry, rows, counts)` fills `trainer` when `rows.creature_default_trainer?.[0]` and a `trainer` row for its `TrainerId` exist (`type` from `Type` by `TRAINER_TYPE_VALUE`; a `Type` outside 0..3 is handled as the Behavior paragraph says), and adds `'trainer'` to `locked` when `counts.sharedTrainer > 0`.
 - Produces (main): `readExistingRows(...)` result gains `sharedTrainer` = the number of OTHER `creature_default_trainer` rows with the same `TrainerId`.
 
 Behavior: `type` mapping uses `Type` 0..3; any other value reads as the nearest safe thing — keep the raw type unrepresentable by locking: when `Type` is not 0..3, set `trainer: null` and add `'trainer'` to `locked` (the editor does not model it, so it is left alone). Spell rows map `SpellId`→`spell`, `MoneyCost`→`cost`, `ReqLevel`→`reqLevel`, `ReqSkillLine`→`reqSkill`, `ReqSkillRank`→`reqSkillRank`, and `ReqAbility1..3` that are above 0, in order, →`reqSpells`; spells ordered by `SpellId` ascending. A `creature_default_trainer` row whose `trainer` row is missing reads as `trainer: null` and locks `'trainer'`.
@@ -252,15 +252,16 @@ describe('writing an existing NPC\'s trainer', () => {
     const npc = npcFromRows(198, trained, counts);
     const edited = { ...npc, trainer: { ...npc.trainer!, greeting: 'Welcome!', spells: [{ ...npc.trainer!.spells[0]!, cost: 250 }, { spell: 5, cost: 1, reqLevel: 2, reqSkill: 0, reqSkillRank: 0, reqSpells: [78] }] } };
     const { apply, revert } = trainerStatements(edited);
+    const added = { TrainerId: '17', SpellId: '5', MoneyCost: '1', ReqSkillLine: '0', ReqSkillRank: '0', ReqAbility1: '78', ReqAbility2: '0', ReqAbility3: '0', ReqLevel: '2' };
     expect(apply).toEqual([
       { kind: 'delete', table: 'creature_default_trainer', key: { CreatureId: '198' } },
       { kind: 'insert', table: 'creature_default_trainer', row: defaultRow },
       { kind: 'delete', table: 'trainer', key: { Id: '17' } },
       { kind: 'insert', table: 'trainer', row: { ...trainerRow, Greeting: 'Welcome!' } },
       { kind: 'delete', table: 'trainer_spell', key: { TrainerId: '17' } },
-      { kind: 'insert', table: 'trainer_spell', row: spell('5', { MoneyCost: '1', ReqLevel: '2', ReqAbility1: '78', VerifiedBuild: undefined as never }) },
+      { kind: 'insert', table: 'trainer_spell', row: added },
       { kind: 'insert', table: 'trainer_spell', row: spell('78', { MoneyCost: '250' }) },
-    ].map((s) => (s.kind === 'insert' && s.table === 'trainer_spell' ? { ...s, row: Object.fromEntries(Object.entries(s.row).filter(([, v]) => v !== undefined)) } : s)));
+    ]);
     expect(revert).toEqual([
       { kind: 'delete', table: 'creature_default_trainer', key: { CreatureId: '198' } },
       { kind: 'insert', table: 'creature_default_trainer', row: defaultRow },
@@ -361,7 +362,6 @@ describe('writing an existing NPC\'s trainer', () => {
 });
 ```
 
-(The "replaces its own trainer's spells" test builds the expected spell row for the newly added spell without a `VerifiedBuild` column: the helper `.map` in the test strips the undefined value; if you prefer, write the expected row literally without that key.)
 
 - [ ] **Step 2: Run to verify failure** — `npx vitest run tests/core/entities-trainer-existing.test.ts` — Expected: FAIL.
 - [ ] **Step 3: Implement** the behavior above in `npcStatements`, keeping `npcflag` in the derived list passed to `keepUnedited`.
