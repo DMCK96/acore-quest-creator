@@ -97,6 +97,14 @@ describe('entity tools', () => {
     expect(order).toEqual([]);
   });
 
+  it('allocate_ids can hand out trainer ids', async () => {
+    const { call } = await mcpFixture(allTools);
+    const result = await call('allocate_ids', { kind: 'trainer', count: 2 });
+    expect(result.isError).toBeFalsy();
+    expect(result.value).toHaveLength(2);
+    expect(result.value[1] - result.value[0]).toBe(1);
+  });
+
   it('delete_entity removes a saved NPC as one step', async () => {
     const { call, api } = await mcpFixture(allTools);
     const existing = (await call('read_existing_entity', { kind: 'npc', entry: 1423 })).value;

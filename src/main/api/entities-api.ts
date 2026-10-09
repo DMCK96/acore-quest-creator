@@ -26,6 +26,7 @@ export function createEntitiesApi(s: Services): EntitiesApi {
           gameobjectSpawn: ['gameobject', 'guid'],
           page: ['page_text', 'ID'],
           item: ['item_template', 'entry'],
+          trainer: ['trainer', 'Id'],
         }[kind] as [string, string];
         let dbMax = 0;
         try {
@@ -39,6 +40,7 @@ export function createEntitiesApi(s: Services): EntitiesApi {
           : kind === 'gameobject' ? objects.map((o) => o.entry)
           : kind === 'item' ? items.map((i) => i.entry)
           : kind === 'creatureSpawn' ? [...npcs.flatMap((n) => n.spawns.map((s) => s.guid)), ...placedGuids('creature')]
+          : kind === 'trainer' ? npcs.flatMap((n) => (n.trainer ? [n.trainer.trainerId] : []))
           : kind === 'page' ? [...objects, ...items].flatMap((o) => o.pages.map((p) => p.id))
           : [...objects.flatMap((o) => o.spawns.map((s) => s.guid)), ...placedGuids('gameobject')];
         const base = Math.max(dbMax, ...used, 0);
