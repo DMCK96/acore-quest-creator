@@ -1,7 +1,8 @@
 import { fightIssues } from '../combat/validate';
 import type { Issue } from '../validate/validate';
 import { npcFromRows } from './from-rows';
-import { ENTITIES_FIELD, sameTrainer, trainerUnread, vendorUnread, type CustomItem, type CustomNpc, type CustomObject, type QuestEntities } from './model';
+import { GOSSIP_SERVICES } from '../game/gossip-services';
+import { ENTITIES_FIELD, gossipUnread, sameGossip, sameGossipMenu, sameTrainer, trainerUnread, vendorUnread, type CustomItem, type CustomNpc, type CustomObject, type QuestEntities } from './model';
 import { missingChoice } from '../patrol/compile';
 
 /**
@@ -16,6 +17,16 @@ const NUMBER = /^-?\d+(\.\d+)?$/;
 const MAX_VENDOR_ITEMS = 150;
 /** `ItemClass` Quest: something the player carries for a quest, never worn. */
 const QUEST_CLASS = 12;
+
+/** What the database says about the gossip menus a project's NPCs hold, for the checks that need more than the project */
+export interface GossipFacts {
+  /** For each menu id, the creatures (by entry) and the number of objects that use it as their menu */
+  menuUsers: ReadonlyMap<number, { creatures: readonly number[]; objects: number }>;
+  /** For each text id, the menus that use it */
+  textMenus: ReadonlyMap<number, readonly number[]>;
+  /** Whether the database has the menu (a row for it, or an option in it) */
+  knownMenu: (id: number) => boolean;
+}
 
 /** The trainer id an existing NPC was read with, or '' when it had none */
 const readTrainerId = (npc: CustomNpc): string => (npc.origin.kind === 'existing' ? (npc.origin.original.creature_default_trainer?.[0]?.TrainerId ?? '') : '');
@@ -41,8 +52,28 @@ export function entityIssues(input: {
   knownExtendedCost?: ((id: number) => boolean) | null;
   /** Which NPCs in the database use each trainer id now (by creature entry); null skips the checks that need it. */
   trainerUsers?: ReadonlyMap<number, readonly number[]> | null;
+  /** What the database says about the gossip menus the project holds; null skips the checks that need it. */
+  gossipFacts?: GossipFacts | null;
+  /** Creature entries that a quest scene with a gossip option trigger belongs to. */
+  sceneGossipOwners?: ReadonlySet<number>;
 }): Issue[] {
   const questItems = new Set(input.questItems ?? []);
+  // How many of the project's NPCs hold each gossip menu and text id that is new to it (not one an existing NPC read)
+  const newMenuIds = new Map<number, number>();
+  const newTextIds = new Map<number, number>();
+  const readMenus = (n: CustomNpc): Set<number> => {
+    const original = n.origin.kind === 'existing' ? n.origin.original : undefined;
+    return new Set((original?.gossip_menu ?? []).map((r) => Number(r.MenuID)));
+  };
+  for (const n of input.entities.npcs) {
+    if (!n.gossipMenu || gossipUnread(n)) continue;
+    const was = readMenus(n);
+    for (const m of n.gossipMenu.menus) {
+      if (m.locked || was.has(m.menuId)) continue;
+      newMenuIds.set(m.menuId, (newMenuIds.get(m.menuId) ?? 0) + 1);
+      newTextIds.set(m.textId, (newTextIds.get(m.textId) ?? 0) + 1);
+    }
+  }
   // How many of the project's NPCs hold each trainer id that is new to it (not one an existing NPC was read with)
   const newTrainerIds = new Map<number, number>();
   for (const n of input.entities.npcs) {
@@ -186,6 +217,89 @@ export function entityIssues(input: {
           if (!underReadId && trainer.trainerId > 0) {
             if (others(trainer.trainerId).length > 0) add('error', 'TRAINER_ID_TAKEN', `trainer id ${trainer.trainerId} is already used by another NPC in the database, so writing it would change that NPC's trainer; allocate a free one with allocate_ids, kind trainer.`);
             if ((newTrainerIds.get(trainer.trainerId) ?? 0) > 1) add('error', 'TRAINER_ID_DUPLICATE', `another NPC in this project has the same trainer id ${trainer.trainerId}; each trainer needs its own.`);
+          }
+        }
+      }
+    }
+    // Taking the whole menu away must not take an option the database ties to a condition or a script with it
+    if ('gossipMenu' in entity && !entity.gossipMenu && entity.origin.kind === 'existing' && !gossipUnread(entity)) {
+      const was = npcFromRows(entity.entry, entity.origin.original, { sharedLoot: entity.origin.sharedLoot, spawnCount: entity.origin.spawnCount, sharedMenus: entity.origin.sharedMenus, sharedTexts: entity.origin.sharedTexts }).gossipMenu;
+      for (const before of was?.menus ?? []) {
+        // (A locked menu is never written, so walking away from it deletes nothing)
+        if (!before.locked && before.options.some((o) => o.kept)) add('error', 'GOSSIP_KEPT_REMOVED', `menu ${before.menuId} had an option the database ties to a condition or a script, and it is no longer there; keep it.`);
+      }
+    }
+    if ('gossipMenu' in entity && entity.gossipMenu) {
+      const tree = entity.gossipMenu;
+      if (gossipUnread(entity)) {
+        add('warning', 'GOSSIP_NOT_READ', 'its gossip was never read from the database, so this menu is not written; put the NPC back as the database has it and edit it again.');
+      } else {
+        const existing = entity.origin.kind === 'existing' ? entity.origin : null;
+        const asRead = existing ? npcFromRows(entity.entry, existing.original, { sharedLoot: existing.sharedLoot, spawnCount: existing.spawnCount, sharedMenus: existing.sharedMenus, sharedTexts: existing.sharedTexts }).gossipMenu : null;
+        const treeChanged = !existing || !sameGossip(tree, asRead);
+        const facts = input.gossipFacts ?? null;
+        const otherUsers = (id: number): number => {
+          const u = facts?.menuUsers.get(id);
+          return u ? u.creatures.filter((e) => e !== entity.entry).length + u.objects : 0;
+        };
+        const ownMenuIds = new Set([...tree.menus.map((m) => m.menuId), ...(asRead?.menus.map((m) => m.menuId) ?? [])]);
+        if (treeChanged) {
+          // The option or menu the database ties to a condition or a script must still be there
+          for (const before of asRead?.menus ?? []) {
+            const kept = before.locked ? [] : before.options.filter((o) => o.kept);
+            const now = tree.menus.find((m) => m.menuId === before.menuId);
+            if (kept.some((o) => !now?.options.some((p) => p.optionId === o.optionId))) {
+              add('error', 'GOSSIP_KEPT_REMOVED', `menu ${before.menuId} had an option the database ties to a condition or a script, and it is no longer there; keep it.`);
+            }
+          }
+          if (!entity.gossip) add('warning', 'GOSSIP_NOT_TALKABLE', 'it has a gossip menu but cannot be talked to; turn on Can be talked to.');
+          if (input.sceneGossipOwners?.has(entity.entry)) add('warning', 'GOSSIP_SCENE', 'a quest scene gives it a gossip option of its own, which does not know this menu; they stay separate.');
+          // Which menus the root reaches
+          const reached = new Set<number>([tree.menus[0]!.menuId]);
+          for (let grew = true; grew; ) {
+            grew = false;
+            for (const m of tree.menus) {
+              if (!reached.has(m.menuId)) continue;
+              for (const o of m.options) if (o.action.kind === 'menu' && !reached.has(o.action.menuId)) { reached.add(o.action.menuId); grew = true; }
+            }
+          }
+          for (const m of tree.menus) if (!reached.has(m.menuId)) add('warning', 'GOSSIP_UNREACHABLE', `menu ${m.menuId} is not opened by any option, so players cannot reach it.`);
+        }
+        // What flags the NPC has, for the service options: the original row's, with the ones the project sets laid over
+        const original = existing ? Number(existing.original.creature_template?.[0]?.npcflag ?? 0) : 0;
+        const flags = (original & ~(1 | 2 | 16 | 128)) | (entity.gossip ? 1 : 0) | (entity.questGiver ? 2 : 0) | (entity.trainer ? 16 : 0) | (entity.vendor.length > 0 ? 128 : 0);
+        for (const m of tree.menus) {
+          const before = asRead?.menus.find((x) => x.menuId === m.menuId);
+          if (existing && before && sameGossipMenu(m, before)) continue;
+          if (m.locked && before) {
+            add('warning', 'GOSSIP_LOCKED', `menu ${m.menuId} is shared with other NPCs or objects, so this edit is not written; use Give it its own copy in the editor first.`);
+            continue;
+          }
+          if (before && otherUsers(m.menuId) > 0) {
+            add('error', 'GOSSIP_SHARED', `menu ${m.menuId} is also used by ${otherUsers(m.menuId)} other NPC${otherUsers(m.menuId) === 1 ? '' : 's'} or objects, so changing it would change theirs; use Give it its own copy in the editor first.`);
+          }
+          if (m.menuId <= 0 || m.textId <= 0) add('error', 'GOSSIP_NO_ID', `menu ${m.menuId} has no menu or text id; allocate them with allocate_ids, kinds gossipMenu and gossipText.`);
+          if (m.greeting.every((v) => v.probability <= 0)) add('error', 'GOSSIP_NO_GREETING', `menu ${m.menuId} has no greeting that could be chosen: give a variant a chance above 0.`);
+          else if (m.greeting.some((v) => v.text.trim() === '' && v.textFemale.trim() === '')) add('warning', 'GOSSIP_EMPTY_GREETING', `menu ${m.menuId} has a greeting variant with no text.`);
+          for (const o of m.options) {
+            if (o.text.trim() === '') add('error', 'GOSSIP_OPTION_NO_TEXT', `option ${o.optionId} of menu ${m.menuId} has no text.`);
+            if (o.action.kind === 'menu' && !ownMenuIds.has(o.action.menuId) && facts && !facts.knownMenu(o.action.menuId)) {
+              add('warning', 'GOSSIP_UNKNOWN_MENU', `option ${o.optionId} of menu ${m.menuId} opens menu ${o.action.menuId}, which neither the database nor this NPC has.`);
+            }
+            if (o.action.kind === 'service' && o.action.npcFlag > 1 && (flags & o.action.npcFlag) !== o.action.npcFlag) {
+              const service = o.action;
+              const label = GOSSIP_SERVICES.find((s) => s.type === service.type && s.npcFlag === service.npcFlag)?.label ?? `type ${service.type}`;
+              add('warning', 'GOSSIP_SERVICE_FLAG', `option ${o.optionId} of menu ${m.menuId} opens the ${label.toLowerCase()} window, but the NPC is not set up for it, so the option would never show.`);
+            }
+          }
+          // An id new to the project must be its own: not another NPC's or object's, nor another new menu's here
+          if (!before && m.menuId > 0) {
+            if (otherUsers(m.menuId) > 0) add('error', 'GOSSIP_ID_TAKEN', `menu id ${m.menuId} is already used by another NPC or object, so writing it would change theirs; allocate a free one with allocate_ids, kind gossipMenu.`);
+            if ((newMenuIds.get(m.menuId) ?? 0) > 1) add('error', 'GOSSIP_ID_DUPLICATE', `another NPC in this project has the same menu id ${m.menuId}; each menu needs its own.`);
+          }
+          if (!before && m.textId > 0) {
+            if ((facts?.textMenus.get(m.textId) ?? []).some((menu) => !ownMenuIds.has(menu))) add('error', 'GOSSIP_ID_TAKEN', `text id ${m.textId} is already used by another menu, so writing it would change theirs; allocate a free one with allocate_ids, kind gossipText.`);
+            if ((newTextIds.get(m.textId) ?? 0) > 1) add('error', 'GOSSIP_ID_DUPLICATE', `another NPC in this project has the same text id ${m.textId}; each menu needs its own.`);
           }
         }
       }

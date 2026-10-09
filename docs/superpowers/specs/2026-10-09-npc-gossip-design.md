@@ -146,7 +146,9 @@ Errors (stop an export):
 - `GOSSIP_NO_ID`: a menu or text with no id (`<= 0`).
 - `GOSSIP_OPTION_NO_TEXT`: an option with no text.
 - `GOSSIP_NO_GREETING`: every greeting variant has probability 0, so none could be chosen.
-- `GOSSIP_ID_TAKEN`: a new menu or text id that another menu in the database already uses.
+- `GOSSIP_ID_TAKEN`: a new menu id that another creature or an object already uses as its menu, or a new text id
+  that another menu uses. (A sub-menu's id that merely has rows is not flagged: rows alone cannot be told from the
+  NPC's own earlier export.)
 - `GOSSIP_ID_DUPLICATE`: two NPCs in the project hold the same new menu or text id.
 - `GOSSIP_SHARED`: an edit would be written over a menu other NPCs or objects use now, whatever the lock says.
 

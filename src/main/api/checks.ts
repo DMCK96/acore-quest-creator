@@ -92,6 +92,29 @@ export function createChecks(ctx: ApiContext, files: ServerFiles) {
     const trainerLinks = trainerIds.length > 0 ? await rowsOrNone(live.db, 'creature_default_trainer', { TrainerId: trainerIds.map(String) }) : [];
     const trainerUsers = new Map<number, number[]>();
     for (const r of trainerLinks) trainerUsers.set(Number(r.TrainerId), [...(trainerUsers.get(Number(r.TrainerId)) ?? []), Number(r.CreatureId)]);
+    // Who in the database uses the gossip menus and texts the project's NPCs hold or point at, and whether the menus their options open exist
+    const trees = entities.npcs.flatMap((n) => n.gossipMenu?.menus ?? []);
+    const roots = entities.npcs.flatMap((n) => (n.origin.kind === 'existing' ? (n.origin.original.gossip_menu ?? []).map((r) => Number(r.MenuID)) : []));
+    const opened = trees.flatMap((m) => m.options.flatMap((o) => (o.action.kind === 'menu' ? [o.action.menuId] : [])));
+    const menuIds = [...new Set([...trees.map((m) => m.menuId), ...roots, ...opened].filter((id) => id > 0))];
+    const textIds = [...new Set(trees.map((m) => m.textId).filter((id) => id > 0))];
+    const [menuCreatures, menuObjects, menuRows, optionRows, textUsers] = await Promise.all([
+      menuIds.length > 0 ? rowsOrNone(live.db, 'creature_template', { gossip_menu_id: menuIds.map(String) }) : [],
+      menuIds.length > 0 ? rowsOrNone(live.db, 'gameobject_template', { type: '2', Data3: menuIds.map(String) }) : [],
+      menuIds.length > 0 ? rowsOrNone(live.db, 'gossip_menu', { MenuID: menuIds.map(String) }) : [],
+      menuIds.length > 0 ? rowsOrNone(live.db, 'gossip_menu_option', { MenuID: menuIds.map(String) }) : [],
+      textIds.length > 0 ? rowsOrNone(live.db, 'gossip_menu', { TextID: textIds.map(String) }) : [],
+    ]);
+    const menuUsers = new Map<number, { creatures: number[]; objects: number }>();
+    const usersOf = (id: number) => menuUsers.get(id) ?? menuUsers.set(id, { creatures: [], objects: 0 }).get(id)!;
+    for (const r of menuCreatures) usersOf(Number(r.gossip_menu_id)).creatures.push(Number(r.entry));
+    for (const r of menuObjects) usersOf(Number(r.Data3)).objects += 1;
+    const textMenus = new Map<number, number[]>();
+    for (const r of textUsers) textMenus.set(Number(r.TextID), [...(textMenus.get(Number(r.TextID)) ?? []), Number(r.MenuID)]);
+    const haveMenu = new Set([...menuRows, ...optionRows].map((r) => Number(r.MenuID)));
+    const gossipFacts = { menuUsers, textMenus, knownMenu: (id: number) => haveMenu.has(id) };
+    // Creatures a quest scene gives a gossip option of its own
+    const sceneGossipOwners = new Set(quests.list().flatMap((q) => readScenes(q.aggregate.values)).flatMap((s) => (s.trigger.kind === 'gossipOption' && s.owner.kind === 'creature' ? [s.owner.entry] : [])));
     // Extended costs only when some stock asks for one and the server's DBC could be read: a validation run cannot say more
     const asked = entities.npcs.some((n) => n.vendor.some((v) => v.extendedCost > 0));
     const costs = asked ? await files.extendedCostsOf(live) : null;
@@ -99,7 +122,7 @@ export function createChecks(ctx: ApiContext, files: ServerFiles) {
     return entityIssues({
       entities, dbNames, questItems: [...new Set(quests.list().flatMap((q) => questItemsOf(q.aggregate)))], objectives: objectivesByQuest(),
       knownSpell: spells ? (id) => spells.get(id) !== undefined : null, itemInventoryTypes,
-      knownQuest: (id) => knownQuests.has(id), knownItem: (id) => knownItems.has(id), trainerUsers,
+      knownQuest: (id) => knownQuests.has(id), knownItem: (id) => knownItems.has(id), trainerUsers, gossipFacts, sceneGossipOwners,
       knownExtendedCost: costs && !('reason' in costs) ? (id) => costs.get(id) !== undefined : null, itemColumnTypes: itemColumnTypes.size > 0 ? itemColumnTypes : null,
     });
   }

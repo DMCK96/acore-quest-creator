@@ -105,6 +105,71 @@ describe('projectIssues', () => {
     expect(shared[0].severity).toBe('error');
   });
 
+  describe('gossip menus', () => {
+    const connect = async (db: ReturnType<typeof forkDb>) => {
+      const api = createApi({
+        store: openStore(':memory:', box), openWorldDb: async () => db, openDevDb: async () => { throw new Error('x'); },
+        fs: { writeFile: async () => {}, ensureDir: async () => {}, listDir: async () => [] }, now: () => new Date(),
+        session: createProjectSession(defaultProjectMeta('P', 'C:/out')), projects: {} as ProjectController,
+      });
+      const rec: any = await api.saveProfile({ name: 'w', role: 'world', host: 'h', port: 1, user: 'u', database: 'd', password: 'p' });
+      await api.connect(rec.value.id);
+      return api;
+    };
+    const menuFor = (entry: number, menuId: number, textId: number) => ({
+      ...newNpc(entry), name: 'T' + entry, displayId: 1, gossip: true,
+      gossipMenu: { menus: [{ menuId, textId, locked: false, greeting: [{ text: 'Hi', textFemale: '', probability: 1 }], options: [{ optionId: 0, icon: 0, text: 'Bye', action: { kind: 'close' as const }, kept: false }] }] },
+    });
+
+    it('errors when a new NPC uses a menu or text id that is not its own, but not when it re-exports its own', async () => {
+      const db = forkDb();
+      db.insert('creature_template', { entry: '555', name: 'Other', gossip_menu_id: '932533' });
+      db.insert('gossip_menu', { MenuID: '932533', TextID: '9780010' });
+      db.insert('creature_template', { entry: '90001', name: 'Mine', gossip_menu_id: '932534' });
+      db.insert('gossip_menu', { MenuID: '932534', TextID: '9780011' });
+      db.insert('gossip_menu', { MenuID: '932600', TextID: '9780012' });
+      const api = await connect(db);
+      // 90001 re-exports its own menu; 90002 takes 555's menu; 90003 is free; 90004 takes a text another menu uses; 90005 repeats 90003's ids
+      await api.putProjectEntities({ npcs: [menuFor(90001, 932534, 9780011), menuFor(90002, 932533, 9780020), menuFor(90003, 932535, 9780021), menuFor(90004, 932536, 9780012), menuFor(90005, 932535, 9780021)], objects: [], items: [] });
+      const issues = (await api.projectIssues() as any).value;
+      const taken = issues.filter((i: any) => i.code === 'GOSSIP_ID_TAKEN');
+      expect(taken.map((i: any) => i.about.entry)).toEqual([90002, 90004]);
+      expect(taken.every((i: any) => i.severity === 'error')).toBe(true);
+      const duplicate = issues.filter((i: any) => i.code === 'GOSSIP_ID_DUPLICATE');
+      expect(duplicate.map((i: any) => i.about.entry)).toEqual([90003, 90003, 90005, 90005]);
+    });
+
+    it('errors when an existing NPC edited menu would be written over while another NPC now uses it', async () => {
+      const db = forkDb();
+      db.insert('creature_template', { entry: '198', name: 'Host', minlevel: '30', maxlevel: '30', faction: '35', rank: '0', type: '7', npcflag: '1', gossip_menu_id: '5000' });
+      db.insert('gossip_menu', { MenuID: '5000', TextID: '7000' });
+      db.insert('npc_text', { ID: '7000', text0_0: 'Hello', Probability0: '1' });
+      db.insert('gossip_menu_option', { MenuID: '5000', OptionID: '0', OptionText: 'Bye', OptionType: '1', OptionNpcFlag: '1' });
+      const api = await connect(db);
+      const read: any = await api.readExistingEntity('npc', 198);
+      expect(read.value.gossipMenu.menus[0].locked).toBe(false);
+      const edited = { ...read.value, gossipMenu: { menus: read.value.gossipMenu.menus.map((m: any) => ({ ...m, greeting: [{ ...m.greeting[0], text: 'Changed' }] })) } };
+      await api.putProjectEntities({ npcs: [edited], objects: [], items: [] });
+      expect(((await api.projectIssues() as any).value).filter((i: any) => i.code === 'GOSSIP_SHARED')).toEqual([]);
+      // Another creature starts to use the menu after the NPC was opened
+      db.insert('creature_template', { entry: '199', name: 'Twin', gossip_menu_id: '5000' });
+      const shared = ((await api.projectIssues() as any).value).filter((i: any) => i.code === 'GOSSIP_SHARED');
+      expect(shared).toHaveLength(1);
+      expect(shared[0].severity).toBe('error');
+    });
+
+    it('warns about a quest scene that gives the NPC its own gossip option', async () => {
+      const api = await connect(forkDb());
+      await api.putProjectEntities({ npcs: [menuFor(90001, 932535, 9780021)], objects: [], items: [] });
+      const opened: any = await api.newQuest();
+      const aggregate = opened.value.aggregate;
+      aggregate.values.scripts = [{ id: 's1', name: '', owner: { kind: 'creature', entry: 90001 }, trigger: { kind: 'gossipOption', text: 'Ready.', greeting: 'Hi.' }, gates: [], steps: [{ kind: 'closeGossip', waitMs: 0 }] }];
+      await api.updateQuest(aggregate);
+      expect(((await api.projectIssues() as any).value).some((i: any) => i.code === 'GOSSIP_SCENE')).toBe(true);
+    });
+  });
+
+
   it('takes no arguments', () => {
     expect(parseRequest('projectIssues', []).ok).toBe(true);
     expect(parseRequest('projectIssues', [1]).ok).toBe(false);
