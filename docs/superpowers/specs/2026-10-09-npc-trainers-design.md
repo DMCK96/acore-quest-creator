@@ -45,8 +45,10 @@ Checked against the fork's `acore_world` on 2026-10-09 (149 trainers, 1,046 defa
 - An NPC is a trainer through its `creature_default_trainer` row and bit 16 of `npcflag`.
 - Several NPCs can point at one `trainer` row (class trainers share a list: one trainer serves up to 36 NPCs
   in this database; 50 trainers have a single NPC).
-- `Requirement` is the class id a class trainer (`Type` 0) serves (1 to 32 here, since the fork has classes of
-  its own); a class trainer with 0 can be used by no player. It is 0 for the other types.
+- `Requirement` is what limits who may use the trainer: the class id for a class trainer (`Type` 0; 1 to 32 here,
+  since the fork has classes of its own) and for a pet trainer, a race for a mount trainer, a required spell for a
+  profession trainer. The server treats 0 as no limit (`Trainer::IsTrainerValidForPlayer`), so a class trainer
+  with 0 serves every class. The data has 0 for every type but class.
 - `npcflag` sub-type bits on trainers of each type: class 16+32; mount and profession 16+64; pet 16 (a few have
   16+32). Other bits (gossip, vendor, repair, and so on) vary and are never touched.
 - Trainer ids reach 900032 (the fork's classes); new ids are allocated above the highest in the database.
@@ -77,8 +79,8 @@ trainerSpell = { spell: int, cost: int.min(0), reqLevel: int.min(0).max(255), re
 - An NPC is a trainer when `trainer` is not null; there is no separate flag. Export sets or clears the
   trainer bit (16) of `npcflag` from that; every other bit stays as the database has it. A new NPC also gets
   the sub-type bit of its type (class 32; mount and profession 64; pet none).
-- `requirement` is the class for a class trainer and 0 otherwise; the editor sets it from the class choice and
-  writes 0 for the other types.
+- `requirement` is written as it is. The editor sets it from the class choice for class and pet trainers, resets
+  it to 0 when the type changes, and leaves a mount or profession trainer's as it was read.
 - `trainerId` is pinned like a guid: allocated once, when the trainer is made or copied, from above the
   database's highest `trainer.Id` and the project's. An existing NPC keeps the id it reads.
 - `trainer = null` on an NPC that read a trainer means "no longer a trainer": export removes its
@@ -97,6 +99,8 @@ trainerSpell = { spell: int, cost: int.min(0), reqLevel: int.min(0).max(255), re
   `creature_default_trainer` names the same trainer, like `sharedLoot`. When it is more than zero the
   trainer part is locked (`EntityLock` gains `'trainer'`) and the Trainer tab shows a warning with
   **Give it its own copy**.
+- Remove trainer on a shared trainer is allowed: it deletes only this NPC's own `creature_default_trainer` row
+  and clears bit 16, and leaves the shared trainer's rows alone.
 - Give it its own copy: allocates a new `trainerId`, keeps the spells, type, requirement and greeting, and
   takes `'trainer'` out of `origin.locked`, which is what makes the trainer the NPC's own. A trainer whose
   `trainerId` differs from the one read is always written as new rows; the trainer it was read from is never
@@ -117,32 +121,43 @@ trainerSpell = { spell: int, cost: int.min(0), reqLevel: int.min(0).max(255), re
 
 ## Validation (`validate.ts`)
 
+A trainer an existing NPC was read with and has not changed is not checked: the database's own quirks are not the
+author's to fix.
+
 Errors (stop an export):
+- `TRAINER_NO_ID`: no trainer id.
 - `TRAINER_NO_SPELL`: a spell row with no spell.
 - `TRAINER_DUPLICATE`: the same spell twice (primary key).
 - `TRAINER_REQ_SPELL`: a prerequisite that is the spell itself.
-- `TRAINER_NO_CLASS`: a class trainer with no class chosen, which no player could use.
+- `TRAINER_ID_TAKEN`: a trainer id new to the project that another NPC in the database already uses (writing it
+  would change that NPC's trainer, and the revert could not undo it). An id the NPC itself exported before is its
+  own.
+- `TRAINER_ID_DUPLICATE`: two NPCs in the project hold the same new trainer id.
+- `TRAINER_SHARED`: an edit would be written over a trainer other NPCs use now, whatever the lock says (the lock
+  is a snapshot taken when the NPC was opened, and an AI can drop it).
 
 Warnings:
+- `TRAINER_NO_CLASS`: a class trainer with no class chosen, so every class can train there.
 - `TRAINER_EMPTY`: a trainer with no spells.
 - `TRAINER_UNKNOWN_SPELL`: a spell not in the server's spell list (reuses the fight check's `knownSpell`).
 - `TRAINER_NOT_READ`: trainer set on an existing NPC whose trainer was never read, so it is not written.
-- `TRAINER_ID_TAKEN`: a new trainer's id is already a trainer in the database that this project did not read.
+- `TRAINER_LOCKED`: an edit to a locked (shared) trainer, which is not written.
 
 ## UI
 
 - `NpcEditor.tsx` gets a **Trainer** tab after **Vendor**, built like `VendorList.tsx`.
-- Empty state: **Make this NPC a trainer**, which asks for the type (and for a class trainer the class) and
-  the greeting, and allocates the trainer id.
-- With a trainer: **Type** (select), **Class** (select, class trainers only: the stock classes by name, any
+- Empty state: **Make this NPC a trainer**, which allocates the trainer id and opens the editor straight away on
+  its type (class by default), class and greeting at the top.
+- With a trainer: **Type** (select), **Class** (select, class and pet trainers: the stock classes by name, any
   other id as "Class N"), **Greeting** (text) at the top, then a spell table: spell picker (the existing spell
   search, with its rank and cost line), **Cost** in gold/silver/copper, **Required level**, **Skill** (picker
-  over `skills.ts`, with a number fallback) and **Skill rank**, **Needs spells** (up to three spell pickers),
+  over `skills.ts`, with a **Skill id** number field beside it for any other) and **Skill rank**, **Needs spells** (up to three spell pickers),
   **Remove**, and **Add spell**.
-- **Copy spells from…** picks another NPC (existing or project) and replaces this list with its spells, asking
-  first when the list is not empty (reusing `CopyStock`'s pattern).
+- **Copy spells from…** picks another NPC (existing or project) and replaces this trainer with its type, class,
+  greeting and spells (never its id), asking first when the list is not empty (reusing `CopyStock`'s pattern).
 - **Remove trainer** returns the NPC to not training, after confirmation when it has spells.
-- A locked (shared) trainer shows its spells read-only with the count of other NPCs and **Give it its own copy**.
+- A locked (shared) trainer shows its spells read-only, by name, with the count of other NPCs, **Give it its own
+  copy** and **Remove trainer**.
 - When the NPC also uses `npc_trainer` lists, the note described above.
 
 ## Right-click menu

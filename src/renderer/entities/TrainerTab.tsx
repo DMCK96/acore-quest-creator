@@ -28,6 +28,11 @@ export function TrainerTab({ npc, onChange, allocateTrainer }: { npc: CustomNpc;
     );
   }
 
+  const remove = (trainer: Trainer): void => {
+    if (trainer.spells.length > 0 && !window.confirm(`Make ${name} stop teaching its ${trainer.spells.length} spell${trainer.spells.length === 1 ? '' : 's'}?`)) return;
+    onChange({ ...npc, trainer: null });
+  };
+
   const lists = legacyLists(npc);
   const note = lists > 0 && (
     <p className="scene-hint">Also teaches the spells of {lists} shared list{lists === 1 ? '' : 's'} (the older npc_trainer table), which are not edited here.</p>
@@ -58,6 +63,9 @@ export function TrainerTab({ npc, onChange, allocateTrainer }: { npc: CustomNpc;
         <button type="button" className="btn" onClick={() => void ownCopy()}>
           Give it its own copy
         </button>
+        <button type="button" className="btn" onClick={() => remove(trainer)}>
+          Remove trainer
+        </button>
         {alert}
         {note}
       </div>
@@ -73,11 +81,6 @@ export function TrainerTab({ npc, onChange, allocateTrainer }: { npc: CustomNpc;
     }
     onChange({ ...npc, trainer: { trainerId, ...NEW_TRAINER, spells: [] } });
   };
-  const remove = (trainer: Trainer): void => {
-    if (trainer.spells.length > 0 && !window.confirm(`Make ${name} stop teaching its ${trainer.spells.length} spell${trainer.spells.length === 1 ? '' : 's'}?`)) return;
-    onChange({ ...npc, trainer: null });
-  };
-
   return (
     <>
       {npc.trainer ? (

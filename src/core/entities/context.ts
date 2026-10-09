@@ -51,6 +51,8 @@ export interface EntityContext {
   waypointRows: RawRow[];
   /** `creature_default_trainer` rows (CreatureId, TrainerId) of the new NPCs' entries: the trainers a past export pointed them at. */
   trainerIds: RawRow[];
+  /** Every `creature_default_trainer` row (CreatureId, TrainerId) that names one of those trainers: who else uses them. */
+  trainerUsers: RawRow[];
 }
 
 export const EMPTY_ENTITY_CONTEXT: EntityContext = {
@@ -62,6 +64,7 @@ export const EMPTY_ENTITY_CONTEXT: EntityContext = {
   addons: [],
   waypointRows: [],
   trainerIds: [],
+  trainerUsers: [],
 };
 
 /**
@@ -100,6 +103,7 @@ export async function readEntityContext(db: WorldDb, entities: ProjectEntities, 
   for (const row of addons) if (Number(row.path_id) > 0) pathIds.add(String(row.path_id));
   const waypointRows = await rowsOrNone(db, 'waypoint_data', { id: [...pathIds] });
   const trainerIds = await rowsOrNone(db, 'creature_default_trainer', { CreatureId: npcEntries });
+  const trainerUsers = trainerIds.length > 0 ? await rowsOrNone(db, 'creature_default_trainer', { TrainerId: [...new Set(trainerIds.map((r) => r.TrainerId ?? ''))] }) : [];
   return {
     creatures: pick(creatures, ['entry', 'AIName', 'gossip_menu_id', 'npcflag', 'flags_extra', 'type_flags']),
     gameobjects: pick(gameobjects, ['entry', 'AIName']),
@@ -109,5 +113,6 @@ export async function readEntityContext(db: WorldDb, entities: ProjectEntities, 
     addons: pick(addons, ['guid', 'path_id']),
     waypointRows: pick(waypointRows, ['id', 'point']),
     trainerIds: pick(trainerIds, ['CreatureId', 'TrainerId']),
+    trainerUsers: pick(trainerUsers, ['CreatureId', 'TrainerId']),
   };
 }

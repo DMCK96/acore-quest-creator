@@ -5,6 +5,9 @@ import { existingStatements } from '../../src/core/entities/existing';
 import { npcFromRows } from '../../src/core/entities/from-rows';
 import { EMPTY_ENTITIES, type CustomNpc } from '../../src/core/entities/model';
 import { readExistingRows } from '../../src/main/entities/existing';
+import { defaultColumnValues } from '../../src/core/import/importer';
+import { renderInsert } from '../../src/core/sql/render';
+import { loadSchema } from '../../src/core/schema/load';
 import { mysqlUrl } from '../helpers/env';
 
 function opts() {
@@ -115,5 +118,37 @@ describe('reading trainers from the real database', () => {
       expect(id, `${s.kind} ${s.table}`).toBe(String(next));
     }
     expect(out.apply).toContainEqual({ kind: 'insert', table: 'creature_default_trainer', row: expect.objectContaining({ CreatureId: String(found.entry), TrainerId: String(next) }) });
+  });
+
+  it('reads every trainer in the database and writes nothing for any of them', async () => {
+    const { firstNpc, trainers } = await trainerFacts();
+    let checked = 0;
+    for (const id of trainers.keys()) {
+      const found = firstNpc((trainerId) => trainerId === id);
+      if (!found) continue;
+      const npc = await read(found.entry);
+      const row = (await db.selectRows('creature_template', { entry: String(found.entry) }))[0]!;
+      expect(trainerStatements(npc), `trainer ${id}, NPC ${found.entry}`).toEqual([]);
+      expect(flagOf(npc), `trainer ${id}, NPC ${found.entry}`).toBe(Number(row.npcflag));
+      checked++;
+    }
+    expect(checked).toBeGreaterThan(0);
+  }, 120_000);
+
+  it('renders the rows of a new trainer against the real columns, so the export cannot fail on one it lacks', async (ctx) => {
+    const { firstNpc } = await trainerFacts();
+    const found = firstNpc((_, type, requirement, npcs) => type === 0 && requirement > 0 && npcs.length > 1);
+    if (!found) return ctx.skip();
+    const npc = await read(found.entry);
+    const next = ((await db.selectMax?.('trainer', 'Id')) ?? 0) + 1;
+    const copy: CustomNpc = { ...npc, trainer: { ...npc.trainer!, trainerId: next }, origin: { ...npc.origin, locked: [] } as CustomNpc['origin'] };
+    const schema = await loadSchema(db, TRAINER_TABLES);
+    const inserts = statementsOf(copy).apply.filter((st) => TRAINER_TABLES.includes(st.table) && st.kind === 'insert');
+    expect(inserts.length).toBeGreaterThan(2);
+    for (const st of inserts) {
+      if (st.kind !== 'insert') continue;
+      const row = { ...defaultColumnValues(st.table, schema), ...st.row };
+      expect(() => renderInsert(st.table, schema.tables[st.table]!, row), st.table).not.toThrow();
+    }
   });
 });

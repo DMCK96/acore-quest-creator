@@ -34,6 +34,14 @@ export function createEntitiesApi(s: Services): EntitiesApi {
         } catch {
           dbMax = 0;
         }
+        // A trainer id some NPC points at counts though its trainer row is missing
+        if (kind === 'trainer') {
+          try {
+            dbMax = Math.max(dbMax, (await live.db.selectMax?.('creature_default_trainer', 'TrainerId')) ?? 0);
+          } catch {
+            // A fork without the table has none
+          }
+        }
         const { npcs, objects, items } = projectEntities();
         const used =
           kind === 'creature' ? npcs.map((n) => n.entry)

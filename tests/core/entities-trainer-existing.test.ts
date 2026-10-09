@@ -56,10 +56,10 @@ describe('writing an existing NPC\'s trainer', () => {
     expect(flagOf(edited)).toBe(51);
   });
 
-  it('writes the class only for a class trainer and 0 for the other types', () => {
+  it('writes the requirement as it is: the class of a class trainer, and what another type was read with', () => {
     const npc = npcFromRows(198, trained, counts);
     const asProfession = trainerStatements({ ...npc, trainer: { ...npc.trainer!, type: 'profession', requirement: 7 } }).apply;
-    expect(asProfession.find((s) => s.table === 'trainer' && s.kind === 'insert')).toMatchObject({ row: { Type: '2', Requirement: '0' } });
+    expect(asProfession.find((s) => s.table === 'trainer' && s.kind === 'insert')).toMatchObject({ row: { Type: '2', Requirement: '7' } });
     const reclassed = trainerStatements({ ...npc, trainer: { ...npc.trainer!, requirement: 2 } }).apply;
     expect(reclassed.find((s) => s.table === 'trainer' && s.kind === 'insert')).toMatchObject({ row: { Type: '0', Requirement: '2' } });
   });
@@ -90,6 +90,22 @@ describe('writing an existing NPC\'s trainer', () => {
     expect(apply).toEqual([{ kind: 'delete', table: 'creature_default_trainer', key: { CreatureId: '198' } }]);
     expect(revert).toEqual([{ kind: 'delete', table: 'creature_default_trainer', key: { CreatureId: '198' } }, { kind: 'insert', table: 'creature_default_trainer', row: defaultRow }]);
     expect(flagOf({ ...npc, trainer: null })).toBe(51 & ~16);
+  });
+
+  it('lets an NPC stop teaching a trainer it shares, by deleting only its own link', () => {
+    const shared = npcFromRows(198, trained, { ...counts, sharedTrainer: 30 });
+    const { apply, revert } = trainerStatements({ ...shared, trainer: null });
+    expect(apply).toEqual([{ kind: 'delete', table: 'creature_default_trainer', key: { CreatureId: '198' } }]);
+    expect(revert).toEqual([{ kind: 'delete', table: 'creature_default_trainer', key: { CreatureId: '198' } }, { kind: 'insert', table: 'creature_default_trainer', row: defaultRow }]);
+    expect(flagOf({ ...shared, trainer: null })).toBe(51 & ~16);
+  });
+
+  it('keeps a greeting the database left NULL as NULL until it is written', () => {
+    const nulled = npcFromRows(198, { ...trained, trainer: [{ ...trainerRow, Greeting: null as never }] }, counts);
+    const edited = { ...nulled, trainer: { ...nulled.trainer!, spells: [] } };
+    expect(trainerStatements(edited).apply.find((s) => s.table === 'trainer' && s.kind === 'insert')).toMatchObject({ row: { Greeting: null } });
+    const written = { ...nulled, trainer: { ...nulled.trainer!, greeting: 'Hi' } };
+    expect(trainerStatements(written).apply.find((s) => s.table === 'trainer' && s.kind === 'insert')).toMatchObject({ row: { Greeting: 'Hi' } });
   });
 
   it('treats a trainer added and taken away again as unchanged', () => {

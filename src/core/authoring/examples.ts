@@ -85,7 +85,8 @@ function trainerExample(): AuthoringExample {
     displayId: 1000,
     spawns: [{ ...newSpawn(90101), x: -9470, y: 34, z: 200, o: 0 }],
     trainer: {
-      trainerId: 900033,
+      // Only the shape: a real id comes from allocate_ids (kind trainer)
+      trainerId: 2000000001,
       type: 'class' as const,
       requirement: 8,
       greeting: 'Hello, mage! Ready for some training?',

@@ -44,6 +44,9 @@ describe('the clicked thing as an entity', () => {
     expect(spawnedEntityOf(info({ entry: 12000001, own: true }), store)).toMatchObject({ trainer: { teaches: false, count: 0 } });
     expect(spawnedEntityOf(info({ npcFlags: 51 }), store)).toMatchObject({ trainer: { teaches: true, count: null } });
     expect(spawnedEntityOf(info({ npcFlags: 3 }), store)).toMatchObject({ trainer: { teaches: false, count: null } });
+    // A trainer the editor could not model (locked, none read) is the database's too
+    const odd = { ...store, npcs: [{ ...newNpc(1423), origin: { kind: 'existing' as const, original: { creature_default_trainer: [{ CreatureId: '1423', TrainerId: '99' }] }, sharedLoot: 0, spawnCount: 1, sharedTrainer: 0, locked: ['trainer' as const] } }] };
+    expect(spawnedEntityOf(info({ npcFlags: 51 }), odd)).toMatchObject({ trainer: { teaches: true, count: null } });
     // A trainer the project never read is the database's, by its flags
     const unread = { ...store, npcs: [{ ...newNpc(1423), origin: { kind: 'existing' as const, original: {}, sharedLoot: 0, spawnCount: 1, sharedTrainer: 0, locked: [] } }] };
     expect(spawnedEntityOf(info({ npcFlags: 51 }), unread)).toMatchObject({ trainer: { teaches: true, count: null } });

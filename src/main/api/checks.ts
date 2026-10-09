@@ -86,14 +86,12 @@ export function createChecks(ctx: ApiContext, files: ServerFiles) {
     // What NPCs sell: an item the world database or the project has
     const sold = [...new Set(entities.npcs.flatMap((n) => n.vendor.map((v) => v.item)).filter((i) => i > 0))];
     const soldRows = sold.length > 0 ? await rowsOrNone(live.db, 'item_template', { entry: sold.map(String) }) : [];
-    // Trainer ids that are new to the project and a trainer the database already has for another NPC
-    const trainerIds = [...new Set(entities.npcs.flatMap((n) => (n.trainer && n.trainer.trainerId > 0 ? [n.trainer.trainerId] : [])))];
-    const [trainerRows, trainerLinks] = trainerIds.length > 0
-      ? await Promise.all([rowsOrNone(live.db, 'trainer', { Id: trainerIds.map(String) }), rowsOrNone(live.db, 'creature_default_trainer', { TrainerId: trainerIds.map(String) })])
-      : [[], []];
-    const projectNpcs = new Set(entities.npcs.map((n) => n.entry));
-    const ours = new Set(trainerLinks.filter((r) => projectNpcs.has(Number(r.CreatureId))).map((r) => Number(r.TrainerId)));
-    const takenTrainers = new Set(trainerRows.map((r) => Number(r.Id)).filter((id) => !ours.has(id)));
+    // Who in the database uses each trainer id a project NPC holds or was read with, to tell an id that is its own from another NPC's
+    const readId = (n: (typeof entities.npcs)[number]): number => (n.origin.kind === 'existing' ? Number(n.origin.original.creature_default_trainer?.[0]?.TrainerId ?? 0) : 0);
+    const trainerIds = [...new Set(entities.npcs.flatMap((n) => [n.trainer?.trainerId ?? 0, readId(n)]).filter((id) => id > 0))];
+    const trainerLinks = trainerIds.length > 0 ? await rowsOrNone(live.db, 'creature_default_trainer', { TrainerId: trainerIds.map(String) }) : [];
+    const trainerUsers = new Map<number, number[]>();
+    for (const r of trainerLinks) trainerUsers.set(Number(r.TrainerId), [...(trainerUsers.get(Number(r.TrainerId)) ?? []), Number(r.CreatureId)]);
     // Extended costs only when some stock asks for one and the server's DBC could be read: a validation run cannot say more
     const asked = entities.npcs.some((n) => n.vendor.some((v) => v.extendedCost > 0));
     const costs = asked ? await files.extendedCostsOf(live) : null;
@@ -101,7 +99,7 @@ export function createChecks(ctx: ApiContext, files: ServerFiles) {
     return entityIssues({
       entities, dbNames, questItems: [...new Set(quests.list().flatMap((q) => questItemsOf(q.aggregate)))], objectives: objectivesByQuest(),
       knownSpell: spells ? (id) => spells.get(id) !== undefined : null, itemInventoryTypes,
-      knownQuest: (id) => knownQuests.has(id), knownItem: (id) => knownItems.has(id), trainerIdTaken: (id) => takenTrainers.has(id),
+      knownQuest: (id) => knownQuests.has(id), knownItem: (id) => knownItems.has(id), trainerUsers,
       knownExtendedCost: costs && !('reason' in costs) ? (id) => costs.get(id) !== undefined : null, itemColumnTypes: itemColumnTypes.size > 0 ? itemColumnTypes : null,
     });
   }

@@ -55,6 +55,14 @@ describe('the Trainer tab', () => {
     expect(current.trainer).toMatchObject({ type: 'class', requirement: 0 });
   });
 
+  it('asks for a class for a pet trainer too, and for none of the other types', async () => {
+    render(<Live start={npcWith(trainer({ type: 'pet', requirement: 3 }))} />);
+    expect(screen.getByLabelText('Class')).toHaveValue('3');
+    await userEvent.selectOptions(screen.getByLabelText('Type'), 'Mount');
+    expect(screen.queryByLabelText('Class')).toBeNull();
+    expect(current.trainer).toMatchObject({ type: 'mount', requirement: 0 });
+  });
+
   it('shows a class this editor has no name for', () => {
     render(<Live start={npcWith(trainer({ requirement: 12 }))} />);
     expect(within(screen.getByLabelText('Class')).getByRole('option', { name: 'Class 12' })).toBeTruthy();
@@ -77,6 +85,14 @@ describe('the Trainer tab', () => {
     await userEvent.click(within(steps()[0]!).getByRole('button', { name: 'Remove' }));
     expect(current.trainer!.spells).toHaveLength(1);
     expect(current.trainer!.spells[0]!.reqSkill).toBe(171);
+  });
+
+  it('takes a skill id the list has no name for', () => {
+    render(<Live start={npcWith(trainer({ spells: [spell(78)] }))} />);
+    fireEvent.change(within(steps()[0]!).getByLabelText('Skill id'), { target: { value: '54' } });
+    expect(current.trainer!.spells[0]!.reqSkill).toBe(54);
+    expect(within(steps()[0]!).getByLabelText('Skill')).toHaveValue('54');
+    expect(within(within(steps()[0]!).getByLabelText('Skill')).getByRole('option', { name: 'Skill 54' })).toBeTruthy();
   });
 
   it('carries copper over into silver', () => {
@@ -162,6 +178,22 @@ describe('the Trainer tab', () => {
     expect(current.trainer!.spells).toEqual([spell(78)]);
     expect((current.origin as { locked: string[] }).locked).toEqual([]);
     expect(await screen.findByRole('button', { name: 'Add spell' })).toBeTruthy();
+  });
+
+  it('names the spells of a trainer other NPCs share', async () => {
+    const origin = { kind: 'existing' as const, original: { creature_default_trainer: [{ CreatureId: '12000001', TrainerId: '17' }], trainer: [], trainer_spell: [] }, sharedLoot: 0, spawnCount: 1, sharedTrainer: 30, locked: ['trainer' as const] };
+    const api = makeMockApi({ lookupNames: vi.fn(async () => okv({ 78: 'Charge' })) });
+    render(<Live start={npcWith(trainer({ trainerId: 17, spells: [spell(78, { cost: 12050, reqLevel: 4 })] }), { origin })} api={api} />);
+    expect(await screen.findByText(/Charge · 1g 20s 50c · level 4/)).toBeTruthy();
+  });
+
+  it('lets an NPC stop teaching a trainer it shares, leaving the shared trainer as it is', async () => {
+    const origin = { kind: 'existing' as const, original: { creature_default_trainer: [{ CreatureId: '12000001', TrainerId: '17' }], trainer: [], trainer_spell: [] }, sharedLoot: 0, spawnCount: 1, sharedTrainer: 30, locked: ['trainer' as const] };
+    vi.spyOn(window, 'confirm').mockReturnValue(true);
+    render(<Live start={npcWith(trainer({ trainerId: 17 }), { origin })} />);
+    await userEvent.click(screen.getByRole('button', { name: 'Remove trainer' }));
+    expect(current.trainer).toBeNull();
+    expect((current.origin as { locked: string[] }).locked).toEqual(['trainer']);
   });
 
   it('says so, and changes nothing, when its own copy could not get an id', async () => {

@@ -65,6 +65,58 @@ describe('exporting an edited existing NPC', () => {
     expect(out.value.sql).toMatch(/INSERT INTO `npc_vendor` \(.*\) VALUES \(1423, 0, 159, 0, 0, 0, /);
   });
 
+  describe('an existing NPC\'s trainer', () => {
+    const trainerRows = async (db: any) => ({
+      creature_template: await db.selectRows('creature_template', { entry: '1423' }),
+      creature_template_model: await db.selectRows('creature_template_model', { CreatureID: '1423' }),
+      creature_loot_template: await db.selectRows('creature_loot_template', { Entry: '1423' }),
+      creature_default_trainer: await db.selectRows('creature_default_trainer', { CreatureId: '1423' }),
+      trainer: await db.selectRows('trainer', { Id: '5' }),
+      trainer_spell: await db.selectRows('trainer_spell', { TrainerId: '5' }),
+    });
+    const lesson = { spell: 5, cost: 1, reqLevel: 2, reqSkill: 0, reqSkillRank: 0, reqSpells: [78] };
+
+    it('exports a database NPC made a trainer, filling the columns the editor does not set', async () => {
+      const { api, db } = await setup();
+      const npc = npcFromRows(1423, await trainerRows(db) as any, { sharedLoot: 0, spawnCount: 3, sharedTrainer: 0 });
+      await api.putProjectEntities({ npcs: [{ ...npc, trainer: { trainerId: 900033, type: 'profession', requirement: 0, greeting: 'Hi', spells: [lesson] } }], objects: [], items: [] });
+      const out: any = await api.exportProject();
+      expect(out.ok, JSON.stringify(out.error)).toBe(true);
+      expect(out.value.sql).toMatch(/INSERT INTO `trainer` \(.*\) VALUES \(900033, 2, 0, 'Hi', /);
+      expect(out.value.sql).toMatch(/INSERT INTO `trainer_spell` \(.*\) VALUES \(900033, 5, /);
+      expect(out.value.sql).toMatch(/INSERT INTO `creature_default_trainer` \(.*\) VALUES \(1423, 900033\)/);
+    });
+
+    it('exports a spell added to the NPC\'s own trainer', async () => {
+      const { api, db } = await setup();
+      db.insert('trainer', { Id: '5', Type: '0', Requirement: '1', Greeting: 'Hi', VerifiedBuild: '12340' });
+      db.insert('trainer_spell', { TrainerId: '5', SpellId: '78', MoneyCost: '10', ReqLevel: '1', VerifiedBuild: '12340' });
+      db.insert('creature_default_trainer', { CreatureId: '1423', TrainerId: '5' });
+      const npc = npcFromRows(1423, await trainerRows(db) as any, { sharedLoot: 0, spawnCount: 3, sharedTrainer: 0 });
+      await api.putProjectEntities({ npcs: [{ ...npc, trainer: { ...npc.trainer!, spells: [...npc.trainer!.spells, lesson] } }], objects: [], items: [] });
+      const out: any = await api.exportProject();
+      expect(out.ok, JSON.stringify(out.error)).toBe(true);
+      expect(out.value.sql).toMatch(/INSERT INTO `trainer_spell` \(.*\) VALUES \(5, 5, 1, /);
+    });
+
+    it('exports a shared trainer\'s NPC given its own copy, leaving the shared trainer alone', async () => {
+      const { api, db } = await setup();
+      db.insert('trainer', { Id: '5', Type: '0', Requirement: '1', Greeting: 'Hi', VerifiedBuild: '12340' });
+      db.insert('trainer_spell', { TrainerId: '5', SpellId: '78', MoneyCost: '10', ReqLevel: '1', VerifiedBuild: '12340' });
+      db.insert('creature_default_trainer', { CreatureId: '1423', TrainerId: '5' });
+      db.insert('creature_default_trainer', { CreatureId: '68', TrainerId: '5' });
+      const npc = npcFromRows(1423, await trainerRows(db) as any, { sharedLoot: 0, spawnCount: 3, sharedTrainer: 1 });
+      expect((npc.origin as { locked: string[] }).locked).toEqual(['trainer']);
+      const copied = { ...npc, trainer: { ...npc.trainer!, trainerId: 900033 }, origin: { ...npc.origin, locked: [] } } as typeof npc;
+      await api.putProjectEntities({ npcs: [copied], objects: [], items: [] });
+      const out: any = await api.exportProject();
+      expect(out.ok, JSON.stringify(out.error)).toBe(true);
+      expect(out.value.sql).toMatch(/INSERT INTO `trainer` \(.*\) VALUES \(900033, 0, 1, 'Hi', /);
+      expect(out.value.sql).toMatch(/INSERT INTO `creature_default_trainer` \(.*\) VALUES \(1423, 900033\)/);
+      expect(out.value.sql).not.toMatch(/(DELETE FROM|INSERT INTO) `trainer(_spell)?` .*(`Id` = 5|`TrainerId` = 5)\b/);
+    });
+  });
+
   it('warns, and still exports, when the database changed the NPC since it was edited here', async () => {
     const { api, db, guard } = await setup();
     await api.putProjectEntities({ npcs: [{ ...guard, minLevel: 60, maxLevel: 60 }], objects: [], items: [] });

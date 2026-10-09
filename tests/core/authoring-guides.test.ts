@@ -98,10 +98,14 @@ describe('the guides tell the truth about the editor', () => {
   it('npc guide and example cover trainers and cite their codes', async () => {
     const { examplesOf } = await import('../../src/core/authoring/examples');
     const guide = guideOf('npc');
-    for (const word of ['`trainer`', '`trainerId`', '`requirement`', '`reqSpells`', 'allocate_ids', 'Give it its own copy', '`TRAINER_NO_ID`', '`TRAINER_NO_SPELL`', '`TRAINER_DUPLICATE`', '`TRAINER_REQ_SPELL`', '`TRAINER_NO_CLASS`', '`TRAINER_EMPTY`', '`TRAINER_UNKNOWN_SPELL`', '`TRAINER_NOT_READ`', '`TRAINER_ID_TAKEN`']) expect(guide).toContain(word);
+    for (const word of ['`trainer`', '`trainerId`', '`requirement`', '`reqSpells`', 'allocate_ids', 'Give it its own copy', '`TRAINER_NO_ID`', '`TRAINER_NO_SPELL`', '`TRAINER_DUPLICATE`', '`TRAINER_REQ_SPELL`', '`TRAINER_NO_CLASS`', '`TRAINER_EMPTY`', '`TRAINER_UNKNOWN_SPELL`', '`TRAINER_NOT_READ`', '`TRAINER_ID_TAKEN`', '`TRAINER_ID_DUPLICATE`', '`TRAINER_SHARED`', '`TRAINER_LOCKED`']) expect(guide).toContain(word);
     expect(jsonSchemaOf('npc')).toHaveProperty('properties.trainer');
     expect(examplesOf('npc').some((e) => (e.value as { trainer?: unknown }).trainer)).toBe(true);
     expect(authoringSummary('npc')).toMatch(/teaches/);
+    // The example only shows the shape: its id must come from allocate_ids, and cannot be one an editor would hand out first
+    const trainerExample = examplesOf('npc').find((e) => (e.value as { trainer?: unknown }).trainer)!;
+    expect((trainerExample.value as { trainer: { trainerId: number } }).trainer.trainerId).toBeGreaterThan(1_000_000_000);
+    expect(guide).toMatch(/every class/);
   });
 
   it('say scene ids look like s1, s2 and so on', () => {

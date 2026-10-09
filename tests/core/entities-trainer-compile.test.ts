@@ -29,10 +29,10 @@ describe('compiling a new NPC\'s trainer', () => {
     ]);
   });
 
-  it('writes 0 as the requirement of the other types', () => {
-    expect(compile([{ ...teacher, trainer: trainer({ type: 'profession', requirement: 7 }) }]).inserts.trainer![0]).toMatchObject({ Type: '2', Requirement: '0' });
-    expect(compile([{ ...teacher, trainer: trainer({ type: 'mount' }) }]).inserts.trainer![0]).toMatchObject({ Type: '1', Requirement: '0' });
-    expect(compile([{ ...teacher, trainer: trainer({ type: 'pet' }) }]).inserts.trainer![0]).toMatchObject({ Type: '3', Requirement: '0' });
+  it('writes the requirement as it is for every type: the class of a class or pet trainer, and whatever a mount or profession trainer was read with', () => {
+    expect(compile([{ ...teacher, trainer: trainer({ type: 'profession', requirement: 7 }) }]).inserts.trainer![0]).toMatchObject({ Type: '2', Requirement: '7' });
+    expect(compile([{ ...teacher, trainer: trainer({ type: 'mount', requirement: 0 }) }]).inserts.trainer![0]).toMatchObject({ Type: '1', Requirement: '0' });
+    expect(compile([{ ...teacher, trainer: trainer({ type: 'pet', requirement: 3 }) }]).inserts.trainer![0]).toMatchObject({ Type: '3', Requirement: '3' });
   });
 
   it('sets the trainer bit and the type\'s sub-type bit with the gossip bit, and nothing for a non-trainer', () => {
@@ -52,7 +52,18 @@ describe('compiling a new NPC\'s trainer', () => {
   });
 
   it('also deletes a trainer the database has it pointing at from an earlier export, but never another NPC\'s', () => {
-    const context = { ...EMPTY_ENTITY_CONTEXT, trainerIds: [{ CreatureId: '12000001', TrainerId: '900031' }, { CreatureId: '555', TrainerId: '17' }] };
+    const context = { ...EMPTY_ENTITY_CONTEXT, trainerIds: [{ CreatureId: '12000001', TrainerId: '900031' }, { CreatureId: '555', TrainerId: '17' }], trainerUsers: [{ CreatureId: '12000001', TrainerId: '900031' }, { CreatureId: '555', TrainerId: '17' }] };
+    const out = compile([{ ...teacher, trainer: null }], context);
+    expect(out.deletes.trainer).toEqual([{ Id: '900031' }]);
+    expect(out.deletes.trainer_spell).toEqual([{ TrainerId: '900031' }]);
+  });
+
+  it('never deletes a trainer that NPCs outside the project use, even one a new NPC\'s entry points at', () => {
+    const context = {
+      ...EMPTY_ENTITY_CONTEXT,
+      trainerIds: [{ CreatureId: '12000001', TrainerId: '17' }, { CreatureId: '12000001', TrainerId: '900031' }],
+      trainerUsers: [{ CreatureId: '12000001', TrainerId: '17' }, { CreatureId: '555', TrainerId: '17' }, { CreatureId: '12000001', TrainerId: '900031' }],
+    };
     const out = compile([{ ...teacher, trainer: null }], context);
     expect(out.deletes.trainer).toEqual([{ Id: '900031' }]);
     expect(out.deletes.trainer_spell).toEqual([{ TrainerId: '900031' }]);

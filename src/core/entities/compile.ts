@@ -151,8 +151,7 @@ export function compileEntities(input: {
       const t = npc.trainer;
       const id = text(t.trainerId);
       insert('creature_default_trainer', { CreatureId: text(npc.entry), TrainerId: id });
-      // The class a class trainer serves; the other types have none
-      insert('trainer', { Id: id, Type: text(TRAINER_TYPE_VALUE[t.type]), Requirement: text(t.type === 'class' ? t.requirement : 0), Greeting: t.greeting });
+      insert('trainer', { Id: id, Type: text(TRAINER_TYPE_VALUE[t.type]), Requirement: text(t.requirement), Greeting: t.greeting });
       for (const s of [...t.spells].sort((a, b) => a.spell - b.spell)) {
         insert('trainer_spell', {
           TrainerId: id, SpellId: text(s.spell), MoneyCost: text(s.cost), ReqSkillLine: text(s.reqSkill), ReqSkillRank: text(s.reqSkillRank),
@@ -264,7 +263,8 @@ export function compileEntities(input: {
   add('creature_default_trainer', sorted(entities.npcs.map((n) => n.entry)).map((e) => ({ CreatureId: text(e) })));
   const ownTrainers = sorted([
     ...entities.npcs.flatMap((n) => (n.trainer ? [n.trainer.trainerId] : [])),
-    ...context.trainerIds.filter((r) => npcEntriesHeld.has(num(r.CreatureId))).map((r) => num(r.TrainerId)),
+    // A trainer a past export pointed a new NPC at, unless NPCs outside the project use it too (an entry that is also a database creature)
+    ...context.trainerIds.filter((r) => npcEntriesHeld.has(num(r.CreatureId)) && context.trainerUsers.filter((u) => num(u.TrainerId) === num(r.TrainerId)).every((u) => npcEntriesHeld.has(num(u.CreatureId)))).map((r) => num(r.TrainerId)),
   ]);
   add('trainer', ownTrainers.map((id) => ({ Id: text(id) })));
   add('trainer_spell', ownTrainers.map((id) => ({ TrainerId: text(id) })));

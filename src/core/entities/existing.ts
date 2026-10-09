@@ -101,7 +101,9 @@ function writeTrainer(out: Statements, origin: Existing, entry: string, trainer:
   const sameId = read !== null && read.trainerId === trainer.trainerId;
   const original = sameId ? rowsOf(origin, 'trainer').find((r) => num(r.Id) === trainer.trainerId) : undefined;
   writeTable(out, origin, 'trainer', [{ Id: id }], [
-    { ...original, Id: id, Type: text(TRAINER_TYPE_VALUE[trainer.type]), Requirement: text(trainer.type === 'class' ? trainer.requirement : 0), Greeting: trainer.greeting },
+    { ...original, Id: id, Type: text(TRAINER_TYPE_VALUE[trainer.type]), Requirement: text(trainer.requirement),
+      // A greeting the database left NULL stays NULL until one is written
+      Greeting: trainer.greeting === '' && original && original.Greeting === null ? null : trainer.greeting },
   ]);
   const carried = new Map(sameId ? rowsOf(origin, 'trainer_spell').map((r) => [num(r.SpellId), r] as const) : []);
   const spells = [...trainer.spells].sort((a, b) => a.spell - b.spell).map((s): Row => ({
@@ -185,7 +187,8 @@ function npcStatements(out: Statements, npc: CustomNpc, origin: Existing, givers
   const vendorChanged = !vendorUnread(npc) && !sameVendor(npc.vendor, asRead.vendor);
   const vendorBit = vendorChanged ? (npc.vendor.length > 0 ? VENDOR_BIT : 0) : num(original.npcflag) & VENDOR_BIT;
   // A trainer other NPCs share, or one never read, is not ours to write; one left as read is not written
-  const trainerChanged = !trainerUnread(npc) && !origin.locked.includes('trainer') && !sameTrainer(npc.trainer, asRead.trainer);
+  // (A shared trainer can still be walked away from: that deletes only this NPC's own link)
+  const trainerChanged = !trainerUnread(npc) && (!origin.locked.includes('trainer') || npc.trainer === null) && !sameTrainer(npc.trainer, asRead.trainer);
   const trainerBit = trainerChanged ? (npc.trainer ? TRAINER_BIT : 0) : num(original.npcflag) & TRAINER_BIT;
   const templateRow = (n: CustomNpc): Row => {
     const flags =

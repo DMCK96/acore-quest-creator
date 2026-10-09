@@ -1,6 +1,7 @@
 import { fightIssues } from '../combat/validate';
 import type { Issue } from '../validate/validate';
-import { ENTITIES_FIELD, trainerUnread, vendorUnread, type CustomItem, type CustomNpc, type CustomObject, type QuestEntities } from './model';
+import { npcFromRows } from './from-rows';
+import { ENTITIES_FIELD, sameTrainer, trainerUnread, vendorUnread, type CustomItem, type CustomNpc, type CustomObject, type QuestEntities } from './model';
 import { missingChoice } from '../patrol/compile';
 
 /**
@@ -38,10 +39,16 @@ export function entityIssues(input: {
   knownItem?: ((id: number) => boolean) | null;
   /** Whether an extended cost is in the server's `ItemExtendedCost.dbc`; null skips the check. */
   knownExtendedCost?: ((id: number) => boolean) | null;
-  /** Whether the database already has a trainer under an id that is not this project's own; null skips the check. */
-  trainerIdTaken?: ((id: number) => boolean) | null;
+  /** Which NPCs in the database use each trainer id now (by creature entry); null skips the checks that need it. */
+  trainerUsers?: ReadonlyMap<number, readonly number[]> | null;
 }): Issue[] {
   const questItems = new Set(input.questItems ?? []);
+  // How many of the project's NPCs hold each trainer id that is new to it (not one an existing NPC was read with)
+  const newTrainerIds = new Map<number, number>();
+  for (const n of input.entities.npcs) {
+    if (!n.trainer || trainerUnread(n) || String(n.trainer.trainerId) === readTrainerId(n)) continue;
+    newTrainerIds.set(n.trainer.trainerId, (newTrainerIds.get(n.trainer.trainerId) ?? 0) + 1);
+  }
   const issues: Issue[] = [];
   /** Marks the issues added since `from` as being about this entity. */
   const tag = (from: number, kind: NonNullable<Issue['about']>['kind'], entry: number): void => {
@@ -140,30 +147,47 @@ export function entityIssues(input: {
       const trainer = entity.trainer;
       if (trainerUnread(entity)) {
         add('warning', 'TRAINER_NOT_READ', 'its trainer was never read from the database, so this trainer is not written; put the NPC back as the database has it and edit it again.');
-      } else if (!(entity.origin.kind === 'existing' && entity.origin.locked.includes('trainer') && String(trainer.trainerId) === readTrainerId(entity))) {
-        if (trainer.trainerId <= 0) add('error', 'TRAINER_NO_ID', 'it has no trainer id; allocate one with allocate_ids, kind trainer.');
-        if (trainer.type === 'class' && trainer.requirement === 0) add('error', 'TRAINER_NO_CLASS', 'it is a class trainer with no class chosen, so no player could use it.');
-        if (trainer.spells.length === 0) add('warning', 'TRAINER_EMPTY', 'it teaches nothing.');
-        const seen = new Set<number>();
-        const repeated = new Set<number>();
-        for (const row of trainer.spells) {
-          if (row.spell <= 0) {
-            add('error', 'TRAINER_NO_SPELL', 'a spell row has no spell.');
-            continue;
+      } else {
+        const existing = entity.origin.kind === 'existing' ? entity.origin : null;
+        const asRead = existing ? npcFromRows(entity.entry, existing.original, { sharedLoot: existing.sharedLoot, spawnCount: existing.spawnCount, sharedTrainer: existing.sharedTrainer }).trainer : null;
+        const readId = readTrainerId(entity);
+        const underReadId = existing !== null && String(trainer.trainerId) === readId;
+        const others = (id: number): number[] => (input.trainerUsers?.get(id) ?? []).filter((e) => e !== entity.entry);
+        // Left as it was read, it is not written: the database's own quirks are not the author's to fix
+        if (existing && sameTrainer(trainer, asRead)) {
+          // nothing to check
+        } else if (existing?.locked.includes('trainer')) {
+          add('warning', 'TRAINER_LOCKED', 'its trainer is shared with other NPCs, so this edit is not written; use Give it its own copy in the editor first.');
+        } else {
+          if (underReadId && others(trainer.trainerId).length > 0) {
+            add('error', 'TRAINER_SHARED', `trainer ${trainer.trainerId} is also used by ${others(trainer.trainerId).length} other NPC${others(trainer.trainerId).length === 1 ? '' : 's'}, so changing it would change theirs; use Give it its own copy in the editor first.`);
           }
-          if (seen.has(row.spell) && !repeated.has(row.spell)) {
-            repeated.add(row.spell);
-            add('error', 'TRAINER_DUPLICATE', `spell ${row.spell} is listed twice; the database allows each spell once.`);
+          if (trainer.trainerId <= 0) add('error', 'TRAINER_NO_ID', 'it has no trainer id; allocate one with allocate_ids, kind trainer.');
+          if (trainer.type === 'class' && trainer.requirement === 0) add('warning', 'TRAINER_NO_CLASS', 'it is a class trainer with no class chosen, so every class can train here; choose its class.');
+          if (trainer.spells.length === 0) add('warning', 'TRAINER_EMPTY', 'it teaches nothing.');
+          const seen = new Set<number>();
+          const repeated = new Set<number>();
+          for (const row of trainer.spells) {
+            if (row.spell <= 0) {
+              add('error', 'TRAINER_NO_SPELL', 'a spell row has no spell.');
+              continue;
+            }
+            if (seen.has(row.spell) && !repeated.has(row.spell)) {
+              repeated.add(row.spell);
+              add('error', 'TRAINER_DUPLICATE', `spell ${row.spell} is listed twice; the database allows each spell once.`);
+            }
+            seen.add(row.spell);
+            if (row.reqSpells.includes(row.spell)) add('error', 'TRAINER_REQ_SPELL', `spell ${row.spell} needs itself first.`);
           }
-          seen.add(row.spell);
-          if (row.reqSpells.includes(row.spell)) add('error', 'TRAINER_REQ_SPELL', `spell ${row.spell} needs itself first.`);
+          if (input.knownSpell) {
+            for (const spell of seen) if (!input.knownSpell(spell)) add('warning', 'TRAINER_UNKNOWN_SPELL', `spell ${spell} is not in the server's spell list.`);
+          }
+          // A trainer id new to the project must be its own: not another NPC's in the database, nor another new trainer's here
+          if (!underReadId && trainer.trainerId > 0) {
+            if (others(trainer.trainerId).length > 0) add('error', 'TRAINER_ID_TAKEN', `trainer id ${trainer.trainerId} is already used by another NPC in the database, so writing it would change that NPC's trainer; allocate a free one with allocate_ids, kind trainer.`);
+            if ((newTrainerIds.get(trainer.trainerId) ?? 0) > 1) add('error', 'TRAINER_ID_DUPLICATE', `another NPC in this project has the same trainer id ${trainer.trainerId}; each trainer needs its own.`);
+          }
         }
-        if (input.knownSpell) {
-          for (const spell of seen) if (!input.knownSpell(spell)) add('warning', 'TRAINER_UNKNOWN_SPELL', `spell ${spell} is not in the server's spell list.`);
-        }
-        // Only a trainer new to the project: a new NPC's, or an own copy under an id it did not read
-        const isNew = entity.origin.kind !== 'existing' || String(trainer.trainerId) !== readTrainerId(entity);
-        if (isNew && trainer.trainerId > 0 && input.trainerIdTaken?.(trainer.trainerId)) add('warning', 'TRAINER_ID_TAKEN', `trainer id ${trainer.trainerId} is already a trainer in the database.`);
       }
     }
     if ('fight' in entity && entity.fight) issues.push(...fightIssues(entity.fight, label, input.knownSpell ?? null, input.objectives ?? null));

@@ -1,7 +1,9 @@
 import { TRAINER_TYPES, type Trainer, type TrainerSpell } from '@core/entities/model';
 import { CLASSES, className } from '@core/game/classes';
+import { formatCoin } from '@core/format/coin';
 import { SKILLS } from '@core/game/skills';
 import { EntityField, NumberField, SelectField, TextField } from '../scripts/fields';
+import { useName } from '../state/names';
 
 const NEW_SPELL: TrainerSpell = { spell: 0, cost: 0, reqLevel: 0, reqSkill: 0, reqSkillRank: 0, reqSpells: [] };
 const TYPE_LABEL: Record<Trainer['type'], string> = { class: 'Class', mount: 'Mount', profession: 'Profession', pet: 'Pet' };
@@ -15,14 +17,22 @@ const MAX_REQ_SPELLS = 3;
 /** A whole number from 0 up */
 const count = (n: number): number => Math.max(0, Math.round(n));
 
+/** A spell by name once known */
+function SpellLine({ spell }: { spell: TrainerSpell }): React.JSX.Element {
+  const { state, name } = useName('spell', spell.spell);
+  return (
+    <li className="scene-step">
+      {state === 'found' && name ? name : `Spell ${spell.spell}`} · {formatCoin(spell.cost)} · level {spell.reqLevel}
+    </li>
+  );
+}
+
 /** What a trainer teaches, read-only: for a trainer other NPCs share */
 export function TrainerSpells({ trainer }: { trainer: Trainer }): React.JSX.Element {
   return (
     <ol className="scene-steps">
       {trainer.spells.map((s, i) => (
-        <li key={i} className="scene-step">
-          Spell {s.spell} · {s.cost} copper · level {s.reqLevel}
-        </li>
+        <SpellLine key={i} spell={s} />
       ))}
     </ol>
   );
@@ -49,7 +59,7 @@ export function TrainerList({ idPrefix, trainer, onChange }: { idPrefix: string;
           options={TRAINER_TYPES.map((t) => [t, TYPE_LABEL[t]] as const)}
           onChange={(type) => onChange({ ...trainer, type, requirement: 0 })}
         />
-        {trainer.type === 'class' && (
+        {(trainer.type === 'class' || trainer.type === 'pet') && (
           <SelectField
             label="Class"
             value={String(trainer.requirement)}
@@ -78,6 +88,7 @@ export function TrainerList({ idPrefix, trainer, onChange }: { idPrefix: string;
             <div className="scene-row">
               <NumberField label="Required level" value={row.reqLevel} min={0} onChange={(n) => setSpell(i, { ...row, reqLevel: Math.min(MAX_LEVEL, count(n)) })} />
               <SelectField label="Skill" value={String(row.reqSkill)} options={skillOptions(row.reqSkill)} onChange={(id) => setSpell(i, { ...row, reqSkill: Number(id) })} />
+              <NumberField label="Skill id" value={row.reqSkill} min={0} onChange={(n) => setSpell(i, { ...row, reqSkill: count(n) })} />
               <NumberField label="Skill rank" value={row.reqSkillRank} min={0} onChange={(n) => setSpell(i, { ...row, reqSkillRank: count(n) })} />
             </div>
             {Array.from({ length: Math.min(row.reqSpells.length + 1, MAX_REQ_SPELLS) }, (_, k) => (
