@@ -1,3 +1,4 @@
+import { projectGossip } from '../../core/entities/gossip-tree';
 import type { SchemaInfo } from '../../core/db/types';
 import { buildPatch, type PatchStatement, type PatchWarning } from '../../core/export/build-patch';
 import { findQuestGiverFixes, type QuestGiverFix } from '../../core/export/quest-giver';
@@ -75,7 +76,7 @@ export function createPatches(ctx: ApiContext) {
     const context = await readScriptContext(live.db, aggregate.questId, scenes);
     // The project patch's fight and patrol rows go in first (Apply to dev runs it first): scenes keep off them
     const project = await projectScripts(live);
-    const compiled = compileScenes({ questId: aggregate.questId, scenes, objectives: objectivesOf(aggregate), context, taken: project.compiled });
+    const compiled = compileScenes({ questId: aggregate.questId, scenes, objectives: objectivesOf(aggregate), context, taken: project.compiled, gossip: projectGossip(projectEntities().npcs) });
     return { context, compiled };
   }
 

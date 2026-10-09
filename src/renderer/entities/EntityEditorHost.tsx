@@ -11,6 +11,7 @@ import { EMPTY_WORLD, type WorldLayer } from '@core/world/layer';
 import { ItemEditor } from './item/ItemEditor';
 import { NpcEditor } from './npc/NpcEditor';
 import type { ExistingFacts } from './existing-facts';
+import { aboveHeld, heldIds } from './alloc-floor';
 import { ObjectEditor } from './object/ObjectEditor';
 import { stillNeeds } from './still-needs';
 
@@ -108,14 +109,13 @@ export function EntityEditorHost({
   // The quests that use it first, then the rest, for the quest an object is limited to
   const questChoices = [...users, ...quests.filter((q) => !users.includes(q))].map((q) => ({ questId: q.questId, title: q.title.trim() || `Quest ${q.questId}` }));
 
-  async function allocate(kind: AllocKind): Promise<number | null> {
-    const result = await api?.allocateIds(kind, 1);
-    return result?.ok && result.value.length > 0 ? result.value[0]! : null;
-  }
-
   async function allocateMany(kind: AllocKind, count: number): Promise<number[] | null> {
     const result = await api?.allocateIds(kind, count);
-    return result?.ok && result.value.length >= count ? result.value : null;
+    return result?.ok && result.value.length >= count ? aboveHeld(result.value, heldIds(kind, entities)) : null;
+  }
+
+  async function allocate(kind: AllocKind): Promise<number | null> {
+    return (await allocateMany(kind, 1))?.[0] ?? null;
   }
 
   const saveNpc = (next: CustomNpc): void => onChange({ ...entities, npcs: entities.npcs.map((n) => (n.entry === next.entry ? next : n)) });

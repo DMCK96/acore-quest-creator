@@ -55,9 +55,32 @@ describe('gossip ids', () => {
     expect(((await api.allocateIds('gossipText', 1)) as any).value).toEqual([9780031]);
   });
 
+  it('count the menu a goober holds in Data19, as well as a questgiver Data3', async () => {
+    const { api } = await setup((db) => {
+      db.insert('gameobject_template', { entry: '102', type: '10', Data19: '932700' });
+    });
+    expect(((await api.allocateIds('gossipMenu', 1)) as any).value).toEqual([932701]);
+  });
+
   it('are accepted over IPC', () => {
     expect(parseRequest('allocateIds', ['gossipMenu', 1]).ok).toBe(true);
     expect(parseRequest('allocateIds', ['gossipText', 1]).ok).toBe(true);
     expect(parseRequest('allocateIds', ['gossip', 1]).ok).toBe(false);
+  });
+});
+
+describe('gossip ids named only by conditions and scripts', () => {
+  it('are not handed out: a menu or text only they name still counts', async () => {
+    const { api } = await setup((db) => {
+      db.insert('gossip_menu_option', { MenuID: '1', OptionID: '0', OptionText: 'x', ActionMenuID: '940000' });
+      db.insert('conditions', { SourceTypeOrReferenceId: '15', SourceGroup: '940010', SourceEntry: '0' });
+      db.insert('conditions', { SourceTypeOrReferenceId: '14', SourceGroup: '940020', SourceEntry: '9790000' });
+      db.insert('smart_scripts', { entryorguid: '1', source_type: '0', id: '0', link: '0', event_type: '62', event_param1: '940030', event_param2: '0', action_type: '1' });
+      db.insert('smart_scripts', { entryorguid: '2', source_type: '0', id: '0', link: '0', event_type: '1', action_type: '98', action_param1: '940040', action_param2: '9790010' });
+      // Not gossip: other condition types name unrelated ids
+      db.insert('conditions', { SourceTypeOrReferenceId: '19', SourceGroup: '99999999', SourceEntry: '99999999' });
+    });
+    expect(((await api.allocateIds('gossipMenu', 1)) as any).value).toEqual([940041]);
+    expect(((await api.allocateIds('gossipText', 1)) as any).value).toEqual([9790011]);
   });
 });

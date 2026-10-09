@@ -1,4 +1,6 @@
 import { rowsOrNone } from '../../core/links/context';
+import { maxObjectMenu } from '../../core/db/object-menus';
+import { GOSSIP_TEXT_LIMIT } from '../../core/entities/gossip-tree';
 import type { QuestAggregate } from '../../core/model/aggregate';
 import { emptyGiversOf } from '../../core/modules/givers';
 import { existingDrift } from '../../core/entities/existing';
@@ -10,7 +12,6 @@ import type { Services } from './services';
 import { fail, run } from './errors';
 
 /** `npc_text` keeps one stray id at the top of its range (16777215); text ids are allocated below it */
-const GOSSIP_TEXT_LIMIT = 16_000_000;
 
 /** The project's NPCs, objects and items: ids for new ones, templates to start from, and editing existing ones */
 export function createEntitiesApi(s: Services): EntitiesApi {
@@ -49,7 +50,7 @@ export function createEntitiesApi(s: Services): EntitiesApi {
         }
         // Other places that name a menu or a text count too, though their rows are missing
         const also: [string, string, number | undefined][] =
-          kind === 'gossipMenu' ? [['gossip_menu_option', 'MenuID', undefined], ['creature_template', 'gossip_menu_id', undefined]]
+          kind === 'gossipMenu' ? [['gossip_menu_option', 'MenuID', undefined], ['gossip_menu_option', 'ActionMenuID', undefined], ['creature_template', 'gossip_menu_id', undefined]]
           : kind === 'gossipText' ? [['gossip_menu', 'TextID', GOSSIP_TEXT_LIMIT]]
           : [];
         for (const [otherTable, otherColumn, below] of also) {
@@ -59,10 +60,22 @@ export function createEntitiesApi(s: Services): EntitiesApi {
             // A fork without the table has none
           }
         }
+        // Conditions and scripts name menus and texts too, with no rows of their own to count
+        if (kind === 'gossipMenu' || kind === 'gossipText') {
+          const menu = kind === 'gossipMenu';
+          const named: [string, Record<string, string[]>, string[]][] = [
+            ['conditions', { SourceTypeOrReferenceId: menu ? ['14', '15'] : ['14'] }, [menu ? 'SourceGroup' : 'SourceEntry']],
+            ['smart_scripts', { source_type: ['0'], action_type: ['98'] }, [menu ? 'action_param1' : 'action_param2']],
+            ...(menu ? [['smart_scripts', { source_type: ['0'], event_type: ['62'] }, ['event_param1']] as [string, Record<string, string[]>, string[]]] : []),
+          ];
+          for (const [namedTable, where, columns] of named) {
+            const rows = await rowsOrNone(live.db, namedTable, where);
+            for (const r of rows) for (const c of columns) if (Number(r[c] ?? 0) < (menu ? Infinity : GOSSIP_TEXT_LIMIT)) dbMax = Math.max(dbMax, Number(r[c] ?? 0));
+          }
+        }
         if (kind === 'gossipMenu') {
           try {
-            const menus = await live.db.selectRows('gameobject_template', { type: '2' });
-            dbMax = Math.max(dbMax, ...menus.map((r) => Number(r.Data3 ?? 0)));
+            dbMax = Math.max(dbMax, await maxObjectMenu(live.db));
           } catch {
             // A fork without the table has none
           }

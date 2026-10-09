@@ -1,6 +1,7 @@
 import type { RawRow, Where } from '../db/types';
 import { UnknownColumnError, UnknownTableError, type WorldDb } from '../db/world-db';
 import { rowsOrNone } from '../links/context';
+import { GOSSIP_TEXT_LIMIT } from '../entities/gossip-tree';
 import { EVENT, SOURCE } from '../smartai/ids';
 import type { QuestScene } from './model';
 import { questTagPrefix, sceneFromComment } from './tag';
@@ -115,10 +116,10 @@ export async function prefixedRows(db: WorldDb, table: string, column: string, p
   }
 }
 
-async function maxOf(db: WorldDb, table: string, column: string): Promise<number> {
+async function maxOf(db: WorldDb, table: string, column: string, below?: number): Promise<number> {
   if (!db.selectMax) return 0;
   try {
-    return (await db.selectMax(table, column)) ?? 0;
+    return (await db.selectMax(table, column, below)) ?? 0;
   } catch (error) {
     if (error instanceof UnknownTableError || error instanceof UnknownColumnError) return 0;
     throw error;
@@ -206,7 +207,7 @@ export async function readScriptContext(
   const [gossipOptions, gossipMenuMax, npcTextMax, waypointsMax, areatriggerMax] = await Promise.all([
     rows(db, 'gossip_menu_option', { MenuID: ids(menus) }),
     maxOf(db, 'gossip_menu', 'MenuID'),
-    maxOf(db, 'npc_text', 'ID'),
+    maxOf(db, 'npc_text', 'ID', GOSSIP_TEXT_LIMIT),
     maxOf(db, 'waypoints', 'entry'),
     maxOf(db, 'areatrigger', 'entry'),
   ]);

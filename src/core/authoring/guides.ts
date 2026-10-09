@@ -278,7 +278,7 @@ const GOSSIP = lines(
   '- `greeting` — one to eight variants `{ text, textFemale, probability }`; one is chosen by weight.',
   '- `options` — each `{ optionId, icon, text, action, kept }`. A new option takes one more than the menu highest `optionId`; an id never changes or moves.',
   '- `action` — what choosing the option does, by its `kind`: `close` the window, open another `menu` (give its `menuId`), or open a `service` window (give its `type` and `npcFlag`). Services: vendor 3/128, flight master 4/8192, trainer 5/16, innkeeper 8/65536, banker 9/131072, petitions 10/262144, tabard designer 11/524288, battlemaster 12/1048576, auctioneer 13/2097152, stable master 14/4194304, armorer 15/4096, unlearn talents 16/16 (type/npcFlag).',
-  '- `locked` — a menu other NPCs or objects use. It is not written; ask the author to use Give it its own copy in the editor, then edit the copy.',
+  '- `locked` — a menu that is not the NPC\'s alone: others use it or its text, it has several text rows or a condition on its text, a menu above it that is locked opens it, or another menu of the tree shares its text. It is not written, whatever you send in `locked`; ask the author to use Give it its own copy in the editor, then edit the copy.',
   '- `kept` — an option the database ties to a condition or a script: it cannot be removed or have its action changed, but its text and icon can.',
   '',
   '## Common mistakes',

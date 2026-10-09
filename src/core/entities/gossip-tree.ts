@@ -7,6 +7,39 @@ export function blankMenu(menuId: number, textId: number): GossipMenu {
   return { menuId, textId, locked: false, greeting: [{ text: '', textFemale: '', probability: 1 }], options: [] };
 }
 
+/** `npc_text` keeps one stray id at the top of its range (16777215); text ids are allocated below this */
+export const GOSSIP_TEXT_LIMIT = 16_000_000;
+
+/**
+ * What the project's NPC trees hold, for the quest scenes that hang options off the same menus: each NPC's root
+ * menu, the option ids of every menu, and the largest menu and text ids
+ */
+export interface ProjectGossip {
+  roots: ReadonlyMap<number, number>;
+  options: ReadonlyMap<number, ReadonlySet<number>>;
+  maxMenu: number;
+  maxText: number;
+}
+
+export function projectGossip(npcs: readonly { entry: number; gossipMenu: GossipTree | null }[]): ProjectGossip {
+  const roots = new Map<number, number>();
+  const options = new Map<number, Set<number>>();
+  let maxMenu = 0;
+  let maxText = 0;
+  for (const npc of npcs) {
+    if (!npc.gossipMenu || npc.gossipMenu.menus.length === 0) continue;
+    roots.set(npc.entry, npc.gossipMenu.menus[0]!.menuId);
+    for (const m of npc.gossipMenu.menus) {
+      maxMenu = Math.max(maxMenu, m.menuId);
+      maxText = Math.max(maxText, m.textId);
+      const held = options.get(m.menuId) ?? new Set<number>();
+      for (const o of m.options) held.add(o.optionId);
+      options.set(m.menuId, held);
+    }
+  }
+  return { roots, options, maxMenu, maxText };
+}
+
 /**
  * The id a new option takes: one above the menu's highest, 0 for the first; never a freed one (conditions and scripts
  * name ids), so `had` lists the ids the menu had when it was read
@@ -27,6 +60,24 @@ export function reachableLocked(tree: GossipTree, fromId: number): number[] {
     for (const o of m.options) if (o.action.kind === 'menu') visit(o.action.menuId);
   };
   visit(fromId);
+  return tree.menus.map((m) => m.menuId).filter((id) => found.has(id));
+}
+
+/**
+ * What a copy of one locked menu has to take along: the locked menus above it that open it (a locked menu is never
+ * written, so a copy only its unlocked parents point at would never be reached) and the locked ones below it
+ */
+export function copySetOf(tree: GossipTree, fromId: number): number[] {
+  const locked = tree.menus.filter((m) => m.locked);
+  const set = new Set([fromId]);
+  for (let grew = true; grew; ) {
+    grew = false;
+    for (const m of locked) {
+      if (!set.has(m.menuId) && m.options.some((o) => o.action.kind === 'menu' && set.has(o.action.menuId))) { set.add(m.menuId); grew = true; }
+    }
+  }
+  const found = new Set<number>();
+  for (const id of set) for (const below of reachableLocked(tree, id)) found.add(below);
   return tree.menus.map((m) => m.menuId).filter((id) => found.has(id));
 }
 

@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { blankMenu, copyMenus, reachableLocked } from '@core/entities/gossip-tree';
+import { blankMenu, copyMenus, copySetOf } from '@core/entities/gossip-tree';
 import { gossipUnread, type CustomNpc, type GossipMenu, type GossipTree } from '@core/entities/model';
 import { serviceLabel } from '@core/game/gossip-services';
 import { CopyGossip, gossipIds, NO_GOSSIP_IDS, type AllocateGossip } from './CopyGossip';
@@ -138,7 +138,7 @@ export function GossipTab({
             : changing it would change theirs too.
           </p>
           <MenuSummary menu={menu} />
-          <button type="button" className="btn" onClick={() => void copyLocked(reachableLocked(tree, menu.menuId))}>
+          <button type="button" className="btn" onClick={() => void copyLocked(copySetOf(tree, menu.menuId))}>
             Give it its own copy
           </button>{' '}
           <button type="button" className="btn" onClick={() => void copyLocked(lockedIds)}>

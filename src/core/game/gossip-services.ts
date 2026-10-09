@@ -32,3 +32,13 @@ export const serviceOf = (type: number, npcFlag: number): GossipService | undefi
 
 /** A pair's name, or "Other (type N, flag M)" for one this editor has no name for */
 export const serviceLabel = (type: number, npcFlag: number): string => serviceOf(type, npcFlag)?.label ?? `Other (type ${type}, flag ${npcFlag})`;
+
+/** The `npcflag` bits the editor sets from the vendor and trainer tabs, which a service option cannot give an NPC */
+const MANAGED_FLAGS = 1 | 16 | 32 | 64 | 128;
+
+/** The `npcflag` bits a tree's service options need that no other tab of a new NPC sets: the NPC is given them */
+export function serviceFlagBits(tree: { menus: readonly { options: readonly { action: { kind: string; npcFlag?: number } }[] }[] } | null): number {
+  let bits = 0;
+  for (const menu of tree?.menus ?? []) for (const o of menu.options) if (o.action.kind === 'service') bits |= (o.action.npcFlag ?? 0) & ~MANAGED_FLAGS;
+  return bits;
+}

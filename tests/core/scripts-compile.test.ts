@@ -105,6 +105,17 @@ describe('compileScenes: gossip, escort and new areas', () => {
     expect(out.updates).toEqual([]);
     expect(out.flags).toEqual([]);
   });
+  it('hangs its option off the root of the tree the project gives the NPC, on the next free option id, with ids clear of the project', () => {
+    const gossip = { roots: new Map([[299, 932535]]), options: new Map([[932535, new Set([0, 1])]]), maxMenu: 932536, maxText: 9780014 };
+    const scene = base({ trigger: { kind: 'gossipOption', text: 'Tell me more.', greeting: '' }, steps: [{ kind: 'closeGossip', waitMs: 0 }] });
+    const out = compileScenes({ questId: Q, scenes: [scene], objectives: [299, 0, 0, 0], context: ctx(), gossip });
+    expect(out.inserts.gossip_menu).toBeUndefined();
+    expect(out.inserts.gossip_menu_option).toEqual([expect.objectContaining({ MenuID: '932535', OptionID: '2' })]);
+    expect(out.updates.filter((u) => 'gossip_menu_id' in u.set)).toEqual([]);
+    // An NPC with no tree still gets a menu, numbered clear of the project's
+    const bare = compileScenes({ questId: Q, scenes: [scene], objectives: [299, 0, 0, 0], context: ctx({ gossipMenuMax: 10, npcTextMax: 10 }), gossip: { ...gossip, roots: new Map() } });
+    expect(bare.inserts.gossip_menu).toEqual([{ MenuID: '932537', TextID: '9780015' }]);
+  });
   it('writes escort points and starts the escort for this quest', () => {
     const out = compile([base({
       trigger: { kind: 'questAccepted' },

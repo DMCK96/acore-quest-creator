@@ -7,6 +7,7 @@ import { itemRow, MODELLED_ITEM_COLUMNS } from './item-columns';
 import { MOVEMENT_TYPE } from '../world/movement';
 import { NPC_TYPE_VALUE, OBJECT_TYPE_VALUE, RANK_VALUE, TRAINER_TYPE_VALUE, type LootRow, type Patrol, type Page, type ProjectEntities } from './model';
 import { seenByColumns } from './visibility';
+import { serviceFlagBits } from '../game/gossip-services';
 
 /**
  * New NPCs and objects to template and spawn rows, in the same shape as compiled scripts so one
@@ -154,6 +155,8 @@ export function compileEntities(input: {
       (npc.gossip ? GOSSIP_BIT : 0) |
       (npc.vendor.length > 0 ? VENDOR_BIT : 0) |
       (npc.trainer ? TRAINER_BIT | TRAINER_SUBTYPE_BIT[npc.trainer.type] : 0) |
+      // The windows its gossip options open need their own flags
+      serviceFlagBits(npc.gossipMenu) |
       (num(existing?.npcflag) & GOSSIP_BIT);
     insert('creature_template', {
       entry: text(npc.entry), name: npc.name, subname: npc.subname, minlevel: text(npc.minLevel), maxlevel: text(npc.maxLevel),

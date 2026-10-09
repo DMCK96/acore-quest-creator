@@ -93,8 +93,9 @@ gossipAction = { kind: 'close' } | { kind: 'menu', menuId: int.positive() }
 ```
 
 - `gossipMenu` is not null when the NPC has a gossip menu; export sets `creature_template.gossip_menu_id` to the root
-  menu's id and sets bit 1 of `npcflag`. `null` clears `gossip_menu_id` and leaves bit 1 to the existing
-  **Can be talked to** checkbox. Every other bit stays as the database has it.
+  menu's id. Bit 1 of `npcflag` stays the **Can be talked to** checkbox's alone (`GOSSIP_NOT_TALKABLE` warns when a
+  menu has it off); a new NPC is also given the bits its service options need. `null` clears `gossip_menu_id`.
+  Every other bit stays as the database has it.
 - `locked` is read-only data: the menu is shared with other NPCs or objects, or has more than one text row, or its
   text is used by another menu. A locked menu is never written. Taking a copy gives it new `menuId` and `textId`
   and clears `locked`, as a trainer's copy does.

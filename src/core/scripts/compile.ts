@@ -11,6 +11,7 @@ import {
   TEXT_TYPE,
 } from '../smartai/ids';
 import type { ScriptContext } from './context';
+import type { ProjectGossip } from '../entities/gossip-tree';
 import { describeGate, describeStep } from './describe';
 import { triggerHasPlayer, type QuestScene, type SceneGate, type SceneStep } from './model';
 import { createAllocator, emitTrigger, textComment, type Row, type SmartAction } from './rows';
@@ -71,6 +72,8 @@ export interface CompileInput {
   context: ScriptContext;
   /** Rows the project patch writes (its NPCs' fights and patrols): as good as taken. */
   taken?: CompiledScripts;
+  /** What the project's NPC gossip trees hold: scenes take ids clear of them and hang their options off the NPC's root menu */
+  gossip?: ProjectGossip;
 }
 
 const SMART_KEY = ['entryorguid', 'source_type', 'id', 'link'] as const;
@@ -176,6 +179,7 @@ export function compileScenes(input: CompileInput): CompiledScripts {
     creatureText: [...context.creatureText.filter((r) => !ours(r.comment)), ...(input.taken?.inserts.creature_text ?? [])],
   });
   const usedOptions = new Map<number, Set<number>>();
+  for (const [menu, held] of input.gossip?.options ?? []) usedOptions.set(menu, new Set(held));
   for (const row of context.gossipOptions) {
     if (deleted('gossip_menu_option', { MenuID: row.MenuID ?? '0', OptionID: row.OptionID ?? '0' })) continue;
     const options = usedOptions.get(num(row.MenuID)) ?? new Set<number>();
@@ -233,8 +237,8 @@ export function compileScenes(input: CompileInput): CompiledScripts {
     takenAreas.add(nextArea);
     return nextArea;
   };
-  let nextMenu = context.gossipMenuMax;
-  let nextText = context.npcTextMax;
+  let nextMenu = Math.max(context.gossipMenuMax, input.gossip?.maxMenu ?? 0);
+  let nextText = Math.max(context.npcTextMax, input.gossip?.maxText ?? 0);
   const menuOf = new Map<number, number>();
 
   const setupDone = new Set<string>();
@@ -370,7 +374,8 @@ export function compileScenes(input: CompileInput): CompiledScripts {
         break;
       case 'gossipOption': {
         const creature = creatures.get(entryorguid);
-        let menu = num(creature?.gossip_menu_id);
+        // The menu the NPC has, or the root of the tree the project gives it
+        let menu = num(creature?.gossip_menu_id) || (input.gossip?.roots.get(entryorguid) ?? 0);
         if (menu === 0) {
           const existing = menuOf.get(entryorguid);
           if (existing !== undefined) menu = existing;

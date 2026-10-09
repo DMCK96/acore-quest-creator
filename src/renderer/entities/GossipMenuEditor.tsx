@@ -1,6 +1,6 @@
 import type { CustomNpc, GossipMenu, GossipOption, GossipTree, TextVariant } from '@core/entities/model';
 import { nextOptionId } from '@core/entities/gossip-tree';
-import { GOSSIP_SERVICES, serviceLabel, serviceOf } from '@core/game/gossip-services';
+import { GOSSIP_SERVICES, serviceFlagBits, serviceLabel, serviceOf } from '@core/game/gossip-services';
 import { NumberField, SelectField, TextField } from '../scripts/fields';
 
 const MAX_VARIANTS = 8;
@@ -16,7 +16,8 @@ const FLAG_VENDOR = 128;
 function flagsOf(npc: CustomNpc): number {
   const original = npc.origin.kind === 'existing' ? Number(npc.origin.original.creature_template?.[0]?.npcflag ?? 0) : 0;
   return (original & ~(FLAG_GOSSIP | FLAG_QUEST_GIVER | FLAG_TRAINER | FLAG_VENDOR)) |
-    (npc.gossip ? FLAG_GOSSIP : 0) | (npc.questGiver ? FLAG_QUEST_GIVER : 0) | (npc.trainer ? FLAG_TRAINER : 0) | (npc.vendor.length > 0 ? FLAG_VENDOR : 0);
+    // A new NPC is given the other flags its service options need when it is exported
+    (npc.origin.kind === 'existing' ? 0 : serviceFlagBits(npc.gossipMenu)) | (npc.gossip ? FLAG_GOSSIP : 0) | (npc.questGiver ? FLAG_QUEST_GIVER : 0) | (npc.trainer ? FLAG_TRAINER : 0) | (npc.vendor.length > 0 ? FLAG_VENDOR : 0);
 }
 
 /** How a menu is named in a list: its first line of greeting, else its place */
@@ -65,11 +66,8 @@ export function GossipMenuEditor({
   const setOption = (i: number, option: GossipOption): void => onChange(setMenu({ ...menu, options: menu.options.map((o, j) => (j === i ? option : o)) }));
   const setVariant = (i: number, variant: TextVariant): void => onChange(setMenu({ ...menu, greeting: menu.greeting.map((v, j) => (j === i ? variant : v)) }));
   const others = tree.menus.filter((_, i) => i !== index);
-  const move = (i: number, by: -1 | 1): void => {
-    const options = [...menu.options];
-    [options[i], options[i + by]] = [options[i + by]!, options[i]!];
-    onChange(setMenu({ ...menu, options }));
-  };
+  // The ids the database gave this menu's options: a new option never takes one of them, though it was removed (conditions and scripts name them)
+  const hadIds = npc.origin.kind === 'existing' ? (npc.origin.original.gossip_menu_option ?? []).filter((r) => Number(r.MenuID) === menu.menuId).map((r) => Number(r.OptionID)) : [];
 
   /** Sets what an option does; opening a menu with none to open makes one */
   async function doesChange(i: number, option: GossipOption, does: string): Promise<void> {
@@ -130,8 +128,6 @@ export function GossipMenuEditor({
             <li key={o.optionId} className="scene-step">
               <div className="scene-step__head">
                 <strong>Option {i + 1}</strong>
-                <button type="button" className="entry-card__btn" disabled={i === 0} onClick={() => move(i, -1)}>Up</button>
-                <button type="button" className="entry-card__btn" disabled={i === menu.options.length - 1} onClick={() => move(i, 1)}>Down</button>
                 {!o.kept && (
                   <button type="button" className="entry-card__btn entry-card__btn--danger" onClick={() => onChange(setMenu({ ...menu, options: menu.options.filter((_, j) => j !== i) }))}>
                     Remove
@@ -150,7 +146,7 @@ export function GossipMenuEditor({
                     value={String(action.menuId)}
                     disabled={o.kept}
                     options={[
-                      ...others.map((m) => [String(m.menuId), menuLabel(m, tree.menus.indexOf(m))] as const),
+                      ...tree.menus.map((m, k) => [String(m.menuId), menuLabel(m, k)] as const),
                       // A menu the database has, not one of this NPC's: shown by its id
                       ...(inTree ? [] : [[String(action.menuId), `Menu ${action.menuId}`] as const]),
                       [NEW_MENU, 'New menu…'],
@@ -166,7 +162,7 @@ export function GossipMenuEditor({
           );
         })}
       </ol>
-      <button type="button" className="btn" onClick={() => onChange(setMenu({ ...menu, options: [...menu.options, { optionId: nextOptionId(menu), icon: 0, text: '', action: { kind: 'close' }, kept: false }] }))}>
+      <button type="button" className="btn" onClick={() => onChange(setMenu({ ...menu, options: [...menu.options, { optionId: nextOptionId(menu, hadIds), icon: 0, text: '', action: { kind: 'close' }, kept: false }] }))}>
         Add option
       </button>
       {index > 0 && !menu.options.some((o) => o.kept) && (

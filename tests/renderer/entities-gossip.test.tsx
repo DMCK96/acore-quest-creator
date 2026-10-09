@@ -89,12 +89,22 @@ describe('the Gossip tab: making and editing a menu', () => {
     expect(tree()[0]!.options.map((o) => o.optionId)).toEqual([3, 4, 5]);
   });
 
-  it('reorders options without moving their ids', async () => {
-    render(<Live start={npcWith([menu(5, { options: [option(0, 'A'), option(1, 'B'), option(2, 'C')] })])} />);
-    expect(within(options()[0]!).getByRole('button', { name: 'Up' })).toBeDisabled();
-    expect(within(options()[2]!).getByRole('button', { name: 'Down' })).toBeDisabled();
-    await userEvent.click(within(options()[0]!).getByRole('button', { name: 'Down' }));
-    expect(tree()[0]!.options.map((o) => [o.optionId, o.text])).toEqual([[1, 'B'], [0, 'A'], [2, 'C']]);
+  it('has no way to reorder options: the game shows them by id, so an order would not last', () => {
+    render(<Live start={npcWith([menu(5, { options: [option(0, 'A'), option(1, 'B')] })])} />);
+    expect(screen.queryByRole('button', { name: 'Up' })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Down' })).toBeNull();
+  });
+
+  it('never gives a new option an id the database held for the menu, though it was removed', async () => {
+    const original = { gossip_menu: [], npc_text: [], gossip_menu_option: [{ MenuID: '5', OptionID: '0' }, { MenuID: '5', OptionID: '7' }, { MenuID: '6', OptionID: '9' }] };
+    render(<Live start={npcWith([menu(5, { options: [option(0, 'A')] })], { origin: existingOrigin({}, original) })} />);
+    await userEvent.click(screen.getByRole('button', { name: 'Add option' }));
+    expect(tree()[0]!.options.map((o) => o.optionId)).toEqual([0, 8]);
+  });
+
+  it('shows the menu an option opens even when it opens its own menu', async () => {
+    render(<Live start={npcWith([menu(5, { options: [option(0, 'Again', { action: { kind: 'menu', menuId: 5 } })] }), menu(6)])} />);
+    expect(within(options()[0]!).getByLabelText('Menu')).toHaveValue('5');
   });
 
   it('chooses what an option does: a service sets its icon only while the icon is 0, closing and opening a menu', async () => {
@@ -158,13 +168,18 @@ describe('the Gossip tab: making and editing a menu', () => {
   it('says a service the NPC cannot do would never show, with a way to set it up', async () => {
     const onTab = vi.fn();
     const vendorOption = option(0, 'Browse', { action: { kind: 'service', type: 3, npcFlag: 128 } });
-    render(<Live start={npcWith([menu(5, { options: [vendorOption, option(1, 'Train', { action: { kind: 'service', type: 5, npcFlag: 16 } }), option(2, 'Bank', { action: { kind: 'service', type: 9, npcFlag: 131072 } })] })])} onTab={onTab} />);
+    render(<Live start={npcWith([menu(5, { options: [vendorOption, option(1, 'Train', { action: { kind: 'service', type: 5, npcFlag: 16 } }), option(2, 'Bank', { action: { kind: 'service', type: 9, npcFlag: 131072 } })] })], { origin: existingOrigin() })} onTab={onTab} />);
     expect(within(options()[0]!).getByText('This NPC is not a vendor, so this option would never show.')).toBeTruthy();
     await userEvent.click(within(options()[0]!).getByRole('button', { name: 'Make it a vendor' }));
     expect(onTab).toHaveBeenCalledWith('vendor');
     await userEvent.click(within(options()[1]!).getByRole('button', { name: 'Make it a trainer' }));
     expect(onTab).toHaveBeenCalledWith('trainer');
     expect(within(options()[2]!).getByText(/not set up for banker/i)).toBeTruthy();
+  });
+
+  it('is quiet about a window a new NPC is given the flag for when it is exported', () => {
+    render(<Live start={npcWith([menu(5, { options: [option(0, 'Bank', { action: { kind: 'service', type: 9, npcFlag: 131072 } })] })])} />);
+    expect(screen.queryByText(/not set up for banker/i)).toBeNull();
   });
 
   it('is quiet about a service the NPC can do', () => {

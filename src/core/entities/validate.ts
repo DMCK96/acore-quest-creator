@@ -1,7 +1,7 @@
 import { fightIssues } from '../combat/validate';
 import type { Issue } from '../validate/validate';
 import { npcFromRows } from './from-rows';
-import { GOSSIP_SERVICES } from '../game/gossip-services';
+import { GOSSIP_SERVICES, serviceFlagBits } from '../game/gossip-services';
 import { ENTITIES_FIELD, gossipUnread, sameGossip, sameGossipMenu, sameTrainer, trainerUnread, vendorUnread, type CustomItem, type CustomNpc, type CustomObject, type QuestEntities } from './model';
 import { missingChoice } from '../patrol/compile';
 
@@ -246,7 +246,7 @@ export function entityIssues(input: {
             }
           }
           if (!entity.gossip) add('warning', 'GOSSIP_NOT_TALKABLE', 'it has a gossip menu but cannot be talked to; turn on Can be talked to.');
-          if (input.sceneGossipOwners?.has(entity.entry)) add('warning', 'GOSSIP_SCENE', 'a quest scene gives it a gossip option of its own, which does not know this menu; they stay separate.');
+          if (input.sceneGossipOwners?.has(entity.entry)) add('warning', 'GOSSIP_SCENE', 'a quest scene gives it a gossip option of its own, added to the first menu of this tree on the next free option id; export the quest again after changing which menu comes first.');
           // Which menus the root reaches
           const reached = new Set<number>([tree.menus[0]!.menuId]);
           for (let grew = true; grew; ) {
@@ -263,7 +263,7 @@ export function entityIssues(input: {
         }
         // What flags the NPC has, for the service options: the original row's, with the ones the project sets laid over
         const original = existing ? Number(existing.original.creature_template?.[0]?.npcflag ?? 0) : 0;
-        const flags = (original & ~(1 | 2 | 16 | 128)) | (entity.gossip ? 1 : 0) | (entity.questGiver ? 2 : 0) | (entity.trainer ? 16 : 0) | (entity.vendor.length > 0 ? 128 : 0);
+        const flags = (original & ~(1 | 2 | 16 | 128)) | (existing ? 0 : serviceFlagBits(tree)) | (entity.gossip ? 1 : 0) | (entity.questGiver ? 2 : 0) | (entity.trainer ? 16 : 0) | (entity.vendor.length > 0 ? 128 : 0);
         for (const m of tree.menus) {
           const before = asRead?.menus.find((x) => x.menuId === m.menuId);
           if (existing && before && sameGossipMenu(m, before)) continue;

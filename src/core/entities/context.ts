@@ -1,6 +1,7 @@
 import type { RawRow } from '../db/types';
 import type { WorldDb } from '../db/world-db';
 import { rowsOrNone } from '../links/context';
+import { objectMenus } from '../db/object-menus';
 import { prefixedRows } from '../scripts/context';
 import { questTagPrefix } from '../scripts/tag';
 import type { ProjectEntities } from './model';
@@ -140,14 +141,14 @@ export async function readEntityContext(db: WorldDb, entities: ProjectEntities, 
     ? await Promise.all([
       rowsOrNone(db, 'gossip_menu', { MenuID: menuIds }),
       rowsOrNone(db, 'creature_template', { gossip_menu_id: menuIds }),
-      rowsOrNone(db, 'gameobject_template', { type: '2', Data3: menuIds }),
+      objectMenus(db, menuIds),
       rowsOrNone(db, 'smart_scripts', { source_type: '0', event_type: '62', event_param1: menuIds }),
       rowsOrNone(db, 'gossip_menu_option', { ActionMenuID: menuIds }),
     ])
     : [[], [], [], [], []];
   const gossipUsers = [
     ...menuCreatures.map((r) => ({ MenuID: r.gossip_menu_id ?? '0', Entry: r.entry ?? '0' })),
-    ...menuObjects.map((r) => ({ MenuID: r.Data3 ?? '0', Entry: '-1' })),
+    ...menuObjects.map((menu) => ({ MenuID: String(menu), Entry: '-1' })),
   ];
   return {
     creatures: pick(creatures, ['entry', 'AIName', 'gossip_menu_id', 'npcflag', 'flags_extra', 'type_flags']),

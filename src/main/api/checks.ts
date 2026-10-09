@@ -1,5 +1,6 @@
 import { assertIdFree } from '../../core/ids/allocator';
 import { rowsOrNone } from '../../core/links/context';
+import { objectMenus } from '../../core/db/object-menus';
 import { linkIssues } from '../../core/links/issues';
 import type { QuestAggregate } from '../../core/model/aggregate';
 import { validateQuest, type Issue, type RefChecker } from '../../core/validate/validate';
@@ -100,7 +101,7 @@ export function createChecks(ctx: ApiContext, files: ServerFiles) {
     const textIds = [...new Set(trees.map((m) => m.textId).filter((id) => id > 0))];
     const [menuCreatures, menuObjects, menuRows, optionRows, textUsers] = await Promise.all([
       menuIds.length > 0 ? rowsOrNone(live.db, 'creature_template', { gossip_menu_id: menuIds.map(String) }) : [],
-      menuIds.length > 0 ? rowsOrNone(live.db, 'gameobject_template', { type: '2', Data3: menuIds.map(String) }) : [],
+      menuIds.length > 0 ? objectMenus(live.db, menuIds.map(String)) : [],
       menuIds.length > 0 ? rowsOrNone(live.db, 'gossip_menu', { MenuID: menuIds.map(String) }) : [],
       menuIds.length > 0 ? rowsOrNone(live.db, 'gossip_menu_option', { MenuID: menuIds.map(String) }) : [],
       textIds.length > 0 ? rowsOrNone(live.db, 'gossip_menu', { TextID: textIds.map(String) }) : [],
@@ -108,7 +109,7 @@ export function createChecks(ctx: ApiContext, files: ServerFiles) {
     const menuUsers = new Map<number, { creatures: number[]; objects: number }>();
     const usersOf = (id: number) => menuUsers.get(id) ?? menuUsers.set(id, { creatures: [], objects: 0 }).get(id)!;
     for (const r of menuCreatures) usersOf(Number(r.gossip_menu_id)).creatures.push(Number(r.entry));
-    for (const r of menuObjects) usersOf(Number(r.Data3)).objects += 1;
+    for (const menu of menuObjects) usersOf(menu).objects += 1;
     const textMenus = new Map<number, number[]>();
     for (const r of textUsers) textMenus.set(Number(r.TextID), [...(textMenus.get(Number(r.TextID)) ?? []), Number(r.MenuID)]);
     const haveMenu = new Set([...menuRows, ...optionRows].map((r) => Number(r.MenuID)));

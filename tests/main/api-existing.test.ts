@@ -73,6 +73,13 @@ describe('editing an existing entity', () => {
     db.insert('gossip_menu_option', { MenuID: '9000', OptionID: '0', OptionText: 'Go', OptionType: '1', OptionNpcFlag: '1', ActionMenuID: '5500' });
     const opened: any = await api.readExistingEntity('npc', 4242);
     expect(opened.value.gossipMenu.menus.map((m: any) => m.locked)).toEqual([true]);
+    // A goober holds its menu in Data19, and is a user too
+    db.insert('creature_template', { entry: '4343', name: 'Host2', minlevel: '10', maxlevel: '10', faction: '35', rank: '0', type: '7', npcflag: '1', gossip_menu_id: '5600' });
+    db.insert('gossip_menu', { MenuID: '5600', TextID: '7600' });
+    db.insert('npc_text', { ID: '7600', text0_0: 'Mine', Probability0: '1' });
+    expect(((await api.readExistingEntity('npc', 4343)) as any).value.gossipMenu.menus.map((m: any) => m.locked)).toEqual([false]);
+    db.insert('gameobject_template', { entry: '101', type: '10', Data19: '5600' });
+    expect(((await api.readExistingEntity('npc', 4343)) as any).value.gossipMenu.menus.map((m: any) => m.locked)).toEqual([true]);
   });
 
   it('refuses one the database does not have', async () => {

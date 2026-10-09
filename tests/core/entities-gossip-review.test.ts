@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { existingStatements } from '../../src/core/entities/existing';
 import { npcFromRows } from '../../src/core/entities/from-rows';
-import { nextOptionId } from '../../src/core/entities/gossip-tree';
+import { copySetOf, nextOptionId } from '../../src/core/entities/gossip-tree';
 import { compileEntities } from '../../src/core/entities/compile';
 import { EMPTY_ENTITY_CONTEXT } from '../../src/core/entities/context';
 import { entityIssues } from '../../src/core/entities/validate';
@@ -161,5 +161,34 @@ describe('cleaning up a re-exported tree of a new NPC', () => {
     expect(compile(fresh([newMenu({ options: [close(0)] })]), opened).deletes.gossip_menu).not.toContainEqual({ MenuID: '932536', TextID: '9780014' });
     const used = { ...exported, gossipUsers: [...exported.gossipUsers, { MenuID: '932536', Entry: '555' }] };
     expect(compile(fresh([newMenu({ options: [close(0)] })]), used).deletes.gossip_menu).not.toContainEqual({ MenuID: '932536', TextID: '9780014' });
+  });
+});
+
+describe('what a copy of a locked sub-menu takes along', () => {
+  const open = (id: number, to: number): GossipOption => close(id, { action: { kind: 'menu', menuId: to } });
+  const tree = { menus: [
+    newMenu({ menuId: 1, textId: 11, locked: true, options: [open(0, 2)] }),
+    newMenu({ menuId: 2, textId: 12, locked: true, options: [open(0, 3)] }),
+    newMenu({ menuId: 3, textId: 13, locked: true, options: [close(0)] }),
+    newMenu({ menuId: 4, textId: 14, locked: false, options: [open(0, 2)] }),
+  ] };
+  it('is the locked menus above it that lead to it, and the locked ones below, never an unlocked parent', () => {
+    expect(copySetOf(tree, 2)).toEqual([1, 2, 3]);
+    expect(copySetOf(tree, 3)).toEqual([1, 2, 3]);
+    expect(copySetOf(tree, 1)).toEqual([1, 2, 3]);
+  });
+});
+
+describe('the windows a new NPC\'s gossip options open', () => {
+  const inn = close(0, { text: 'Make this inn your home', action: { kind: 'service', type: 8, npcFlag: 65536 } });
+  const vendorOption = close(1, { action: { kind: 'service', type: 3, npcFlag: 128 } });
+  it('give it the flag they need, but not the vendor or trainer flags those tabs set', () => {
+    const npc = fresh([newMenu({ options: [inn, vendorOption] })]);
+    const out = compileEntities({ entities: { npcs: [npc], objects: [], items: [] }, givers: [], context: EMPTY_ENTITY_CONTEXT });
+    expect(out.inserts.creature_template![0]).toMatchObject({ npcflag: String(1 | 65536) });
+  });
+  it('are not warned about on a new NPC, except the ones it lacks the data for', () => {
+    expect(codesOf([fresh([newMenu({ options: [inn] })])])).toEqual([]);
+    expect(codesOf([fresh([newMenu({ options: [vendorOption] })])])).toEqual(['warning:GOSSIP_SERVICE_FLAG']);
   });
 });
