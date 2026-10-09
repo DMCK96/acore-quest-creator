@@ -9,7 +9,7 @@ import { npcSpawnGuids, spawnEventRows } from './spawn-events-read';
 import { rowsOrNone } from '../db/rows-or-none';
 import {
   existingOnly, NPC_TYPE_VALUE, OBJECT_TYPE_VALUE, RANK_VALUE,
-  type CustomItem, type CustomNpc, type CustomObject, type LootRow, type OriginalRows, type Page, type ProjectEntities, type StoredOrigin,
+  type CustomItem, type CustomNpc, type CustomObject, type LootRow, type OriginalRows, type Page, type ProjectEntities, type StoredOrigin, type VendorItem,
 } from './model';
 
 /**
@@ -25,6 +25,7 @@ type Statements = { apply: PatchStatement[]; revert: PatchStatement[] };
 
 const GOSSIP_BIT = 1;
 const QUEST_GIVER_BIT = 2;
+const VENDOR_BIT = 128;
 const DATA_COLUMN = /^Data\d+$/;
 
 const text = (n: number): string => String(n);
@@ -73,6 +74,17 @@ const lootRows = (lootId: number, loot: readonly LootRow[]): Row[] =>
     Entry: text(lootId), Item: text(row.item), Reference: '0', Chance: text(row.chance), QuestRequired: row.questOnly ? '1' : '0',
     LootMode: '1', GroupId: '0', MinCount: text(row.min), MaxCount: text(row.max), Comment: '',
   }));
+
+/** The stock rows, slot by position; a row for an item and cost the database already had keeps its other columns (`VerifiedBuild`) */
+const vendorRows = (entry: string, vendor: readonly VendorItem[], original: readonly Row[]): Row[] =>
+  vendor.map((v, slot) => {
+    const same = original.find((r) => num(r.item) === v.item && num(r.ExtendedCost) === v.extendedCost);
+    return {
+      ...same, entry, slot: text(slot), item: text(v.item), maxcount: text(v.maxCount),
+      // Unlimited stock never restocks
+      incrtime: text(v.maxCount === 0 ? 0 : v.restockSecs), ExtendedCost: text(v.extendedCost),
+    };
+  });
 
 /** Pages: the original chain's and the current chain's rows deleted, the current ones written over their original columns */
 function writePages(out: Statements, origin: Existing, pages: readonly Page[]): void {
@@ -143,11 +155,17 @@ function npcStatements(out: Statements, npc: CustomNpc, origin: Existing, givers
   const fightLocked = origin.locked.includes('fight');
   const originalLoot = num(original.lootid);
   const lootId = originalLoot > 0 ? originalLoot : !lootLocked && npc.loot.length > 0 ? (lootIds.get(`npc:${npc.entry}`) ?? npc.entry) : 0;
+  const asRead = npcFromRows(npc.entry, origin.original, { sharedLoot: origin.sharedLoot, spawnCount: origin.spawnCount });
+  // Stock a project saved before vendors existed never read is not ours to replace; stock left as read is not written
+  const vendorRead = Object.prototype.hasOwnProperty.call(origin.original, 'npc_vendor');
+  const vendorChanged = vendorRead && JSON.stringify(npc.vendor) !== JSON.stringify(asRead.vendor);
+  const vendorBit = vendorChanged ? (npc.vendor.length > 0 ? VENDOR_BIT : 0) : num(original.npcflag) & VENDOR_BIT;
   const templateRow = (n: CustomNpc): Row => {
     const flags =
-      (num(original.npcflag) & ~(GOSSIP_BIT | QUEST_GIVER_BIT)) |
+      (num(original.npcflag) & ~(GOSSIP_BIT | QUEST_GIVER_BIT | VENDOR_BIT)) |
       (n.questGiver || givers.includes(n.entry) ? QUEST_GIVER_BIT : 0) |
-      (n.gossip ? GOSSIP_BIT : 0);
+      (n.gossip ? GOSSIP_BIT : 0) |
+      vendorBit;
     return {
       ...original, entry, name: n.name, subname: n.subname, minlevel: text(n.minLevel), maxlevel: text(n.maxLevel),
       faction: text(n.faction), rank: text(RANK_VALUE[n.rank]), type: text(NPC_TYPE_VALUE[n.type]),
@@ -158,7 +176,6 @@ function npcStatements(out: Statements, npc: CustomNpc, origin: Existing, givers
       ...(n.seenBy && n.seenBy !== seenByOf(original) ? seenByColumns(n.seenBy, original) : {}),
     };
   };
-  const asRead = npcFromRows(npc.entry, origin.original, { sharedLoot: origin.sharedLoot, spawnCount: origin.spawnCount });
   writeTable(out, origin, 'creature_template', [{ entry }], [keepUnedited(templateRow(npc), templateRow(asRead), original, [], ['npcflag', 'lootid', 'AIName'])]);
 
   const model = rowsOf(origin, 'creature_template_model').find((r) => num(r.Idx) === 0) ?? { CreatureID: entry, Idx: '0', Probability: '1' };
@@ -176,6 +193,7 @@ function npcStatements(out: Statements, npc: CustomNpc, origin: Existing, givers
   }
 
   if (!lootLocked && lootId > 0) writeTable(out, origin, 'creature_loot_template', [{ Entry: text(lootId) }], lootRows(lootId, npc.loot));
+  if (vendorChanged) writeTable(out, origin, 'npc_vendor', [{ entry }], vendorRows(entry, npc.vendor, rowsOf(origin, 'npc_vendor')));
 }
 
 function objectStatements(out: Statements, object: CustomObject, origin: Existing, lootIds: LootIds): void {
