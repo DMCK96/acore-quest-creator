@@ -9,7 +9,7 @@ import type { ProjectEntities } from './model';
 export const ENTITY_TABLES = [
   'creature_template', 'creature_template_model', 'creature', 'gameobject_template', 'gameobject', 'page_text',
   'creature_loot_template', 'gameobject_loot_template', 'creature_addon', 'waypoint_data', 'creature_equip_template',
-  'item_template', 'npc_vendor',
+  'item_template', 'npc_vendor', 'creature_default_trainer', 'trainer', 'trainer_spell',
 ] as const;
 
 export const ENTITY_KEYS: Record<string, readonly string[]> = {
@@ -26,6 +26,9 @@ export const ENTITY_KEYS: Record<string, readonly string[]> = {
   creature_equip_template: ['CreatureID', 'ID'],
   item_template: ['entry'],
   npc_vendor: ['entry', 'item', 'ExtendedCost'],
+  creature_default_trainer: ['CreatureId'],
+  trainer: ['Id'],
+  trainer_spell: ['TrainerId', 'SpellId'],
 };
 
 /**
@@ -46,6 +49,8 @@ export interface EntityContext {
   addons: RawRow[];
   /** `waypoint_data` rows (id, point) of those spawns' routes. */
   waypointRows: RawRow[];
+  /** `creature_default_trainer` rows (CreatureId, TrainerId) of the new NPCs' entries: the trainers a past export pointed them at. */
+  trainerIds: RawRow[];
 }
 
 export const EMPTY_ENTITY_CONTEXT: EntityContext = {
@@ -56,6 +61,7 @@ export const EMPTY_ENTITY_CONTEXT: EntityContext = {
   taggedLoot: { creature: [], gameobject: [] },
   addons: [],
   waypointRows: [],
+  trainerIds: [],
 };
 
 /**
@@ -93,6 +99,7 @@ export async function readEntityContext(db: WorldDb, entities: ProjectEntities, 
   for (const npc of entities.npcs) for (const spawn of npc.spawns) if (spawn.patrol && spawn.patrol.pathId > 0) pathIds.add(String(spawn.patrol.pathId));
   for (const row of addons) if (Number(row.path_id) > 0) pathIds.add(String(row.path_id));
   const waypointRows = await rowsOrNone(db, 'waypoint_data', { id: [...pathIds] });
+  const trainerIds = await rowsOrNone(db, 'creature_default_trainer', { CreatureId: npcEntries });
   return {
     creatures: pick(creatures, ['entry', 'AIName', 'gossip_menu_id', 'npcflag', 'flags_extra', 'type_flags']),
     gameobjects: pick(gameobjects, ['entry', 'AIName']),
@@ -101,5 +108,6 @@ export async function readEntityContext(db: WorldDb, entities: ProjectEntities, 
     taggedLoot: { creature: pick(creatureLoot, ['Entry', 'Item', 'Comment']), gameobject: pick(objectLoot, ['Entry', 'Item', 'Comment']) },
     addons: pick(addons, ['guid', 'path_id']),
     waypointRows: pick(waypointRows, ['id', 'point']),
+    trainerIds: pick(trainerIds, ['CreatureId', 'TrainerId']),
   };
 }

@@ -5,7 +5,7 @@ import { entityLootTag, entityOf, entityTag } from '../scripts/tag';
 import type { EntityContext } from './context';
 import { itemRow, MODELLED_ITEM_COLUMNS } from './item-columns';
 import { MOVEMENT_TYPE } from '../world/movement';
-import { NPC_TYPE_VALUE, OBJECT_TYPE_VALUE, RANK_VALUE, type LootRow, type Patrol, type Page, type ProjectEntities } from './model';
+import { NPC_TYPE_VALUE, OBJECT_TYPE_VALUE, RANK_VALUE, TRAINER_TYPE_VALUE, type LootRow, type Patrol, type Page, type ProjectEntities } from './model';
 import { seenByColumns } from './visibility';
 
 /**
@@ -20,6 +20,9 @@ type Row = Record<string, string>;
 const GOSSIP_BIT = 1;
 const QUEST_GIVER_BIT = 2;
 const VENDOR_BIT = 128;
+const TRAINER_BIT = 16;
+/** The sub-type bits stock trainers of each type carry: class 32; mount and profession 64; pet none */
+const TRAINER_SUBTYPE_BIT = { class: 32, mount: 64, profession: 64, pet: 0 } as const;
 /** `UNIT_CLASS_WARRIOR`: the plain melee class every simple NPC uses. */
 const UNIT_CLASS = 1;
 /** `GO_STATE_READY` and the fully drawn animation every placed object starts with. */
@@ -123,6 +126,7 @@ export function compileEntities(input: {
       (npc.questGiver || givers.includes(npc.entry) ? QUEST_GIVER_BIT : 0) |
       (npc.gossip ? GOSSIP_BIT : 0) |
       (npc.vendor.length > 0 ? VENDOR_BIT : 0) |
+      (npc.trainer ? TRAINER_BIT | TRAINER_SUBTYPE_BIT[npc.trainer.type] : 0) |
       (num(existing?.npcflag) & GOSSIP_BIT);
     insert('creature_template', {
       entry: text(npc.entry), name: npc.name, subname: npc.subname, minlevel: text(npc.minLevel), maxlevel: text(npc.maxLevel),
@@ -142,6 +146,19 @@ export function compileEntities(input: {
     const armed = mainHand > 0 || offHand > 0 || ranged > 0;
     if (armed) {
       insert('creature_equip_template', { CreatureID: text(npc.entry), ID: '1', ItemID1: text(mainHand), ItemID2: text(offHand), ItemID3: text(ranged) });
+    }
+    if (npc.trainer) {
+      const t = npc.trainer;
+      const id = text(t.trainerId);
+      insert('creature_default_trainer', { CreatureId: text(npc.entry), TrainerId: id });
+      // The class a class trainer serves; the other types have none
+      insert('trainer', { Id: id, Type: text(TRAINER_TYPE_VALUE[t.type]), Requirement: text(t.type === 'class' ? t.requirement : 0), Greeting: t.greeting });
+      for (const s of [...t.spells].sort((a, b) => a.spell - b.spell)) {
+        insert('trainer_spell', {
+          TrainerId: id, SpellId: text(s.spell), MoneyCost: text(s.cost), ReqSkillLine: text(s.reqSkill), ReqSkillRank: text(s.reqSkillRank),
+          ReqAbility1: text(s.reqSpells[0] ?? 0), ReqAbility2: text(s.reqSpells[1] ?? 0), ReqAbility3: text(s.reqSpells[2] ?? 0), ReqLevel: text(s.reqLevel),
+        });
+      }
     }
     npc.vendor.forEach((v, slot) => {
       insert('npc_vendor', {
@@ -243,6 +260,14 @@ export function compileEntities(input: {
   add('creature_template_model', sorted(entities.npcs.map((n) => n.entry)).map((e) => ({ CreatureID: text(e), Idx: '0' })));
   // Every new NPC's stock is deleted by entry, so a list the author has since emptied is cleaned on re-export
   add('npc_vendor', sorted(entities.npcs.map((n) => n.entry)).map((e) => ({ entry: text(e) })));
+  // Every new NPC's default-trainer row, and each trainer it holds or a past export pointed it at (never another NPC's)
+  add('creature_default_trainer', sorted(entities.npcs.map((n) => n.entry)).map((e) => ({ CreatureId: text(e) })));
+  const ownTrainers = sorted([
+    ...entities.npcs.flatMap((n) => (n.trainer ? [n.trainer.trainerId] : [])),
+    ...context.trainerIds.filter((r) => npcEntriesHeld.has(num(r.CreatureId))).map((r) => num(r.TrainerId)),
+  ]);
+  add('trainer', ownTrainers.map((id) => ({ Id: text(id) })));
+  add('trainer_spell', ownTrainers.map((id) => ({ TrainerId: text(id) })));
   add('creature_equip_template', sorted(entities.npcs.map((n) => n.entry)).map((e) => ({ CreatureID: text(e), ID: '1' })));
   add('creature', sorted(creatureGuids).map((g) => ({ guid: text(g) })));
   // A removed spawn's game events go with it; a current spawn's are the spawn event writer's (spawn-events.ts)
