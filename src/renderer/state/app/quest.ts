@@ -177,6 +177,8 @@ export function createQuestSlice({ api, kit, set, get }: SliceArgs): QuestSlice 
       }));
     },
     async flushSave() {
+      // An AI client's write is on its way: what is pending is sent when it is over
+      if (kit.held) return;
       // Only an edit is sent: a quest merely looked at must not mark the project unsaved.
       const pending = kit.saveTimer !== null || get().dirty;
       if (kit.saveTimer) {

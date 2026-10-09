@@ -36,6 +36,10 @@ Add a dev database in [Settings](/azeroth-world-editor/reference/settings/#dev-d
 
 Some changes only load after a server restart: new spawns, new or changed patrols and new objects. [Test in game](/azeroth-world-editor/guides/test-in-game/) lists which reload commands your quest needs.
 
+## Editing is greyed out for a moment
+
+An AI assistant connected through [MCP / AI](/azeroth-world-editor/guides/ai-mcp/) is writing to the project. Editing pauses until it finishes, usually under a second, and what you typed is kept. If it stays greyed out, turn off **MCP / AI** in Settings.
+
 ## Installing
 
 - **Windows says "Windows protected your PC"**: choose **More info**, then **Run anyway**.

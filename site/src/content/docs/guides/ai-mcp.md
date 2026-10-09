@@ -1,0 +1,99 @@
+---
+title: Working with an AI assistant (MCP)
+description: Let an AI assistant connected over MCP research the world and build quests, NPCs and spawns in your open project.
+sidebar:
+  order: 14
+---
+
+Azeroth World Editor can run an [MCP](https://modelcontextprotocol.io/) server, so an AI assistant (Claude Code, Claude Desktop, or any other MCP client) can work in the project you have open: look things up in your world, draft a quest chain, place NPCs, and export a patch. You watch it happen, and anything it does can be undone.
+
+It is off until you turn it on.
+
+## Turn it on
+
+1. Open **Settings** and choose the **MCP / AI** tab.
+2. Tick **Allow AI to edit this project**.
+3. The tab shows the **address** and a **token**. Press **Show** to see the token, or **Copy token** to copy it.
+
+The server only listens on this computer (`127.0.0.1`), and every request must carry the token. **Make a new token** replaces it at once; a client using the old one is refused.
+
+## Connect an assistant
+
+Any MCP client that supports HTTP servers needs two things: the address, and the header `Authorization: Bearer <your token>`.
+
+For Claude Code, press **Copy Claude Code command** and run it in a terminal. It looks like this:
+
+```sh
+claude mcp add --transport http awe http://127.0.0.1:47600/mcp --header "Authorization: Bearer <your token>"
+```
+
+Connect the editor to your world database first, as you do for any work. The assistant can also connect for you using one of your saved connections. Then ask for what you want.
+
+## What the assistant can do
+
+- **Look things up:** quests, NPCs, objects, items and spells by name; who stands where; what a quest chain links to.
+- **Write quests:** start a new quest, import an existing one, set its fields, and check it for problems. Quest text is written in English.
+- **Make NPCs, objects and items,** or take over an existing one and change it.
+- **Place and move spawns,** set patrol routes, movement and respawn times in the World.
+- **Export:** write a quest's or the project's SQL patch into your export folder.
+- **Undo and redo.**
+
+## Knowing your world
+
+Before it writes, the assistant can look at what already exists, so new content fits in:
+
+- **Quests by zone and level:** the quests listed under a zone (such as Elwynn Forest), filtered by level, and the full text, objectives, rewards and chain links of up to 25 quests at a time, read without importing them.
+- **What is around a point:** the NPCs and objects within a radius (100 yards by default, at most 500), what each does (vendor, innkeeper, quest giver), their level and faction, the quests they offer, what vendors sell and what NPCs drop. Every spawn includes where it stands and **which way it faces**, so the assistant knows what is already there and can aim its own NPC at something sensible, such as a campfire or a doorway, rather than at a tent, a wall or the NPC beside it.
+- **Name and id clashes:** whether a name or an id is already used in your database or in your project.
+
+Zones and factions are shown by name when the connection has a server data folder, and by number otherwise.
+
+## Lore from the wiki
+
+The assistant can also search and read pages on [warcraft.wiki.gg](https://warcraft.wiki.gg/) to check new content against the story. This is **off until you turn it on**: in Settings, MCP / AI tab, tick **Allow lookups on warcraft.wiki.gg**.
+
+- Only the words the assistant searches for are sent to the wiki; nothing else leaves your computer. It reads one page at a time, and repeats are remembered for an hour.
+- Every answer carries the page link and the wiki's licence (Creative Commons Attribution-ShareAlike 4.0), so what it borrows can be credited.
+- The wiki covers every expansion, while your server is at Wrath of the Lich King. The assistant is told that later events have not happened in your world's story yet, and that later content is welcome as inspiration, as long as it says where an idea comes from.
+- If the wiki refuses the request, the assistant is told so and carries on without it.
+
+## Scenes, fights, patrols and loot
+
+Beyond quest text, the assistant can write the parts that make a quest or an encounter come alive, in the editor's own terms:
+
+- **Scenes** on a quest: when something happens to an NPC, object or area (the quest is accepted, a player talks to it, it dies, someone enters an area), and only if some conditions hold, a list of steps runs, such as saying a line, giving credit, spawning an NPC or escorting one.
+- **Boss fights** for the NPCs it makes: abilities on timers, reactions at health thresholds, phases, adds and surrender.
+- **Patrol routes** for the spawns of its NPCs, with pauses and actions at each point.
+- **Loot** for its NPCs and chests.
+- **New NPCs, objects and items**, such as a legendary sword and the captain who guards it.
+
+It learns each of these from a built-in guide and examples, and the editor checks everything it writes and tells it what is still wrong, so it can fix it. If a scene stored on a quest cannot be read (an older or hand-edited one), the assistant is told its id and leaves it exactly as it is, and moving a marker in the World does the same, so it is never erased by a save. An existing database NPC's fight or loot is left alone when the editor locks it. None of this changes the database until you export a patch and apply it yourself.
+
+## Ready-made workflows
+
+A client such as Claude Code offers three workflows as slash commands: **quest_chain** (research a zone and build a chain that fits it), **legendary_item** (brainstorm an outline with you first, then build the item, its guardian and the chain) and **populate_place** (add NPCs or objects that fit a place and face what they are there for, such as a campfire or a road). Each one works in your open project, labels its steps "AI: …", and asks before exporting.
+
+## What it cannot do
+
+- It never writes to your world database, and it cannot apply a patch to your dev database. You apply patches yourself, as always.
+- It has no access to your connection passwords.
+
+## While it writes
+
+A write usually takes a moment. While one runs, editing in the window pauses so your changes and the assistant's cannot cross:
+
+- Panels that edit the project grey out and take no clicks or typing. An open quest editor shows *The assistant is changing this quest. Editing is paused for a moment.*
+- In the World you can still look around and move the camera, but gizmos, placing, deleting and the right-click menu's editing items wait (the menu says why). A drag under way is dropped and the part goes back where it was. Copying and looking things up still work.
+- Anything you typed in a quest meanwhile is kept and put on top of the assistant's change when it arrives, and closing the app never loses an edit.
+
+The pause only shows if the write takes longer than a moment.
+
+## Undoing its work
+
+Every change the assistant makes is one step in **History**, named **AI: …** (for example *AI: edit quest 60001*). The open quest, the quest graph and the World update as it works. Undo with **Ctrl+Z** or from History, like any other change. See [Undo and redo](/azeroth-world-editor/guides/undo/).
+
+## Things to try
+
+- *"Build a quest chain in Elwynn Forest for level 10, and make it lore accurate."*
+- *"I have an idea for a legendary weapon and a quest chain to get it. Help me brainstorm and fit it in with the rest of the world."*
+- *"Find every quest between levels 8 and 12 near Goldshire and tell me what's missing."*

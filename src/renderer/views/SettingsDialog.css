@@ -89,3 +89,24 @@
   align-items: center;
   gap: 0.5rem;
 }
+
+.settings-mcp__note {
+  margin: 0;
+  opacity: 0.8;
+}
+
+.settings-mcp__error {
+  margin: 0;
+  color: var(--danger, #e5736a);
+}
+
+.settings-mcp__connect {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  overflow-wrap: anywhere;
+}
+
+.settings-mcp__connect button {
+  margin-left: 0.5rem;
+}

@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import type { FieldValue } from '@core/registry/types';
 import { PRESETS, presetScene, type PresetId, type QuestFacts } from '@core/scripts/presets';
-import { SCRIPTS_FIELD, nextSceneId, readScenes, writeScenes, type QuestScene, type SceneOwner } from '@core/scripts/model';
+import { SCRIPTS_FIELD, nextSceneId, splitScenes, writeScenes, type QuestScene, type SceneOwner } from '@core/scripts/model';
 import type { QuestScriptsInfo } from '@shared/ipc';
 import { useApi, useNameBook } from '../../state/names';
 import { SceneCard } from '../../scripts/SceneCard';
@@ -41,7 +41,7 @@ const OWNER_WORD = { creature: 'NPC', gameobject: 'Object', areatrigger: 'Area' 
 /** Scenes the author builds for the quest, then the scripts already on its NPCs and objects. */
 export function ScriptsBody({ open, onChange }: ModuleBodyProps): React.JSX.Element {
   const { aggregate } = open;
-  const scenes = readScenes(aggregate.values);
+  const { scenes, unreadable } = splitScenes(aggregate.values);
   const [preset, setPreset] = useState<PresetId>('blank');
   const api = useApi();
   const names = useNameBook();
@@ -58,13 +58,13 @@ export function ScriptsBody({ open, onChange }: ModuleBodyProps): React.JSX.Elem
   }, [api, aggregate.questId]);
 
   const save = (next: QuestScene[]): void => {
-    onChange(SCRIPTS_FIELD, writeScenes(next));
+    onChange(SCRIPTS_FIELD, writeScenes(next, unreadable));
     // A script can only complete the quest when the quest says it may; switch that on as it is needed.
     const flags = aggregate.values[FLAGS_FIELD];
     if (needsEventFlag(next) && typeof flags === 'number' && (flags & EVENT_FLAG) === 0) onChange(FLAGS_FIELD, flags | EVENT_FLAG);
   };
 
-  const add = (): void => save([...scenes, presetScene(preset, questFacts(aggregate.questId, aggregate.values), nextSceneId(scenes))]);
+  const add = (): void => save([...scenes, presetScene(preset, questFacts(aggregate.questId, aggregate.values), nextSceneId([...scenes, ...unreadable]))]);
 
   return (
     <div className="scripts-body">

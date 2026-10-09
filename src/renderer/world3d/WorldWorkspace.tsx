@@ -6,6 +6,7 @@ import { EMPTY_ENTITIES, newSpawn, type CustomObject, type ProjectEntities } fro
 import type { Placement } from '@core/world/layer';
 import { EntityEditorHost, type EditorState } from '../entities/EntityEditorHost';
 import { useHistorySteps } from '../state/history-context';
+import { AiLock } from '../components/AiLock';
 import { useProjectEntities } from '../state/project-entities';
 import { ownViewSpawns } from '@core/entities/view-spawns';
 import { hasRole, toggleRole } from '@core/modules/quest-roles';
@@ -725,9 +726,11 @@ export function WorldWorkspace({
         <PlaceInWorldProvider value={editorPlace}>
         <ShowInWorldProvider value={editorShow}>
           <div className="modal-backdrop" hidden={editorAside}>
+            <AiLock>
             <EntityEditorHost entities={project.entities} onChange={(next) => project.setEntities(next)} quests={project.quests} layer={project.layer}
               state={editor} onTab={(tab) => setEditor((was) => (was ? { ...was, tab } : was))} onClose={() => setEditor(null)}
               onDelete={(kind, entry) => project.remove(kind, entry)} />
+            </AiLock>
           </div>
         </ShowInWorldProvider>
         </PlaceInWorldProvider>

@@ -49,6 +49,8 @@ export interface ConnectionSlice {
   connect(input: ProfileSave): Promise<void>;
   /** Connects with a saved profile and its stored password. */
   connectProfile(profileId: number): Promise<void>;
+  /** Shows a connection the main process made on its own (an AI client, through MCP) as a connect from the window would. */
+  adoptConnection(summary: ConnectSummary): Promise<void>;
   /**
    * Saves the draft's rows (world, then dev, then removes a dev row the user removed) and reloads the
    * profiles. A failure part way still returns what was saved (`saved`/`original`, null when
@@ -109,7 +111,9 @@ export function createConnectionSlice({ api, kit, set, get }: SliceArgs): Connec
         set({ error: connected.error.message, screen: 'connect' });
         return;
       }
-      const summary = connected.value;
+      await get().adoptConnection(connected.value);
+    },
+    async adoptConnection(summary) {
       if (summary.blocking) {
         set(blockedBy(summary));
         return;

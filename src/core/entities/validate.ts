@@ -32,7 +32,12 @@ export function entityIssues(input: {
 }): Issue[] {
   const questItems = new Set(input.questItems ?? []);
   const issues: Issue[] = [];
+  /** Marks the issues added since `from` as being about this entity. */
+  const tag = (from: number, kind: NonNullable<Issue['about']>['kind'], entry: number): void => {
+    for (let i = from; i < issues.length; i++) issues[i] = { ...issues[i]!, about: { kind, entry } };
+  };
   const check = (kind: 'creature' | 'gameobject', entity: CustomNpc | CustomObject): void => {
+    const first = issues.length;
     const word = kind === 'creature' ? 'NPC' : 'Object';
     const label = entity.name.trim() ? `${word} "${entity.name.trim()}"` : `${word} ${entity.entry}`;
     const add = (severity: Issue['severity'], code: string, message: string): void => {
@@ -88,8 +93,10 @@ export function entityIssues(input: {
     if (held !== undefined && held !== entity.name) {
       add('warning', 'ENTITY_TAKEN', `entry ${entity.entry} already holds "${held}" in the database, which this would replace.`);
     }
+    tag(first, kind, entity.entry);
   };
   const checkItem = (item: CustomItem): void => {
+    const first = issues.length;
     const label = item.name.trim() ? `Item "${item.name.trim()}"` : `Item ${item.entry}`;
     const add = (severity: Issue['severity'], code: string, message: string): void => {
       issues.push({ severity, code, fieldId: ENTITIES_FIELD, message: `${label}: ${message}` });
@@ -120,6 +127,7 @@ export function entityIssues(input: {
     if (held !== undefined && held !== item.name) {
       add('warning', 'ENTITY_TAKEN', `entry ${item.entry} already holds "${held}" in the database, which this would replace.`);
     }
+    tag(first, 'item', item.entry);
   };
   for (const npc of input.entities.npcs) check('creature', npc);
   for (const object of input.entities.objects) check('gameobject', object);

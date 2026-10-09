@@ -116,3 +116,23 @@ export const itemId = (label: string): string =>
     .replace(/^-|-$/g, '');
 
 export const item = (label: string, rest: Omit<MenuItem, 'id' | 'label'> = {}): MenuItem => ({ id: itemId(label), label, ...rest });
+
+/** What the menu may still do while an AI client is writing: look, copy, and put down what is half done in the view alone */
+const READS: ReadonlySet<MenuAction['kind']> = new Set([
+  'stopPlacing', 'undoPoint', 'cancelPath', 'copy', 'copyCoordinates', 'showGroup', 'findQuests', 'showSpawns', 'hideSpawns', 'vesselStops',
+]);
+
+/** Whether a menu action changes the project (so it waits while an AI client is writing) */
+export const editsProject = (action: MenuAction): boolean => !READS.has(action.kind);
+
+export const AI_WRITING = 'The assistant is changing the project; try again in a moment';
+
+/** The menu with every item that edits the project disabled, saying why */
+export function lockEdits(groups: MenuGroup[]): MenuGroup[] {
+  const lock = (entry: MenuItem): MenuItem => ({
+    ...entry,
+    ...(entry.action && editsProject(entry.action) ? { disabledReason: AI_WRITING } : {}),
+    ...(entry.children ? { children: entry.children.map(lock) } : {}),
+  });
+  return groups.map((group) => ({ ...group, items: group.items.map(lock) }));
+}

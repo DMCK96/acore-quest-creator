@@ -133,6 +133,34 @@ describe('store', () => {
     const raw = new Database(file, { readonly: true });
     const tables = raw.prepare("SELECT name FROM sqlite_master WHERE type = 'table' AND name NOT LIKE '\\_\\_%' ESCAPE '\\' AND name NOT LIKE 'sqlite_%'").all().map((r: any) => r.name).sort();
     raw.close();
-    expect(tables).toEqual(['connection_profiles', 'recent_projects']);
+    expect(tables).toEqual(['app_settings', 'connection_profiles', 'recent_projects']);
+  });
+
+  it('keeps app settings, and keeps a secret setting out of the file in the clear', () => {
+    const dir = tmp();
+    const file = join(dir, 'q.sqlite');
+    store = openStore(file, box);
+    store.settings.set('mcp.port', '47600');
+    store.settings.setSecret('mcp.token', 'super-secret-token');
+    expect(store.settings.get('mcp.port')).toBe('47600');
+    expect(store.settings.getSecret('mcp.token')).toBe('super-secret-token');
+    store.close();
+    expect(readFileSync(file).includes(Buffer.from('super-secret-token'))).toBe(false);
+    store = openStore(file, box);
+    expect(store.settings.getSecret('mcp.token')).toBe('super-secret-token');
+    store.settings.set('mcp.port', null);
+    expect(store.settings.get('mcp.port')).toBeNull();
+  });
+
+  it('adds the settings table to a file from a build that had only 8 migrations, keeping its profiles', () => {
+    const dir = tmp();
+    const file = join(dir, 'q.sqlite');
+    store = openStore(file, box, olderMigrations(8));
+    store.profiles.save({ name: 'w', role: 'world', host: 'h', port: 1, user: 'u', database: 'd', password: 'p' });
+    store.close();
+    store = openStore(file, box);
+    expect(store.profiles.list()).toHaveLength(1);
+    store.settings.set('a', 'b');
+    expect(store.settings.get('a')).toBe('b');
   });
 });

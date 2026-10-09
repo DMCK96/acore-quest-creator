@@ -28,3 +28,46 @@
   overflow: hidden;
   clip: rect(0 0 0 0);
 }
+
+.quest-editor-modal__body {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+}
+
+/* A write usually lasts a few milliseconds: the greying and the notice only show if it lasts longer */
+.quest-editor-modal__body--paused {
+  opacity: 0.5;
+  transition: opacity 0.15s ease 0.25s;
+}
+
+.quest-editor-modal__writing {
+  position: absolute;
+  z-index: 2;
+  top: 0.75rem;
+  left: 50%;
+  transform: translateX(-50%);
+  margin: 0;
+  padding: 0.4rem 0.9rem;
+  background: var(--bg);
+  border: 1px solid var(--glass-border);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--glass-shadow);
+  font-size: 0.85rem;
+  animation: quest-editor-writing-in 0.15s ease 0.25s both;
+}
+
+@keyframes quest-editor-writing-in {
+  from {
+    opacity: 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  /* Nothing fades, but the short wait before it shows stays */
+  .quest-editor-modal__body--paused,
+  .quest-editor-modal__writing {
+    transition-duration: 0.01ms;
+    animation-duration: 0.01ms;
+  }
+}

@@ -1,5 +1,6 @@
 import type { AppStore } from '../../state/app-store';
 import { ConnectionSection } from './ConnectionSection';
+import { McpSection } from './McpSection';
 import { PreferencesSection } from './PreferencesSection';
 
 export interface SettingsSectionProps {
@@ -19,4 +20,5 @@ export interface SettingsSection {
 export const SETTINGS_SECTIONS: readonly SettingsSection[] = [
   { id: 'connection', title: 'Connection', Component: ConnectionSection },
   { id: 'preferences', title: 'Preferences', Component: PreferencesSection },
+  { id: 'mcp', title: 'MCP / AI', Component: McpSection },
 ];

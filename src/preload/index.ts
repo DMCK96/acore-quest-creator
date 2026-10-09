@@ -1,6 +1,6 @@
 import { contextBridge, ipcRenderer } from 'electron';
 // Not `../shared/ipc`: a sandboxed preload cannot `require` zod out of node_modules.
-import { API_METHODS, channelFor, FLUSH_DONE_CHANNEL, FLUSH_REQUEST_CHANNEL, HISTORY_CHANNEL } from '../shared/api-methods';
+import { API_METHODS, channelFor, CONNECTED_CHANNEL, EXTERNAL_CHANGE_CHANNEL, FLUSH_DONE_CHANNEL, FLUSH_REQUEST_CHANNEL, HISTORY_CHANNEL, HOLD_EDITS_CHANNEL } from '../shared/api-methods';
 
 /**
  * The only thing the renderer can reach: one function per API method, each forwarding to the
@@ -18,6 +18,18 @@ contextBridge.exposeInMainWorld('appEvents', {
   /** The undo history, sent after every step, undo, redo, save and clear. */
   onHistory(handler: (list: unknown) => void): void {
     ipcRenderer.on(HISTORY_CHANNEL, (_event, list: unknown) => handler(list));
+  },
+  /** The main process connected to a world database on its own (an AI client, through MCP). */
+  onConnected(handler: (summary: unknown) => void): void {
+    ipcRenderer.on(CONNECTED_CHANNEL, (_event, summary: unknown) => handler(summary));
+  },
+  /** A change the main process made on its own (an AI client, through MCP), shaped like an undo result. */
+  onExternalChange(handler: (change: unknown) => void): void {
+    ipcRenderer.on(EXTERNAL_CHANGE_CHANNEL, (_event, change: unknown) => handler(change));
+  },
+  /** An AI client's write begins (`true`) or is over (`false`): the window keeps its quest edits back meanwhile. */
+  onHoldEdits(handler: (held: boolean) => void): void {
+    ipcRenderer.on(HOLD_EDITS_CHANNEL, (_event, held: boolean) => handler(held));
   },
   onFlushRequest(handler: () => Promise<void>): void {
     ipcRenderer.on(FLUSH_REQUEST_CHANNEL, () => {

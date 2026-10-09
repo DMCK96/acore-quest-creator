@@ -7,7 +7,7 @@ import type { Role, RoleTarget } from '@core/modules/quest-roles';
 import type { World3D } from './world3d';
 import type { EditPoint, SpawnEdit, SpawnRef } from './edits';
 import type { ProjectEntities } from '@core/entities/model';
-import type { At, MenuAction, MenuGroup, MenuSpawn, MenuTarget, QuestMenuInfo } from './menu/model';
+import { AI_WRITING, editsProject, lockEdits, type At, type MenuAction, type MenuGroup, type MenuSpawn, type MenuTarget, type QuestMenuInfo } from './menu/model';
 import { buildMenu, NEEDS_GROUND } from './menu/section';
 import { subjectOf } from './menu/subject';
 import { aboardVessel } from './frame-edit';
@@ -25,6 +25,7 @@ import type { SpawnEvents } from '@core/entities/model';
 import { GroupDialog } from './GroupDialog';
 import { PlaceDialog, type Chosen } from './PlaceDialog';
 import { useHistorySteps } from '../state/history-context';
+import { AiLock } from '../components/AiLock';
 import { newSpawnGuid } from './spawn-guid';
 
 export const NO_LONGER_HERE = 'That spawn is no longer here';
@@ -110,9 +111,12 @@ export function useWorldMenu(deps: WorldMenuDeps): {
   const d = useRef(deps);
   d.current = deps;
   // Each action is one step of the project's history, however many changes it makes
-  const { runStep } = useHistorySteps();
+  const { runStep, editLocked } = useHistorySteps();
   const step = useRef(runStep);
   step.current = runStep;
+  // While an AI client writes, the menu only looks and copies
+  const locked = useRef(editLocked);
+  locked.current = editLocked;
   const [menu, setMenu] = useState<{ groups: MenuGroup[]; at: { x: number; y: number } } | null>(null);
   const [place, setPlace] = useState<{ what: 'creature' | 'object'; at: At } | null>(null);
   const [wander, setWander] = useState<{ spawn: MenuSpawn } | null>(null);
@@ -145,7 +149,7 @@ export function useWorldMenu(deps: WorldMenuDeps): {
   const open = (target: MenuTarget, client: { x: number; y: number }): void => {
     const { api, map, placing, quest, onNewQuest } = d.current;
     const entries = clipEntries();
-    const groups = buildMenu(subjectOf(target, d.current.entities), {
+    const built = buildMenu(subjectOf(target, d.current.entities), {
       map,
       connected: api !== null,
       clipboard: { count: entries.length, blocked: null },
@@ -156,6 +160,7 @@ export function useWorldMenu(deps: WorldMenuDeps): {
       marked,
       vessel: aboardVessel(target, d.current.vessel, (kind, guid) => d.current.world.current?.frameOfSpawn(kind, guid) ?? null),
     });
+    const groups = locked.current ? lockEdits(built) : built;
     if (groups.length > 0) setMenu({ groups, at: client });
   };
 
@@ -313,6 +318,11 @@ export function useWorldMenu(deps: WorldMenuDeps): {
     const { world: worldRef, api, setNote } = d.current;
     const world = worldRef.current;
     if (!world) return;
+    // The menu may have been opened before the AI client began to write
+    if (locked.current && editsProject(action)) {
+      setNote(`${AI_WRITING}.`);
+      return;
+    }
     switch (action.kind) {
       case 'stopPlacing':
         d.current.stopPlacing();
@@ -535,6 +545,7 @@ export function useWorldMenu(deps: WorldMenuDeps): {
   const shortcut = (code: 'KeyC' | 'KeyV' | 'KeyD'): boolean => {
     const world = d.current.world.current;
     if (!world) return false;
+    if (locked.current && code !== 'KeyC') return true;
     // A paste or a duplicate while a path is drawn would land among the path's undo steps
     if (drawingRef.current && code !== 'KeyC') return true;
     if (code === 'KeyC') copy();
@@ -566,6 +577,7 @@ export function useWorldMenu(deps: WorldMenuDeps): {
           }}
         />
       )}
+      <AiLock>
       {place && (
         <PlaceDialog
           kind={place.what}
@@ -695,10 +707,15 @@ export function useWorldMenu(deps: WorldMenuDeps): {
           }}
         />
       )}
+      </AiLock>
     </>
   );
 
   const editGroup = (id: number): void => {
+    if (locked.current) {
+      d.current.setNote(`${AI_WRITING}.`);
+      return;
+    }
     openGroup(id).catch((error: unknown) => d.current.setNote(error instanceof Error ? error.message : String(error)));
   };
 

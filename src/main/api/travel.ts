@@ -1,7 +1,7 @@
-import { movementsOf, type WorldLayer } from '../../core/world/layer';
-import { describeStep } from '../project/step-labels';
+import type { WorldLayer } from '../../core/world/layer';
+import { resultOfSteps } from './step-result';
 import type { HistoryStep } from '../project/history';
-import type { HistoryPart, HistoryResult, QuestEdit, StepSummary } from '../../shared/history';
+import type { HistoryPart, HistoryResult, QuestEdit } from '../../shared/history';
 import { readPlacement } from '../world/world-api';
 import type { ProjectEntities } from '../../core/entities/model';
 import type { ApiContext } from './context';
@@ -106,12 +106,7 @@ export function createTravel(ctx: ApiContext) {
   const applySteps = ({ direction, steps }: { direction: 'undo' | 'redo'; steps: HistoryStep[] }, taken: Taken): HistoryResult => {
     const verb = direction === 'undo' ? 'undo' : 'redo';
     const left = new Set<string>();
-    const touched: number[] = [];
-    let positions = false;
-    let world = false;
-    let entities = false;
-    let name = false;
-    let last: StepSummary | null = null;
+    const applied: { step: HistoryStep; skip: Set<number> }[] = [];
     for (const step of steps) {
       const skip = new Set<number>();
       const parts = step.parts.map((part, i): HistoryPart => {
@@ -148,30 +143,9 @@ export function createTravel(ctx: ApiContext) {
         return part;
       });
       deps.session.applyStep({ ...step, parts }, direction, skip);
-      step.parts.forEach((part, i) => {
-        if (skip.has(i)) return;
-        if (part.kind === 'quest') {
-          if (!touched.includes(part.questId)) touched.push(part.questId);
-          if (part.before === null || part.after === null) positions = true;
-        } else if (part.kind === 'positions') positions = true;
-        else if (part.kind === 'world') world = true;
-        else if (part.kind === 'entities') entities = true;
-        else name = true;
-      });
-      last = { id: step.id, ...describeStep(step) };
+      applied.push({ step, skip });
     }
-    const layer = deps.session.world.get();
-    return {
-      step: last,
-      direction,
-      quests: touched.map((questId) => ({ questId, aggregate: quests.get(questId)?.aggregate ?? null })),
-      positions,
-      world: world ? { ...layer, movements: movementsOf(layer) } : null,
-      entities: entities ? deps.session.entities.get() : null,
-      name,
-      skipped: [...left],
-      history: historyList(),
-    };
+    return resultOfSteps(deps.session, applied, direction, [...left], historyList());
   };
   // Undo, redo and jump one at a time: Ctrl+Z held down sends them faster than they finish
   let travelling: Promise<unknown> = Promise.resolve();

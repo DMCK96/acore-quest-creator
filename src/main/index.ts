@@ -4,9 +4,19 @@ import { mkdir, readdir, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { openMysqlDevDb } from '../core/db/mysql-dev-db';
 import { openMysqlWorldDb } from '../core/db/mysql-world-db';
-import { FLUSH_DONE_CHANNEL, FLUSH_REQUEST_CHANNEL, HISTORY_CHANNEL } from '../shared/api-methods';
+import { CONNECTED_CHANNEL, EXTERNAL_CHANGE_CHANNEL, FLUSH_DONE_CHANNEL, FLUSH_REQUEST_CHANNEL, HISTORY_CHANNEL, HOLD_EDITS_CHANNEL } from '../shared/api-methods';
 import { describeStep } from './project/step-labels';
-import { API_METHODS, channelFor, parseRequest, type Api, type ApiError } from '../shared/ipc';
+import { API_METHODS, channelFor, type Api } from '../shared/ipc';
+import { invokeApi } from './api/invoke';
+import { waitForFlush } from './wait-for-flush';
+import type { McpContext } from './mcp/tool';
+import { createMcpController, type McpController } from './mcp/controller';
+import { startMcpHttp } from './mcp/http';
+import { createMcpServer } from './mcp/server';
+import { createMcpSettings } from './mcp/settings';
+import { allPrompts } from './mcp/prompts';
+import { allTools } from './mcp/tools';
+import { createWriteGuard } from './mcp/write-guard';
 import { createApi, type ApiDeps } from './api';
 import { seedEnvProfiles } from './env-profiles';
 import { mapDataFiles, nodeServerDataFiles } from './server-data';
@@ -61,11 +71,6 @@ const defaultOutputDir = (): string => join(app.getPath('documents'), 'Azeroth W
 const migrationsFolder = (): string =>
   app.isPackaged ? join(process.resourcesPath, 'drizzle') : join(__dirname, '..', '..', 'drizzle');
 
-const unknownError = (error: unknown): { ok: false; error: ApiError } => ({
-  ok: false,
-  error: { code: 'UNKNOWN', message: error instanceof Error ? error.message : String(error) },
-});
-
 // The scheme must be known before `ready`. The 3D view reads the game client's files through `awe-wow`; its loaders run in workers, which need CORS.
 protocol.registerSchemesAsPrivileged([
   { scheme: ASSET_SCHEME, privileges: { standard: true, secure: true, supportFetchAPI: true, corsEnabled: true } },
@@ -95,9 +100,12 @@ function buildDeps(
   projects: ProjectController,
   startupProfileId: number | null,
   client: GameClient,
+  mcp: McpController,
 ): ApiDeps {
   return {
     store,
+    mcp,
+    fetch: globalThis.fetch,
     onClientDir: (dir) => client.setDir(dir),
     clientStatus: () => client.status(),
     clientFile: (path) => client.file(path),
@@ -135,16 +143,7 @@ function buildDeps(
  */
 function registerIpc(api: Api): void {
   for (const method of API_METHODS) {
-    ipcMain.handle(channelFor(method), async (_event, ...args: unknown[]) => {
-      const parsed = parseRequest(method, args);
-      if (!parsed.ok) return { ok: false, error: parsed.error };
-      try {
-        const call = api[method] as (...a: unknown[]) => Promise<unknown>;
-        return await call.apply(api, parsed.args);
-      } catch (error) {
-        return unknownError(error);
-      }
-    });
+    ipcMain.handle(channelFor(method), (_event, ...args: unknown[]) => invokeApi(api, method, args));
   }
 }
 
@@ -184,6 +183,17 @@ const electronDialogs: Dialogs = {
     return response === 0 ? 'save' : response === 1 ? 'discard' : 'cancel';
   },
 };
+
+/** Asks a window to hand over any edit it still holds back, and waits until it has (or the timeout, when given). */
+const requestFlush = (win: BrowserWindow, timeoutMs?: number): Promise<void> =>
+  waitForFlush({
+    listen: (done) => {
+      ipcMain.once(FLUSH_DONE_CHANNEL, done);
+      return () => void ipcMain.removeListener(FLUSH_DONE_CHANNEL, done);
+    },
+    send: () => win.webContents.send(FLUSH_REQUEST_CHANNEL),
+    ...(timeoutMs !== undefined ? { timeoutMs } : {}),
+  });
 
 function createWindow(session: ProjectSession, recovery: Recovery, projects: ProjectController): void {
   const win = new BrowserWindow({
@@ -237,13 +247,8 @@ function createWindow(session: ProjectSession, recovery: Recovery, projects: Pro
   const timer = setInterval(tick, recoveryIntervalMs());
   win.on('blur', tick);
 
-  const flush = (): Promise<void> =>
-    new Promise((resolve) => {
-      ipcMain.once(FLUSH_DONE_CHANNEL, () => resolve());
-      win.webContents.send(FLUSH_REQUEST_CHANNEL);
-    });
   const guard = createCloseGuard({
-    flush,
+    flush: () => requestFlush(win),
     projects,
     onError: (message) => dialog.showErrorBox('The project was not saved', message),
   });
@@ -294,9 +299,41 @@ void app.whenReady().then(() => {
   });
   const client = createGameClient({ fs: nodeClientFs, log: (m) => console.warn(`Game client: ${m}`) });
   registerClientFiles(client);
-  registerIpc(createApi(buildDeps(store, session, projects, startupProfileId, client)));
+
+  // The MCP server (off unless the user turns it on in Settings) drives the same API the window does.
+  let api: Api | null = null;
+  const writeGuard = createWriteGuard();
+  const mcpContext: McpContext = {
+    get api() {
+      return api!;
+    },
+    session,
+    call: ((method: keyof Api, ...args: unknown[]) => invokeApi(api!, method, args)) as McpContext['call'],
+    flush() {
+      const win = BrowserWindow.getAllWindows().find((w) => !w.isDestroyed());
+      // The write guard stops waiting at 5 s; this clears the listener just after
+      return win ? requestFlush(win, 6000) : Promise.resolve();
+    },
+    holdEdits(held) {
+      for (const win of BrowserWindow.getAllWindows()) if (!win.isDestroyed()) win.webContents.send(HOLD_EDITS_CHANNEL, held);
+    },
+    notifyConnected(summary) {
+      for (const win of BrowserWindow.getAllWindows()) if (!win.isDestroyed()) win.webContents.send(CONNECTED_CHANNEL, summary);
+    },
+    notify(change) {
+      for (const win of BrowserWindow.getAllWindows()) if (!win.isDestroyed()) win.webContents.send(EXTERNAL_CHANGE_CHANNEL, change);
+    },
+  };
+  const mcp = createMcpController({
+    settings: createMcpSettings(store),
+    listen: ({ port, token }) => startMcpHttp({ port, token, createServer: () => createMcpServer(mcpContext, allTools, writeGuard, allPrompts) }),
+  });
+  api = createApi(buildDeps(store, session, projects, startupProfileId, client, mcp));
+  registerIpc(api);
+  app.on('will-quit', () => void mcp.stop());
 
   createWindow(session, recovery, projects);
+  mcp.start().catch((error: unknown) => console.error('Could not start the MCP server:', error));
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow(session, recovery, projects);
   });

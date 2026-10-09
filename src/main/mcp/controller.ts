@@ -1,0 +1,86 @@
+import type { McpStatus } from '../../shared/ipc';
+import type { McpSettings } from './settings';
+
+export interface McpListener {
+  port: number;
+  close(): Promise<void>;
+}
+
+export interface McpControllerOptions {
+  settings: McpSettings;
+  /** Starts listening; rejects when it cannot (the port is in use). */
+  listen(o: { port: number; token: () => string }): Promise<McpListener>;
+}
+
+export interface McpController {
+  status(): McpStatus;
+  /** Starts the server if it was left enabled; for the app's launch. */
+  start(): Promise<McpStatus>;
+  configure(c: { enabled: boolean; port: number; wikiLookups?: boolean }): Promise<McpStatus>;
+  /** Whether the user has allowed the assistant to look things up on the wiki. */
+  wikiEnabled(): boolean;
+  regenerateToken(): Promise<McpStatus>;
+  stop(): Promise<void>;
+}
+
+/** Owns the running MCP server: starts it, stops it, restarts it when the settings change. */
+export function createMcpController({ settings, listen }: McpControllerOptions): McpController {
+  let listener: McpListener | null = null;
+  let error: string | null = null;
+  // Start, configure and regenerate run one at a time, so a switch-off cannot overtake a start that
+  // is still opening its port and leave the server running while the setting says off
+  let tail: Promise<unknown> = Promise.resolve();
+  const queued = <T,>(work: () => Promise<T>): Promise<T> => {
+    const next = tail.then(work, work);
+    tail = next.catch(() => undefined);
+    return next;
+  };
+
+  const status = (): McpStatus => {
+    const s = settings.read();
+    // The token is only shown while the server runs; reading it is what needs the secure storage
+    return { enabled: s.enabled, port: s.port, url: `http://127.0.0.1:${s.port}/mcp`, token: listener !== null ? settings.token() : '', running: listener !== null, error, wikiLookups: s.wikiLookups };
+  };
+  const stop = async (): Promise<void> => {
+    const old = listener;
+    listener = null;
+    await old?.close();
+  };
+  const begin = async (): Promise<McpStatus> => {
+    await stop();
+    error = null;
+    const s = settings.read();
+    if (s.enabled) {
+      try {
+        settings.token();
+        listener = await listen({ port: s.port, token: () => settings.token() });
+      } catch (e) {
+        settings.setEnabled(false);
+        error = e instanceof Error ? e.message : String(e);
+      }
+    }
+    return status();
+  };
+
+  return {
+    status,
+    wikiEnabled: () => settings.read().wikiLookups,
+    start: () => queued(begin),
+    configure: ({ enabled, port, wikiLookups }) =>
+      queued(async () => {
+        const before = settings.read();
+        settings.setPort(port);
+        settings.setEnabled(enabled);
+        if (wikiLookups !== undefined) settings.setWikiLookups(wikiLookups);
+        // Ticking the wiki box must not cut the connections of a server that is running as asked
+        const unchanged = enabled === before.enabled && port === before.port && (listener !== null) === enabled;
+        return unchanged ? status() : begin();
+      }),
+    regenerateToken: () =>
+      queued(async () => {
+        settings.regenerateToken();
+        return status();
+      }),
+    stop: () => queued(stop),
+  };
+}

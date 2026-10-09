@@ -31,6 +31,7 @@
     "app:icon": "npm run build && playwright test -c playwright.docs.config.ts icon"
   },
   "dependencies": {
+    "@modelcontextprotocol/sdk": "1.32.1",
     "@wowserhq/format": "0.25.0",
     "@wowserhq/io": "2.0.2",
     "@xyflow/react": "^12.11.6",

@@ -4,7 +4,7 @@ import { asc, desc, eq, notInArray } from 'drizzle-orm';
 import { drizzle } from 'drizzle-orm/better-sqlite3';
 import { migrate } from 'drizzle-orm/better-sqlite3/migrator';
 import type { ProfileInput, ProfileRecord, ProfileSave } from '../../shared/ipc';
-import { connectionProfiles, recentProjects } from './schema';
+import { appSettings, connectionProfiles, recentProjects } from './schema';
 
 // The records the renderer sees are the IPC types; the store is where they are kept.
 export type { ProfileInput, ProfileRecord, ProfileSave };
@@ -45,6 +45,13 @@ export interface Store {
     /** Newest first. */
     list(): RecentEntry[];
     forget(path: string): void;
+  };
+  /** Small per-machine settings by key. `null` deletes. Secrets are sealed with this machine's key. */
+  settings: {
+    get(key: string): string | null;
+    set(key: string, value: string | null): void;
+    getSecret(key: string): string | null;
+    setSecret(key: string, plain: string | null): void;
   };
   close(): void;
 }
@@ -132,6 +139,24 @@ export function openStore(path: string, secrets: SecretBox, migrationsFolder: st
       list: () => db.select().from(recentProjects).orderBy(desc(recentProjects.openedAt)).all(),
       forget(path) {
         db.delete(recentProjects).where(eq(recentProjects.path, path)).run();
+      },
+    },
+    settings: {
+      get: (key) => db.select().from(appSettings).where(eq(appSettings.key, key)).get()?.value ?? null,
+      set(key, value) {
+        if (value === null) db.delete(appSettings).where(eq(appSettings.key, key)).run();
+        else db.insert(appSettings).values({ key, value }).onConflictDoUpdate({ target: appSettings.key, set: { value } }).run();
+      },
+      getSecret(key) {
+        const sealed = db.select().from(appSettings).where(eq(appSettings.key, key)).get()?.value;
+        return sealed === undefined ? null : secrets.decrypt(Uint8Array.from(Buffer.from(sealed, 'base64')));
+      },
+      setSecret(key, plain) {
+        if (plain === null) db.delete(appSettings).where(eq(appSettings.key, key)).run();
+        else {
+          const value = Buffer.from(secrets.encrypt(plain)).toString('base64');
+          db.insert(appSettings).values({ key, value }).onConflictDoUpdate({ target: appSettings.key, set: { value } }).run();
+        }
       },
     },
     close: () => {

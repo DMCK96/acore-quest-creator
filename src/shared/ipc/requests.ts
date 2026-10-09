@@ -231,6 +231,20 @@ const REQUEST_SCHEMAS: Record<keyof Api, z.ZodType<unknown[]>> = {
   recoveries: z.tuple([]),
   restoreRecovery: z.tuple([z.string().max(MAX_RECOVERY_ID)]),
   discardRecovery: z.tuple([z.string().max(MAX_RECOVERY_ID)]),
+  mcpStatus: z.tuple([]),
+  mcpConfigure: z.tuple([z.object({ enabled: z.boolean(), port: z.number().int().min(1024).max(65535), wikiLookups: z.boolean().optional() })]),
+  mcpRegenerateToken: z.tuple([]),
+  questsInZone: z.tuple([
+    z.number().int(),
+    z.object({ minLevel: z.number().int().min(0).max(255).optional(), maxLevel: z.number().int().min(0).max(255).optional(), limit: z.number().int().min(1).max(200).optional() }).optional(),
+  ]),
+  questSummaries: z.tuple([z.array(z.number().int().min(1)).min(1).max(25)]),
+  areaOverview: z.tuple([z.number().int().min(0), finite, finite, z.number().finite().positive().max(500)]),
+  checkNames: z.tuple([z.enum(['creature', 'gameobject', 'item', 'quest']), z.array(z.string().max(100)).min(1).max(25)]),
+  checkIds: z.tuple([z.enum(['creature', 'gameobject', 'item', 'quest']), z.array(z.number().int().min(1)).min(1).max(100)]),
+  wikiSearch: z.tuple([z.string().min(1).max(200), z.number().int().min(1).max(10).optional()]),
+  wikiPage: z.tuple([z.string().min(1).max(200), z.string().min(1).max(200).optional()]),
+  projectIssues: z.tuple([]),
 };
 
 /**
