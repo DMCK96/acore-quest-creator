@@ -7,7 +7,9 @@ import { FightEditor } from '../../combat/FightEditor';
 import { CreditQuestsProvider } from '../../combat/credit-quests';
 import { NumberField } from '../../scripts/fields';
 import { EditorTabs, type EditorTab } from '../EditorTabs';
+import { CopyStock } from '../CopyStock';
 import { LootList } from '../LootList';
+import { VendorList } from '../VendorList';
 import { SpawnList } from '../SpawnList';
 import { NpcBasics } from './NpcBasics';
 import { NpcLook } from './NpcLook';
@@ -87,6 +89,20 @@ export function NpcEditor({
       ),
     },
   ];
+  tabs.push({
+    id: 'vendor',
+    label: 'Vendor',
+    render: () =>
+      // Stock a project saved before vendors existed never read is left as the database has it
+      npc.origin.kind === 'existing' && !Object.prototype.hasOwnProperty.call(npc.origin.original, 'npc_vendor') ? (
+        <p className="scene-hint">{name}&apos;s stock was not read when it was added to this project, so it is not edited here.</p>
+      ) : (
+        <>
+          <VendorList idPrefix={`npc-${npc.entry}`} vendor={npc.vendor} onChange={(vendor) => onChange({ ...npc, vendor })} hasServerData={hasServerData} />
+          <CopyStock idPrefix={`npc-${npc.entry}`} npcEntry={npc.entry} current={npc.vendor} onCopy={(vendor) => onChange({ ...npc, vendor })} />
+        </>
+      ),
+  });
   if (!existing) {
     tabs.push({
       id: 'placement',

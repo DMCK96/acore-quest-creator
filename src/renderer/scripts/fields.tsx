@@ -4,11 +4,11 @@ import { EntityPicker } from '../controls/EntityPicker';
 
 /** Small labelled inputs the scene editor is built from; each is a label around its control. */
 
-export function NumberField({ label, value, onChange, min }: { label: string; value: number; onChange(n: number): void; min?: number }): React.JSX.Element {
+export function NumberField({ label, value, onChange, min, disabled }: { label: string; value: number; onChange(n: number): void; min?: number; disabled?: boolean }): React.JSX.Element {
   return (
     <label className="scene-field scene-field--short">
       <span>{label}</span>
-      <input type="number" step="any" min={min} value={value} onChange={(e) => onChange(Number(e.target.value) || 0)} />
+      <input type="number" step="any" min={min} value={value} disabled={disabled} onChange={(e) => onChange(Number(e.target.value) || 0)} />
     </label>
   );
 }
