@@ -4,6 +4,7 @@ import type { EntityHit, SearchKind } from '@core/db/world-db';
 import type { NameBook } from '@core/links/component';
 import type { Api, Result } from '@shared/ipc';
 import type { ProjectEntities } from '@core/entities/model';
+import type { CanvasNode } from '@shared/ipc';
 
 export type NameStatus = 'idle' | 'loading' | 'found' | 'missing' | 'unsupported';
 
@@ -24,21 +25,23 @@ const scheduleFrame: (run: () => void) => void =
   typeof requestAnimationFrame === 'function' ? requestAnimationFrame : (run) => setTimeout(run, 0);
 
 /**
- * Names of the project's new NPCs and objects. They are not in the world DB, and the main process
+ * Names of the project's new NPCs, objects and quests. They are not in the world DB, and the main process
  * hears of them only after the edit debounce, so asking it right after "New NPC" would answer
  * "missing" and that answer would stick.
  */
 export interface LocalNames {
   creature: ReadonlyMap<number, string>;
   gameobject: ReadonlyMap<number, string>;
+  quest: ReadonlyMap<number, string>;
 }
 
-/** The `LocalNames` of the project's store; unnamed ones are called what search calls them. */
-export function localNamesOf(entities: ProjectEntities | undefined): LocalNames {
+/** The `LocalNames` of the project's store and new quests; unnamed ones are called what search calls them. */
+export function localNamesOf(entities: ProjectEntities | undefined, nodes: readonly CanvasNode[] = []): LocalNames {
   const { npcs, objects } = entities ?? { npcs: [], objects: [] };
   return {
     creature: new Map(npcs.map((n) => [n.entry, n.name || 'New NPC'])),
     gameobject: new Map(objects.map((o) => [o.entry, o.name || 'New object'])),
+    quest: new Map(nodes.filter((n) => n.isNew).map((n) => [n.questId, n.title.trim() || `Quest ${n.questId}`])),
   };
 }
 
@@ -59,7 +62,7 @@ function createNamesStore(api: Api): NamesStore {
   let local: LocalNames | undefined;
 
   const localName = (kind: RefKind, id: number): string | undefined =>
-    kind === 'creature' || kind === 'gameobject' ? local?.[kind].get(id) : undefined;
+    kind === 'creature' || kind === 'gameobject' || kind === 'quest' ? local?.[kind].get(id) : undefined;
 
   const key = (kind: RefKind, id: number): string => `${kind}:${id}`;
   const notify = (): void => listeners.forEach((l) => l());
@@ -131,7 +134,7 @@ export function NamesProvider({
   api: Api;
   /** The connection's count: a new connection starts an empty cache. */
   epoch?: number;
-  /** The open quest's new NPCs and objects, named before the main process knows them. */
+  /** The project's new NPCs, objects and quests, named before the main process knows them. */
   local?: LocalNames;
   children: ReactNode;
 }): React.JSX.Element {
