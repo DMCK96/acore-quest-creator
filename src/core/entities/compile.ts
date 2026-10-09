@@ -19,6 +19,7 @@ type Row = Record<string, string>;
 
 const GOSSIP_BIT = 1;
 const QUEST_GIVER_BIT = 2;
+const VENDOR_BIT = 128;
 /** `UNIT_CLASS_WARRIOR`: the plain melee class every simple NPC uses. */
 const UNIT_CLASS = 1;
 /** `GO_STATE_READY` and the fully drawn animation every placed object starts with. */
@@ -121,6 +122,7 @@ export function compileEntities(input: {
     const npcflag =
       (npc.questGiver || givers.includes(npc.entry) ? QUEST_GIVER_BIT : 0) |
       (npc.gossip ? GOSSIP_BIT : 0) |
+      (npc.vendor.length > 0 ? VENDOR_BIT : 0) |
       (num(existing?.npcflag) & GOSSIP_BIT);
     insert('creature_template', {
       entry: text(npc.entry), name: npc.name, subname: npc.subname, minlevel: text(npc.minLevel), maxlevel: text(npc.maxLevel),
@@ -141,6 +143,13 @@ export function compileEntities(input: {
     if (armed) {
       insert('creature_equip_template', { CreatureID: text(npc.entry), ID: '1', ItemID1: text(mainHand), ItemID2: text(offHand), ItemID3: text(ranged) });
     }
+    npc.vendor.forEach((v, slot) => {
+      insert('npc_vendor', {
+        entry: text(npc.entry), slot: text(slot), item: text(v.item), maxcount: text(v.maxCount),
+        // Unlimited stock never restocks
+        incrtime: text(v.maxCount === 0 ? 0 : v.restockSecs), ExtendedCost: text(v.extendedCost),
+      });
+    });
     for (const spawn of npc.spawns) {
       creatureGuids.add(spawn.guid);
       const patrol = walking(spawn.patrol) ? spawn.patrol : null;
@@ -232,6 +241,8 @@ export function compileEntities(input: {
   };
   add('creature_template', sorted(entities.npcs.map((n) => n.entry)).map((e) => ({ entry: text(e) })));
   add('creature_template_model', sorted(entities.npcs.map((n) => n.entry)).map((e) => ({ CreatureID: text(e), Idx: '0' })));
+  // Every new NPC's stock is deleted by entry, so a list the author has since emptied is cleaned on re-export
+  add('npc_vendor', sorted(entities.npcs.map((n) => n.entry)).map((e) => ({ entry: text(e) })));
   add('creature_equip_template', sorted(entities.npcs.map((n) => n.entry)).map((e) => ({ CreatureID: text(e), ID: '1' })));
   add('creature', sorted(creatureGuids).map((g) => ({ guid: text(g) })));
   // A removed spawn's game events go with it; a current spawn's are the spawn event writer's (spawn-events.ts)

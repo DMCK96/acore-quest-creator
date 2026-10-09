@@ -15,6 +15,7 @@ const DELETE_ORDER = [
   // New NPCs and objects (slice D): loot and spawns before the templates they belong to.
   'creature_loot_template',
   'gameobject_loot_template',
+  'npc_vendor',
   'creature_addon',
   'waypoint_data',
   'creature',
@@ -33,6 +34,7 @@ const INSERT_ORDER = [
   // New items first: loot, equipment and rewards name them.
   'item_template',
   'creature_template',
+  'npc_vendor',
   'creature_template_model',
   'creature_equip_template',
   'page_text',

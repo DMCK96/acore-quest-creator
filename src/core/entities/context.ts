@@ -9,7 +9,7 @@ import type { ProjectEntities } from './model';
 export const ENTITY_TABLES = [
   'creature_template', 'creature_template_model', 'creature', 'gameobject_template', 'gameobject', 'page_text',
   'creature_loot_template', 'gameobject_loot_template', 'creature_addon', 'waypoint_data', 'creature_equip_template',
-  'item_template',
+  'item_template', 'npc_vendor',
 ] as const;
 
 export const ENTITY_KEYS: Record<string, readonly string[]> = {
@@ -25,6 +25,7 @@ export const ENTITY_KEYS: Record<string, readonly string[]> = {
   waypoint_data: ['id', 'point'],
   creature_equip_template: ['CreatureID', 'ID'],
   item_template: ['entry'],
+  npc_vendor: ['entry', 'item', 'ExtendedCost'],
 };
 
 /**
