@@ -267,13 +267,24 @@ export async function readOriginalRows(db: RowReader, kind: Kind, entry: number)
     const template = await rowsOrNone(db, 'creature_template', { entry: key });
     if (template.length === 0) return null;
     const lootid = num(template[0]!.lootid);
-    const [models, equip, loot, vendor, hasVendorTable] = await Promise.all([
+    const has = async (table: string): Promise<boolean> => (db.columns ? (await db.columns(table)).length > 0 : true);
+    const [models, equip, loot, vendor, hasVendorTable, hasDefault, hasTrainer, hasSpells, hasLegacy] = await Promise.all([
       rowsOrNone(db, 'creature_template_model', { CreatureID: key }),
       rowsOrNone(db, 'creature_equip_template', { CreatureID: key, ID: '1' }),
       lootid > 0 ? rowsOrNone(db, 'creature_loot_template', { Entry: text(lootid) }) : Promise.resolve([]),
       rowsOrNone(db, 'npc_vendor', { entry: key }),
       // A fork without the table has no stock to read; the key is left out so its stock is never written
-      db.columns ? db.columns('npc_vendor').then((columns) => columns.length > 0) : Promise.resolve(true),
+      has('npc_vendor'),
+      has('creature_default_trainer'), has('trainer'), has('trainer_spell'), has('npc_trainer'),
+    ]);
+    // Its trainer: the default-trainer row, then that trainer's row and spells. A fork without a table has no key for it, so it is never written
+    const links = hasDefault ? await rowsOrNone(db, 'creature_default_trainer', { CreatureId: key }) : [];
+    const trainerId = links[0]?.TrainerId ?? null;
+    const [trainerRows, spellRows, legacyRows] = await Promise.all([
+      hasTrainer && trainerId !== null ? rowsOrNone(db, 'trainer', { Id: trainerId }) : Promise.resolve([]),
+      hasSpells && trainerId !== null ? rowsOrNone(db, 'trainer_spell', { TrainerId: trainerId }) : Promise.resolve([]),
+      // Only counted, to say what else the NPC teaches; never written
+      hasLegacy ? rowsOrNone(db, 'npc_trainer', { ID: key }) : Promise.resolve([]),
     ]);
     // Its spawns and their game event rows: what its event rule is read from
     const guids = await npcSpawnGuids(db, entry);
@@ -281,6 +292,7 @@ export async function readOriginalRows(db: RowReader, kind: Kind, entry: number)
       .sort((a, b) => num(a.guid) - num(b.guid) || num(a.eventEntry) - num(b.eventEntry));
     return {
       creature_template: template, creature_template_model: models, creature_equip_template: equip, creature_loot_template: loot, ...(hasVendorTable ? { npc_vendor: vendor } : {}),
+      ...(hasDefault ? { creature_default_trainer: links } : {}), ...(hasTrainer ? { trainer: trainerRows } : {}), ...(hasSpells ? { trainer_spell: spellRows } : {}), ...(hasLegacy ? { npc_trainer: legacyRows } : {}),
       creature: guids.map((g) => ({ guid: text(g) })), game_event_creature: events,
     };
   }

@@ -32,6 +32,24 @@ describe('editing an existing entity', () => {
     expect(out.value.origin.original.creature_template[0].name).toBe('Stormwind Guard');
   });
 
+  it("reads an NPC's trainer and how many other NPCs share it", async () => {
+    const { api, db } = await setup();
+    db.insert('trainer', { Id: '5', Type: '0', Requirement: '1', Greeting: 'Hi', VerifiedBuild: '0' });
+    db.insert('trainer', { Id: '6', Type: '2', Requirement: '0', Greeting: 'Craft', VerifiedBuild: '0' });
+    db.insert('trainer_spell', { TrainerId: '5', SpellId: '78', MoneyCost: '100', ReqLevel: '4' });
+    db.insert('trainer_spell', { TrainerId: '6', SpellId: '2018', MoneyCost: '50', ReqLevel: '1' });
+    db.insert('creature_default_trainer', { CreatureId: '1423', TrainerId: '5' });
+    db.insert('creature_default_trainer', { CreatureId: '68', TrainerId: '5' });
+    const shared: any = await api.readExistingEntity('npc', 1423);
+    expect(shared.value.origin).toMatchObject({ sharedTrainer: 1, locked: ['trainer'] });
+    expect(shared.value.trainer).toMatchObject({ trainerId: 5, type: 'class', requirement: 1, spells: [{ spell: 78, cost: 100, reqLevel: 4 }] });
+    db.insert('creature_default_trainer', { CreatureId: '4242', TrainerId: '6' });
+    db.insert('creature_template', { entry: '4242', name: 'Alchemist', minlevel: '10', maxlevel: '10', faction: '35', rank: '0', type: '7', npcflag: '81' });
+    const own: any = await api.readExistingEntity('npc', 4242);
+    expect(own.value.origin).toMatchObject({ sharedTrainer: 0, locked: [] });
+    expect(own.value.trainer).toMatchObject({ trainerId: 6, type: 'profession' });
+  });
+
   it('refuses one the database does not have', async () => {
     const { api } = await setup();
     const out: any = await api.readExistingEntity('npc', 4242);

@@ -29,6 +29,8 @@ const LOOKUP_TABLES = [
   'game_event', 'game_event_pool', 'game_event_creature',
   // What the lore queries read around a point: vendor stock and referenced loot.
   'npc_vendor', 'reference_loot_template',
+  // What trainers are read from and written to
+  'creature_default_trainer', 'trainer', 'trainer_spell', 'npc_trainer',
 ] as const;
 
 /** An empty in-memory world DB whose tables carry the fork's real DDL. */

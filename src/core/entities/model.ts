@@ -110,7 +110,7 @@ export const OBJECT_TYPE_VALUE = { questGiver: 2, chest: 3, generic: 5, text: 9,
 const keysOf = <T extends Record<string, number>>(o: T) => Object.keys(o) as [keyof T & string, ...(keyof T & string)[]];
 
 /** What of an existing entity the project may not change, because other things share it */
-export type EntityLock = 'type' | 'loot' | 'fight';
+export type EntityLock = 'type' | 'loot' | 'fight' | 'trainer';
 /** An existing entity's rows as the database had them, by table name */
 export type OriginalRows = Record<string, Record<string, string | null>[]>;
 
@@ -126,7 +126,9 @@ const originSchema = z.discriminatedUnion('kind', [
     original: z.record(z.string(), z.array(z.record(z.string(), z.string().nullable()))),
     sharedLoot: int.min(0),
     spawnCount: int.min(0),
-    locked: z.array(z.enum(['type', 'loot', 'fight'])),
+    // How many other NPCs use its trainer; absent in projects saved before trainers
+    sharedTrainer: int.min(0).optional(),
+    locked: z.array(z.enum(['type', 'loot', 'fight', 'trainer'])),
   }),
 ]);
 const NEW_ORIGIN = { kind: 'new' } as const;
@@ -139,6 +141,30 @@ export const vendorItemSchema = z.object({
   maxCount: int.min(0).max(255),
   restockSecs: int.min(0),
   extendedCost: int.min(0),
+});
+
+/** `trainer.Type`: what a trainer teaches */
+export const TRAINER_TYPES = ['class', 'mount', 'profession', 'pet'] as const;
+export const TRAINER_TYPE_VALUE = { class: 0, mount: 1, profession: 2, pet: 3 } as const;
+
+/** One spell a trainer teaches: its price in copper, the level and skill a player needs, and up to three spells to know first */
+export const trainerSpellSchema = z.object({
+  // 0: not picked yet
+  spell: int.min(0),
+  cost: int.min(0),
+  reqLevel: int.min(0).max(255),
+  reqSkill: int.min(0),
+  reqSkillRank: int.min(0),
+  reqSpells: z.array(int.positive()).max(3),
+});
+
+/** What an NPC teaches: its own trainer row (`trainerId`) and the spells under it. `requirement` is the class a class trainer serves, else 0 */
+export const trainerSchema = z.object({
+  trainerId: int,
+  type: z.enum(TRAINER_TYPES),
+  requirement: int.min(0),
+  greeting: z.string(),
+  spells: z.array(trainerSpellSchema),
 });
 
 export const lootSchema = z.object({ item: int, chance: num, min: int, max: int, questOnly: z.boolean() });
@@ -173,6 +199,8 @@ const npcFields = z.object({
   events: z.union([eventRuleSchema, z.literal('asIs')]).default('asIs'),
   // Added with NPC vendors; what it sells, in display order (the index is the slot). The default keeps NPCs saved before then as they were.
   vendor: z.array(vendorItemSchema).default([]),
+  // Added with NPC trainers; null is not a trainer. The default keeps NPCs saved before then as they were.
+  trainer: trainerSchema.nullable().default(null),
 });
 
 /**
@@ -251,6 +279,8 @@ export type Patrol = z.infer<typeof patrolSchema>;
 export type Page = z.infer<typeof pageSchema>;
 export type LootRow = z.infer<typeof lootSchema>;
 export type VendorItem = z.infer<typeof vendorItemSchema>;
+export type TrainerSpell = z.infer<typeof trainerSpellSchema>;
+export type Trainer = z.infer<typeof trainerSchema>;
 export type CustomNpc = z.infer<typeof npcSchema>;
 export type CustomObject = z.infer<typeof objectSchema>;
 export type NpcRank = CustomNpc['rank'];
@@ -274,6 +304,27 @@ export function vendorUnread(npc: { origin: StoredOrigin }): boolean {
 /** Whether two stock lists hold the same rows in the same order */
 export function sameVendor(a: readonly VendorItem[], b: readonly VendorItem[]): boolean {
   return a.length === b.length && a.every((x, i) => x.item === b[i]!.item && x.maxCount === b[i]!.maxCount && x.restockSecs === b[i]!.restockSecs && x.extendedCost === b[i]!.extendedCost);
+}
+
+/**
+ * Whether an existing NPC's trainer was never read: a project saved before trainers existed, or a fork
+ * without the trainer tables. Its trainer is then not ours to write, whatever `trainer` holds.
+ */
+export function trainerUnread(npc: { origin: StoredOrigin }): boolean {
+  return npc.origin.kind === 'existing' && !Object.prototype.hasOwnProperty.call(npc.origin.original, 'creature_default_trainer');
+}
+
+/** Whether two trainers hold the same values, spells in the same order */
+export function sameTrainer(a: Trainer | null, b: Trainer | null): boolean {
+  if (a === null || b === null) return a === b;
+  const same = (x: readonly number[], y: readonly number[]): boolean => x.length === y.length && x.every((v, i) => v === y[i]);
+  return (
+    a.trainerId === b.trainerId && a.type === b.type && a.requirement === b.requirement && a.greeting === b.greeting && a.spells.length === b.spells.length &&
+    a.spells.every((s, i) => {
+      const t = b.spells[i]!;
+      return s.spell === t.spell && s.cost === t.cost && s.reqLevel === t.reqLevel && s.reqSkill === t.reqSkill && s.reqSkillRank === t.reqSkillRank && same(s.reqSpells, t.reqSpells);
+    })
+  );
 }
 
 /** The project's new NPCs, objects and items: one store; a quest uses one by naming it. */
@@ -361,6 +412,7 @@ export function newNpc(entry: number): CustomNpc {
     seenBy: 'living',
     events: null,
     vendor: [],
+    trainer: null,
   };
 }
 

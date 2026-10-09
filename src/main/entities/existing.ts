@@ -26,16 +26,18 @@ async function spawnCountOf(db: WorldDb, table: 'creature' | 'gameobject', entry
  */
 export async function readExistingRows(
   db: WorldDb, kind: Kind, entry: number,
-): Promise<{ rows: OriginalRows; sharedLoot: number; spawnCount: number } | null> {
+): Promise<{ rows: OriginalRows; sharedLoot: number; spawnCount: number; sharedTrainer: number } | null> {
   const rows = await readOriginalRows(db, kind, entry);
   if (!rows) return null;
   if (kind === 'npc') {
     const lootid = num(rows.creature_template?.[0]?.lootid);
-    const [sharing, spawnCount] = await Promise.all([
+    const trainerId = rows.creature_default_trainer?.[0]?.TrainerId ?? null;
+    const [sharing, spawnCount, trainerUsers] = await Promise.all([
       lootid > 0 ? rowsOrNone(db, 'creature_template', { lootid: str(lootid) }) : Promise.resolve([]),
       spawnCountOf(db, 'creature', entry),
+      trainerId !== null ? rowsOrNone(db, 'creature_default_trainer', { TrainerId: trainerId }) : Promise.resolve([]),
     ]);
-    return { rows, sharedLoot: sharing.filter((r) => num(r.entry) !== entry).length, spawnCount };
+    return { rows, sharedLoot: sharing.filter((r) => num(r.entry) !== entry).length, spawnCount, sharedTrainer: trainerUsers.filter((r) => num(r.CreatureId) !== entry).length };
   }
   if (kind === 'object') {
     const row = rows.gameobject_template?.[0] ?? {};
@@ -44,7 +46,7 @@ export async function readExistingRows(
       lootid > 0 ? rowsOrNone(db, 'gameobject_template', { type: '3', Data1: str(lootid) }) : Promise.resolve([]),
       spawnCountOf(db, 'gameobject', entry),
     ]);
-    return { rows, sharedLoot: sharing.filter((r) => num(r.entry) !== entry).length, spawnCount };
+    return { rows, sharedLoot: sharing.filter((r) => num(r.entry) !== entry).length, spawnCount, sharedTrainer: 0 };
   }
-  return { rows, sharedLoot: 0, spawnCount: 0 };
+  return { rows, sharedLoot: 0, spawnCount: 0, sharedTrainer: 0 };
 }

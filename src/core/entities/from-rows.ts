@@ -3,13 +3,16 @@ import { seenByOf } from './visibility';
 import { npcEventsOf } from './spawn-events';
 import {
   NPC_TYPE_VALUE, OBJECT_TYPE_VALUE, RANK_VALUE, newItem, newNpc, newObject,
-  type CustomItem, type CustomNpc, type CustomObject, type EntityLock, type LootRow, type OriginalRows, type Page, type VendorItem,
+  type CustomItem, type CustomNpc, type CustomObject, type EntityLock, type LootRow, type OriginalRows, type Page, type Trainer, type VendorItem,
+  TRAINER_TYPE_VALUE,
 } from './model';
 
 /** How many other entries share an existing entity's loot and how many spawns it has */
 export interface ExistingCounts {
   sharedLoot: number;
   spawnCount: number;
+  /** How many other NPCs use its trainer */
+  sharedTrainer?: number;
 }
 
 type Row = Record<string, string | null>;
@@ -22,7 +25,7 @@ const nameOf = <T extends Record<string, number>>(map: T, value: number, fallbac
   (Object.keys(map) as (keyof T)[]).find((k) => map[k] === value) ?? fallback;
 
 const origin = (rows: OriginalRows, counts: ExistingCounts, locked: EntityLock[]) =>
-  ({ kind: 'existing', original: rows, sharedLoot: counts.sharedLoot, spawnCount: counts.spawnCount, locked }) as const;
+  ({ kind: 'existing', original: rows, sharedLoot: counts.sharedLoot, spawnCount: counts.spawnCount, sharedTrainer: counts.sharedTrainer ?? 0, locked }) as const;
 
 /** The loot a plain list holds; lists with references or groups cannot be edited as one list, so none */
 function lootOf(rows: Row[] | undefined): { loot: LootRow[]; locked: boolean } {
@@ -39,6 +42,27 @@ function vendorOf(rows: Row[] | undefined): VendorItem[] {
   return [...(rows ?? [])]
     .sort((a, b) => numberOf(a.slot) - numberOf(b.slot))
     .map((r) => ({ item: numberOf(r.item), maxCount: numberOf(r.maxcount), restockSecs: numberOf(r.incrtime), extendedCost: numberOf(r.ExtendedCost) }));
+}
+
+/**
+ * The trainer an NPC uses, read from its default-trainer row, the trainer row and the spells under it. A type
+ * the editor has no name for, or a trainer row that is missing, cannot be modelled: it is left alone (locked).
+ */
+function trainerOf(rows: OriginalRows): { trainer: Trainer | null; locked: boolean } {
+  const link = rows.creature_default_trainer?.[0];
+  if (!link) return { trainer: null, locked: false };
+  const id = numberOf(link.TrainerId);
+  const row = (rows.trainer ?? []).find((r) => numberOf(r.Id) === id);
+  const type = (Object.keys(TRAINER_TYPE_VALUE) as (keyof typeof TRAINER_TYPE_VALUE)[]).find((k) => TRAINER_TYPE_VALUE[k] === numberOf(row?.Type, -1));
+  if (!row || !type) return { trainer: null, locked: true };
+  const spells = (rows.trainer_spell ?? [])
+    .filter((r) => numberOf(r.TrainerId) === id)
+    .sort((a, b) => numberOf(a.SpellId) - numberOf(b.SpellId))
+    .map((r) => ({
+      spell: numberOf(r.SpellId), cost: numberOf(r.MoneyCost), reqLevel: numberOf(r.ReqLevel), reqSkill: numberOf(r.ReqSkillLine), reqSkillRank: numberOf(r.ReqSkillRank),
+      reqSpells: [r.ReqAbility1, r.ReqAbility2, r.ReqAbility3].map((v) => numberOf(v)).filter((v) => v > 0),
+    }));
+  return { trainer: { trainerId: id, type, requirement: numberOf(row.Requirement), greeting: row.Greeting ?? '', spells }, locked: false };
 }
 
 /** The page chain starting at `first`, following `NextPageID` */
@@ -66,6 +90,9 @@ export function npcFromRows(entry: number, rows: OriginalRows, counts: ExistingC
   const locked: EntityLock[] = [];
   if (lootLocked) locked.push('loot');
   if ((row.AIName ?? '') !== '' || (row.ScriptName ?? '') !== '') locked.push('fight');
+  // A trainer other NPCs share is not ours to change, and one the editor cannot model is left as it is
+  const { trainer, locked: trainerLocked } = trainerOf(rows);
+  if (trainerLocked || (trainer !== null && (counts.sharedTrainer ?? 0) > 0)) locked.push('trainer');
   return {
     ...newNpc(entry),
     name: row.name ?? '', subname: row.subname ?? '',
@@ -77,7 +104,7 @@ export function npcFromRows(entry: number, rows: OriginalRows, counts: ExistingC
     healthModifier: numberOf(row.HealthModifier, 1), damageModifier: numberOf(row.DamageModifier, 1),
     displayId: model ? numberOf(model.CreatureDisplayID) : numberOf(row.modelid1), scale: numberOf(model?.DisplayScale, 1),
     equipment: { mainHand: numberOf(gear?.ItemID1), offHand: numberOf(gear?.ItemID2), ranged: numberOf(gear?.ItemID3) },
-    loot, fight: null, spawns: [], vendor: vendorOf(rows.npc_vendor),
+    loot, fight: null, spawns: [], vendor: vendorOf(rows.npc_vendor), trainer,
     origin: origin(rows, counts, locked),
   };
 }
