@@ -189,6 +189,7 @@ const NPC = lines(
   '- `spawns` — where it stands: `guid`, `map`, `x`, `y`, `z`, `o` (facing in radians), `respawnSecs`, `wander`, `patrol`.',
   '- `equipment` — items in `mainHand`, `offHand` and `ranged`.',
   '- `vendor` — what it sells, in the order shown: `{ item, maxCount, restockSecs, extendedCost }`. `maxCount` 0 is unlimited (and `restockSecs` is then ignored); otherwise `maxCount` is 1 to 255 and `restockSecs` must be above 0, since the stock comes back every `restockSecs` seconds. A negative `item` is another vendor\'s whole list (minus the NPC entry). `extendedCost` is an `ItemExtendedCost.dbc` id for honor, arena points or tokens, 0 for gold alone (the gold price is the buy price of the item). An NPC with any stock is a vendor; none, not. Writing it replaces the whole list. An existing database vendor arrives with its stock already in `vendor`; if its `origin.original` has no `npc_vendor` it was brought in before stock was read, so its `vendor` is not written.',
+  '- `trainer` — `null`, or what it teaches; its `type` is `class`, `mount`, `profession` or `pet`.',
   '- `seenBy` — who sees it: `living` players (the default), only the `dead` (a spirit healer) or `both`.',
   '- `events` — `asIs`, or a rule `{ mode, events }` for the game events its spawns follow: `during` puts them in the world only while one of the listed events runs, `except` takes them out while one runs.',
   '- `origin` — `new`, or `existing` for a database NPC the project took over; an existing one may be `locked` for `fight` or `loot`.',
