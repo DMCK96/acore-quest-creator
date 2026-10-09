@@ -101,8 +101,8 @@ describe('a menu other NPCs use', () => {
   it('errors when an option the database ties to a script, or its menu, is gone', () => {
     const dropped = edit(read(0), (m) => ({ ...m, options: m.options.filter((o) => !o.kept) }));
     expect(codes(check(dropped))).toEqual(['error:GOSSIP_KEPT_REMOVED']);
-    const noMenu = { ...read(0), gossipMenu: null };
-    expect(codes(check(noMenu))).toEqual(['error:GOSSIP_KEPT_REMOVED']);
+    // Giving up the link deletes nothing a kept option needs, so it is allowed
+    expect(check({ ...read(0), gossipMenu: null })).toEqual([]);
     // Walking away from a shared menu deletes nothing
     expect(check({ ...read(3), gossipMenu: null })).toEqual([]);
   });

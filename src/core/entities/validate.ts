@@ -221,14 +221,7 @@ export function entityIssues(input: {
         }
       }
     }
-    // Taking the whole menu away must not take an option the database ties to a condition or a script with it
-    if ('gossipMenu' in entity && !entity.gossipMenu && entity.origin.kind === 'existing' && !gossipUnread(entity)) {
-      const was = npcFromRows(entity.entry, entity.origin.original, { sharedLoot: entity.origin.sharedLoot, spawnCount: entity.origin.spawnCount, sharedMenus: entity.origin.sharedMenus, sharedTexts: entity.origin.sharedTexts }).gossipMenu;
-      for (const before of was?.menus ?? []) {
-        // (A locked menu is never written, so walking away from it deletes nothing)
-        if (!before.locked && before.options.some((o) => o.kept)) add('error', 'GOSSIP_KEPT_REMOVED', `menu ${before.menuId} had an option the database ties to a condition or a script, and it is no longer there; keep it.`);
-      }
-    }
+    // (Taking the whole menu away only clears the NPC's link: a menu with an option the database ties to a condition or a script is left in place)
     if ('gossipMenu' in entity && entity.gossipMenu) {
       const tree = entity.gossipMenu;
       if (gossipUnread(entity)) {
@@ -263,6 +256,9 @@ export function entityIssues(input: {
               for (const o of m.options) if (o.action.kind === 'menu' && !reached.has(o.action.menuId)) { reached.add(o.action.menuId); grew = true; }
             }
           }
+          // A menu taken out of the tree has its rows deleted (unless it is locked or holds a kept option), so nothing may still open it
+          const removed = new Set((asRead?.menus ?? []).filter((b) => !b.locked && !b.options.some((o) => o.kept) && !tree.menus.some((m) => m.menuId === b.menuId)).map((b) => b.menuId));
+          for (const m of tree.menus) for (const o of m.options) if (o.action.kind === 'menu' && removed.has(o.action.menuId)) add('error', 'GOSSIP_REMOVED_MENU', `option ${o.optionId} of menu ${m.menuId} opens menu ${o.action.menuId}, which this edit removes; point the option elsewhere or remove it.`);
           for (const m of tree.menus) if (!reached.has(m.menuId)) add('warning', 'GOSSIP_UNREACHABLE', `menu ${m.menuId} is not opened by any option, so players cannot reach it.`);
         }
         // What flags the NPC has, for the service options: the original row's, with the ones the project sets laid over
@@ -271,8 +267,8 @@ export function entityIssues(input: {
         for (const m of tree.menus) {
           const before = asRead?.menus.find((x) => x.menuId === m.menuId);
           if (existing && before && sameGossipMenu(m, before)) continue;
-          if (m.locked && before) {
-            add('warning', 'GOSSIP_LOCKED', `menu ${m.menuId} is shared with other NPCs or objects, so this edit is not written; use Give it its own copy in the editor first.`);
+          if (m.locked || before?.locked) {
+            if (before) add('warning', 'GOSSIP_LOCKED', `menu ${m.menuId} is shared with other NPCs or objects, so this edit is not written; use Give it its own copy in the editor first.`);
             continue;
           }
           if (before && otherUsers(m.menuId) > 0) {
@@ -281,11 +277,15 @@ export function entityIssues(input: {
           if (m.menuId <= 0 || m.textId <= 0) add('error', 'GOSSIP_NO_ID', `menu ${m.menuId} has no menu or text id; allocate them with allocate_ids, kinds gossipMenu and gossipText.`);
           if (m.greeting.every((v) => v.probability <= 0)) add('error', 'GOSSIP_NO_GREETING', `menu ${m.menuId} has no greeting that could be chosen: give a variant a chance above 0.`);
           else if (m.greeting.some((v) => v.text.trim() === '' && v.textFemale.trim() === '')) add('warning', 'GOSSIP_EMPTY_GREETING', `menu ${m.menuId} has a greeting variant with no text.`);
+          const optionIds = new Set<number>();
           for (const o of m.options) {
+            if (optionIds.has(o.optionId)) add('error', 'GOSSIP_OPTION_DUPLICATE', `menu ${m.menuId} has two options with id ${o.optionId}; each option needs its own.`);
+            optionIds.add(o.optionId);
             if (o.text.trim() === '') add('error', 'GOSSIP_OPTION_NO_TEXT', `option ${o.optionId} of menu ${m.menuId} has no text.`);
             if (o.action.kind === 'menu' && !ownMenuIds.has(o.action.menuId) && facts && !facts.knownMenu(o.action.menuId)) {
               add('warning', 'GOSSIP_UNKNOWN_MENU', `option ${o.optionId} of menu ${m.menuId} opens menu ${o.action.menuId}, which neither the database nor this NPC has.`);
             }
+            if (o.action.kind === 'service' && o.action.npcFlag === 0) add('warning', 'GOSSIP_SERVICE_FLAG', `option ${o.optionId} of menu ${m.menuId} has no NPC flag, so the server never shows it.`);
             if (o.action.kind === 'service' && o.action.npcFlag > 1 && (flags & o.action.npcFlag) !== o.action.npcFlag) {
               const service = o.action;
               const label = GOSSIP_SERVICES.find((s) => s.type === service.type && s.npcFlag === service.npcFlag)?.label ?? `type ${service.type}`;
@@ -295,11 +295,11 @@ export function entityIssues(input: {
           // An id new to the project must be its own: not another NPC's or object's, nor another new menu's here
           if (!before && m.menuId > 0) {
             if (otherUsers(m.menuId) > 0) add('error', 'GOSSIP_ID_TAKEN', `menu id ${m.menuId} is already used by another NPC or object, so writing it would change theirs; allocate a free one with allocate_ids, kind gossipMenu.`);
-            if ((newMenuIds.get(m.menuId) ?? 0) > 1) add('error', 'GOSSIP_ID_DUPLICATE', `another NPC in this project has the same menu id ${m.menuId}; each menu needs its own.`);
+            if ((newMenuIds.get(m.menuId) ?? 0) > 1) add('error', 'GOSSIP_ID_DUPLICATE', `another menu in this project has the same menu id ${m.menuId}; each menu needs its own.`);
           }
           if (!before && m.textId > 0) {
             if ((facts?.textMenus.get(m.textId) ?? []).some((menu) => !ownMenuIds.has(menu))) add('error', 'GOSSIP_ID_TAKEN', `text id ${m.textId} is already used by another menu, so writing it would change theirs; allocate a free one with allocate_ids, kind gossipText.`);
-            if ((newTextIds.get(m.textId) ?? 0) > 1) add('error', 'GOSSIP_ID_DUPLICATE', `another NPC in this project has the same text id ${m.textId}; each menu needs its own.`);
+            if ((newTextIds.get(m.textId) ?? 0) > 1) add('error', 'GOSSIP_ID_DUPLICATE', `another menu in this project has the same text id ${m.textId}; each menu needs its own.`);
           }
         }
       }

@@ -7,9 +7,13 @@ export function blankMenu(menuId: number, textId: number): GossipMenu {
   return { menuId, textId, locked: false, greeting: [{ text: '', textFemale: '', probability: 1 }], options: [] };
 }
 
-/** The id a new option takes: one above the menu's highest, 0 for the first; never a freed one (conditions and scripts name ids) */
-export function nextOptionId(menu: GossipMenu): number {
-  return menu.options.length === 0 ? 0 : Math.max(...menu.options.map((o) => o.optionId)) + 1;
+/**
+ * The id a new option takes: one above the menu's highest, 0 for the first; never a freed one (conditions and scripts
+ * name ids), so `had` lists the ids the menu had when it was read
+ */
+export function nextOptionId(menu: GossipMenu, had: readonly number[] = []): number {
+  const all = [...menu.options.map((o) => o.optionId), ...had];
+  return all.length === 0 ? 0 : Math.max(...all) + 1;
 }
 
 /** The locked menus a menu reaches through its options, itself included when it is locked: what a copy of it has to take along */

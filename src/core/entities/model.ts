@@ -386,7 +386,7 @@ export function sameGossipMenu(a: GossipMenu, b: GossipMenu): boolean {
   return (
     a.menuId === b.menuId && a.textId === b.textId &&
     a.greeting.length === b.greeting.length && a.greeting.every((v, i) => v.text === b.greeting[i]!.text && v.textFemale === b.greeting[i]!.textFemale && v.probability === b.greeting[i]!.probability) &&
-    a.options.length === b.options.length && a.options.every((o, i) => sameGossipOption(o, b.options[i]!))
+    a.options.length === b.options.length && a.options.every((o) => { const p = b.options.find((x) => x.optionId === o.optionId); return p !== undefined && sameGossipOption(o, p); })
   );
 }
 

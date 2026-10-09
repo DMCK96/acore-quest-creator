@@ -134,9 +134,22 @@ describe('what the database holds for a new NPC\'s menus', () => {
     db.insert('gossip_menu_option', { MenuID: '932536', OptionID: '0', OptionText: 'Sub' });
     db.insert('smart_scripts', { entryorguid: '12000001', source_type: '0', id: '0', link: '0', event_type: '62', event_param1: '932535', event_param2: '5' });
     const context = await readEntityContext(db, { npcs: [{ ...host, gossipMenu: { menus: [root, sub] } }, { ...plain, entry: 555 }], objects: [], items: [] }, []);
-    expect(context.gossipOptions).toEqual(expect.arrayContaining([{ MenuID: '932535', OptionID: '5' }, { MenuID: '777', OptionID: '0' }, { MenuID: '932536', OptionID: '0' }]));
+    expect(context.gossipOptions).toEqual(expect.arrayContaining([{ MenuID: '932535', OptionID: '5', ActionMenuID: '0' }, { MenuID: '777', OptionID: '0', ActionMenuID: '0' }, { MenuID: '932536', OptionID: '0', ActionMenuID: '0' }]));
     expect(context.gossipMenus).toEqual(expect.arrayContaining([{ MenuID: '932535', TextID: '9780013' }, { MenuID: '777', TextID: '555' }]));
     expect(context.gossipUsers).toEqual(expect.arrayContaining([{ MenuID: '932535', Entry: '12000001' }, { MenuID: '777', Entry: '555' }, { MenuID: '777', Entry: '556' }, { MenuID: '932536', Entry: '-1' }]));
     expect(context.gossipScripted).toEqual([{ event_param1: '932535', event_param2: '5' }]);
+  });
+
+  it('follows the options to the menus they open, and reads who else opens them', async () => {
+    const db = forkDb();
+    db.insert('creature_template', { entry: '12000001', name: 'Hela', gossip_menu_id: '932535' });
+    db.insert('gossip_menu_option', { MenuID: '932535', OptionID: '0', OptionText: 'More', ActionMenuID: '932536' });
+    db.insert('gossip_menu_option', { MenuID: '932536', OptionID: '0', OptionText: 'Deeper', ActionMenuID: '932537' });
+    db.insert('gossip_menu_option', { MenuID: '4000', OptionID: '0', OptionText: 'Other way in', ActionMenuID: '932537' });
+    db.insert('gossip_menu', { MenuID: '932537', TextID: '9780015' });
+    const context = await readEntityContext(db, { npcs: [{ ...host, gossipMenu: { menus: [root] } }], objects: [], items: [] }, []);
+    expect(context.gossipOptions.map((r) => r.MenuID)).toEqual(expect.arrayContaining(['932535', '932536']));
+    expect(context.gossipMenus).toContainEqual({ MenuID: '932537', TextID: '9780015' });
+    expect(context.gossipOpeners).toEqual(expect.arrayContaining([{ MenuID: '932536', ActionMenuID: '932537' }, { MenuID: '4000', ActionMenuID: '932537' }]));
   });
 });

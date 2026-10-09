@@ -103,12 +103,18 @@ function gossipOf(rows: OriginalRows, counts: ExistingCounts): GossipTree | null
     order.push(id);
     for (const o of optionsOf(id)) if (numberOf(o.ActionMenuID) > 0) queue.push(numberOf(o.ActionMenuID));
   }
+  // A text two menus of the tree name is theirs together: neither can change it alone
+  const textUses = new Map<number, number>();
+  for (const id of order) {
+    const t = numberOf(menuRows.find((r) => numberOf(r.MenuID) === id)?.TextID);
+    textUses.set(t, (textUses.get(t) ?? 0) + 1);
+  }
   const menus = order.map((id): GossipMenu => {
     const own = menuRows.filter((r) => numberOf(r.MenuID) === id);
     const textId = numberOf(own[0]?.TextID);
     const text = textRows.find((r) => numberOf(r.ID) === textId);
     const conditioned = conditions.some((c) => numberOf(c.SourceTypeOrReferenceId) === 14 && numberOf(c.SourceGroup) === id);
-    const locked = (counts.sharedMenus?.[id] ?? 0) > 0 || (counts.sharedTexts?.[textId] ?? 0) > 0 || own.length !== 1 || conditioned || !text || textId <= 0;
+    const locked = (counts.sharedMenus?.[id] ?? 0) > 0 || (counts.sharedTexts?.[textId] ?? 0) > 0 || (textUses.get(textId) ?? 0) > 1 || own.length !== 1 || conditioned || !text || textId <= 0;
     const options = optionsOf(id).map((r): GossipOption => {
       const optionId = numberOf(r.OptionID);
       const tied = conditions.some((c) => numberOf(c.SourceTypeOrReferenceId) === 15 && numberOf(c.SourceGroup) === id && numberOf(c.SourceEntry) === optionId) ||

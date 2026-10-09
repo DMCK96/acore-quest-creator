@@ -118,6 +118,8 @@ const VARIANTS = 8;
 /** A menu's text row: the original columns with the greeting laid over; a variant whose text changed loses its broadcast text */
 function gossipTextRow(menu: GossipMenu, read: GossipMenu | undefined, original: Row | undefined): Row {
   const row: Row = { ...original, ID: text(menu.textId) };
+  // A variant removed moves the ones after it up a slot, and the language and emotes belong to the slot: they are reset
+  const shifted = read !== undefined && menu.greeting.length < read.greeting.length;
   // A column the database left NULL stays NULL while the text it holds is empty
   const keepNull = (column: string, value: string): string | null => (value === '' && original !== undefined && original[column] === null ? null : value);
   for (let i = 0; i < VARIANTS; i++) {
@@ -128,7 +130,7 @@ function gossipTextRow(menu: GossipMenu, read: GossipMenu | undefined, original:
       row[`text${i}_0`] = keepNull(`text${i}_0`, v.text);
       row[`text${i}_1`] = keepNull(`text${i}_1`, v.textFemale);
       row[`Probability${i}`] = text(v.probability);
-      row[`BroadcastTextID${i}`] = same ? (original?.[`BroadcastTextID${i}`] ?? '0') : '0';
+      row[`BroadcastTextID${i}`] = same && !shifted ? (original?.[`BroadcastTextID${i}`] ?? '0') : '0';
     } else if (was) {
       // A variant that was read and is gone
       row[`text${i}_0`] = keepNull(`text${i}_0`, '');
@@ -137,13 +139,18 @@ function gossipTextRow(menu: GossipMenu, read: GossipMenu | undefined, original:
       row[`BroadcastTextID${i}`] = '0';
     }
   }
+  if (shifted) {
+    for (let i = 0; i < VARIANTS; i++) {
+      for (const column of [`lang${i}`, ...[0, 1, 2].flatMap((k) => [`EmoteDelay${i}_${k}`, `Emote${i}_${k}`])]) if (original && column in original) row[column] = '0';
+    }
+  }
   return row;
 }
 
 /** An option's row: the original (written as it is when the option is unchanged) with the modelled columns laid over it */
 function gossipOptionRow(menuId: number, option: GossipOption, read: GossipOption | undefined, original: Row | undefined): Row {
   if (read && original && sameGossipOption(option, read)) return original;
-  const row: Row = { ...original, MenuID: text(menuId), OptionID: text(option.optionId), OptionIcon: text(option.icon), OptionText: option.text };
+  const row: Row = { ...original, MenuID: text(menuId), OptionID: text(option.optionId), OptionIcon: text(option.icon), OptionText: option.text === '' && original !== undefined && original.OptionText === null ? null : option.text };
   // The translation of a text that changed no longer says what it does
   if (original) row.OptionBroadcastTextID = read && read.text === option.text ? (original.OptionBroadcastTextID ?? '0') : '0';
   const action = option.action;
@@ -174,17 +181,21 @@ function writeGossip(out: Statements, origin: Existing, tree: GossipTree | null,
       menu && menu.textId > 0 ? [{ ...rowsOf(origin, 'gossip_menu').find((r) => num(r.MenuID) === menuId && num(r.TextID) === menu.textId), MenuID: text(menuId), TextID: text(menu.textId) }] : []);
     writeTable(out, origin, 'npc_text', textIds.map((id) => ({ ID: text(id) })),
       menu && menu.textId > 0 ? [gossipTextRow(menu, before, rowsOf(origin, 'npc_text').find((r) => num(r.ID) === menu.textId))] : []);
-    const keptIds = new Set((before?.options ?? []).filter((o) => o.kept).map((o) => o.optionId));
-    const ids = [...new Set([...(menu?.options ?? []).map((o) => o.optionId), ...(before?.options ?? []).filter((o) => !o.kept).map((o) => o.optionId)])].sort((a, b) => a - b);
+    // A kept option is only written when its text or icon changed (its action is the one it was read with); a removed one stays
+    const readOption = (id: number): GossipOption | undefined => before?.options.find((b) => b.optionId === id);
+    const written = (menu?.options ?? [])
+      .map((o) => (readOption(o.optionId)?.kept ? { ...o, action: readOption(o.optionId)!.action, kept: true } : o))
+      .filter((o) => !(readOption(o.optionId)?.kept && sameGossipOption(o, readOption(o.optionId)!)));
+    const ids = [...new Set([...written.map((o) => o.optionId), ...(before?.options ?? []).filter((o) => !o.kept).map((o) => o.optionId)])].sort((a, b) => a - b);
     if (ids.length > 0) {
       writeTable(out, origin, 'gossip_menu_option', ids.map((id) => ({ MenuID: text(menuId), OptionID: text(id) })),
-        (menu?.options ?? []).filter((o) => !keptIds.has(o.optionId)).map((o) => gossipOptionRow(menuId, o, before?.options.find((b) => b.optionId === o.optionId), originalOption(o.optionId))));
+        written.map((o) => gossipOptionRow(menuId, o, readOption(o.optionId), originalOption(o.optionId))));
     }
   };
   for (const menu of held) {
     if (menu.locked) continue;
     const before = was.find((m) => m.menuId === menu.menuId);
-    if (before && sameGossipMenu(menu, before)) continue;
+    if (before?.locked || (before && sameGossipMenu(menu, before))) continue;
     write(menu, before);
   }
   for (const before of was) {

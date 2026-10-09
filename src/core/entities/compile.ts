@@ -118,10 +118,28 @@ export function compileEntities(input: {
 
   // A menu is this project's own when someone uses it and everyone who does is a project NPC (an object never is)
   const projectNpcs = new Set(entities.npcs.map((n) => n.entry));
-  const ownedMenu = (menu: number): boolean => {
+  const ownedRoot = (menu: number): boolean => {
     const users = context.gossipUsers.filter((u) => num(u.MenuID) === menu);
     return users.length > 0 && users.every((u) => projectNpcs.has(num(u.Entry)));
   };
+  // A menu an owned menu opens is owned too, when nothing else uses it as its menu nor opens it from outside the owned ones
+  const ownedMenus = new Set(context.gossipUsers.map((u) => num(u.MenuID)).filter(ownedRoot));
+  const reachable = new Set(ownedMenus);
+  for (let grew = true; grew; ) {
+    grew = false;
+    for (const r of context.gossipOptions) {
+      const next = num(r.ActionMenuID);
+      if (next > 0 && reachable.has(num(r.MenuID)) && !reachable.has(next) && !context.gossipUsers.some((u) => num(u.MenuID) === next)) { reachable.add(next); grew = true; }
+    }
+  }
+  for (let dropped = true; dropped; ) {
+    dropped = false;
+    for (const menu of [...reachable]) {
+      if (ownedMenus.has(menu)) continue;
+      if (context.gossipOpeners.some((r) => num(r.ActionMenuID) === menu && !reachable.has(num(r.MenuID)))) { reachable.delete(menu); dropped = true; }
+    }
+  }
+  const ownedMenu = (menu: number): boolean => reachable.has(menu);
   // A menu a quest scene wrote options into (a gossip-select script names it) is the scene's too: it is never cleared or removed here
   const sceneMenus = new Set(context.gossipScripted.map((r) => num(r.event_param1)));
   const removable = (menu: number): boolean => ownedMenu(menu) && !sceneMenus.has(menu);
