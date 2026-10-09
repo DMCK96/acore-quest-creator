@@ -64,9 +64,10 @@ export interface WorldDb {
   selectByPrefix?(table: string, column: string, prefix: string): Promise<RawRow[]>;
   /**
    * The largest value of a numeric column, or `null` for an empty table: where the next free global
-   * number (a path, a menu, an area trigger) starts. Throws `UnknownTableError` / `UnknownColumnError`.
+   * number (a path, a menu, an area trigger) starts; with `below`, the largest value under it (a table that
+   * keeps a stray id at the top of its range). Throws `UnknownTableError` / `UnknownColumnError`.
    */
-  selectMax?(table: string, column: string): Promise<number | null>;
+  selectMax?(table: string, column: string, below?: number): Promise<number | null>;
   /**
    * Creatures and objects on a map inside a box for the 3D view, each kind ordered by guid and at most
    * `limit`: with facing, display, scale, wander, patrol route and held items.

@@ -306,12 +306,12 @@ class MysqlWorldDb implements WorldDb {
     return rows.map((r) => ({ ...r }));
   }
 
-  async selectMax(table: string, column: string): Promise<number | null> {
+  async selectMax(table: string, column: string, below?: number): Promise<number | null> {
     const cols = await this.knownColumns(table);
     await this.checkColumns(table, cols, [column]);
-    const sql = `SELECT MAX(${ident(column)}) AS m FROM ${ident(table)}`;
+    const sql = `SELECT MAX(${ident(column)}) AS m FROM ${ident(table)}${below === undefined ? '' : ` WHERE ${ident(column)} < ?`}`;
     const rows = await this.run(`reading ${table}`, async () => {
-      const [result] = await this.pool.query(sql);
+      const [result] = await this.pool.query(sql, below === undefined ? [] : [below]);
       return result as Array<{ m: string | null }>;
     });
     const max = rows[0]?.m;

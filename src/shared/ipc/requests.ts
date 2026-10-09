@@ -215,7 +215,7 @@ const REQUEST_SCHEMAS: Record<keyof Api, z.ZodType<unknown[]>> = {
   findSpawns: z.tuple([z.enum(['creature', 'gameobject']), z.number().int()]),
   spawnPlacement: z.tuple([z.enum(['npc', 'object']), z.number().int()]),
   questSpawnList: z.tuple([z.array(z.number().int().min(1)).max(50)]),
-  allocateIds: z.tuple([z.enum(['creature', 'gameobject', 'creatureSpawn', 'gameobjectSpawn', 'page', 'item', 'trainer']), z.number().int().min(1).max(50)]),
+  allocateIds: z.tuple([z.enum(['creature', 'gameobject', 'creatureSpawn', 'gameobjectSpawn', 'page', 'item', 'trainer', 'gossipMenu', 'gossipText']), z.number().int().min(1).max(50)]),
   patrolPathId: z.tuple([z.number().int().min(1)]),
   entityTemplate: z.tuple([z.enum(['creature', 'gameobject', 'item']), z.number().int()]),
   itemColumns: z.tuple([]),

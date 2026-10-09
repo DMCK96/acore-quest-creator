@@ -147,9 +147,9 @@ export class FakeWorldDb implements WorldDb {
     return (await this.selectRows(table, {})).filter((row) => typeof row[column] === 'string' && row[column]!.startsWith(prefix));
   }
 
-  async selectMax(table: string, column: string): Promise<number | null> {
+  async selectMax(table: string, column: string, below?: number): Promise<number | null> {
     this.checkColumns(table, this.table(table), [column]);
-    const values = this.table(table).rows.map((r) => r[column]).filter((v): v is string => v !== null).map(Number);
+    const values = this.table(table).rows.map((r) => r[column]).filter((v): v is string => v !== null).map(Number).filter((v) => below === undefined || v < below);
     return values.length === 0 ? null : Math.max(...values);
   }
 

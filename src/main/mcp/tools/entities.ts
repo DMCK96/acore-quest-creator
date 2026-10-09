@@ -37,8 +37,8 @@ export const entityTools = [
     name: 'allocate_ids',
     title: 'Free ids for new content',
     description:
-      "Fresh ids for new NPCs (creature), objects (gameobject), their spawns, readable pages, items or trainers (a trainer's id, for an NPC that teaches spells): above everything in the database and the project, so they cannot collide. Nothing is reserved until you use them in upsert_entity.",
-    input: { kind: z.enum(['creature', 'gameobject', 'creatureSpawn', 'gameobjectSpawn', 'page', 'item', 'trainer']), count: z.number().int().min(1).max(50) },
+      "Fresh ids for new NPCs (creature), objects (gameobject), their spawns, readable pages, items, gossip menus (gossipMenu) or their texts (gossipText), or trainers (a trainer's id, for an NPC that teaches spells): above everything in the database and the project, so they cannot collide. Nothing is reserved until you use them in upsert_entity.",
+    input: { kind: z.enum(['creature', 'gameobject', 'creatureSpawn', 'gameobjectSpawn', 'page', 'item', 'trainer', 'gossipMenu', 'gossipText']), count: z.number().int().min(1).max(50) },
     write: false,
     run: ({ kind, count }, ctx) => ctx.call('allocateIds', kind, count),
   }),

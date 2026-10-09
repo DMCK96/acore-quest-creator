@@ -97,6 +97,16 @@ describe('entity tools', () => {
     expect(order).toEqual([]);
   });
 
+  it('allocate_ids can hand out gossip menu and text ids', async () => {
+    const { call } = await mcpFixture(allTools);
+    for (const kind of ['gossipMenu', 'gossipText']) {
+      const result = await call('allocate_ids', { kind, count: 2 });
+      expect(result.isError).toBeFalsy();
+      expect(result.value).toHaveLength(2);
+      expect(result.value[1] - result.value[0]).toBe(1);
+    }
+  });
+
   it('allocate_ids can hand out trainer ids', async () => {
     const { call } = await mcpFixture(allTools);
     const result = await call('allocate_ids', { kind: 'trainer', count: 2 });

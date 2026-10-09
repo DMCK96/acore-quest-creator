@@ -4,7 +4,7 @@ import type { EntityRef } from '@core/entities/entity';
 import type { ColumnInfo } from '@core/db/types';
 import type { Result } from './result';
 
-export type AllocKind = 'creature' | 'gameobject' | 'creatureSpawn' | 'gameobjectSpawn' | 'page' | 'item' | 'trainer';
+export type AllocKind = 'creature' | 'gameobject' | 'creatureSpawn' | 'gameobjectSpawn' | 'page' | 'item' | 'trainer' | 'gossipMenu' | 'gossipText';
 
 /** Fields an existing NPC or object lends a new one. */
 export type EntityTemplate =

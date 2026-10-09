@@ -9,6 +9,9 @@ import type { EntitiesApi } from '../../shared/ipc';
 import type { Services } from './services';
 import { fail, run } from './errors';
 
+/** `npc_text` keeps one stray id at the top of its range (16777215); text ids are allocated below it */
+const GOSSIP_TEXT_LIMIT = 16_000_000;
+
 /** The project's NPCs, objects and items: ids for new ones, templates to start from, and editing existing ones */
 export function createEntitiesApi(s: Services): EntitiesApi {
   const { deps, connected, quests, asOneStep, putEntities, projectEntities, exportSchema } = s.ctx;
@@ -27,10 +30,12 @@ export function createEntitiesApi(s: Services): EntitiesApi {
           page: ['page_text', 'ID'],
           item: ['item_template', 'entry'],
           trainer: ['trainer', 'Id'],
+          gossipMenu: ['gossip_menu', 'MenuID'],
+          gossipText: ['npc_text', 'ID'],
         }[kind] as [string, string];
         let dbMax = 0;
         try {
-          dbMax = (await live.db.selectMax?.(table, column)) ?? 0;
+          dbMax = (await live.db.selectMax?.(table, column, kind === 'gossipText' ? GOSSIP_TEXT_LIMIT : undefined)) ?? 0;
         } catch {
           dbMax = 0;
         }
@@ -42,6 +47,26 @@ export function createEntitiesApi(s: Services): EntitiesApi {
             // A fork without the table has none
           }
         }
+        // Other places that name a menu or a text count too, though their rows are missing
+        const also: [string, string, number | undefined][] =
+          kind === 'gossipMenu' ? [['gossip_menu_option', 'MenuID', undefined], ['creature_template', 'gossip_menu_id', undefined]]
+          : kind === 'gossipText' ? [['gossip_menu', 'TextID', GOSSIP_TEXT_LIMIT]]
+          : [];
+        for (const [otherTable, otherColumn, below] of also) {
+          try {
+            dbMax = Math.max(dbMax, (await live.db.selectMax?.(otherTable, otherColumn, below)) ?? 0);
+          } catch {
+            // A fork without the table has none
+          }
+        }
+        if (kind === 'gossipMenu') {
+          try {
+            const menus = await live.db.selectRows('gameobject_template', { type: '2' });
+            dbMax = Math.max(dbMax, ...menus.map((r) => Number(r.Data3 ?? 0)));
+          } catch {
+            // A fork without the table has none
+          }
+        }
         const { npcs, objects, items } = projectEntities();
         const used =
           kind === 'creature' ? npcs.map((n) => n.entry)
@@ -49,6 +74,8 @@ export function createEntitiesApi(s: Services): EntitiesApi {
           : kind === 'item' ? items.map((i) => i.entry)
           : kind === 'creatureSpawn' ? [...npcs.flatMap((n) => n.spawns.map((s) => s.guid)), ...placedGuids('creature')]
           : kind === 'trainer' ? npcs.flatMap((n) => (n.trainer ? [n.trainer.trainerId] : []))
+          : kind === 'gossipMenu' ? npcs.flatMap((n) => (n.gossipMenu?.menus ?? []).map((m) => m.menuId))
+          : kind === 'gossipText' ? npcs.flatMap((n) => (n.gossipMenu?.menus ?? []).map((m) => m.textId))
           : kind === 'page' ? [...objects, ...items].flatMap((o) => o.pages.map((p) => p.id))
           : [...objects.flatMap((o) => o.spawns.map((s) => s.guid)), ...placedGuids('gameobject')];
         const base = Math.max(dbMax, ...used, 0);
