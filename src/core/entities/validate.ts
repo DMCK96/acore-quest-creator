@@ -1,6 +1,6 @@
 import { fightIssues } from '../combat/validate';
 import type { Issue } from '../validate/validate';
-import { ENTITIES_FIELD, vendorUnread, type CustomItem, type CustomNpc, type CustomObject, type QuestEntities } from './model';
+import { ENTITIES_FIELD, trainerUnread, vendorUnread, type CustomItem, type CustomNpc, type CustomObject, type QuestEntities } from './model';
 import { missingChoice } from '../patrol/compile';
 
 /**
@@ -15,6 +15,9 @@ const NUMBER = /^-?\d+(\.\d+)?$/;
 const MAX_VENDOR_ITEMS = 150;
 /** `ItemClass` Quest: something the player carries for a quest, never worn. */
 const QUEST_CLASS = 12;
+
+/** The trainer id an existing NPC was read with, or '' when it had none */
+const readTrainerId = (npc: CustomNpc): string => (npc.origin.kind === 'existing' ? (npc.origin.original.creature_default_trainer?.[0]?.TrainerId ?? '') : '');
 
 /** What is wrong with the project's NPCs, objects and items, each issue routed to their module; an existing one is not checked for spawns or a taken entry. */
 export function entityIssues(input: {
@@ -35,6 +38,8 @@ export function entityIssues(input: {
   knownItem?: ((id: number) => boolean) | null;
   /** Whether an extended cost is in the server's `ItemExtendedCost.dbc`; null skips the check. */
   knownExtendedCost?: ((id: number) => boolean) | null;
+  /** Whether the database already has a trainer under an id that is not this project's own; null skips the check. */
+  trainerIdTaken?: ((id: number) => boolean) | null;
 }): Issue[] {
   const questItems = new Set(input.questItems ?? []);
   const issues: Issue[] = [];
@@ -129,6 +134,36 @@ export function entityIssues(input: {
       }
       if (vendorUnread(entity) && entity.vendor.length > 0) {
         add('warning', 'VENDOR_NOT_READ', 'its stock was never read from the database, so this stock is not written; put the NPC back as the database has it and edit it again.');
+      }
+    }
+    if ('trainer' in entity && entity.trainer) {
+      const trainer = entity.trainer;
+      if (trainerUnread(entity)) {
+        add('warning', 'TRAINER_NOT_READ', 'its trainer was never read from the database, so this trainer is not written; put the NPC back as the database has it and edit it again.');
+      } else if (!(entity.origin.kind === 'existing' && entity.origin.locked.includes('trainer') && String(trainer.trainerId) === readTrainerId(entity))) {
+        if (trainer.trainerId <= 0) add('error', 'TRAINER_NO_ID', 'it has no trainer id; allocate one with allocate_ids, kind trainer.');
+        if (trainer.type === 'class' && trainer.requirement === 0) add('error', 'TRAINER_NO_CLASS', 'it is a class trainer with no class chosen, so no player could use it.');
+        if (trainer.spells.length === 0) add('warning', 'TRAINER_EMPTY', 'it teaches nothing.');
+        const seen = new Set<number>();
+        const repeated = new Set<number>();
+        for (const row of trainer.spells) {
+          if (row.spell <= 0) {
+            add('error', 'TRAINER_NO_SPELL', 'a spell row has no spell.');
+            continue;
+          }
+          if (seen.has(row.spell) && !repeated.has(row.spell)) {
+            repeated.add(row.spell);
+            add('error', 'TRAINER_DUPLICATE', `spell ${row.spell} is listed twice; the database allows each spell once.`);
+          }
+          seen.add(row.spell);
+          if (row.reqSpells.includes(row.spell)) add('error', 'TRAINER_REQ_SPELL', `spell ${row.spell} needs itself first.`);
+        }
+        if (input.knownSpell) {
+          for (const spell of seen) if (!input.knownSpell(spell)) add('warning', 'TRAINER_UNKNOWN_SPELL', `spell ${spell} is not in the server's spell list.`);
+        }
+        // Only a trainer new to the project: a new NPC's, or an own copy under an id it did not read
+        const isNew = entity.origin.kind !== 'existing' || String(trainer.trainerId) !== readTrainerId(entity);
+        if (isNew && trainer.trainerId > 0 && input.trainerIdTaken?.(trainer.trainerId)) add('warning', 'TRAINER_ID_TAKEN', `trainer id ${trainer.trainerId} is already a trainer in the database.`);
       }
     }
     if ('fight' in entity && entity.fight) issues.push(...fightIssues(entity.fight, label, input.knownSpell ?? null, input.objectives ?? null));
