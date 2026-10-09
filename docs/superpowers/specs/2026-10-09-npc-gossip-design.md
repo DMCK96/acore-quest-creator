@@ -82,8 +82,8 @@ Checked against the fork's `acore_world` on 2026-10-09 (6,336 menus, 4,889 optio
 `CustomNpc` (`src/core/entities/model.ts`) gains
 
 ```ts
-gossip: gossipSchema.nullable().default(null)
-gossip = { menus: array(gossipMenu) }                  // menus[0] is the NPC's root menu
+gossipMenu: gossipTreeSchema.nullable().default(null)   // `gossip` is already the Can be talked to flag
+gossipTree = { menus: array(gossipMenu).min(1) }        // menus[0] is the NPC's root menu
 gossipMenu = { menuId: int, textId: int, greeting: array(textVariant).min(1).max(8),
                options: array(gossipOption), locked: boolean }
 textVariant = { text: string, textFemale: string, probability: number.min(0) }
@@ -92,7 +92,7 @@ gossipAction = { kind: 'close' } | { kind: 'menu', menuId: int.positive() }
              | { kind: 'service', type: int, npcFlag: int }
 ```
 
-- `gossip` is not null when the NPC has a gossip menu; export sets `creature_template.gossip_menu_id` to the root
+- `gossipMenu` is not null when the NPC has a gossip menu; export sets `creature_template.gossip_menu_id` to the root
   menu's id and sets bit 1 of `npcflag`. `null` clears `gossip_menu_id` and leaves bit 1 to the existing
   **Can be talked to** checkbox. Every other bit stays as the database has it.
 - `locked` is read-only data: the menu is shared with other NPCs or objects, or has more than one text row, or its
@@ -141,6 +141,7 @@ gossipAction = { kind: 'close' } | { kind: 'menu', menuId: int.positive() }
 ## Validation (`validate.ts`)
 
 Errors (stop an export):
+- `GOSSIP_KEPT_REMOVED`: an option the database ties to a condition or a script, or a menu holding one, is no longer there.
 - `GOSSIP_NO_ID`: a menu or text with no id (`<= 0`).
 - `GOSSIP_OPTION_NO_TEXT`: an option with no text.
 - `GOSSIP_NO_GREETING`: every greeting variant has probability 0, so none could be chosen.
@@ -157,6 +158,7 @@ Warnings:
 - `GOSSIP_SCENE`: a quest scene with a gossip option trigger owned by an NPC that has a menu here; the scene writes
   its own menu and option and does not know this one (resolved when scenes move to NPCs, spec 4).
 - `GOSSIP_LOCKED`: an edit to a locked menu, which is not written.
+- `GOSSIP_NOT_TALKABLE`: the NPC has a menu but **Can be talked to** is off, so players cannot open it.
 - `GOSSIP_NOT_READ`: gossip set on an existing NPC whose gossip was never read, so it is not written.
 
 An existing menu left as read is not checked: the database's own quirks are not the author's to fix.
