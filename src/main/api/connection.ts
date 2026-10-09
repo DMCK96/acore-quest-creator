@@ -7,6 +7,7 @@ import type { NavTile } from '../../core/game/navmesh';
 import type { ServerData } from '../server-data';
 import type { SpellIndex } from '../../core/game/spells';
 import type { SoundIndex } from '../../core/game/sounds';
+import type { ExtendedCostIndex } from '../../core/game/extended-costs';
 import type { QuestSortIndex } from '../../core/game/quest-sorts';
 import type { DisplayIndex } from '../../core/game/displays';
 import type { FactionTemplateIndex } from '../../core/game/faction-templates';
@@ -41,6 +42,8 @@ export interface Session {
   spellsReady?: SpellIndex;
   /** Sound names, loaded on the first sound search or lookup; a reason when there are none. */
   sounds?: Promise<SoundIndex | { reason: string }>;
+  /** What vendors ask for besides gold, loaded on the first search or lookup; a reason when there are none. */
+  extendedCosts?: Promise<ExtendedCostIndex | { reason: string }>;
   questSorts?: Promise<QuestSortIndex>;
   /** Looks and factions for new NPCs and objects, each loaded on first use. */
   looks?: Partial<Record<LookKind, Promise<DisplayIndex | FactionTemplateIndex | { reason: string }>>>;

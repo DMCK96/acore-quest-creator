@@ -42,7 +42,7 @@ async function readRewardRow(
 /** Searches and names: quests, NPCs, objects, items, spells, sounds, looks, rewards and events */
 export function createLookupApi(s: Services): LookupApi {
   const { connected, projectEntities } = s.ctx;
-  const { spellsOf, soundsOf, questSortsOf, lookOf, isLookKind, lookHits } = s.files;
+  const { spellsOf, soundsOf, extendedCostsOf, questSortsOf, lookOf, isLookKind, lookHits } = s.files;
 
   return {
     searchQuests: (text) => run(async () => connected().db.searchQuests(text, SEARCH_LIMIT)),
@@ -68,6 +68,10 @@ export function createLookupApi(s: Services): LookupApi {
         if (kind === 'sound') {
           const sounds = await soundsOf(connected());
           return 'reason' in sounds ? [] : sounds.search(text, ENTITY_SEARCH_LIMIT);
+        }
+        if (kind === 'extendedCost') {
+          const costs = await extendedCostsOf(connected());
+          return 'reason' in costs ? [] : costs.search(text, ENTITY_SEARCH_LIMIT);
         }
         if (isLookKind(kind)) return lookHits(connected(), kind, text);
         if (kind === 'questSort') return (await questSortsOf(connected())).search(text, ENTITY_SEARCH_LIMIT);
@@ -106,6 +110,16 @@ export function createLookupApi(s: Services): LookupApi {
           const names: Record<number, string> = {};
           for (const id of ids) {
             const name = index.get(id);
+            if (name !== undefined) names[id] = name;
+          }
+          return names;
+        }
+        if (kind === 'extendedCost') {
+          const costs = await extendedCostsOf(connected());
+          const names: Record<number, string> = {};
+          if ('reason' in costs) return names;
+          for (const id of ids) {
+            const name = costs.get(id);
             if (name !== undefined) names[id] = name;
           }
           return names;

@@ -10,7 +10,7 @@ export type AllocKind = 'creature' | 'gameobject' | 'creatureSpawn' | 'gameobjec
 export type EntityTemplate =
   | Partial<Omit<CustomNpc, 'entry' | 'spawns'>>
   | Partial<Omit<CustomObject, 'entry' | 'spawns'>>
-  | Pick<CustomItem, 'name' | 'displayId' | 'itemClass' | 'subclass' | 'inventoryType'>;
+  | Pick<CustomItem, 'name' | 'displayId' | 'itemClass' | 'subclass' | 'inventoryType' | 'buyPrice'>;
 
 /** The project's NPCs, objects and items: ids for new ones, templates to start from, and editing existing ones */
 export interface EntitiesApi {

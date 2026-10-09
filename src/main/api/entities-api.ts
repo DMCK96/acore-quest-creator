@@ -65,7 +65,7 @@ export function createEntitiesApi(s: Services): EntitiesApi {
           const item_template = await rowsOrNone(live.db, 'item_template', { entry: key });
           if (item_template.length === 0) return null;
           const i = itemFromRows(entry, { item_template });
-          return { name: i.name, displayId: i.displayId, itemClass: i.itemClass, subclass: i.subclass, inventoryType: i.inventoryType };
+          return { name: i.name, displayId: i.displayId, itemClass: i.itemClass, subclass: i.subclass, inventoryType: i.inventoryType, buyPrice: i.buyPrice };
         }
         const gameobject_template = await rowsOrNone(live.db, 'gameobject_template', { entry: key });
         if (gameobject_template.length === 0) return null;

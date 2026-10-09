@@ -5,6 +5,7 @@ import { AREA_TABLE_FILE, MAP_FILE } from '../../core/game/maps-dbc';
 import { TerrainFormatError, gridFileName, parseMapFile, type TerrainFile } from '../../core/game/terrain';
 import { readServerDataFile, type ServerDataFiles } from '../server-data';
 import { CAST_TIMES_FILE, RANGE_FILE, readSpellIndex, SPELL_FILE, type SpellIndex } from '../../core/game/spells';
+import { buildExtendedCostIndex, EXTENDED_COST_FILE, readExtendedCosts, type ExtendedCostIndex } from '../../core/game/extended-costs';
 import { readSoundIndex, SOUND_FILE, type SoundIndex } from '../../core/game/sounds';
 import { QUEST_SORT_FILE, readQuestSorts, type QuestSortIndex } from '../../core/game/quest-sorts';
 import { DISPLAY_FILES, readCreatureDisplays, readObjectDisplays, type DisplayIndex } from '../../core/game/displays';
@@ -122,6 +123,25 @@ export function createServerFiles(deps: ApiDeps) {
     return live.sounds;
   }
 
+  /** What vendors ask for besides gold, read on first use; item names come from the world database. */
+  function extendedCostsOf(live: Session): Promise<ExtendedCostIndex | { reason: string }> {
+    live.extendedCosts ??= (async () => {
+      const dir = live.serverData?.status.dir;
+      if (!dir) return { reason: 'Extended costs need the server data folder.' };
+      try {
+        const bytes = await readServerDataFile(dir, EXTENDED_COST_FILE, deps.serverDataFiles ?? NO_SERVER_DATA_FILES);
+        if (!bytes) return { reason: `${EXTENDED_COST_FILE} is not in ${dir} or its dbc folder.` };
+        const costs = readExtendedCosts(bytes);
+        const items = [...new Set([...costs.values()].flatMap((c) => c.items.map((i) => i.item)))];
+        const names = await live.db.lookupNames('item', items);
+        return buildExtendedCostIndex(costs, (id) => names.get(id));
+      } catch (error) {
+        return { reason: `${EXTENDED_COST_FILE} could not be read: ${error instanceof Error ? error.message : String(error)}` };
+      }
+    })();
+    return live.extendedCosts;
+  }
+
   /**
    * Quest log headings: zones from the server data folder, when it has them, and categories (from
    * `QuestSort.dbc`, or the stock list). A missing or unreadable file only loses its names.
@@ -212,7 +232,7 @@ export function createServerFiles(deps: ApiDeps) {
       return names.length > 0 ? { ...h, detail: `used by ${names.join(', ')}` } : h;
     });
   }
-  return { terrainAt, navTileAt, spellsOf, soundsOf, questSortsOf, lookOf, isLookKind, lookHits };
+  return { terrainAt, navTileAt, spellsOf, soundsOf, extendedCostsOf, questSortsOf, lookOf, isLookKind, lookHits };
 }
 
 export type ServerFiles = ReturnType<typeof createServerFiles>;

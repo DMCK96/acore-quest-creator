@@ -35,6 +35,7 @@ const REF_KINDS = [
   'skill',
   'questSort',
   'mailTemplate',
+  'extendedCost',
 ] as const;
 
 // Fails to compile if `RefKind` gains a member that the wire schema does not accept.
@@ -145,7 +146,7 @@ const REQUEST_SCHEMAS: Record<keyof Api, z.ZodType<unknown[]>> = {
   connect: z.tuple([z.number()]),
   searchQuests: z.tuple([z.string().max(MAX_SEARCH_TEXT)]),
   questsOfNpc: z.tuple([z.number().int()]),
-  searchEntities: z.tuple([z.enum(['item', 'creature', 'gameobject', 'quest', 'spell', 'sound', 'questSort', 'creatureDisplay', 'objectDisplay', 'factionTemplate']), z.string().max(MAX_SEARCH_TEXT)]),
+  searchEntities: z.tuple([z.enum(['item', 'creature', 'gameobject', 'quest', 'spell', 'sound', 'questSort', 'extendedCost', 'creatureDisplay', 'objectDisplay', 'factionTemplate']), z.string().max(MAX_SEARCH_TEXT)]),
   openQuest: z.tuple([z.number(), positionSchema.optional()]),
   newQuest: z.tuple([positionSchema.optional()]),
   addQuestChain: z.tuple([z.number(), positionSchema.optional()]),

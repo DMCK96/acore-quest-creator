@@ -25,7 +25,8 @@ export type RefKind =
   | 'zone'
   | 'skill'
   | 'questSort'
-  | 'mailTemplate';
+  | 'mailTemplate'
+  | 'extendedCost';
 
 export interface ColumnInfo {
   name: string;

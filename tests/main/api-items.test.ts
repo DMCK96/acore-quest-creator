@@ -64,7 +64,7 @@ describe('custom items through the API', () => {
   it('copies a look from an existing item and lists the columns for the advanced tab', async () => {
     const { api, db } = await setup();
     db.insert('item_template', { entry: '2589', name: 'Linen Cloth', displayid: '7426', class: '7', subclass: '5', InventoryType: '0' });
-    expect(((await api.entityTemplate('item', 2589)) as any).value).toEqual({ name: 'Linen Cloth', displayId: 7426, itemClass: 7, subclass: 5, inventoryType: 0 });
+    expect(((await api.entityTemplate('item', 2589)) as any).value).toEqual({ name: 'Linen Cloth', displayId: 7426, itemClass: 7, subclass: 5, inventoryType: 0, buyPrice: 0 });
     const cols: any = await api.itemColumns();
     expect(cols.value.map((c: any) => c.name)).toContain('holy_res');
   });
