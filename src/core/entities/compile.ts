@@ -116,6 +116,12 @@ export function compileEntities(input: {
   const creatureRows = new Map(context.creatures.map((r) => [num(r.entry), r]));
   const objectRows = new Map(context.gameobjects.map((r) => [num(r.entry), r]));
 
+  // A menu is this project's own when someone uses it and everyone who does is a project NPC (an object never is)
+  const projectNpcs = new Set(entities.npcs.map((n) => n.entry));
+  const ownedMenu = (menu: number): boolean => {
+    const users = context.gossipUsers.filter((u) => num(u.MenuID) === menu);
+    return users.length > 0 && users.every((u) => projectNpcs.has(num(u.Entry)));
+  };
   const creatureGuids = new Set<number>();
   const objectGuids = new Set<number>();
 
@@ -135,7 +141,8 @@ export function compileEntities(input: {
       // Who sees it, every other flag bit as its row already has them
       ...seenByColumns(npc.seenBy ?? 'living', existing ?? {}),
       // A fight or things to do on its patrol run on SmartAI; otherwise keep what quest scripting may have set.
-      AIName: fightIsEmpty(npc.fight) && !hasPointActions(npc) ? (existing?.AIName ?? '') : 'SmartAI', gossip_menu_id: existing?.gossip_menu_id ?? '0',
+      AIName: fightIsEmpty(npc.fight) && !hasPointActions(npc) ? (existing?.AIName ?? '') : 'SmartAI', // Its root menu; without one, what the database has, unless that menu is this project's own and is going
+      gossip_menu_id: npc.gossipMenu ? text(npc.gossipMenu.menus[0]!.menuId) : ownedMenu(num(existing?.gossip_menu_id)) ? '0' : (existing?.gossip_menu_id ?? '0'),
       // Creature loot is looked up by `lootid`; the NPC's own entry keeps its loot rows its own.
       ...(lootWritten > 0 ? { lootid: text(npc.entry) } : {}),
     });
@@ -156,6 +163,25 @@ export function compileEntities(input: {
         insert('trainer_spell', {
           TrainerId: id, SpellId: text(s.spell), MoneyCost: text(s.cost), ReqSkillLine: text(s.reqSkill), ReqSkillRank: text(s.reqSkillRank),
           ReqAbility1: text(s.reqSpells[0] ?? 0), ReqAbility2: text(s.reqSpells[1] ?? 0), ReqAbility3: text(s.reqSpells[2] ?? 0), ReqLevel: text(s.reqLevel),
+        });
+      }
+    }
+    for (const menu of npc.gossipMenu?.menus ?? []) {
+      if (menu.locked) continue;
+      insert('gossip_menu', { MenuID: text(menu.menuId), TextID: text(menu.textId) });
+      const variants: Row = { ID: text(menu.textId) };
+      menu.greeting.forEach((v, i) => {
+        variants[`text${i}_0`] = v.text;
+        variants[`text${i}_1`] = v.textFemale;
+        variants[`Probability${i}`] = text(v.probability);
+      });
+      insert('npc_text', variants);
+      for (const option of menu.options) {
+        const action = option.action;
+        insert('gossip_menu_option', {
+          MenuID: text(menu.menuId), OptionID: text(option.optionId), OptionIcon: text(option.icon), OptionText: option.text,
+          OptionType: text(action.kind === 'service' ? action.type : 1), OptionNpcFlag: text(action.kind === 'service' ? action.npcFlag : 1),
+          ActionMenuID: text(action.kind === 'menu' ? action.menuId : 0),
         });
       }
     }
@@ -292,6 +318,33 @@ export function compileEntities(input: {
     points.set(`${num(row.id)}/${num(row.point)}`, { id: text(num(row.id)), point: text(num(row.point)) });
   }
   add('waypoint_data', [...points.values()].sort((a, b) => num(a.id) - num(b.id) || num(a.point) - num(b.point)));
+  // Gossip: what the NPCs hold, and what a past export wrote there that they no longer hold, on menus only project NPCs use
+  const heldMenus = entities.npcs.flatMap((n) => (n.gossipMenu?.menus ?? []).filter((m) => !m.locked));
+  const heldOptionKeys = new Set(heldMenus.flatMap((m) => m.options.map((o) => `${m.menuId}/${o.optionId}`)));
+  const owned = ownedMenu;
+  const scripted = new Set(context.gossipScripted.map((r) => `${num(r.event_param1)}/${num(r.event_param2)}`));
+  const optionKeys = new Map<string, Row>();
+  for (const m of heldMenus) for (const o of m.options) optionKeys.set(`${m.menuId}/${o.optionId}`, { MenuID: text(m.menuId), OptionID: text(o.optionId) });
+  for (const r of context.gossipOptions) {
+    const key = `${num(r.MenuID)}/${num(r.OptionID)}`;
+    if (owned(num(r.MenuID)) && !scripted.has(key) && !heldOptionKeys.has(key)) optionKeys.set(key, { MenuID: text(num(r.MenuID)), OptionID: text(num(r.OptionID)) });
+  }
+  const menuKeys = new Map<string, Row>();
+  const textKeys = new Map<number, Row>();
+  for (const m of heldMenus) {
+    menuKeys.set(`${m.menuId}/${m.textId}`, { MenuID: text(m.menuId), TextID: text(m.textId) });
+    textKeys.set(m.textId, { ID: text(m.textId) });
+  }
+  const heldMenuIds = new Set(heldMenus.map((m) => m.menuId));
+  for (const r of context.gossipMenus) {
+    if (!owned(num(r.MenuID)) || heldMenuIds.has(num(r.MenuID))) continue;
+    menuKeys.set(`${num(r.MenuID)}/${num(r.TextID)}`, { MenuID: text(num(r.MenuID)), TextID: text(num(r.TextID)) });
+    textKeys.set(num(r.TextID), { ID: text(num(r.TextID)) });
+  }
+  const byNumbers = (a: Row, b: Row, ...columns: string[]): number => columns.reduce((d, c) => d || num(a[c]) - num(b[c]), 0);
+  add('gossip_menu_option', [...optionKeys.values()].sort((a, b) => byNumbers(a, b, 'MenuID', 'OptionID')));
+  add('gossip_menu', [...menuKeys.values()].sort((a, b) => byNumbers(a, b, 'MenuID', 'TextID')));
+  add('npc_text', [...textKeys.values()].sort((a, b) => byNumbers(a, b, 'ID')));
   // Loot rows written before and since removed, for NPCs and chests the project still has.
   const npcEntries = new Set(entities.npcs.map((n) => n.entry));
   const chestEntries = new Set(entities.objects.filter((o) => o.type === 'chest').map((o) => o.entry));

@@ -26,6 +26,9 @@ export const ENTITY_KEYS: Record<string, readonly string[]> = {
   creature_equip_template: ['CreatureID', 'ID'],
   item_template: ['entry'],
   npc_vendor: ['entry', 'item', 'ExtendedCost'],
+  gossip_menu: ['MenuID', 'TextID'],
+  gossip_menu_option: ['MenuID', 'OptionID'],
+  npc_text: ['ID'],
   creature_default_trainer: ['CreatureId'],
   trainer: ['Id'],
   trainer_spell: ['TrainerId', 'SpellId'],
@@ -53,6 +56,14 @@ export interface EntityContext {
   trainerIds: RawRow[];
   /** Every `creature_default_trainer` row (CreatureId, TrainerId) that names one of those trainers: who else uses them. */
   trainerUsers: RawRow[];
+  /** `gossip_menu_option` rows (MenuID, OptionID) of the menus the new NPCs hold or point at. */
+  gossipOptions: RawRow[];
+  /** `gossip_menu` rows (MenuID, TextID) of those menus. */
+  gossipMenus: RawRow[];
+  /** Who uses those menus: a creature by entry, or an object as Entry '-1' (never a project NPC). */
+  gossipUsers: RawRow[];
+  /** The gossip-select scripts (event_param1 the menu, event_param2 the option) that name those menus: options scenes own. */
+  gossipScripted: RawRow[];
 }
 
 export const EMPTY_ENTITY_CONTEXT: EntityContext = {
@@ -65,6 +76,10 @@ export const EMPTY_ENTITY_CONTEXT: EntityContext = {
   waypointRows: [],
   trainerIds: [],
   trainerUsers: [],
+  gossipOptions: [],
+  gossipMenus: [],
+  gossipUsers: [],
+  gossipScripted: [],
 };
 
 /**
@@ -104,6 +119,24 @@ export async function readEntityContext(db: WorldDb, entities: ProjectEntities, 
   const waypointRows = await rowsOrNone(db, 'waypoint_data', { id: [...pathIds] });
   const trainerIds = await rowsOrNone(db, 'creature_default_trainer', { CreatureId: npcEntries });
   const trainerUsers = trainerIds.length > 0 ? await rowsOrNone(db, 'creature_default_trainer', { TrainerId: [...new Set(trainerIds.map((r) => r.TrainerId ?? ''))] }) : [];
+  // The menus the new NPCs hold, or their templates point at: what a past export wrote there, and who else uses them
+  const menuIds = [...new Set([
+    ...entities.npcs.flatMap((n) => (n.gossipMenu ? n.gossipMenu.menus.map((m) => String(m.menuId)) : [])),
+    ...creatures.map((r) => r.gossip_menu_id ?? '0').filter((id) => id !== '0'),
+  ])];
+  const [gossipOptions, gossipMenus, menuCreatures, menuObjects, gossipScripted] = menuIds.length > 0
+    ? await Promise.all([
+      rowsOrNone(db, 'gossip_menu_option', { MenuID: menuIds }),
+      rowsOrNone(db, 'gossip_menu', { MenuID: menuIds }),
+      rowsOrNone(db, 'creature_template', { gossip_menu_id: menuIds }),
+      rowsOrNone(db, 'gameobject_template', { type: '2', Data3: menuIds }),
+      rowsOrNone(db, 'smart_scripts', { source_type: '0', event_type: '62', event_param1: menuIds }),
+    ])
+    : [[], [], [], [], []];
+  const gossipUsers = [
+    ...menuCreatures.map((r) => ({ MenuID: r.gossip_menu_id ?? '0', Entry: r.entry ?? '0' })),
+    ...menuObjects.map((r) => ({ MenuID: r.Data3 ?? '0', Entry: '-1' })),
+  ];
   return {
     creatures: pick(creatures, ['entry', 'AIName', 'gossip_menu_id', 'npcflag', 'flags_extra', 'type_flags']),
     gameobjects: pick(gameobjects, ['entry', 'AIName']),
@@ -114,5 +147,9 @@ export async function readEntityContext(db: WorldDb, entities: ProjectEntities, 
     waypointRows: pick(waypointRows, ['id', 'point']),
     trainerIds: pick(trainerIds, ['CreatureId', 'TrainerId']),
     trainerUsers: pick(trainerUsers, ['CreatureId', 'TrainerId']),
+    gossipOptions: pick(gossipOptions, ['MenuID', 'OptionID']),
+    gossipMenus: pick(gossipMenus, ['MenuID', 'TextID']),
+    gossipUsers,
+    gossipScripted: pick(gossipScripted, ['event_param1', 'event_param2']),
   };
 }
