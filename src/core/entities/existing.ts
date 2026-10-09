@@ -3,7 +3,7 @@ import type { RawRow } from '../db/types';
 import type { WorldDb } from '../db/world-db';
 import type { PatchStatement } from '../export/build-patch';
 import { ITEM_SLOT_BLOCKS, itemRow } from './item-columns';
-import { itemFromRows, npcFromRows } from './from-rows';
+import { itemFromRows, MAX_GOSSIP_MENUS, npcFromRows } from './from-rows';
 import { seenByColumns, seenByOf } from './visibility';
 import { npcSpawnGuids, spawnEventRows } from './spawn-events-read';
 import { rowsOrNone } from '../db/rows-or-none';
@@ -293,6 +293,48 @@ async function pageRows(db: RowReader, first: number): Promise<Row[]> {
  * The rows an existing NPC, object or item is made of, as the database has them now; null when it has
  * none. What is brought into the project is kept as these rows, and drift compares against them again.
  */
+/** The tables a gossip tree is read from that the database has */
+interface GossipTables {
+  hasMenu: boolean;
+  hasOptions: boolean;
+  hasText: boolean;
+  hasConditions: boolean;
+  hasScripts: boolean;
+}
+
+/**
+ * The rows of an NPC's gossip tree: the menu it opens with and, level by level, every menu its options open
+ * (at most `MAX_GOSSIP_MENUS`), their texts, and only the conditions and gossip-select scripts that name them.
+ */
+async function readGossipRows(db: RowReader, root: number, t: GossipTables): Promise<OriginalRows> {
+  const out: OriginalRows = {};
+  const menuRows: Row[] = [];
+  const optionRows: Row[] = [];
+  const menus: number[] = [];
+  if (t.hasMenu && t.hasOptions) {
+    for (let frontier = root > 0 ? [root] : []; frontier.length > 0 && menus.length < MAX_GOSSIP_MENUS; ) {
+      const batch = [...new Set(frontier)].filter((id) => !menus.includes(id)).slice(0, MAX_GOSSIP_MENUS - menus.length);
+      if (batch.length === 0) break;
+      menus.push(...batch);
+      const where = { MenuID: batch.map(text) };
+      const [found, options] = await Promise.all([rowsOrNone(db, 'gossip_menu', where), rowsOrNone(db, 'gossip_menu_option', where)]);
+      menuRows.push(...found);
+      optionRows.push(...options);
+      frontier = options.map((r) => num(r.ActionMenuID)).filter((id) => id > 0 && !menus.includes(id));
+    }
+  }
+  const names = menus.map(text);
+  if (t.hasMenu) out.gossip_menu = menuRows;
+  if (t.hasOptions) out.gossip_menu_option = optionRows;
+  if (t.hasText) {
+    const ids = [...new Set(menuRows.map((r) => r.TextID ?? '0'))];
+    out.npc_text = ids.length > 0 ? await rowsOrNone(db, 'npc_text', { ID: ids }) : [];
+  }
+  if (t.hasConditions) out.conditions = names.length > 0 ? await rowsOrNone(db, 'conditions', { SourceTypeOrReferenceId: ['14', '15'], SourceGroup: names }) : [];
+  if (t.hasScripts) out.smart_scripts = names.length > 0 ? await rowsOrNone(db, 'smart_scripts', { source_type: '0', event_type: '62', event_param1: names }) : [];
+  return out;
+}
+
 export async function readOriginalRows(db: RowReader, kind: Kind, entry: number): Promise<OriginalRows | null> {
   const key = text(entry);
   if (kind === 'npc') {
@@ -318,12 +360,16 @@ export async function readOriginalRows(db: RowReader, kind: Kind, entry: number)
       // Only counted, to say what else the NPC teaches; never written
       hasLegacy ? rowsOrNone(db, 'npc_trainer', { ID: key }) : Promise.resolve([]),
     ]);
+    // Its gossip: the menu it opens with and every menu its options open (a table the fork lacks has no key, so it is never written)
+    const [hasMenu, hasOptions, hasText, hasConditions, hasScripts] = await Promise.all([has('gossip_menu'), has('gossip_menu_option'), has('npc_text'), has('conditions'), has('smart_scripts')]);
+    const gossip = await readGossipRows(db, num(template[0]!.gossip_menu_id), { hasMenu, hasOptions, hasText, hasConditions, hasScripts });
     // Its spawns and their game event rows: what its event rule is read from
     const guids = await npcSpawnGuids(db, entry);
     const events = [...(await spawnEventRows(db, guids)).values()].flat()
       .sort((a, b) => num(a.guid) - num(b.guid) || num(a.eventEntry) - num(b.eventEntry));
     return {
       creature_template: template, creature_template_model: models, creature_equip_template: equip, creature_loot_template: loot, ...(hasVendorTable ? { npc_vendor: vendor } : {}),
+      ...gossip,
       ...(hasDefault ? { creature_default_trainer: links } : {}), ...(hasTrainer ? { trainer: trainerRows } : {}), ...(hasSpells ? { trainer_spell: spellRows } : {}), ...(hasLegacy ? { npc_trainer: legacyRows } : {}),
       creature: guids.map((g) => ({ guid: text(g) })), game_event_creature: events,
     };

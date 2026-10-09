@@ -50,6 +50,27 @@ describe('editing an existing entity', () => {
     expect(own.value.trainer).toMatchObject({ trainerId: 6, type: 'profession' });
   });
 
+  it("reads an NPC's gossip tree and which of its menus and texts others use", async () => {
+    const { api, db } = await setup();
+    db.update('creature_template', { entry: '1423' }, { gossip_menu_id: '5000' });
+    db.update('creature_template', { entry: '68' }, { gossip_menu_id: '5000' });
+    db.insert('gossip_menu', { MenuID: '5000', TextID: '7000' });
+    db.insert('gossip_menu', { MenuID: '5001', TextID: '7001' });
+    db.insert('gossip_menu', { MenuID: '6000', TextID: '7001' });
+    db.insert('npc_text', { ID: '7000', text0_0: 'Hello', Probability0: '1' });
+    db.insert('npc_text', { ID: '7001', text0_0: 'Farewell', Probability0: '1' });
+    db.insert('gossip_menu_option', { MenuID: '5000', OptionID: '0', OptionText: 'More', OptionType: '1', OptionNpcFlag: '1', ActionMenuID: '5001' });
+    db.insert('gossip_menu_option', { MenuID: '5001', OptionID: '0', OptionText: 'Bye', OptionType: '1', OptionNpcFlag: '1' });
+    db.insert('gameobject_template', { entry: '100', type: '2', Data3: '5001' });
+    const shared: any = await api.readExistingEntity('npc', 1423);
+    expect(shared.value.gossipMenu.menus.map((m: any) => [m.menuId, m.locked])).toEqual([[5000, true], [5001, true]]);
+    db.insert('creature_template', { entry: '4242', name: 'Host', minlevel: '10', maxlevel: '10', faction: '35', rank: '0', type: '7', npcflag: '1', gossip_menu_id: '5500' });
+    db.insert('gossip_menu', { MenuID: '5500', TextID: '7500' });
+    db.insert('npc_text', { ID: '7500', text0_0: 'Mine', Probability0: '1' });
+    const own: any = await api.readExistingEntity('npc', 4242);
+    expect(own.value.gossipMenu.menus.map((m: any) => [m.menuId, m.locked])).toEqual([[5500, false]]);
+  });
+
   it('refuses one the database does not have', async () => {
     const { api } = await setup();
     const out: any = await api.readExistingEntity('npc', 4242);

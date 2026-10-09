@@ -167,6 +167,34 @@ export const trainerSchema = z.object({
   spells: z.array(trainerSpellSchema),
 });
 
+/** What an option does: closes the window, opens another menu, or opens a service window (a named type and NPC flag pair) */
+export const gossipActionSchema = z.discriminatedUnion('kind', [
+  z.object({ kind: z.literal('close') }),
+  z.object({ kind: z.literal('menu'), menuId: int.positive() }),
+  z.object({ kind: z.literal('service'), type: int.min(0), npcFlag: int.min(0) }),
+]);
+
+/** One line a menu may greet with; the variants are chosen by weight */
+export const textVariantSchema = z.object({ text: z.string(), textFemale: z.string(), probability: num.min(0) });
+
+/**
+ * One option of a menu. `optionId` is pinned (conditions and scripts name it). `kept` marks an option the
+ * database ties to a condition or a script: it cannot be removed and its action cannot change.
+ */
+export const gossipOptionSchema = z.object({ optionId: int.min(0), icon: int.min(0), text: z.string(), action: gossipActionSchema, kept: z.boolean() });
+
+/** A menu with its greeting. `locked` menus (shared, or ones the editor cannot model) are never written */
+export const gossipMenuSchema = z.object({
+  menuId: int,
+  textId: int,
+  greeting: z.array(textVariantSchema).min(1).max(8),
+  options: z.array(gossipOptionSchema),
+  locked: z.boolean(),
+});
+
+/** An NPC's menus: the first is the one it opens with (`creature_template.gossip_menu_id`) */
+export const gossipTreeSchema = z.object({ menus: z.array(gossipMenuSchema).min(1) });
+
 export const lootSchema = z.object({ item: int, chance: num, min: int, max: int, questOnly: z.boolean() });
 
 const npcFields = z.object({
@@ -201,6 +229,8 @@ const npcFields = z.object({
   vendor: z.array(vendorItemSchema).default([]),
   // Added with NPC trainers; null is not a trainer. The default keeps NPCs saved before then as they were.
   trainer: trainerSchema.nullable().default(null),
+  // Added with NPC gossip; null has no menu (`gossip` is the Can be talked to flag). The default keeps NPCs saved before then as they were.
+  gossipMenu: gossipTreeSchema.nullable().default(null),
 });
 
 /**
@@ -281,6 +311,11 @@ export type LootRow = z.infer<typeof lootSchema>;
 export type VendorItem = z.infer<typeof vendorItemSchema>;
 export type TrainerSpell = z.infer<typeof trainerSpellSchema>;
 export type Trainer = z.infer<typeof trainerSchema>;
+export type GossipAction = z.infer<typeof gossipActionSchema>;
+export type TextVariant = z.infer<typeof textVariantSchema>;
+export type GossipOption = z.infer<typeof gossipOptionSchema>;
+export type GossipMenu = z.infer<typeof gossipMenuSchema>;
+export type GossipTree = z.infer<typeof gossipTreeSchema>;
 export type CustomNpc = z.infer<typeof npcSchema>;
 export type CustomObject = z.infer<typeof objectSchema>;
 export type NpcRank = CustomNpc['rank'];
@@ -325,6 +360,34 @@ export function sameTrainer(a: Trainer | null, b: Trainer | null): boolean {
       return s.spell === t.spell && s.cost === t.cost && s.reqLevel === t.reqLevel && s.reqSkill === t.reqSkill && s.reqSkillRank === t.reqSkillRank && same(s.reqSpells, t.reqSpells);
     })
   );
+}
+
+/**
+ * Whether an existing NPC's gossip was never read: a project saved before gossip existed, or a fork without
+ * the gossip tables. Its gossip is then not ours to write, whatever `gossipMenu` holds.
+ */
+export function gossipUnread(npc: { origin: StoredOrigin }): boolean {
+  return npc.origin.kind === 'existing' && !Object.prototype.hasOwnProperty.call(npc.origin.original, 'gossip_menu');
+}
+
+/** Whether two menus hold the same values; `locked` says nothing of what they hold */
+export function sameGossipMenu(a: GossipMenu, b: GossipMenu): boolean {
+  const sameAction = (x: GossipAction, y: GossipAction): boolean =>
+    x.kind === y.kind && (x.kind !== 'menu' || x.menuId === (y as typeof x).menuId) && (x.kind !== 'service' || (x.type === (y as typeof x).type && x.npcFlag === (y as typeof x).npcFlag));
+  return (
+    a.menuId === b.menuId && a.textId === b.textId &&
+    a.greeting.length === b.greeting.length && a.greeting.every((v, i) => v.text === b.greeting[i]!.text && v.textFemale === b.greeting[i]!.textFemale && v.probability === b.greeting[i]!.probability) &&
+    a.options.length === b.options.length && a.options.every((o, i) => {
+      const p = b.options[i]!;
+      return o.optionId === p.optionId && o.icon === p.icon && o.text === p.text && o.kept === p.kept && sameAction(o.action, p.action);
+    })
+  );
+}
+
+/** Whether two trees hold the same menus in the same order */
+export function sameGossip(a: GossipTree | null, b: GossipTree | null): boolean {
+  if (a === null || b === null) return a === b;
+  return a.menus.length === b.menus.length && a.menus.every((m, i) => sameGossipMenu(m, b.menus[i]!));
 }
 
 /** The project's new NPCs, objects and items: one store; a quest uses one by naming it. */
@@ -413,6 +476,7 @@ export function newNpc(entry: number): CustomNpc {
     events: null,
     vendor: [],
     trainer: null,
+    gossipMenu: null,
   };
 }
 

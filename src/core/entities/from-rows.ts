@@ -3,7 +3,7 @@ import { seenByOf } from './visibility';
 import { npcEventsOf } from './spawn-events';
 import {
   NPC_TYPE_VALUE, OBJECT_TYPE_VALUE, RANK_VALUE, newItem, newNpc, newObject,
-  type CustomItem, type CustomNpc, type CustomObject, type EntityLock, type LootRow, type OriginalRows, type Page, type Trainer, type VendorItem,
+  type CustomItem, type CustomNpc, type CustomObject, type EntityLock, type LootRow, type OriginalRows, type Page, type Trainer, type VendorItem, type GossipMenu, type GossipOption, type GossipTree, type TextVariant,
   TRAINER_TYPE_VALUE,
 } from './model';
 
@@ -13,6 +13,10 @@ export interface ExistingCounts {
   spawnCount: number;
   /** How many other NPCs use its trainer */
   sharedTrainer?: number;
+  /** For each menu id, how many other creatures and objects use it */
+  sharedMenus?: Readonly<Record<number, number>>;
+  /** For each text id, how many menus outside the NPC's own use it */
+  sharedTexts?: Readonly<Record<number, number>>;
 }
 
 type Row = Record<string, string | null>;
@@ -65,6 +69,63 @@ function trainerOf(rows: OriginalRows): { trainer: Trainer | null; locked: boole
   return { trainer: { trainerId: id, type, requirement: numberOf(row.Requirement), greeting: row.Greeting ?? '', spells }, locked: false };
 }
 
+/** How many menus an NPC's tree is read to: the rest of what its options open stay bare ids */
+export const MAX_GOSSIP_MENUS = 24;
+
+const VARIANTS = 8;
+
+/** A menu's greeting: the variants up to the last that is used (a text, or a chance), at least one blank one */
+function greetingOf(row: Row | undefined): TextVariant[] {
+  const all = Array.from({ length: VARIANTS }, (_, i): TextVariant => ({ text: row?.[`text${i}_0`] ?? '', textFemale: row?.[`text${i}_1`] ?? '', probability: numberOf(row?.[`Probability${i}`]) }));
+  const last = all.map((v) => v.text !== '' || v.textFemale !== '' || v.probability > 0).lastIndexOf(true);
+  return last < 0 ? [{ text: '', textFemale: '', probability: 1 }] : all.slice(0, last + 1);
+}
+
+/**
+ * The menus an NPC opens with and everything its options open, read from the rows. A menu is locked when it is
+ * not ours to change: others use it or its text, it has several text rows or a conditioned one, or its text is missing.
+ */
+function gossipOf(rows: OriginalRows, counts: ExistingCounts): GossipTree | null {
+  const rootId = numberOf(rows.creature_template?.[0]?.gossip_menu_id);
+  // Gossip that was never read (no key) is not ours to model
+  if (rootId <= 0 || !Object.prototype.hasOwnProperty.call(rows, 'gossip_menu')) return null;
+  const menuRows = rows.gossip_menu ?? [];
+  const optionRows = rows.gossip_menu_option ?? [];
+  const textRows = rows.npc_text ?? [];
+  const conditions = rows.conditions ?? [];
+  const scripts = rows.smart_scripts ?? [];
+  const optionsOf = (id: number): Row[] => optionRows.filter((r) => numberOf(r.MenuID) === id).sort((a, b) => numberOf(a.OptionID) - numberOf(b.OptionID));
+  const known = (id: number): boolean => id === rootId || menuRows.some((r) => numberOf(r.MenuID) === id) || optionRows.some((r) => numberOf(r.MenuID) === id);
+  const order: number[] = [];
+  for (const queue = [rootId]; queue.length > 0 && order.length < MAX_GOSSIP_MENUS; ) {
+    const id = queue.shift()!;
+    if (order.includes(id) || !known(id)) continue;
+    order.push(id);
+    for (const o of optionsOf(id)) if (numberOf(o.ActionMenuID) > 0) queue.push(numberOf(o.ActionMenuID));
+  }
+  const menus = order.map((id): GossipMenu => {
+    const own = menuRows.filter((r) => numberOf(r.MenuID) === id);
+    const textId = numberOf(own[0]?.TextID);
+    const text = textRows.find((r) => numberOf(r.ID) === textId);
+    const conditioned = conditions.some((c) => numberOf(c.SourceTypeOrReferenceId) === 14 && numberOf(c.SourceGroup) === id);
+    const locked = (counts.sharedMenus?.[id] ?? 0) > 0 || (counts.sharedTexts?.[textId] ?? 0) > 0 || own.length !== 1 || conditioned || !text || textId <= 0;
+    const options = optionsOf(id).map((r): GossipOption => {
+      const optionId = numberOf(r.OptionID);
+      const tied = conditions.some((c) => numberOf(c.SourceTypeOrReferenceId) === 15 && numberOf(c.SourceGroup) === id && numberOf(c.SourceEntry) === optionId) ||
+        scripts.some((s) => numberOf(s.source_type) === 0 && numberOf(s.event_type) === 62 && numberOf(s.event_param1) === id && numberOf(s.event_param2) === optionId);
+      const type = numberOf(r.OptionType);
+      const npcFlag = numberOf(r.OptionNpcFlag);
+      const next = numberOf(r.ActionMenuID);
+      return {
+        optionId, icon: numberOf(r.OptionIcon), text: r.OptionText ?? '', kept: tied,
+        action: next > 0 ? { kind: 'menu', menuId: next } : type === 1 && npcFlag === 1 ? { kind: 'close' } : { kind: 'service', type, npcFlag },
+      };
+    });
+    return { menuId: id, textId, greeting: greetingOf(text), options, locked };
+  });
+  return { menus };
+}
+
 /** The page chain starting at `first`, following `NextPageID` */
 function pagesFrom(first: number, rows: Row[] | undefined): Page[] {
   const byId = new Map((rows ?? []).map((r) => [numberOf(r.ID), r]));
@@ -104,7 +165,7 @@ export function npcFromRows(entry: number, rows: OriginalRows, counts: ExistingC
     healthModifier: numberOf(row.HealthModifier, 1), damageModifier: numberOf(row.DamageModifier, 1),
     displayId: model ? numberOf(model.CreatureDisplayID) : numberOf(row.modelid1), scale: numberOf(model?.DisplayScale, 1),
     equipment: { mainHand: numberOf(gear?.ItemID1), offHand: numberOf(gear?.ItemID2), ranged: numberOf(gear?.ItemID3) },
-    loot, fight: null, spawns: [], vendor: vendorOf(rows.npc_vendor), trainer,
+    loot, fight: null, spawns: [], vendor: vendorOf(rows.npc_vendor), trainer, gossipMenu: gossipOf(rows, counts),
     origin: origin(rows, counts, locked),
   };
 }

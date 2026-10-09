@@ -20,13 +20,41 @@ async function spawnCountOf(db: WorldDb, table: 'creature' | 'gameobject', entry
 }
 
 /**
+ * Who else uses what an NPC's gossip tree holds: for each menu the other creatures (by `gossip_menu_id`) and
+ * objects (type 2 `Data3`) that use it, and for each text the menus outside the tree that use it
+ */
+async function gossipUsers(db: WorldDb, rows: OriginalRows, entry: number): Promise<{ sharedMenus: Record<number, number>; sharedTexts: Record<number, number> }> {
+  const menus = [...new Set((rows.gossip_menu ?? []).map((r) => num(r.MenuID)).concat((rows.gossip_menu_option ?? []).map((r) => num(r.MenuID))).concat(num(rows.creature_template?.[0]?.gossip_menu_id)))].filter((id) => id > 0);
+  const sharedMenus: Record<number, number> = {};
+  const sharedTexts: Record<number, number> = {};
+  if (menus.length === 0) return { sharedMenus, sharedTexts };
+  const names = menus.map(str);
+  const texts = [...new Set((rows.gossip_menu ?? []).map((r) => r.TextID ?? '0'))];
+  const [creatures, objects, users] = await Promise.all([
+    rowsOrNone(db, 'creature_template', { gossip_menu_id: names }),
+    rowsOrNone(db, 'gameobject_template', { type: '2', Data3: names }),
+    texts.length > 0 ? rowsOrNone(db, 'gossip_menu', { TextID: texts }) : Promise.resolve([]),
+  ]);
+  for (const r of creatures) if (num(r.entry) !== entry) sharedMenus[num(r.gossip_menu_id)] = (sharedMenus[num(r.gossip_menu_id)] ?? 0) + 1;
+  for (const r of objects) sharedMenus[num(r.Data3)] = (sharedMenus[num(r.Data3)] ?? 0) + 1;
+  for (const r of users) if (!menus.includes(num(r.MenuID))) sharedTexts[num(r.TextID)] = (sharedTexts[num(r.TextID)] ?? 0) + 1;
+  return { sharedMenus, sharedTexts };
+}
+
+/**
  * The rows an existing NPC, object or item is made of, as the database has them now (see
  * `readOriginalRows`), with how many other entries share its loot and how many spawns it has; null
  * when it has none
  */
 export async function readExistingRows(
   db: WorldDb, kind: Kind, entry: number,
-): Promise<{ rows: OriginalRows; sharedLoot: number; spawnCount: number; sharedTrainer: number } | null> {
+): Promise<{
+  rows: OriginalRows; sharedLoot: number; spawnCount: number; sharedTrainer: number;
+  /** For each menu of its gossip tree, how many other creatures and objects use it */
+  sharedMenus: Record<number, number>;
+  /** For each text of its gossip tree, how many menus outside the tree use it */
+  sharedTexts: Record<number, number>;
+} | null> {
   const rows = await readOriginalRows(db, kind, entry);
   if (!rows) return null;
   if (kind === 'npc') {
@@ -37,7 +65,8 @@ export async function readExistingRows(
       spawnCountOf(db, 'creature', entry),
       trainerId !== null ? rowsOrNone(db, 'creature_default_trainer', { TrainerId: trainerId }) : Promise.resolve([]),
     ]);
-    return { rows, sharedLoot: sharing.filter((r) => num(r.entry) !== entry).length, spawnCount, sharedTrainer: trainerUsers.filter((r) => num(r.CreatureId) !== entry).length };
+    const { sharedMenus, sharedTexts } = await gossipUsers(db, rows, entry);
+    return { rows, sharedLoot: sharing.filter((r) => num(r.entry) !== entry).length, spawnCount, sharedTrainer: trainerUsers.filter((r) => num(r.CreatureId) !== entry).length, sharedMenus, sharedTexts };
   }
   if (kind === 'object') {
     const row = rows.gameobject_template?.[0] ?? {};
@@ -46,7 +75,7 @@ export async function readExistingRows(
       lootid > 0 ? rowsOrNone(db, 'gameobject_template', { type: '3', Data1: str(lootid) }) : Promise.resolve([]),
       spawnCountOf(db, 'gameobject', entry),
     ]);
-    return { rows, sharedLoot: sharing.filter((r) => num(r.entry) !== entry).length, spawnCount, sharedTrainer: 0 };
+    return { rows, sharedLoot: sharing.filter((r) => num(r.entry) !== entry).length, spawnCount, sharedTrainer: 0, sharedMenus: {}, sharedTexts: {} };
   }
-  return { rows, sharedLoot: 0, spawnCount: 0, sharedTrainer: 0 };
+  return { rows, sharedLoot: 0, spawnCount: 0, sharedTrainer: 0, sharedMenus: {}, sharedTexts: {} };
 }
