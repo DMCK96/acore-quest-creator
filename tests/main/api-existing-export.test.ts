@@ -49,6 +49,22 @@ describe('exporting an edited existing NPC', () => {
     expect(out.value.warnings).toEqual([]);
   });
 
+  it('exports stock added to an existing NPC, filling the columns the editor does not set', async () => {
+    const { api, db } = await setup();
+    const rows = {
+      creature_template: await db.selectRows('creature_template', { entry: '1423' }),
+      creature_template_model: await db.selectRows('creature_template_model', { CreatureID: '1423' }),
+      creature_loot_template: await db.selectRows('creature_loot_template', { Entry: '1423' }),
+      npc_vendor: [],
+    };
+    const guard = npcFromRows(1423, rows as any, { sharedLoot: 0, spawnCount: 3 });
+    await api.putProjectEntities({ npcs: [{ ...guard, vendor: [{ item: 159, maxCount: 0, restockSecs: 0, extendedCost: 0 }] }], objects: [], items: [] });
+    const out: any = await api.exportProject();
+    expect(out.ok).toBe(true);
+    expect(out.value.sql).toMatch(/DELETE FROM `npc_vendor` WHERE `entry` = 1423/);
+    expect(out.value.sql).toMatch(/INSERT INTO `npc_vendor` \(.*\) VALUES \(1423, 0, 159, 0, 0, 0, /);
+  });
+
   it('warns, and still exports, when the database changed the NPC since it was edited here', async () => {
     const { api, db, guard } = await setup();
     await api.putProjectEntities({ npcs: [{ ...guard, minLevel: 60, maxLevel: 60 }], objects: [], items: [] });
