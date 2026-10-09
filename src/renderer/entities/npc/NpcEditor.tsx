@@ -9,6 +9,7 @@ import { NumberField } from '../../scripts/fields';
 import { EditorTabs, type EditorTab } from '../EditorTabs';
 import { CopyStock } from '../CopyStock';
 import { LootList } from '../LootList';
+import { GossipTab } from '../GossipTab';
 import { TrainerTab } from '../TrainerTab';
 import { VendorList } from '../VendorList';
 import { SpawnList } from '../SpawnList';
@@ -26,6 +27,7 @@ export function NpcEditor({
   onChange,
   allocateSpawn,
   allocateTrainer = async () => null,
+  allocateGossip = async () => null,
   tab,
   onTab,
   hasServerData = true,
@@ -44,6 +46,8 @@ export function NpcEditor({
   allocateSpawn(): Promise<number | null>;
   /** A free trainer id for an NPC that starts to teach, or null when there is none */
   allocateTrainer?(): Promise<number | null>;
+  /** Free gossip menu or text ids, `count` of the kind; null when there are none */
+  allocateGossip?(kind: 'gossipMenu' | 'gossipText', count: number): Promise<number[] | null>;
   tab?: string;
   onTab?(id: string): void;
   /** Whether looks can be named, from the server data folder. */
@@ -110,6 +114,7 @@ export function NpcEditor({
       ),
   });
   tabs.push({ id: 'trainer', label: 'Trainer', render: () => <TrainerTab npc={npc} onChange={onChange} allocateTrainer={allocateTrainer} /> });
+  tabs.push({ id: 'gossip', label: 'Gossip', render: () => <GossipTab npc={npc} onChange={onChange} allocate={allocateGossip} onTab={onTab} /> });
   if (!existing) {
     tabs.push({
       id: 'placement',

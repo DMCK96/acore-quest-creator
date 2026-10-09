@@ -113,6 +113,11 @@ export function EntityEditorHost({
     return result?.ok && result.value.length > 0 ? result.value[0]! : null;
   }
 
+  async function allocateMany(kind: AllocKind, count: number): Promise<number[] | null> {
+    const result = await api?.allocateIds(kind, count);
+    return result?.ok && result.value.length >= count ? result.value : null;
+  }
+
   const saveNpc = (next: CustomNpc): void => onChange({ ...entities, npcs: entities.npcs.map((n) => (n.entry === next.entry ? next : n)) });
   const saveObject = (next: CustomObject): void => onChange({ ...entities, objects: entities.objects.map((o) => (o.entry === next.entry ? next : o)) });
   const saveItem = (next: CustomItem): void => onChange({ ...entities, items: entities.items.map((i) => (i.entry === next.entry ? next : i)) });
@@ -175,7 +180,7 @@ export function EntityEditorHost({
         <p className="scene-hint">{entity.name.trim() || `This ${word}`} has {existing.spawnCount} spawns in the world: changes here change all of them.</p>
       )}
       {npc && (
-        <NpcEditor npc={npc} onChange={saveNpc} allocateSpawn={() => allocate('creatureSpawn')} allocateTrainer={() => allocate('trainer')} tab={tab} onTab={chooseTab}
+        <NpcEditor npc={npc} onChange={saveNpc} allocateSpawn={() => allocate('creatureSpawn')} allocateTrainer={() => allocate('trainer')} allocateGossip={allocateMany} tab={tab} onTab={chooseTab}
           others={entities.npcs.filter((n) => n.entry !== npc.entry)} hasServerData={hasServerData} quests={questChoices} existing={existing}
           events={events} spawnFacts={npcSpawnFacts(npc, layer, existing?.spawnCount ?? 0)} />
       )}

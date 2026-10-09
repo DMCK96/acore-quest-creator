@@ -23,9 +23,9 @@ function NpcEditorLive({ start, others }: { start: CustomNpc; others: CustomNpc[
 const tab = (name: string) => userEvent.click(screen.getByRole('tab', { name }));
 
 describe('NPC editor', () => {
-  it('has the seven tabs and opens on Basics', async () => {
+  it('has the eight tabs and opens on Basics', async () => {
     render(<Live api={makeMockApi()} start={newNpc(12000001)} />);
-    expect(screen.getAllByRole('tab').map((t) => t.textContent)).toEqual(['Basics', 'Look & gear', 'Fight', 'Loot', 'Vendor', 'Trainer', 'Placement']);
+    expect(screen.getAllByRole('tab').map((t) => t.textContent)).toEqual(['Basics', 'Look & gear', 'Fight', 'Loot', 'Vendor', 'Trainer', 'Gossip', 'Placement']);
     expect(screen.getByRole('tab', { name: 'Basics' })).toHaveAttribute('aria-selected', 'true');
     expect(screen.getByRole('tabpanel', { name: 'Basics' })).toBeTruthy();
   });
@@ -180,7 +180,7 @@ describe('NPC editor', () => {
   it('moves between tabs with the arrow keys, one tab stop for the row', async () => {
     render(<Live api={makeMockApi()} start={newNpc(12000001)} />);
     const basics = screen.getByRole('tab', { name: 'Basics' });
-    expect(screen.getAllByRole('tab').map((t) => t.getAttribute('tabindex'))).toEqual(['0', '-1', '-1', '-1', '-1', '-1', '-1']);
+    expect(screen.getAllByRole('tab').map((t) => t.getAttribute('tabindex'))).toEqual(['0', '-1', '-1', '-1', '-1', '-1', '-1', '-1']);
     basics.focus();
     await userEvent.keyboard('{ArrowRight}');
     expect(screen.getByRole('tab', { name: 'Look & gear' })).toHaveAttribute('aria-selected', 'true');
