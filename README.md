@@ -37,6 +37,7 @@
 - **Combat wizard.** Design how an NPC fights, from one ability to a boss with phases, adds and health thresholds.
 - **New NPCs and objects.** Pick how they look, their faction and weapons, who sees them (the living, only the dead like a spirit healer, or both) and the game events their spawns follow; make readable books and notes, and chests with loot.
 - **Patrols.** Place a new NPC in the World from its quest, draw its patrol on the ground and give each point a wait, a pace and actions such as a line to say.
+- **Work with an AI assistant.** Turn on MCP / AI in Settings and connect an assistant such as Claude Code. It can look up your world (quests by zone, what stands around a point and which way it faces, name clashes, optionally lore from warcraft.wiki.gg), then write quests, scenes, boss fights, patrols, loot and new NPCs, objects and items in your open project. Each change is one undoable **AI: …** step, editing pauses while it writes, and it can never write to your world database.
 - **Test in game.** Get the GM commands to reload and try a quest on your test server.
 - **Export.** Review every change, then export an SQL patch or apply it to a dev database. Your live world database is only ever read.
 
