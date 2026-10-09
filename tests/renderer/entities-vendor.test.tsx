@@ -5,8 +5,9 @@ import { fireEvent, render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { NpcEditor } from '../../src/renderer/entities/npc/NpcEditor';
 import { NamesProvider } from '../../src/renderer/state/names';
-import { makeMockApi, okv } from './mock-api';
-import { newNpc, type CustomNpc, type VendorItem } from '../../src/core/entities/model';
+import { errv, makeMockApi, okv } from './mock-api';
+import { ProjectEntitiesProvider } from '../../src/renderer/state/project-entities';
+import { EMPTY_ENTITIES, newNpc, type CustomNpc, type VendorItem } from '../../src/core/entities/model';
 
 let current: CustomNpc = newNpc(12000001);
 function Live({ start, hasServerData = true, api = makeMockApi() }: { start: CustomNpc; hasServerData?: boolean; api?: ReturnType<typeof makeMockApi> }) {
@@ -151,10 +152,52 @@ describe('the Vendor tab', () => {
     expect(current.vendor.map((v) => v.item)).toEqual([1]);
   });
 
+  it('gives limited stock a restock time to start from, since the server would not load it without one', async () => {
+    render(<Live start={withStock([stock(159)])} />);
+    await userEvent.type(within(rows()[0]!).getByLabelText('Max count'), '5');
+    expect(current.vendor[0]).toMatchObject({ maxCount: 5, restockSecs: 900 });
+  });
+
+  it('holds at most 255 of an item', () => {
+    render(<Live start={withStock([stock(159)])} />);
+    fireEvent.change(within(rows()[0]!).getByLabelText('Max count'), { target: { value: '300' } });
+    expect(current.vendor[0]!.maxCount).toBe(255);
+  });
+
+  it("says a negative item is another vendor's whole list", () => {
+    render(<Live start={withStock([stock(-54)])} />);
+    expect(screen.getByText(/whole list of NPC 54/)).toBeTruthy();
+  });
+
+  it('takes the extended cost as a number when the server data folder has no readable file', async () => {
+    const api = makeMockApi({ searchEntities: vi.fn(async () => errv('BAD_REQUEST', 'ItemExtendedCost.dbc could not be read: nope')) });
+    render(<Live start={withStock([stock(159)])} api={api} />);
+    expect(await screen.findByLabelText('Extended cost (id)')).toBeTruthy();
+    expect(screen.getByText(/could not be read: nope/)).toBeTruthy();
+  });
+
+  it('copies the stock of a project NPC saved before vendors were read from the database instead', async () => {
+    const old: CustomNpc = { ...newNpc(68), name: 'Guard', origin: { kind: 'existing', original: { creature_template: [{ entry: '68' }] }, sharedLoot: 0, spawnCount: 1, locked: [] } };
+    const api = makeMockApi({
+      readExistingEntity: vi.fn(async () => okv({ ...newNpc(68), name: 'Guard', vendor: [stock(10)] })),
+      searchEntities: vi.fn(async () => okv([{ id: 68, name: 'Guard' }])),
+    });
+    const project = { entities: { ...EMPTY_ENTITIES, npcs: [old] }, setEntities: vi.fn(), quests: [], layer: { spawns: [], routes: [], added: [] }, setLayer: vi.fn(), tracked: [], create: vi.fn(), remove: vi.fn(), adopt: vi.fn(), ensure: vi.fn() };
+    function WithProject() {
+      const [npc, setNpc] = useState(newNpc(12000001));
+      current = npc;
+      return <ProjectEntitiesProvider value={project as never}><NamesProvider api={api}><NpcEditor npc={npc} onChange={setNpc} allocateSpawn={async () => 900} tab="vendor" /></NamesProvider></ProjectEntitiesProvider>;
+    }
+    render(<WithProject />);
+    await chooseSource('Guard');
+    expect(current.vendor.map((v) => v.item)).toEqual([10]);
+  });
+
   it('leaves the stock of a project saved before vendors were read alone', () => {
     const old: CustomNpc = { ...newNpc(54), name: 'Innkeeper', origin: { kind: 'existing', original: { creature_template: [{ entry: '54' }] }, sharedLoot: 0, spawnCount: 1, locked: [] } };
     render(<NamesProvider api={makeMockApi()}><NpcEditor npc={old} onChange={vi.fn()} allocateSpawn={async () => null} existing={{ sharedLoot: 0, spawnCount: 1, locked: [] }} tab="vendor" /></NamesProvider>);
     expect(screen.getByText(/stock was not read/i)).toBeTruthy();
+    expect(screen.getByText(/put back as the database has it/i)).toBeTruthy();
     expect(screen.queryByRole('button', { name: 'Make this NPC a vendor' })).toBeNull();
   });
 });

@@ -17,7 +17,7 @@ const SUMMARIES: Record<AuthoringModel, string> = {
   fight: "A new NPC's fight: abilities it casts on timers, reactions to what happens, and phases.",
   patrol: 'A route one spawn of a new NPC walks, with waits, pace changes and actions at its points.',
   loot: 'The items a new NPC or object drops or holds, each with a chance and a count.',
-  npc: 'A new NPC for the project: its name, level, look, faction, role, spawns, loot and fight.',
+  npc: 'A new NPC for the project: its name, level, look, faction, role, spawns, loot, what it sells and fight.',
   object: 'A new object for the project: a chest, book, door or other thing in the world.',
   item: 'A new item for the project: its quality, level, stats, spells and text.',
 };

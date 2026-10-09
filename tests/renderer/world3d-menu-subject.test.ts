@@ -31,6 +31,10 @@ describe('the clicked thing as an entity', () => {
     expect(spawnedEntityOf(info({ entry: 12000001, own: true }), store)).toMatchObject({ vendor: { sells: false, count: 0 } });
     expect(spawnedEntityOf(info({ npcFlags: 129 }), store)).toMatchObject({ vendor: { sells: true, count: null } });
     expect(spawnedEntityOf(info({ npcFlags: 3 }), store)).toMatchObject({ vendor: { sells: false, count: null } });
+    // Stock the project never read is the database's, so the flags say
+    const unread = { ...store, npcs: [{ ...newNpc(1423), origin: { kind: 'existing' as const, original: {}, sharedLoot: 0, spawnCount: 1, locked: [] } }] };
+    expect(spawnedEntityOf(info({ npcFlags: 129 }), unread)).toMatchObject({ vendor: { sells: true, count: null } });
+    expect(spawnedEntityOf(info({ npcFlags: 1 }), unread)).toMatchObject({ vendor: { sells: false, count: null } });
   });
 
   it('an object says whether it can be looted: a project chest yes, a project goober no, a database one cannot be changed', () => {

@@ -19,11 +19,12 @@ export interface Services {
 
 export function createServices(deps: ApiDeps): Services {
   const ctx = createContext(deps, createConnection(deps));
+  const files = createServerFiles(deps);
 
   return {
     ctx,
-    files: createServerFiles(deps),
-    checks: createChecks(ctx),
+    files,
+    checks: createChecks(ctx, files),
     patches: createPatches(ctx),
     groups: createSpawnGroups(ctx),
     travel: createTravel(ctx),

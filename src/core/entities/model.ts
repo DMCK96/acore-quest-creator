@@ -132,7 +132,14 @@ const originSchema = z.discriminatedUnion('kind', [
 const NEW_ORIGIN = { kind: 'new' } as const;
 
 /** One thing an NPC sells: `maxCount` 0 is unlimited, and `extendedCost` 0 is gold alone */
-export const vendorItemSchema = z.object({ item: int, maxCount: int.min(0), restockSecs: int.min(0), extendedCost: int.min(0) });
+export const vendorItemSchema = z.object({
+  // Negative: a reference to another vendor's whole list (the server reads `-item` as an NPC entry)
+  item: int,
+  // `npc_vendor.maxcount` is a tinyint unsigned
+  maxCount: int.min(0).max(255),
+  restockSecs: int.min(0),
+  extendedCost: int.min(0),
+});
 
 export const lootSchema = z.object({ item: int, chance: num, min: int, max: int, questOnly: z.boolean() });
 
@@ -255,6 +262,19 @@ export type ItemDamage = z.infer<typeof itemDamageSchema>;
 export type ItemSpell = z.infer<typeof itemSpellSchema>;
 export type ItemQuality = CustomItem['quality'];
 export type Bonding = CustomItem['bonding'];
+
+/**
+ * Whether an existing NPC's stock was never read: a project saved before vendors existed, or a fork
+ * without `npc_vendor`. Its stock is then not ours to write, whatever `vendor` holds.
+ */
+export function vendorUnread(npc: { origin: StoredOrigin }): boolean {
+  return npc.origin.kind === 'existing' && !Object.prototype.hasOwnProperty.call(npc.origin.original, 'npc_vendor');
+}
+
+/** Whether two stock lists hold the same rows in the same order */
+export function sameVendor(a: readonly VendorItem[], b: readonly VendorItem[]): boolean {
+  return a.length === b.length && a.every((x, i) => x.item === b[i]!.item && x.maxCount === b[i]!.maxCount && x.restockSecs === b[i]!.restockSecs && x.extendedCost === b[i]!.extendedCost);
+}
 
 /** The project's new NPCs, objects and items: one store; a quest uses one by naming it. */
 export interface ProjectEntities {

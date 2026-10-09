@@ -4,7 +4,7 @@ import { registry } from '../../core/registry';
 import type { LookupApi, NpcQuest, SpellFactsResult } from '../../shared/ipc';
 import { spellDetail, spellLabel } from '../../core/game/spells';
 import type { Services } from './services';
-import { run } from './errors';
+import { fail, run } from './errors';
 import { ENTITY_SEARCH_LIMIT } from './server-files';
 
 const SEARCH_LIMIT = 50;
@@ -70,8 +70,12 @@ export function createLookupApi(s: Services): LookupApi {
           return 'reason' in sounds ? [] : sounds.search(text, ENTITY_SEARCH_LIMIT);
         }
         if (kind === 'extendedCost') {
-          const costs = await extendedCostsOf(connected());
-          return 'reason' in costs ? [] : costs.search(text, ENTITY_SEARCH_LIMIT);
+          const live = connected();
+          const costs = await extendedCostsOf(live);
+          if (!('reason' in costs)) return costs.search(text, ENTITY_SEARCH_LIMIT);
+          // With no server data folder there is nothing to look in; with one, say what is wrong with its file
+          if (!live.serverData?.status.dir) return [];
+          throw fail('BAD_REQUEST', costs.reason);
         }
         if (isLookKind(kind)) return lookHits(connected(), kind, text);
         if (kind === 'questSort') return (await questSortsOf(connected())).search(text, ENTITY_SEARCH_LIMIT);

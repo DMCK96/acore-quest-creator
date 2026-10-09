@@ -14,6 +14,9 @@ describe('item extended costs', () => {
   it('rejects a file with too few fields', () => {
     expect(() => readExtendedCosts(buildDbc([[1, 0, 0, 0, 0, 0, 0, 0, 0, 0]]))).toThrow(/10 fields/);
   });
+  it('names the 16 fields a 3.3.5a file has when it is too short', () => {
+    expect(() => readExtendedCosts(buildDbc([[1, 0, 0, 0, 0, 0, 0, 0, 0, 0]]))).toThrow(/has 16/);
+  });
   it('labels a cost readably', () => {
     expect(extendedCostLabel(costs.get(1)!, name)).toBe('2000 honor + 1 Mark of Honor');
     expect(extendedCostLabel(costs.get(2)!, name)).toBe('1500 arena points (rating 1700)');

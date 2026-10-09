@@ -1,3 +1,4 @@
+import type { MenuEditorTab } from './menu/model';
 import { popPlace, pushPlace, type CameraPlace } from './camera-history';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import type { CanvasNode, GroupView, OpenResult, QuestSpawnGroup } from '@shared/ipc';
@@ -168,7 +169,7 @@ export function WorldWorkspace({
   };
 
   /** Edit NPC… / Edit object…: an existing one is brought into the project first, then its editor opens */
-  const editEntity = async (what: 'creature' | 'object' | 'item', entry: number, tab?: string): Promise<void> => {
+  const editEntity = async (what: 'creature' | 'object' | 'item', entry: number, tab?: MenuEditorTab): Promise<void> => {
     if (!project) return;
     const kind = what === 'creature' ? 'npc' : what;
     const error = await project.ensure({ kind, entry });

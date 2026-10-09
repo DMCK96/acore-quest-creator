@@ -7,7 +7,7 @@ import type { Role, RoleTarget } from '@core/modules/quest-roles';
 import type { World3D } from './world3d';
 import type { EditPoint, SpawnEdit, SpawnRef } from './edits';
 import type { ProjectEntities } from '@core/entities/model';
-import { AI_WRITING, editsProject, lockEdits, type At, type MenuAction, type MenuGroup, type MenuSpawn, type MenuTarget, type QuestMenuInfo } from './menu/model';
+import { AI_WRITING, editsProject, lockEdits, type At, type MenuAction, type MenuEditorTab, type MenuGroup, type MenuSpawn, type MenuTarget, type QuestMenuInfo } from './menu/model';
 import { buildMenu, NEEDS_GROUND } from './menu/section';
 import { subjectOf } from './menu/subject';
 import { aboardVessel } from './frame-edit';
@@ -72,7 +72,7 @@ export interface WorldMenuDeps {
   /** Makes a new project NPC or object with one spawn at `at`, as one step */
   onCreateEntity?(what: 'creature' | 'object', at: Placement): Promise<void>;
   /** Opens the editor on one of the project's NPCs or objects */
-  onEditEntity?(kind: 'creature' | 'object', entry: number, tab?: string): void;
+  onEditEntity?(kind: 'creature' | 'object', entry: number, tab?: MenuEditorTab): void;
   /** Makes a project object lootable, or no longer */
   onSetLootable?(entry: number, on: boolean): Promise<void>;
   /** The project's NPCs, objects and items: whether a right-clicked spawn's NPC or object is the project's own */

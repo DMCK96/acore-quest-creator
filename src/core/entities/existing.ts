@@ -8,7 +8,7 @@ import { seenByColumns, seenByOf } from './visibility';
 import { npcSpawnGuids, spawnEventRows } from './spawn-events-read';
 import { rowsOrNone } from '../db/rows-or-none';
 import {
-  existingOnly, NPC_TYPE_VALUE, OBJECT_TYPE_VALUE, RANK_VALUE,
+  existingOnly, sameVendor, vendorUnread, NPC_TYPE_VALUE, OBJECT_TYPE_VALUE, RANK_VALUE,
   type CustomItem, type CustomNpc, type CustomObject, type LootRow, type OriginalRows, type Page, type ProjectEntities, type StoredOrigin, type VendorItem,
 } from './model';
 
@@ -157,8 +157,7 @@ function npcStatements(out: Statements, npc: CustomNpc, origin: Existing, givers
   const lootId = originalLoot > 0 ? originalLoot : !lootLocked && npc.loot.length > 0 ? (lootIds.get(`npc:${npc.entry}`) ?? npc.entry) : 0;
   const asRead = npcFromRows(npc.entry, origin.original, { sharedLoot: origin.sharedLoot, spawnCount: origin.spawnCount });
   // Stock a project saved before vendors existed never read is not ours to replace; stock left as read is not written
-  const vendorRead = Object.prototype.hasOwnProperty.call(origin.original, 'npc_vendor');
-  const vendorChanged = vendorRead && JSON.stringify(npc.vendor) !== JSON.stringify(asRead.vendor);
+  const vendorChanged = !vendorUnread(npc) && !sameVendor(npc.vendor, asRead.vendor);
   const vendorBit = vendorChanged ? (npc.vendor.length > 0 ? VENDOR_BIT : 0) : num(original.npcflag) & VENDOR_BIT;
   const templateRow = (n: CustomNpc): Row => {
     const flags =
@@ -241,7 +240,7 @@ export function existingStatements(store: ProjectEntities, givers: readonly numb
 }
 
 type Kind = 'npc' | 'object' | 'item';
-type RowReader = Pick<WorldDb, 'selectRows'>;
+type RowReader = Pick<WorldDb, 'selectRows'> & Partial<Pick<WorldDb, 'columns'>>;
 
 
 /** The rows of a page chain starting at `first`, following `NextPageID` */
@@ -268,18 +267,20 @@ export async function readOriginalRows(db: RowReader, kind: Kind, entry: number)
     const template = await rowsOrNone(db, 'creature_template', { entry: key });
     if (template.length === 0) return null;
     const lootid = num(template[0]!.lootid);
-    const [models, equip, loot, vendor] = await Promise.all([
+    const [models, equip, loot, vendor, hasVendorTable] = await Promise.all([
       rowsOrNone(db, 'creature_template_model', { CreatureID: key }),
       rowsOrNone(db, 'creature_equip_template', { CreatureID: key, ID: '1' }),
       lootid > 0 ? rowsOrNone(db, 'creature_loot_template', { Entry: text(lootid) }) : Promise.resolve([]),
       rowsOrNone(db, 'npc_vendor', { entry: key }),
+      // A fork without the table has no stock to read; the key is left out so its stock is never written
+      db.columns ? db.columns('npc_vendor').then((columns) => columns.length > 0) : Promise.resolve(true),
     ]);
     // Its spawns and their game event rows: what its event rule is read from
     const guids = await npcSpawnGuids(db, entry);
     const events = [...(await spawnEventRows(db, guids)).values()].flat()
       .sort((a, b) => num(a.guid) - num(b.guid) || num(a.eventEntry) - num(b.eventEntry));
     return {
-      creature_template: template, creature_template_model: models, creature_equip_template: equip, creature_loot_template: loot, npc_vendor: vendor,
+      creature_template: template, creature_template_model: models, creature_equip_template: equip, creature_loot_template: loot, ...(hasVendorTable ? { npc_vendor: vendor } : {}),
       creature: guids.map((g) => ({ guid: text(g) })), game_event_creature: events,
     };
   }

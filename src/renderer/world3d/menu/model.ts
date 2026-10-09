@@ -11,6 +11,8 @@ import type { MenuGroupId } from './section';
 
 export type At = { x: number; y: number; z: number };
 export type MenuSpawn = SpawnInfo;
+/** The editor tabs the menu can open an NPC on */
+export type MenuEditorTab = 'vendor';
 
 export interface MenuTarget {
   /** The ground under the right-click, or null for sky */
@@ -57,7 +59,7 @@ export type MenuAction =
   /** A new project NPC or object standing here, attached to no quest */
   | { kind: 'newEntity'; what: 'creature' | 'object'; at: At }
   /** `tab`: the editor tab to open on */
-  | { kind: 'editEntity'; spawn: MenuSpawn; tab?: string }
+  | { kind: 'editEntity'; spawn: MenuSpawn; tab?: MenuEditorTab }
   | { kind: 'setLootable'; spawn: MenuSpawn; on: boolean }
   | { kind: 'copy' }
   | { kind: 'paste'; at: At }

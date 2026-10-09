@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import type { CustomNpc, VendorItem } from '@core/entities/model';
+import { vendorUnread, type CustomNpc, type VendorItem } from '@core/entities/model';
 import { EntityField } from '../scripts/fields';
 import { useApi } from '../state/names';
 import { useProjectEntities } from '../state/project-entities';
@@ -19,7 +19,9 @@ export function CopyStock({
       setError('That is this NPC.');
       return;
     }
+    // A project NPC whose stock was never read has none to copy: the database's is read instead
     let from: CustomNpc | undefined = project?.entities.npcs.find((n) => n.entry === source);
+    if (from && vendorUnread(from)) from = undefined;
     if (!from) {
       if (!api) {
         setError('Copying stock from the database needs the world database.');

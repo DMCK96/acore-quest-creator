@@ -27,3 +27,39 @@ describe('vendor stock checks', () => {
     expect(codes(issues([stock(0)], () => false))).toEqual(['error:VENDOR_NO_ITEM']);
   });
 });
+
+describe('vendor stock checks the server also makes', () => {
+  const limited = (restockSecs: number): VendorItem => ({ item: 5, maxCount: 5, restockSecs, extendedCost: 0 });
+  const check = (vendor: VendorItem[], over: Partial<Parameters<typeof entityIssues>[0]> = {}, base: Partial<CustomNpc> = {}) =>
+    entityIssues({ entities: { npcs: [{ ...npc(vendor), ...base }], objects: [], items: [] }, dbNames: new Map(), ...over });
+
+  it('errors on limited stock that never restocks, which the server would not load', () => {
+    expect(codes(check([limited(0)]))).toEqual(['error:VENDOR_NO_RESTOCK']);
+    expect(check([limited(0)])[0]!.message).toContain('item 5');
+    expect(check([limited(900)])).toEqual([]);
+    expect(check([{ item: 5, maxCount: 0, restockSecs: 0, extendedCost: 0 }])).toEqual([]);
+  });
+
+  it('accepts a negative item as a reference to another vendor\'s list, and does not look it up', () => {
+    expect(check([stock(-54)], { knownItem: () => false })).toEqual([]);
+  });
+
+  it('warns about an extended cost the server\'s DBC does not have, only when it can tell', () => {
+    expect(codes(check([stock(5, 99)], { knownExtendedCost: (id) => id !== 99 }))).toEqual(['warning:VENDOR_UNKNOWN_COST']);
+    expect(check([stock(5, 99)], { knownExtendedCost: null })).toEqual([]);
+    expect(check([stock(5, 0)], { knownExtendedCost: () => false })).toEqual([]);
+  });
+
+  it('warns about a list longer than the server reads', () => {
+    const many = Array.from({ length: 151 }, (_, i) => stock(i + 1));
+    expect(codes(check(many))).toEqual(['warning:VENDOR_TOO_MANY']);
+    expect(check(many.slice(0, 150))).toEqual([]);
+  });
+
+  it('warns that stock set on an NPC whose stock was never read is not written', () => {
+    const unread = { kind: 'existing' as const, original: { creature_template: [] }, sharedLoot: 0, spawnCount: 1, locked: [] };
+    expect(codes(check([stock(5)], {}, { origin: unread }))).toEqual(['warning:VENDOR_NOT_READ']);
+    expect(check([], {}, { origin: unread })).toEqual([]);
+    expect(check([stock(5)], {}, { origin: { ...unread, original: { npc_vendor: [] } } })).toEqual([]);
+  });
+});

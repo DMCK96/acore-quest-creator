@@ -1,6 +1,6 @@
 import type { NpcSpawn, ObjectSpawn, SpawnPoint } from '@core/entities/entity';
 import { spawnKindOf } from '@core/entities/entity';
-import { OBJECT_TYPE_VALUE, originOf, type ProjectEntities } from '@core/entities/model';
+import { OBJECT_TYPE_VALUE, originOf, vendorUnread, type ProjectEntities } from '@core/entities/model';
 import type { At, MenuSpawn, MenuTarget } from './model';
 
 type Vessel = MenuTarget['vessel'];
@@ -27,8 +27,8 @@ export function spawnedEntityOf(info: MenuSpawn, store: ProjectEntities): NpcSpa
   const spawn: SpawnPoint = { guid: info.guid, map: info.map, placement: info.placement, origin: info.own || info.added ? 'new' : 'existing', group: info.group ?? null };
   if (kind === 'npc') {
     const stored = store.npcs.find((n) => n.entry === info.entry);
-    // The project's stock is counted; a database NPC the project has not opened is a vendor by its flags
-    const vendor = stored ? { sells: stored.vendor.length > 0, count: stored.vendor.length } : { sells: ((info.npcFlags ?? 0) & VENDOR_FLAG) !== 0, count: null };
+    // The project's stock is counted; stock it has not read (an NPC it has not opened, or opened before vendors) is the database's, by its flags
+    const vendor = stored && !vendorUnread(stored) ? { sells: stored.vendor.length > 0, count: stored.vendor.length } : { sells: ((info.npcFlags ?? 0) & VENDOR_FLAG) !== 0, count: null };
     return { kind, entry: info.entry, name: info.name, origin: stored ? originOf(stored) : 'existing', pathId: info.pathId, wander: info.wander, vendor, spawn };
   }
   const stored = store.objects.find((o) => o.entry === info.entry);

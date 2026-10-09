@@ -79,3 +79,12 @@ describe('writing an existing NPC\'s vendor stock', () => {
     expect(flagOf(edited)).toBe(2177);
   });
 });
+
+describe('telling whether stock changed', () => {
+  it('compares the rows by value, not by the order of their properties', () => {
+    const npc = npcFromRows(54, stocked, counts);
+    const shuffled = npc.vendor.map((v) => ({ extendedCost: v.extendedCost, restockSecs: v.restockSecs, maxCount: v.maxCount, item: v.item }));
+    expect(vendorStatements({ ...npc, vendor: shuffled }).apply).toEqual([]);
+    expect(flagOf({ ...npc, vendor: shuffled })).toBe(2177);
+  });
+});

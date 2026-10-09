@@ -6,6 +6,10 @@ import { useApi } from '../state/names';
 import { useProjectEntities } from '../state/project-entities';
 
 const NEW_ROW: VendorItem = { item: 0, maxCount: 0, restockSecs: 0, extendedCost: 0 };
+/** Limited stock the server would not load without a restock time, so it starts at fifteen minutes */
+const DEFAULT_RESTOCK_SECS = 900;
+/** `npc_vendor.maxcount` is a tinyint unsigned */
+const MAX_COUNT = 255;
 
 /** A count the database holds as a whole number from 0 up */
 const count = (n: number): number => Math.max(0, Math.round(n));
@@ -33,6 +37,20 @@ function BuyPrice({ item }: { item: number }): React.JSX.Element | null {
 export function VendorList({
   idPrefix, vendor, onChange, hasServerData,
 }: { idPrefix: string; vendor: readonly VendorItem[]; onChange(next: VendorItem[]): void; hasServerData: boolean }): React.JSX.Element {
+  const api = useApi();
+  // Why extended costs cannot be named though a server data folder is set (its file is missing or damaged)
+  const [costsWhy, setCostsWhy] = useState<string | null>(null);
+  useEffect(() => {
+    if (!hasServerData || !api) return;
+    let live = true;
+    void api.searchEntities('extendedCost', '0').then((result) => {
+      if (live) setCostsWhy(result.ok ? null : result.error.message);
+    });
+    return () => {
+      live = false;
+    };
+  }, [api, hasServerData]);
+  const namedCosts = hasServerData && costsWhy === null;
   const set = (i: number, row: VendorItem): void => onChange(vendor.map((r, j) => (j === i ? row : r)));
   const move = (i: number, by: -1 | 1): void => {
     const next = [...vendor];
@@ -65,18 +83,22 @@ export function VendorList({
                 </div>
                 <EntityField id={`${idPrefix}-vendor${i}`} label="Item" kind="item" value={row.item} onChange={(item) => set(i, { ...row, item })} />
                 <BuyPrice item={row.item} />
+                {row.item < 0 && <p className="scene-hint">Uses the whole list of NPC {-row.item} as its own stock (a reference to another vendor).</p>}
                 <div className="scene-row">
-                  <NumberField label="Max count" value={row.maxCount} min={0} onChange={(n) => set(i, { ...row, maxCount: count(n) })} />
+                  <NumberField label="Max count" value={row.maxCount} min={0} onChange={(n) => {
+                    const maxCount = Math.min(MAX_COUNT, count(n));
+                    set(i, { ...row, maxCount, ...(row.maxCount === 0 && maxCount > 0 && row.restockSecs === 0 ? { restockSecs: DEFAULT_RESTOCK_SECS } : {}) });
+                  }} />
                   <NumberField label="Restock (seconds)" value={row.maxCount === 0 ? 0 : row.restockSecs} min={0} disabled={row.maxCount === 0}
                     onChange={(n) => set(i, { ...row, restockSecs: count(n) })} />
                 </div>
-                {hasServerData ? (
+                {namedCosts ? (
                   <EntityField id={`${idPrefix}-vendor${i}-cost`} label="Extended cost" kind="extendedCost" value={row.extendedCost}
                     onChange={(extendedCost) => set(i, { ...row, extendedCost })} />
                 ) : (
                   <>
                     <NumberField label="Extended cost (id)" value={row.extendedCost} min={0} onChange={(n) => set(i, { ...row, extendedCost: count(n) })} />
-                    <p className="scene-hint">Names need the server data folder.</p>
+                    <p className="scene-hint">{costsWhy ?? 'Names need the server data folder.'}</p>
                   </>
                 )}
               </li>

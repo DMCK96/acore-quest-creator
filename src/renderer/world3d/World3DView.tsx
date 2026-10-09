@@ -26,7 +26,7 @@ import { OrbMark } from '../components/OrbMark';
 import type { PlaceRequest } from './placing';
 import { CHAIN_DRAG_TYPE, dropToRequest, groundOverDrag } from './chain-drop';
 import { useWorldMenu } from './useWorldMenu';
-import type { QuestMenuInfo } from './menu/model';
+import type { MenuEditorTab, QuestMenuInfo } from './menu/model';
 import type { Role, RoleTarget } from '@core/modules/quest-roles';
 import type { GroupView, QuestSpawnGroup } from '@shared/ipc';
 import { GroupCard, groupDrawingOf } from './GroupCard';
@@ -155,7 +155,7 @@ interface ViewProps {
   /** The right-click menu's New … here: one project NPC or object with a spawn at `at`, as one step */
   onCreateEntity?(what: 'creature' | 'object', at: Placement): Promise<void>;
   /** The right-click menu's Edit NPC… / Edit object…, and Edit in Project changes (which lists items too) */
-  onEditEntity?(kind: 'creature' | 'object' | 'item', entry: number, tab?: string): void;
+  onEditEntity?(kind: 'creature' | 'object' | 'item', entry: number, tab?: MenuEditorTab): void;
   /** Project changes' Go to: brings a spawn of the project's into view, on whichever map it is */
   onGoToSpawn?(target: Omit<FocusTarget, 'nonce'> & { map: number }): void;
   /** The right-click menu's Make lootable… / Stop being lootable */

@@ -43,3 +43,19 @@ describe('reading an existing NPC\'s vendor stock', () => {
     expect(read!.npc_vendor).toEqual([row('0', '159')]);
   });
 });
+
+describe('what a vendor list may hold', () => {
+  it('holds at most 255 of an item, the width of npc_vendor.maxcount', () => {
+    const with_ = (maxCount: number) => projectEntitiesSchema.safeParse({ npcs: [{ ...newNpc(7), vendor: [{ item: 1, maxCount, restockSecs: 0, extendedCost: 0 }] }], objects: [], items: [] }).success;
+    expect(with_(255)).toBe(true);
+    expect(with_(256)).toBe(false);
+  });
+
+  it('leaves the stock unread, so it is not edited, when the fork has no npc_vendor table', async () => {
+    const { FakeWorldDb } = await import('../helpers/fake-world-db');
+    const db = FakeWorldDb.fromFork(['creature_template', 'creature_template_model', 'creature_equip_template', 'creature_loot_template', 'creature', 'game_event_creature']);
+    db.insert('creature_template', template);
+    const read = await readOriginalRows(db, 'npc', 54);
+    expect(read).not.toHaveProperty('npc_vendor');
+  });
+});

@@ -1,4 +1,4 @@
-import type { CustomNpc, Spawn } from '@core/entities/model';
+import { vendorUnread, type CustomNpc, type Spawn } from '@core/entities/model';
 import { npcSpawnFacts } from '@core/entities/spawn-events';
 import { isSpiritNpc } from '@core/entities/visibility';
 import { EMPTY_WORLD } from '@core/world/layer';
@@ -94,8 +94,10 @@ export function NpcEditor({
     label: 'Vendor',
     render: () =>
       // Stock a project saved before vendors existed never read is left as the database has it
-      npc.origin.kind === 'existing' && !Object.prototype.hasOwnProperty.call(npc.origin.original, 'npc_vendor') ? (
-        <p className="scene-hint">{name}&apos;s stock was not read when it was added to this project, so it is not edited here.</p>
+      vendorUnread(npc) ? (
+        <p className="scene-hint">
+          {name}&apos;s stock was not read when it was added to this project, so it is not edited here. Choose Put back as the database has it, then edit it again, to read its stock.
+        </p>
       ) : (
         <>
           <VendorList idPrefix={`npc-${npc.entry}`} vendor={npc.vendor} onChange={(vendor) => onChange({ ...npc, vendor })} hasServerData={hasServerData} />

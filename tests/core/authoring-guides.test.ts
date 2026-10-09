@@ -1,6 +1,6 @@
 import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
-import { AUTHORING_MODELS, choicesIn, jsonSchemaOf, kindsIn } from '../../src/core/authoring/models';
+import { AUTHORING_MODELS, authoringSummary, choicesIn, jsonSchemaOf, kindsIn } from '../../src/core/authoring/models';
 import { guideOf } from '../../src/core/authoring/guides';
 
 describe('the guides', () => {
@@ -88,8 +88,10 @@ describe('the guides tell the truth about the editor', () => {
   it('npc guide and example cover vendor stock and cite its codes', async () => {
     const { examplesOf } = await import('../../src/core/authoring/examples');
     const guide = guideOf('npc');
-    for (const word of ['`vendor`', '`maxCount`', '`restockSecs`', '`extendedCost`', '`VENDOR_DUPLICATE`', '`VENDOR_NO_ITEM`', '`VENDOR_UNKNOWN_ITEM`']) expect(guide).toContain(word);
+    for (const word of ['`vendor`', '`maxCount`', '`restockSecs`', '`extendedCost`', '`VENDOR_DUPLICATE`', '`VENDOR_NO_ITEM`', '`VENDOR_UNKNOWN_ITEM`', '`VENDOR_NO_RESTOCK`', '`VENDOR_UNKNOWN_COST`', '`VENDOR_TOO_MANY`', '`VENDOR_NOT_READ`']) expect(guide).toContain(word);
     expect(jsonSchemaOf('npc')).toHaveProperty('properties.vendor');
+    expect(guide).toMatch(/negative/i);
+    expect(authoringSummary('npc')).toMatch(/sells/);
     expect((examplesOf('npc')[0]!.value as { vendor: unknown[] }).vendor.length).toBeGreaterThan(0);
   });
 

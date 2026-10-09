@@ -15,9 +15,10 @@ import type { ProjectQuest } from '../project/project-file';
 import type { ApiContext } from './context';
 import type { Session } from './connection';
 import { fail } from './errors';
+import type { ServerFiles } from './server-files';
 
 /** What stops a quest or the project being exported: validation, the round-trip gate and free ids */
-export function createChecks(ctx: ApiContext) {
+export function createChecks(ctx: ApiContext, files: ServerFiles) {
   const { deps, quests, linksFor, projectEntities, questEntities, refsFor, objectivesByQuest, missingScriptTables } = ctx;
 
   /**
@@ -85,11 +86,15 @@ export function createChecks(ctx: ApiContext) {
     // What NPCs sell: an item the world database or the project has
     const sold = [...new Set(entities.npcs.flatMap((n) => n.vendor.map((v) => v.item)).filter((i) => i > 0))];
     const soldRows = sold.length > 0 ? await rowsOrNone(live.db, 'item_template', { entry: sold.map(String) }) : [];
+    // Extended costs only when some stock asks for one and the server's DBC could be read: a validation run cannot say more
+    const asked = entities.npcs.some((n) => n.vendor.some((v) => v.extendedCost > 0));
+    const costs = asked ? await files.extendedCostsOf(live) : null;
     const knownItems = new Set([...soldRows.map((r) => Number(r.entry)), ...entities.items.map((i) => i.entry)]);
     return entityIssues({
       entities, dbNames, questItems: [...new Set(quests.list().flatMap((q) => questItemsOf(q.aggregate)))], objectives: objectivesByQuest(),
       knownSpell: spells ? (id) => spells.get(id) !== undefined : null, itemInventoryTypes,
-      knownQuest: (id) => knownQuests.has(id), knownItem: (id) => knownItems.has(id), itemColumnTypes: itemColumnTypes.size > 0 ? itemColumnTypes : null,
+      knownQuest: (id) => knownQuests.has(id), knownItem: (id) => knownItems.has(id),
+      knownExtendedCost: costs && !('reason' in costs) ? (id) => costs.get(id) !== undefined : null, itemColumnTypes: itemColumnTypes.size > 0 ? itemColumnTypes : null,
     });
   }
 

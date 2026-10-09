@@ -1,6 +1,6 @@
 import { fightIssues } from '../combat/validate';
 import type { Issue } from '../validate/validate';
-import { ENTITIES_FIELD, type CustomItem, type CustomNpc, type CustomObject, type QuestEntities } from './model';
+import { ENTITIES_FIELD, vendorUnread, type CustomItem, type CustomNpc, type CustomObject, type QuestEntities } from './model';
 import { missingChoice } from '../patrol/compile';
 
 /**
@@ -11,6 +11,8 @@ const HELD_IN_HAND: ReadonlySet<number> = new Set([13, 14, 15, 17, 21, 22, 23, 2
 
 const NUMERIC_TYPES: ReadonlySet<string> = new Set(['tinyint', 'smallint', 'mediumint', 'int', 'bigint', 'float', 'double', 'decimal']);
 const NUMBER = /^-?\d+(\.\d+)?$/;
+/** `MAX_VENDOR_ITEMS`: the server reads no more rows than this for one vendor. */
+const MAX_VENDOR_ITEMS = 150;
 /** `ItemClass` Quest: something the player carries for a quest, never worn. */
 const QUEST_CLASS = 12;
 
@@ -31,6 +33,8 @@ export function entityIssues(input: {
   itemColumnTypes?: ReadonlyMap<string, string> | null;
   /** Whether an item is in the world database or the project; null skips the check of what an NPC sells. */
   knownItem?: ((id: number) => boolean) | null;
+  /** Whether an extended cost is in the server's `ItemExtendedCost.dbc`; null skips the check. */
+  knownExtendedCost?: ((id: number) => boolean) | null;
 }): Issue[] {
   const questItems = new Set(input.questItems ?? []);
   const issues: Issue[] = [];
@@ -94,8 +98,9 @@ export function entityIssues(input: {
       const seen = new Set<string>();
       const repeated = new Set<string>();
       const unknown = new Set<number>();
+      const unknownCost = new Set<number>();
       for (const row of entity.vendor) {
-        if (row.item <= 0) {
+        if (row.item === 0) {
           add('error', 'VENDOR_NO_ITEM', 'a stock row has no item.');
           continue;
         }
@@ -105,10 +110,25 @@ export function entityIssues(input: {
           add('error', 'VENDOR_DUPLICATE', `item ${row.item} is listed twice with the same extended cost; the database allows each pair once.`);
         }
         seen.add(pair);
-        if (input.knownItem && !input.knownItem(row.item) && !unknown.has(row.item)) {
+        // The server skips limited stock that never restocks, and restocking stock that is not limited is ignored
+        if (row.maxCount > 0 && row.restockSecs <= 0) {
+          add('error', 'VENDOR_NO_RESTOCK', `item ${row.item} is limited to ${row.maxCount} but has no restock time, so the server would not load it; set how often it restocks.`);
+        }
+        // A negative item is another vendor's list, not an item to look up
+        if (row.item > 0 && input.knownItem && !input.knownItem(row.item) && !unknown.has(row.item)) {
           unknown.add(row.item);
           add('warning', 'VENDOR_UNKNOWN_ITEM', `item ${row.item} is neither in the world database nor in this project.`);
         }
+        if (row.extendedCost > 0 && input.knownExtendedCost && !input.knownExtendedCost(row.extendedCost) && !unknownCost.has(row.extendedCost)) {
+          unknownCost.add(row.extendedCost);
+          add('warning', 'VENDOR_UNKNOWN_COST', `extended cost ${row.extendedCost} is not in the server's ItemExtendedCost.dbc, so the server would skip its item.`);
+        }
+      }
+      if (entity.vendor.length > MAX_VENDOR_ITEMS) {
+        add('warning', 'VENDOR_TOO_MANY', `it sells ${entity.vendor.length} things; the server reads at most ${MAX_VENDOR_ITEMS} for one vendor and ignores the rest.`);
+      }
+      if (vendorUnread(entity) && entity.vendor.length > 0) {
+        add('warning', 'VENDOR_NOT_READ', 'its stock was never read from the database, so this stock is not written; put the NPC back as the database has it and edit it again.');
       }
     }
     if ('fight' in entity && entity.fight) issues.push(...fightIssues(entity.fight, label, input.knownSpell ?? null, input.objectives ?? null));

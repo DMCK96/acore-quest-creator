@@ -2,12 +2,14 @@ import { DbcFormatError, parseDbc } from './dbc';
 
 /**
  * What a vendor asks for besides gold, from the server data folder's `ItemExtendedCost.dbc`
- * (3.3.5a, 15 fields): the id, honor points, arena points, arena slot, five item ids, five item
- * counts and the personal arena rating needed.
+ * (3.3.5a, 16 fields): the id, honor points, arena points, arena slot, five item ids, five item
+ * counts, the personal arena rating needed and the purchase group (not read).
  */
 export const EXTENDED_COST_FILE = 'ItemExtendedCost.dbc';
 
+/** The fields read; a 3.3.5a file has one more, the purchase group */
 const FIELDS = 15;
+const FILE_FIELDS = 16;
 const ITEM_SLOTS = 5;
 
 export interface ExtendedCost {
@@ -22,7 +24,7 @@ export interface ExtendedCost {
 export function readExtendedCosts(bytes: Uint8Array): Map<number, ExtendedCost> {
   const table = parseDbc(bytes, EXTENDED_COST_FILE);
   if (table.fieldCount < FIELDS) {
-    throw new DbcFormatError(`${EXTENDED_COST_FILE} has ${table.fieldCount} fields; a 3.3.5a file has ${FIELDS}.`);
+    throw new DbcFormatError(`${EXTENDED_COST_FILE} has ${table.fieldCount} fields; a 3.3.5a file has ${FILE_FIELDS}.`);
   }
   const costs = new Map<number, ExtendedCost>();
   for (const r of table.records) {

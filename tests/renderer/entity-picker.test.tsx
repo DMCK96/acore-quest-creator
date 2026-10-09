@@ -132,7 +132,7 @@ describe('new NPCs and objects made with the open quest', () => {
   it('names a new NPC instead of calling it missing', async () => {
     const api = makeMockApi({ lookupNames: nothingFound });
     render(
-      <NamesProvider api={api} local={{ creature: new Map([[11000231, 'Foreman Brask']]), gameobject: new Map() }}>
+      <NamesProvider api={api} local={{ creature: new Map([[11000231, 'Foreman Brask']]), gameobject: new Map(), quest: new Map() }}>
         <EntityPicker id="p" label="NPC" kind="creature" value={11000231} onChange={vi.fn()} />
       </NamesProvider>,
     );
@@ -144,11 +144,11 @@ describe('new NPCs and objects made with the open quest', () => {
     const api = makeMockApi({ lookupNames: nothingFound });
     const picker = <EntityPicker id="p" label="NPC" kind="creature" value={11000231} onChange={vi.fn()} />;
     const { rerender } = render(
-      <NamesProvider api={api} local={{ creature: new Map([[11000231, 'New NPC']]), gameobject: new Map() }}>{picker}</NamesProvider>,
+      <NamesProvider api={api} local={{ creature: new Map([[11000231, 'New NPC']]), gameobject: new Map(), quest: new Map() }}>{picker}</NamesProvider>,
     );
     expect(await screen.findByDisplayValue('New NPC')).toBeInTheDocument();
     rerender(
-      <NamesProvider api={api} local={{ creature: new Map([[11000231, 'Foreman Brask']]), gameobject: new Map() }}>{picker}</NamesProvider>,
+      <NamesProvider api={api} local={{ creature: new Map([[11000231, 'Foreman Brask']]), gameobject: new Map(), quest: new Map() }}>{picker}</NamesProvider>,
     );
     expect(await screen.findByDisplayValue('Foreman Brask')).toBeInTheDocument();
   });
@@ -159,7 +159,7 @@ describe('new NPCs and objects made with the open quest', () => {
       return <p>{names('gameobject', 9000150) ?? 'loading'}</p>;
     }
     render(
-      <NamesProvider api={makeMockApi({ lookupNames: nothingFound })} local={{ creature: new Map(), gameobject: new Map([[9000150, "Brask's Ledger"]]) }}>
+      <NamesProvider api={makeMockApi({ lookupNames: nothingFound })} local={{ creature: new Map(), gameobject: new Map([[9000150, "Brask's Ledger"]]), quest: new Map() }}>
         <Probe />
       </NamesProvider>,
     );
@@ -169,7 +169,7 @@ describe('new NPCs and objects made with the open quest', () => {
   it('still asks the database for everything else', async () => {
     const api = makeMockApi({ lookupNames: wolfNames });
     render(
-      <NamesProvider api={api} local={{ creature: new Map([[11000231, 'Foreman Brask']]), gameobject: new Map() }}>
+      <NamesProvider api={api} local={{ creature: new Map([[11000231, 'Foreman Brask']]), gameobject: new Map(), quest: new Map() }}>
         <EntityPicker id="p" label="NPC" kind="creature" value={299} onChange={vi.fn()} />
       </NamesProvider>,
     );

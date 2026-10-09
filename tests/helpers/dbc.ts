@@ -51,6 +51,6 @@ export function buildDbcWithStrings(records: (number | string)[][], fieldCount: 
   return bytes;
 }
 
-/** An ItemExtendedCost.dbc record of 15 fields: id, honor, arena, slot, 5 item ids, 5 item counts, rating. */
+/** An ItemExtendedCost.dbc record of 16 fields: id, honor, arena, slot, 5 item ids, 5 item counts, rating, purchase group. */
 export const costRecord = (id: number, honor: number, arena: number, items: [number, number][], rating = 0): number[] =>
-  [id, honor, arena, 0, ...Array.from({ length: 5 }, (_, i) => items[i]?.[0] ?? 0), ...Array.from({ length: 5 }, (_, i) => items[i]?.[1] ?? 0), rating];
+  [id, honor, arena, 0, ...Array.from({ length: 5 }, (_, i) => items[i]?.[0] ?? 0), ...Array.from({ length: 5 }, (_, i) => items[i]?.[1] ?? 0), rating, 0];
