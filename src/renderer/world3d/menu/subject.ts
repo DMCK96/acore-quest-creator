@@ -1,6 +1,6 @@
 import type { NpcSpawn, ObjectSpawn, SpawnPoint } from '@core/entities/entity';
 import { spawnKindOf } from '@core/entities/entity';
-import { OBJECT_TYPE_VALUE, originOf, trainerUnread, vendorUnread, type ProjectEntities } from '@core/entities/model';
+import { OBJECT_TYPE_VALUE, gossipUnread, originOf, trainerUnread, vendorUnread, type ProjectEntities } from '@core/entities/model';
 import type { At, MenuSpawn, MenuTarget } from './model';
 
 type Vessel = MenuTarget['vessel'];
@@ -32,7 +32,10 @@ export function spawnedEntityOf(info: MenuSpawn, store: ProjectEntities): NpcSpa
     const trainer = stored && !trainerUnread(stored) && !(stored.trainer === null && stored.origin.kind === 'existing' && stored.origin.locked.includes('trainer'))
       ? { teaches: stored.trainer !== null, count: stored.trainer?.spells.length ?? 0 }
       : { teaches: ((info.npcFlags ?? 0) & TRAINER_FLAG) !== 0, count: null };
-    return { kind, entry: info.entry, name: info.name, origin: stored ? originOf(stored) : 'existing', pathId: info.pathId, wander: info.wander, vendor, trainer, spawn };
+    const gossipMenu = stored && !gossipUnread(stored)
+      ? { has: stored.gossipMenu !== null, count: stored.gossipMenu?.menus.reduce((n, m) => n + m.options.length, 0) ?? 0 }
+      : { has: (info.gossipMenuId ?? 0) > 0, count: null };
+    return { kind, entry: info.entry, name: info.name, origin: stored ? originOf(stored) : 'existing', pathId: info.pathId, wander: info.wander, vendor, trainer, gossipMenu, spawn };
   }
   const stored = store.objects.find((o) => o.entry === info.entry);
   const typeLocked = stored?.origin.kind === 'existing' && stored.origin.locked.includes('type');

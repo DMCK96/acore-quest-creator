@@ -42,4 +42,16 @@ describe('opening an NPC from the right-click menu on its Vendor tab', () => {
     await userEvent.click(await screen.findByRole('menuitem', { name: /Edit trainer spells…/ }));
     expect(onEditEntity).toHaveBeenCalledWith('creature', 1423, 'trainer');
   });
+
+  it('hands the Gossip tab to the view for an NPC whose template has a menu', async () => {
+    const onEditEntity = vi.fn();
+    const deps = {
+      world: { current: { setMarked: vi.fn(), frameOfSpawn: () => null } }, api: {}, map: 0, vessel: false, placing: false, newPaths: new Set<number>(),
+      entities: EMPTY_ENTITIES, onEditEntity, isNewPath: () => false, send: async () => true, takeLayer: vi.fn(), setNote: vi.fn(), floorZ: async () => null,
+      toRow: (at: unknown) => at, stopPlacing: vi.fn(), clearSelection: vi.fn(), focusView: vi.fn(), viewCentre: () => ({ x: 0, y: 0 }),
+    } as unknown as WorldMenuDeps;
+    render(<Harness deps={deps} spawn={{ ...guard, gossipMenuId: 5000 } as MenuSpawn} />);
+    await userEvent.click(await screen.findByRole('menuitem', { name: /Edit gossip menu…/ }));
+    expect(onEditEntity).toHaveBeenCalledWith('creature', 1423, 'gossip');
+  });
 });

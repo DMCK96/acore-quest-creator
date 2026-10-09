@@ -12,7 +12,7 @@ const store = { ...EMPTY_ENTITIES, npcs: [{ ...newNpc(12000001), name: 'Hela' }]
 describe('the clicked thing as an entity', () => {
   it('a database NPC is existing, with its spawn existing too', () => {
     expect(spawnedEntityOf(info(), store)).toEqual({
-      kind: 'npc', entry: 1423, name: 'Guard', origin: 'existing', pathId: 801, wander: 0, vendor: { sells: false, count: null }, trainer: { teaches: false, count: null },
+      kind: 'npc', entry: 1423, name: 'Guard', origin: 'existing', pathId: 801, wander: 0, vendor: { sells: false, count: null }, trainer: { teaches: false, count: null }, gossipMenu: { has: false, count: null },
       spawn: { guid: 80330, map: 0, placement, origin: 'existing', group: null },
     });
   });
@@ -51,6 +51,19 @@ describe('the clicked thing as an entity', () => {
     const unread = { ...store, npcs: [{ ...newNpc(1423), origin: { kind: 'existing' as const, original: {}, sharedLoot: 0, spawnCount: 1, sharedTrainer: 0, locked: [] } }] };
     expect(spawnedEntityOf(info({ npcFlags: 51 }), unread)).toMatchObject({ trainer: { teaches: true, count: null } });
     expect(spawnedEntityOf(info({ npcFlags: 1 }), unread)).toMatchObject({ trainer: { teaches: false, count: null } });
+  });
+
+  it('an NPC says whether it talks: the options the project holds counted, an unopened database NPC by its gossip_menu_id', () => {
+    const option = { optionId: 0, icon: 0, text: 'Bye', action: { kind: 'close' as const }, kept: false };
+    const menu = { menuId: 100, textId: 101, locked: false, greeting: [{ text: 'Hi', textFemale: '', probability: 1 }], options: [option, { ...option, optionId: 1 }] };
+    const talking = { ...store, npcs: [{ ...newNpc(12000001), gossipMenu: { menus: [menu, { ...menu, menuId: 102 }] } }] };
+    expect(spawnedEntityOf(info({ entry: 12000001, own: true }), talking)).toMatchObject({ gossipMenu: { has: true, count: 4 } });
+    expect(spawnedEntityOf(info({ entry: 12000001, own: true }), store)).toMatchObject({ gossipMenu: { has: false, count: 0 } });
+    expect(spawnedEntityOf(info({ gossipMenuId: 5000 }), store)).toMatchObject({ gossipMenu: { has: true, count: null } });
+    expect(spawnedEntityOf(info({ gossipMenuId: 0 }), store)).toMatchObject({ gossipMenu: { has: false, count: null } });
+    const unread = { ...store, npcs: [{ ...newNpc(1423), origin: { kind: 'existing' as const, original: {}, sharedLoot: 0, spawnCount: 1, sharedTrainer: 0, locked: [] } }] };
+    expect(spawnedEntityOf(info({ gossipMenuId: 5000 }), unread)).toMatchObject({ gossipMenu: { has: true, count: null } });
+    expect(spawnedEntityOf(info({ gossipMenuId: 0 }), unread)).toMatchObject({ gossipMenu: { has: false, count: null } });
   });
 
   it('an object says whether it can be looted: a project chest yes, a project goober no, a database one cannot be changed', () => {

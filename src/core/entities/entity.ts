@@ -49,6 +49,8 @@ export interface NpcSpawn extends SpawnedEntity {
   vendor: { sells: boolean; count: number | null };
   /** Whether it teaches spells, and how many when the project holds its trainer (null when the database's has not been read) */
   trainer: { teaches: boolean; count: number | null };
+  /** Whether it has a gossip menu, and how many options its menus hold when the project holds them (null when the database's has not been read) */
+  gossipMenu: { has: boolean; count: number | null };
 }
 
 /** A spawned object; `lootable` is null when it is the database's and cannot be changed */

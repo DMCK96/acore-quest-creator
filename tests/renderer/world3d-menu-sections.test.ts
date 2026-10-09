@@ -55,7 +55,7 @@ describe('a route point', () => {
 
 describe('the builder', () => {
   it('registers the sections in the spec order', () => {
-    expect(SECTIONS.map((s) => s.id)).toEqual(['busy', 'create', 'edit', 'loot', 'vendor', 'trainer', 'clipboard', 'coordinates', 'respawn', 'spawn-events', 'spawn-group', 'remove', 'movement', 'route-point', 'quest-parts', 'quest-spawns', 'vessel-stops']);
+    expect(SECTIONS.map((s) => s.id)).toEqual(['busy', 'create', 'edit', 'loot', 'vendor', 'trainer', 'gossip', 'clipboard', 'coordinates', 'respawn', 'spawn-events', 'spawn-group', 'remove', 'movement', 'route-point', 'quest-parts', 'quest-spawns', 'vessel-stops']);
   });
 
   it('runs only sections that apply, joins those of one group, and drops empty groups', () => {
@@ -119,14 +119,14 @@ describe('the ground', () => {
 describe('a spawn', () => {
   it('a database NPC can be edited too; offline it needs the database', () => {
     const world = buildMenu(on(npc()), context()).find((g) => g.id === 'world')!;
-    expect(world.items.map((i) => i.label)).toEqual(['Edit NPC…', 'Make vendor…', 'Make trainer…', 'Copy', 'Duplicate', 'Copy coordinates', 'Respawn time…', 'Event…']);
+    expect(world.items.map((i) => i.label)).toEqual(['Edit NPC…', 'Make vendor…', 'Make trainer…', 'Add gossip menu…', 'Copy', 'Duplicate', 'Copy coordinates', 'Respawn time…', 'Event…']);
     expect(item(buildMenu(on(npc()), context({ connected: false })), 'Edit NPC…')!.disabledReason).toBe('Needs the world database');
     expect(item(buildMenu(on(hela), context({ connected: false })), 'Edit NPC…')!.action).toBeDefined();
   });
 
   it('a project NPC: edit first, and remove last', () => {
     const world = buildMenu(on(hela), context()).find((g) => g.id === 'world')!;
-    expect(world.items.map((i) => i.label)).toEqual(['Edit NPC…', 'Make vendor…', 'Make trainer…', 'Copy', 'Duplicate', 'Copy coordinates', 'Respawn time…', 'Event…', 'Remove']);
+    expect(world.items.map((i) => i.label)).toEqual(['Edit NPC…', 'Make vendor…', 'Make trainer…', 'Add gossip menu…', 'Copy', 'Duplicate', 'Copy coordinates', 'Respawn time…', 'Event…', 'Remove']);
     expect(item(buildMenu(on(hela), context()), 'Edit NPC…')!.action).toEqual({ kind: 'editEntity', spawn: hela });
   });
 
@@ -343,5 +343,38 @@ describe('the trainer section', () => {
     const unread = { ...store, npcs: [{ ...newNpc(1423), origin: { kind: 'existing' as const, original: {}, sharedLoot: 0, spawnCount: 1, sharedTrainer: 0, locked: [] } }] };
     expect(item(buildMenu(on(npc({ npcFlags: 51 }), unread), context()), 'Edit trainer spells…')).toBeDefined();
     expect(item(buildMenu(on(npc({ npcFlags: 3 }), unread), context()), 'Make trainer…')).toBeDefined();
+  });
+});
+
+describe('the gossip section', () => {
+  const option = (id: number) => ({ optionId: id, icon: 0, text: 'Bye', action: { kind: 'close' as const }, kept: false });
+  const menu = (menuId: number, options: number) => ({ menuId, textId: menuId + 1, locked: false, greeting: [{ text: 'Hi', textFemale: '', probability: 1 }], options: Array.from({ length: options }, (_, i) => option(i)) });
+  const talking = (...counts: number[]): ProjectEntities => ({ ...store, npcs: [{ ...newNpc(12000001), name: 'Hela', gossipMenu: { menus: counts.map((n, i) => menu(100 + i, n)) } }] });
+
+  it('offers Add gossip menu… on an NPC without one, opening the Gossip tab', () => {
+    const entry = item(buildMenu(on(hela), context()), 'Add gossip menu…')!;
+    expect(entry.action).toEqual({ kind: 'editEntity', spawn: hela, tab: 'gossip' });
+    expect(entry.hint).toBeUndefined();
+  });
+  it('offers Edit gossip menu… with the options counted over all its menus', () => {
+    expect(item(buildMenu(on(hela, talking(2, 1)), context()), 'Edit gossip menu…')!.hint).toBe('3 options');
+    expect(item(buildMenu(on(hela, talking(1)), context()), 'Edit gossip menu…')!.hint).toBe('1 option');
+    expect(item(buildMenu(on(hela, talking(0)), context()), 'Edit gossip menu…')!.hint).toBeUndefined();
+    expect(item(buildMenu(on(hela, talking(1)), context()), 'Add gossip menu…')).toBeUndefined();
+  });
+  it('reads an unopened database NPC from its gossip_menu_id', () => {
+    expect(item(buildMenu(on(npc({ gossipMenuId: 5000 })), context()), 'Edit gossip menu…')!.hint).toBeUndefined();
+    expect(item(buildMenu(on(npc({ gossipMenuId: 0 })), context()), 'Add gossip menu…')).toBeDefined();
+    expect(item(buildMenu(on(npc()), context()), 'Add gossip menu…')).toBeDefined();
+  });
+  it('needs the world database for a database NPC, not for a project one; not on objects', () => {
+    expect(item(buildMenu(on(npc()), context({ connected: false })), 'Add gossip menu…')!.disabledReason).toBe('Needs the world database');
+    expect(item(buildMenu(on(hela), context({ connected: false })), 'Add gossip menu…')!.action).toBeDefined();
+    expect(item(buildMenu(on(chest), context()), 'Add gossip menu…')).toBeUndefined();
+  });
+  it('a gossip menu the project never read falls back to the database\'s', () => {
+    const unread = { ...store, npcs: [{ ...newNpc(1423), origin: { kind: 'existing' as const, original: {}, sharedLoot: 0, spawnCount: 1, sharedTrainer: 0, locked: [] } }] };
+    expect(item(buildMenu(on(npc({ gossipMenuId: 5000 }), unread), context()), 'Edit gossip menu…')).toBeDefined();
+    expect(item(buildMenu(on(npc({ gossipMenuId: 0 }), unread), context()), 'Add gossip menu…')).toBeDefined();
   });
 });

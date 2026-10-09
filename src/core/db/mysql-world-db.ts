@@ -343,7 +343,7 @@ class MysqlWorldDb implements WorldDb {
     const creatureRows = await query(
       'reading creature',
       `SELECT s.guid, s.${entry} AS entry, s.map, s.position_x, s.position_y, s.position_z, s.orientation, s.wander_distance, s.MovementType, s.equipment_id, s.spawntimesecs, ` +
-        `t.name, t.npcflag AS npcflag, m.CreatureDisplayID AS display_id, m.DisplayScale AS display_scale, ${pathColumn} AS path_id${creatureEvents.columns}${creaturePools.columns} ` +
+        `t.name, t.npcflag AS npcflag, t.gossip_menu_id AS gossip_menu_id, m.CreatureDisplayID AS display_id, m.DisplayScale AS display_scale, ${pathColumn} AS path_id${creatureEvents.columns}${creaturePools.columns} ` +
         `FROM creature s LEFT JOIN creature_template t ON t.entry = s.${entry}${routeJoins} ` +
         `LEFT JOIN (SELECT CreatureID, MIN(Idx) AS Idx FROM creature_template_model GROUP BY CreatureID) f ON f.CreatureID = s.${entry} ` +
         `LEFT JOIN creature_template_model m ON m.CreatureID = f.CreatureID AND m.Idx = f.Idx${creatureEvents.joins}${creaturePools.joins} ` +

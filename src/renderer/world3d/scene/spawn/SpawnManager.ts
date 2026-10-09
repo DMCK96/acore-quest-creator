@@ -63,6 +63,8 @@ export type SpawnInfo = {
   objectType?: number;
   /** An NPC's template `npcflag` (128 is a vendor); absent for an object or when it is not known */
   npcFlags?: number;
+  /** An NPC's template `gossip_menu_id` (0 has no menu); absent for an object or when it is not known */
+  gossipMenuId?: number;
 };
 
 /** An object's facing: its turn about Z, from 0 to a whole turn */
@@ -771,7 +773,7 @@ class SpawnManager {
       const base = { kind, guid, entry: data.entry, name: data.name, own: data.own, added: data.added ?? false, map: data.map, group: data.group ?? null, respawnSecs: data.respawnSecs ?? 300 };
       if (kind === 'creature') {
         const c = data as ViewCreature;
-        return { ...base, pathId: c.pathId ?? 0, wander: c.wander, placement: this.#inView({ x: c.x, y: c.y, z: c.z, orientation: c.orientation, rotation: null }), spawnEvents: c.spawnEvents === undefined ? 'npc' : c.spawnEvents, eventsNow: { during: c.events, gone: c.removedBy }, ...(c.npcFlags === undefined ? {} : { npcFlags: c.npcFlags }) };
+        return { ...base, pathId: c.pathId ?? 0, wander: c.wander, placement: this.#inView({ x: c.x, y: c.y, z: c.z, orientation: c.orientation, rotation: null }), spawnEvents: c.spawnEvents === undefined ? 'npc' : c.spawnEvents, eventsNow: { during: c.events, gone: c.removedBy }, ...(c.npcFlags === undefined ? {} : { npcFlags: c.npcFlags }), ...(c.gossipMenuId === undefined ? {} : { gossipMenuId: c.gossipMenuId }) };
       }
       const o = data as ViewObject;
       const objectType = o.objectType ?? -1;

@@ -169,6 +169,7 @@ export class FakeWorldDb implements WorldDb {
     const creatureTemplates = await this.selectRows('creature_template', {});
     const names = new Map(creatureTemplates.map((r) => [r.entry, r.name ?? null]));
     const npcflags = new Map(creatureTemplates.map((r) => [r.entry, r.npcflag ?? null]));
+    const menus = new Map(creatureTemplates.map((r) => [r.entry, r.gossip_menu_id ?? null]));
     // The template's first model: the lowest Idx
     const models = new Map<string, RawRow>();
     for (const m of await this.selectRows('creature_template_model', {})) {
@@ -205,7 +206,7 @@ export class FakeWorldDb implements WorldDb {
       const points = pathId && pathId !== '0' ? waypoints.filter((w) => w.id === pathId) : [];
       const equip = r.equipment_id && r.equipment_id !== '0' ? equips.find((e) => e.CreatureID === entry && e.ID === r.equipment_id) : undefined;
       return toViewCreature(
-        { ...r, entry, name: names.get(entry) ?? null, ...(npcflags.get(entry) == null ? {} : { npcflag: npcflags.get(entry) }), display_id: model?.CreatureDisplayID ?? null, display_scale: model?.DisplayScale ?? null, path_id: pathId ?? null, pool_entry: creaturePools.get(r.guid) ?? null, ...poolEvent(creaturePools.get(r.guid)) },
+        { ...r, entry, name: names.get(entry) ?? null, ...(npcflags.get(entry) == null ? {} : { npcflag: npcflags.get(entry) }), ...(menus.get(entry) == null ? {} : { gossip_menu_id: menus.get(entry) }), display_id: model?.CreatureDisplayID ?? null, display_scale: model?.DisplayScale ?? null, path_id: pathId ?? null, pool_entry: creaturePools.get(r.guid) ?? null, ...poolEvent(creaturePools.get(r.guid)) },
         points.length > 0 ? orderPath(points) : null,
         equip ? [Number(equip.ItemID1 ?? 0), Number(equip.ItemID2 ?? 0), Number(equip.ItemID3 ?? 0)] : [0, 0, 0],
         presets.length > 0 ? pickPreset(presets, Number(entry), Number(model?.CreatureDisplayID ?? 0)) : null,

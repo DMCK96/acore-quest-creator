@@ -45,6 +45,15 @@ describe('spawns for the 3D view', () => {
     expect(out.value.capped).toEqual({ creatures: false, objects: false });
   });
 
+  it('carries the template gossip_menu_id, so the menu can tell an NPC that talks', async () => {
+    const api = await setup((db) => {
+      db.insert('creature_template', { entry: '54', name: 'Innkeeper', npcflag: '129', gossip_menu_id: '5000' });
+      db.insert('creature', { guid: '5', id1: '54', map: '0', position_x: '-8900', position_y: '-150', position_z: '82', orientation: '0', wander_distance: '0', MovementType: '0' });
+    });
+    const out: any = await api.viewSpawns(0, AREA);
+    expect(out.value.creatures[0].gossipMenuId).toBe(5000);
+  });
+
   it('falls back to the template\'s route when the spawn has no addon of its own', async () => {
     const api = await setup((db) => {
       db.insert('creature_template', { entry: '1423', name: 'Stormwind Guard' });

@@ -170,6 +170,13 @@ describe('an NPC dressed by a display preset (creature_display_preset)', () => {
   });
 });
 
+describe('a creature spawn\'s gossip menu', () => {
+  it('carries the template\'s gossip_menu_id when the query gave it, and none otherwise', () => {
+    expect(toViewCreature({ ...creatureRow, gossip_menu_id: '5000' }, null, [0, 0, 0]).gossipMenuId).toBe(5000);
+    expect(toViewCreature(creatureRow, null, [0, 0, 0])).not.toHaveProperty('gossipMenuId');
+  });
+});
+
 describe('a creature spawn\'s NPC flags', () => {
   it('carries the template\'s npcflag when the query gave it, and none otherwise', () => {
     expect(toViewCreature({ ...creatureRow, npcflag: '129' }, null, [0, 0, 0]).npcFlags).toBe(129);

@@ -83,6 +83,8 @@ export interface ViewCreature {
   group: number | null;
   /** Its template's `npcflag` (128 is a vendor), when the query gave it */
   npcFlags?: number;
+  /** Its template's `gossip_menu_id` (0 has no menu), when the query gave it */
+  gossipMenuId?: number;
   /** The top-level group its database group sits in (itself when not nested), when the query gave it */
   poolTop?: number | null;
   /** The event that top-level group follows in the database (game_event_pool), which `events` or `removedBy` holds */
@@ -240,6 +242,7 @@ export function toViewCreature(row: Row, path: ViewPoint[] | null, equipment: [n
     preset,
     group: groupOf(row),
     ...(row.npcflag === null || row.npcflag === undefined ? {} : { npcFlags: num(row.npcflag) }),
+    ...(row.gossip_menu_id === null || row.gossip_menu_id === undefined ? {} : { gossipMenuId: num(row.gossip_menu_id) }),
     respawnSecs: num(row.spawntimesecs, DEFAULT_RESPAWN_SECS),
   };
 }
