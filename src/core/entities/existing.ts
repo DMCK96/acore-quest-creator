@@ -250,17 +250,18 @@ export async function readOriginalRows(db: RowReader, kind: Kind, entry: number)
     const template = await rowsOrNone(db, 'creature_template', { entry: key });
     if (template.length === 0) return null;
     const lootid = num(template[0]!.lootid);
-    const [models, equip, loot] = await Promise.all([
+    const [models, equip, loot, vendor] = await Promise.all([
       rowsOrNone(db, 'creature_template_model', { CreatureID: key }),
       rowsOrNone(db, 'creature_equip_template', { CreatureID: key, ID: '1' }),
       lootid > 0 ? rowsOrNone(db, 'creature_loot_template', { Entry: text(lootid) }) : Promise.resolve([]),
+      rowsOrNone(db, 'npc_vendor', { entry: key }),
     ]);
     // Its spawns and their game event rows: what its event rule is read from
     const guids = await npcSpawnGuids(db, entry);
     const events = [...(await spawnEventRows(db, guids)).values()].flat()
       .sort((a, b) => num(a.guid) - num(b.guid) || num(a.eventEntry) - num(b.eventEntry));
     return {
-      creature_template: template, creature_template_model: models, creature_equip_template: equip, creature_loot_template: loot,
+      creature_template: template, creature_template_model: models, creature_equip_template: equip, creature_loot_template: loot, npc_vendor: vendor,
       creature: guids.map((g) => ({ guid: text(g) })), game_event_creature: events,
     };
   }

@@ -131,6 +131,9 @@ const originSchema = z.discriminatedUnion('kind', [
 ]);
 const NEW_ORIGIN = { kind: 'new' } as const;
 
+/** One thing an NPC sells: `maxCount` 0 is unlimited, and `extendedCost` 0 is gold alone */
+export const vendorItemSchema = z.object({ item: int, maxCount: int.min(0), restockSecs: int.min(0), extendedCost: int.min(0) });
+
 export const lootSchema = z.object({ item: int, chance: num, min: int, max: int, questOnly: z.boolean() });
 
 const npcFields = z.object({
@@ -161,6 +164,8 @@ const npcFields = z.object({
   seenBy: z.enum(SEEN_BY).optional(),
   // Added with NPC visibility; 'asIs' leaves every spawn's events as they are
   events: z.union([eventRuleSchema, z.literal('asIs')]).default('asIs'),
+  // Added with NPC vendors; what it sells, in display order (the index is the slot). The default keeps NPCs saved before then as they were.
+  vendor: z.array(vendorItemSchema).default([]),
 });
 
 /**
@@ -238,6 +243,7 @@ export type PatrolPoint = z.infer<typeof patrolPointSchema>;
 export type Patrol = z.infer<typeof patrolSchema>;
 export type Page = z.infer<typeof pageSchema>;
 export type LootRow = z.infer<typeof lootSchema>;
+export type VendorItem = z.infer<typeof vendorItemSchema>;
 export type CustomNpc = z.infer<typeof npcSchema>;
 export type CustomObject = z.infer<typeof objectSchema>;
 export type NpcRank = CustomNpc['rank'];
@@ -334,6 +340,7 @@ export function newNpc(entry: number): CustomNpc {
     origin: { kind: 'new' },
     seenBy: 'living',
     events: null,
+    vendor: [],
   };
 }
 

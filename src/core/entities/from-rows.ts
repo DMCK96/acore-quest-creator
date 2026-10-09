@@ -3,7 +3,7 @@ import { seenByOf } from './visibility';
 import { npcEventsOf } from './spawn-events';
 import {
   NPC_TYPE_VALUE, OBJECT_TYPE_VALUE, RANK_VALUE, newItem, newNpc, newObject,
-  type CustomItem, type CustomNpc, type CustomObject, type EntityLock, type LootRow, type OriginalRows, type Page,
+  type CustomItem, type CustomNpc, type CustomObject, type EntityLock, type LootRow, type OriginalRows, type Page, type VendorItem,
 } from './model';
 
 /** How many other entries share an existing entity's loot and how many spawns it has */
@@ -32,6 +32,13 @@ function lootOf(rows: Row[] | undefined): { loot: LootRow[]; locked: boolean } {
     loot: list.map((r) => ({ item: numberOf(r.Item), chance: numberOf(r.Chance), min: numberOf(r.MinCount, 1), max: numberOf(r.MaxCount, 1), questOnly: r.QuestRequired === '1' })),
     locked: false,
   };
+}
+
+/** What an NPC sells, in slot order */
+function vendorOf(rows: Row[] | undefined): VendorItem[] {
+  return [...(rows ?? [])]
+    .sort((a, b) => numberOf(a.slot) - numberOf(b.slot))
+    .map((r) => ({ item: numberOf(r.item), maxCount: numberOf(r.maxcount), restockSecs: numberOf(r.incrtime), extendedCost: numberOf(r.ExtendedCost) }));
 }
 
 /** The page chain starting at `first`, following `NextPageID` */
@@ -70,7 +77,7 @@ export function npcFromRows(entry: number, rows: OriginalRows, counts: ExistingC
     healthModifier: numberOf(row.HealthModifier, 1), damageModifier: numberOf(row.DamageModifier, 1),
     displayId: model ? numberOf(model.CreatureDisplayID) : numberOf(row.modelid1), scale: numberOf(model?.DisplayScale, 1),
     equipment: { mainHand: numberOf(gear?.ItemID1), offHand: numberOf(gear?.ItemID2), ranged: numberOf(gear?.ItemID3) },
-    loot, fight: null, spawns: [],
+    loot, fight: null, spawns: [], vendor: vendorOf(rows.npc_vendor),
     origin: origin(rows, counts, locked),
   };
 }
