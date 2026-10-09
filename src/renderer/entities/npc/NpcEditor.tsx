@@ -9,6 +9,7 @@ import { NumberField } from '../../scripts/fields';
 import { EditorTabs, type EditorTab } from '../EditorTabs';
 import { CopyStock } from '../CopyStock';
 import { LootList } from '../LootList';
+import { TrainerTab } from '../TrainerTab';
 import { VendorList } from '../VendorList';
 import { SpawnList } from '../SpawnList';
 import { NpcBasics } from './NpcBasics';
@@ -24,6 +25,7 @@ export function NpcEditor({
   npc,
   onChange,
   allocateSpawn,
+  allocateTrainer = async () => null,
   tab,
   onTab,
   hasServerData = true,
@@ -40,6 +42,8 @@ export function NpcEditor({
   others?: readonly CustomNpc[];
   onChange(next: CustomNpc): void;
   allocateSpawn(): Promise<number | null>;
+  /** A free trainer id for an NPC that starts to teach, or null when there is none */
+  allocateTrainer?(): Promise<number | null>;
   tab?: string;
   onTab?(id: string): void;
   /** Whether looks can be named, from the server data folder. */
@@ -105,6 +109,7 @@ export function NpcEditor({
         </>
       ),
   });
+  tabs.push({ id: 'trainer', label: 'Trainer', render: () => <TrainerTab npc={npc} onChange={onChange} allocateTrainer={allocateTrainer} /> });
   if (!existing) {
     tabs.push({
       id: 'placement',

@@ -100,7 +100,7 @@ export function EntityEditorHost({
   const Word = { npc: 'NPC', object: 'Object', item: 'Item' }[state.kind];
   const existing: ExistingFacts | undefined =
     entity.origin.kind === 'existing'
-      ? { sharedLoot: entity.origin.sharedLoot, spawnCount: entity.origin.spawnCount, locked: entity.origin.locked }
+      ? { sharedLoot: entity.origin.sharedLoot, spawnCount: entity.origin.spawnCount, sharedTrainer: entity.origin.sharedTrainer ?? 0, locked: entity.origin.locked }
       : undefined;
   const title = state.isNew ? `New ${word}` : `${Word}: ${entity.name.trim() || entity.entry}${existing ? ' (existing)' : ''}`;
   const useKey = state.kind === 'npc' ? 'npcs' : state.kind === 'object' ? 'objects' : 'items';
@@ -175,7 +175,7 @@ export function EntityEditorHost({
         <p className="scene-hint">{entity.name.trim() || `This ${word}`} has {existing.spawnCount} spawns in the world: changes here change all of them.</p>
       )}
       {npc && (
-        <NpcEditor npc={npc} onChange={saveNpc} allocateSpawn={() => allocate('creatureSpawn')} tab={tab} onTab={chooseTab}
+        <NpcEditor npc={npc} onChange={saveNpc} allocateSpawn={() => allocate('creatureSpawn')} allocateTrainer={() => allocate('trainer')} tab={tab} onTab={chooseTab}
           others={entities.npcs.filter((n) => n.entry !== npc.entry)} hasServerData={hasServerData} quests={questChoices} existing={existing}
           events={events} spawnFacts={npcSpawnFacts(npc, layer, existing?.spawnCount ?? 0)} />
       )}

@@ -5,6 +5,8 @@ export interface ExistingFacts {
   /** Other templates sharing its loot list */
   sharedLoot: number;
   spawnCount: number;
+  /** Other NPCs using its trainer */
+  sharedTrainer?: number;
   /** Parts left as the database has them */
   locked: readonly EntityLock[];
 }
