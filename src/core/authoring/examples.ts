@@ -62,8 +62,16 @@ function npcExample(): AuthoringExample {
     displayId: 1000,
     rank: 'elite' as const,
     spawns: [{ ...newSpawn(90100), x: -9460, y: 30, z: 200, o: 3.1416 }],
+    vendor: [
+      { item: 159, maxCount: 0, restockSecs: 0, extendedCost: 0 },
+      { item: 4540, maxCount: 5, restockSecs: 900, extendedCost: 0 },
+    ],
   };
-  return { title: 'An elite level 12 humanoid, hostile to all, with one spawn', value, reading: 'Captain Rellick, an elite level 12 humanoid hostile to all, standing at one spawn facing south.' };
+  return {
+    title: 'An elite level 12 humanoid, hostile to all, with one spawn and two things to sell',
+    value,
+    reading: 'Captain Rellick, an elite level 12 humanoid hostile to all, standing at one spawn facing south. He sells item 159 without limit and five of item 4540, restocked every 15 minutes.',
+  };
 }
 
 function objectExample(): AuthoringExample {

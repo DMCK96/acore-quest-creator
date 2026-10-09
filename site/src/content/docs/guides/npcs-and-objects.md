@@ -54,7 +54,25 @@ An NPC holds a weapon by its item's display alone, so any item works, even one y
 :::
 - **Fight**: how it fights. See the [combat wizard](/azeroth-world-editor/guides/combat-wizard/).
 - **Loot**: what it drops. See [Loot](/azeroth-world-editor/guides/loot/).
+- **Vendor**: what it sells. See [Selling things](#selling-things) below.
 - **Placement**: where it stands. **Add spawn** and paste the output of the in-game `.gps` command, or choose **Place in world** to put it down in [the World](/azeroth-world-editor/guides/the-world/#your-own-npcs-from-their-editor). Each spawn has its own **Event**, which starts as **Same as the NPC**.
+
+### Selling things
+
+Any NPC can be a vendor, a new one or one the database already has. On the **Vendor** tab, **Make this NPC a vendor** adds the first row, and **Add item** adds more. Each row is one thing it sells:
+
+- **Item**: pick it by name or ID. Under it, the item's buy price is shown, since that is what a player pays in gold.
+- **Max count**: how many it has. **0 is unlimited**.
+- **Restock (seconds)**: how long until the stock comes back after it sells out. It only applies to limited stock, so it is switched off while **Max count** is 0.
+- **Extended cost**: the honor, arena points or tokens it asks for besides gold, picked by what it costs, such as *2000 honor + 1 Mark of Honor*. These come from the server data folder's `ItemExtendedCost.dbc`; without that folder you type the cost's ID instead. Leave it empty for gold alone. New costs cannot be made here.
+
+**Up** and **Down** set the order the items are shown in, and **Remove** takes one away. **Copy stock from…** replaces the list with another NPC's, new or from the database, and asks first when this NPC already sells things.
+
+An NPC the database already makes a vendor opens with its stock listed, ready to edit. Opening it changes nothing; the patch writes the stock only if you change it, and the revert patch puts the original rows back. An NPC with any stock is made a vendor, and with none it is not. Its other flags (such as a reagent or food vendor) stay as the database has them.
+
+In [the World](/azeroth-world-editor/guides/the-world/#the-right-click-menu), right-click an NPC and choose **Make vendor…**, or **Edit vendor stock…** when it already sells things; both open this tab. Checks: an item listed twice with the same extended cost, or a row with no item, is an error; an item the database and the project do not have is a warning.
+
+Stock that depends on a game event is not edited here.
 
 ### Visibility
 

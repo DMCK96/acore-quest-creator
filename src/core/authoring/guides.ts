@@ -171,7 +171,7 @@ const LOOT = lines(
 
 const NPC = lines(
   '## What it is',
-  'A new NPC for the project: a creature template with its look, levels, faction and role, any number of spawns (where it stands), its loot and its fight. It is written as database rows when a patch is exported.',
+  'A new NPC for the project: a creature template with its look, levels, faction and role, any number of spawns (where it stands), its loot, what it sells and its fight. It is written as database rows when a patch is exported.',
   '',
   '## How the parts fit',
   'Make it with `new_entity`, then use `set_loot`, `set_npc_fight` and `set_npc_patrol` for the nested models. To place it, add entries to its `spawns` with `upsert_entity` (a spawn has `guid`, `map`, `x`, `y`, `z`, `o`, `respawnSecs`, `wander`, `patrol`, `rotation`, `events`), taking each `guid` from `allocate_ids` with kind `creatureSpawn`. `add_spawn` places only NPCs that already exist in the database.',
@@ -188,6 +188,7 @@ const NPC = lines(
   '- `questGiver`, `gossip` — whether it offers quests and has a talk window.',
   '- `spawns` — where it stands: `guid`, `map`, `x`, `y`, `z`, `o` (facing in radians), `respawnSecs`, `wander`, `patrol`.',
   '- `equipment` — items in `mainHand`, `offHand` and `ranged`.',
+  '- `vendor` — what it sells, in the order shown: `{ item, maxCount, restockSecs, extendedCost }`. `maxCount` 0 is unlimited (and `restockSecs` is then ignored); otherwise the stock comes back every `restockSecs` seconds. `extendedCost` is an `ItemExtendedCost.dbc` id for honor, arena points or tokens, 0 for gold alone (the gold price is the buy price of the item). An NPC with any stock is a vendor; none, not. Writing it replaces the whole list. An existing database vendor arrives with its stock already in `vendor`.',
   '- `seenBy` — who sees it: `living` players (the default), only the `dead` (a spirit healer) or `both`.',
   '- `events` — `asIs`, or a rule `{ mode, events }` for the game events its spawns follow: `during` puts them in the world only while one of the listed events runs, `except` takes them out while one runs.',
   '- `origin` — `new`, or `existing` for a database NPC the project took over; an existing one may be `locked` for `fight` or `loot`.',
@@ -198,7 +199,7 @@ const NPC = lines(
   '- Reusing an entry: use `new_entity`, which picks a free one.',
   '',
   '## What the editor checks',
-  'Writing an NPC returns the editor\'s issues for it. Errors stop an export: `ENTITY_NO_NAME`, `ENTITY_NO_MODEL` and `ENTITY_LEVELS`. Warnings: `ENTITY_NO_SPAWN` (nothing places it in the world), `ENTITY_SPAWN_ORIGIN` (a spawn is still at 0, 0, 0), `ENTITY_GHOST_GIVER` (it gives quests but only the dead see it), `ENTITY_WEAPON` (a held item that is missing or not held in a hand) and `ENTITY_TAKEN` (the entry already holds something in the database, which it would replace). Its fight and patrols add the `FIGHT_` and `PATROL_UNPICKED` checks.',
+  'Writing an NPC returns the editor\'s issues for it. Errors stop an export: `ENTITY_NO_NAME`, `ENTITY_NO_MODEL` and `ENTITY_LEVELS`. Warnings: `ENTITY_NO_SPAWN` (nothing places it in the world), `ENTITY_SPAWN_ORIGIN` (a spawn is still at 0, 0, 0), `ENTITY_GHOST_GIVER` (it gives quests but only the dead see it), `ENTITY_WEAPON` (a held item that is missing or not held in a hand) and `ENTITY_TAKEN` (the entry already holds something in the database, which it would replace). Its stock adds `VENDOR_NO_ITEM` and `VENDOR_DUPLICATE` (the same `item` with the same `extendedCost` twice; the database allows each pair once), both errors, and the warning `VENDOR_UNKNOWN_ITEM` (an item neither the database nor the project has). Its fight and patrols add the `FIGHT_` and `PATROL_UNPICKED` checks.',
 );
 
 const OBJECT = lines(

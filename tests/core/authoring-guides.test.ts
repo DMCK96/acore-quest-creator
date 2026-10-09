@@ -54,13 +54,13 @@ describe('the guides tell the truth about the editor', () => {
 
   it('cite only issue codes the editor really has', () => {
     for (const model of AUTHORING_MODELS) {
-      const cited = [...guideOf(model).matchAll(/`((?:SCENE|FIGHT|ENTITY|ITEM|LOOT|PATROL)_[A-Z_]+)`/g)].map((m) => m[1]!);
+      const cited = [...guideOf(model).matchAll(/`((?:SCENE|FIGHT|ENTITY|ITEM|LOOT|PATROL|VENDOR)_[A-Z_]+)`/g)].map((m) => m[1]!);
       for (const code of cited) expect(sources.includes(`'${code}'`), `${model} guide cites ${code}`).toBe(true);
     }
   });
 
   it('cite enough codes that a reader can match what the editor reports', () => {
-    const count = (model: Parameters<typeof guideOf>[0]) => new Set([...guideOf(model).matchAll(/`(?:SCENE|FIGHT|ENTITY|ITEM|LOOT|PATROL)_[A-Z_]+`/g)].map((m) => m[0])).size;
+    const count = (model: Parameters<typeof guideOf>[0]) => new Set([...guideOf(model).matchAll(/`(?:SCENE|FIGHT|ENTITY|ITEM|LOOT|PATROL|VENDOR)_[A-Z_]+`/g)].map((m) => m[0])).size;
     expect(count('scene')).toBeGreaterThanOrEqual(4);
     expect(count('fight')).toBeGreaterThanOrEqual(4);
     expect(count('npc')).toBeGreaterThanOrEqual(3);
@@ -83,6 +83,14 @@ describe('the guides tell the truth about the editor', () => {
       expect(guideOf(model)).toMatch(/friendly/i);
       expect(guideOf(model)).toContain('14');
     }
+  });
+
+  it('npc guide and example cover vendor stock and cite its codes', async () => {
+    const { examplesOf } = await import('../../src/core/authoring/examples');
+    const guide = guideOf('npc');
+    for (const word of ['`vendor`', '`maxCount`', '`restockSecs`', '`extendedCost`', '`VENDOR_DUPLICATE`', '`VENDOR_NO_ITEM`', '`VENDOR_UNKNOWN_ITEM`']) expect(guide).toContain(word);
+    expect(jsonSchemaOf('npc')).toHaveProperty('properties.vendor');
+    expect((examplesOf('npc')[0]!.value as { vendor: unknown[] }).vendor.length).toBeGreaterThan(0);
   });
 
   it('say scene ids look like s1, s2 and so on', () => {

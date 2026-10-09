@@ -21,6 +21,7 @@ The app only writes when you **Export patch** or **Export project patch** (to a 
 | New objects | `gameobject_template`, `gameobject` (spawns) |
 | Readable objects | `page_text` |
 | Loot | `creature_loot_template`, `gameobject_loot_template` |
+| Vendors | `npc_vendor` (what an NPC sells), and the vendor bit of `npcflag` on `creature_template` |
 | Quest scripting scenes | `smart_scripts`, `creature_text`, `gossip_menu`, `gossip_menu_option`, `npc_text`, `conditions`, `areatrigger`, `areatrigger_scripts`, `waypoints` (escort paths) |
 | Combat wizard | `smart_scripts`, `creature_text` |
 | Patrols | `creature_addon`, `waypoint_data`, and `smart_scripts` / `creature_text` for point actions |
