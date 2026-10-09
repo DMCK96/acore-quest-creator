@@ -47,13 +47,23 @@ export function authoringSchema(model: AuthoringModel): z.ZodType {
 
 export const authoringSummary = (model: AuthoringModel): string => SUMMARIES[model];
 
+/** The models written as a part of an entity: a few fields at a time, the rest filled in by the editor. */
+const PARTIAL: ReadonlySet<AuthoringModel> = new Set(['npc', 'object', 'item']);
+
+const PARTIAL_NOTE =
+  "Every field is optional: new_entity's `fields` takes any of them and the editor fills in the rest with its defaults. `entry`, `origin` and `spawns` are chosen by the editor and cannot be set in `fields` (add spawns afterwards with upsert_entity). `name` is given to new_entity on its own.";
+
 /**
  * The model as JSON Schema. Transforms and defaults cannot be written in JSON Schema, so they
  * become free-form values (`unrepresentable: 'any'`) and the schema describes what is written
- * (`io: 'input'`); the zod schema still validates it.
+ * (`io: 'input'`); the zod schema still validates it. An NPC, object or item is written a few
+ * fields at a time, so its schema does not require any.
  */
 export function jsonSchemaOf(model: AuthoringModel): Record<string, unknown> {
-  return z.toJSONSchema(authoringSchema(model), { unrepresentable: 'any', io: 'input' }) as Record<string, unknown>;
+  const schema = z.toJSONSchema(authoringSchema(model), { unrepresentable: 'any', io: 'input' }) as Record<string, unknown>;
+  if (!PARTIAL.has(model)) return schema;
+  const { required: _required, ...rest } = schema;
+  return { ...rest, description: PARTIAL_NOTE };
 }
 
 /** Every distinct string a `kind` property is fixed to anywhere in a JSON Schema, sorted. */
@@ -70,6 +80,30 @@ export function kindsIn(jsonSchema: unknown): string[] {
     if (kind) {
       if (typeof kind['const'] === 'string') found.add(kind['const']);
       if (Array.isArray(kind['enum'])) for (const v of kind['enum']) if (typeof v === 'string') found.add(v);
+    }
+    Object.values(record).forEach(walk);
+  };
+  walk(jsonSchema);
+  return [...found].sort();
+}
+
+/**
+ * Every string a property of a JSON Schema can be fixed to or limited to, sorted: the `kind`s and
+ * every other choice (a style, a state, a rank). A guide must name each one.
+ */
+export function choicesIn(jsonSchema: unknown): string[] {
+  const found = new Set<string>();
+  const walk = (node: unknown): void => {
+    if (Array.isArray(node)) {
+      node.forEach(walk);
+      return;
+    }
+    if (typeof node !== 'object' || node === null) return;
+    const record = node as Record<string, unknown>;
+    for (const property of Object.values((record['properties'] as Record<string, unknown> | undefined) ?? {})) {
+      const limit = property as Record<string, unknown> | null;
+      if (typeof limit?.['const'] === 'string') found.add(limit['const']);
+      if (Array.isArray(limit?.['enum'])) for (const v of limit['enum']) if (typeof v === 'string') found.add(v);
     }
     Object.values(record).forEach(walk);
   };

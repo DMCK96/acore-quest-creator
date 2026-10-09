@@ -14,6 +14,11 @@ const ORDER: Record<string, string[]> = {
   populate_place: ['area_overview', 'check_names', 'new_entity', 'add_spawn', 'check_project_entities'],
 };
 const toolNames = new Set(allTools.map((t) => t.name));
+/** Words in code font that are fields or values the prompts mention, not tools. */
+const TERMS = new Set(['orientation', 'rotation', 'creatureSpawn', 'gameobjectSpawn']);
+const namesIn = (text: string): string[] => [...text.matchAll(/`([A-Za-z][A-Za-z0-9_]*)`/g)].map((m) => m[1]!);
+/** Every word in code font that is neither a tool nor a known term. */
+const notToolsIn = (text: string): string[] => namesIn(text).filter((name) => !toolNames.has(name) && !TERMS.has(name));
 
 describe('the prompts', () => {
   it('are the three the assistant is offered', () => {
@@ -38,11 +43,15 @@ describe('the prompts', () => {
     }
   });
 
-  it.each(allPrompts)('$name names only tools that exist', (prompt) => {
+  it.each(allPrompts)('$name names only tools that exist, and every other word in code font is a known term', (prompt) => {
     const text = prompt.text(ARGS[prompt.name]!);
-    const named = [...text.matchAll(/`([a-z]+(?:_[a-z]+)+)`/g)].map((m) => m[1]!);
-    expect(named.length).toBeGreaterThan(3);
-    for (const name of named) expect(toolNames.has(name), name).toBe(true);
+    expect(namesIn(text).filter((name) => toolNames.has(name)).length).toBeGreaterThan(3);
+    expect(notToolsIn(text)).toEqual([]);
+  });
+
+  it('notices a tool name that does not exist, whether or not it has an underscore', () => {
+    expect(notToolsIn('Use `new_entity`, then `validate` and `set_scenes`.')).toEqual(['validate', 'set_scenes']);
+    expect(notToolsIn('Match the `orientation` and `rotation`, with `creatureSpawn`.')).toEqual([]);
   });
 
   it("say the wiki step can be skipped when lookups are off, and that exporting needs the user's say-so", () => {
@@ -57,10 +66,12 @@ describe('the prompts', () => {
     expect(text).toMatch(/before building anything/i);
   });
 
-  it('populate_place tells the assistant to match the facing of the neighbours', () => {
+  it('populate_place tells the assistant to face NPCs toward what they are there for, not their neighbours', () => {
     const text = allPrompts.find((p) => p.name === 'populate_place')!.text(ARGS.populate_place!);
     expect(text).toMatch(/orientation/);
-    expect(text).toMatch(/neighbour/i);
+    expect(text).toMatch(/campfire/i);
+    expect(text).toMatch(/never toward a tent, a wall or the NPC next to it/i);
+    expect(text).not.toMatch(/face the way their neighbours/i);
   });
 });
 

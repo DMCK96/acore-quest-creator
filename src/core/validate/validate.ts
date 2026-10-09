@@ -8,6 +8,8 @@ export interface Issue {
   code: string;
   fieldId?: string;
   message: string;
+  /** The project NPC, object or item an entity issue is about, so two with the same name stay apart. */
+  about?: { kind: 'creature' | 'gameobject' | 'item'; entry: number };
 }
 
 export interface RefChecker {

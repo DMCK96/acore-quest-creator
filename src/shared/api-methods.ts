@@ -128,6 +128,8 @@ export const CONNECTED_CHANNEL = 'app:connected';
 
 /** Main tells the window what a tool of the MCP server (an AI client) changed in the project, as an undo result. */
 export const EXTERNAL_CHANGE_CHANNEL = 'app:external-change';
+/** Main to window: `true` while an AI client's write is on its way (hold quest saves), `false` once it is done. */
+export const HOLD_EDITS_CHANNEL = 'app:hold-edits';
 
 /** Main tells the window the undo history after every step, undo, redo, save or clear. */
 export const HISTORY_CHANNEL = 'app:history';

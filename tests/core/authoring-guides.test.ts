@@ -1,6 +1,6 @@
 import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
-import { AUTHORING_MODELS, jsonSchemaOf, kindsIn } from '../../src/core/authoring/models';
+import { AUTHORING_MODELS, choicesIn, jsonSchemaOf, kindsIn } from '../../src/core/authoring/models';
 import { guideOf } from '../../src/core/authoring/guides';
 
 describe('the guides', () => {
@@ -16,6 +16,15 @@ describe('the guides', () => {
   it.each(['scene', 'fight', 'patrol'] as const)('%s guide mentions every kind its model defines, so a new kind forces a guide edit', (model) => {
     const guide = guideOf(model);
     const missing = kindsIn(jsonSchemaOf(model)).filter((kind) => !guide.includes(`\`${kind}\``));
+    expect(missing).toEqual([]);
+  });
+
+  it.each(AUTHORING_MODELS)('%s guide names every choice its model allows (a style, a state, a rank), each in code font as a whole word', (model) => {
+    const guide = guideOf(model);
+    const named = new Set([...guide.matchAll(/`([^`]+)`/g)].map((m) => m[1]!));
+    // An NPC embeds a fight and patrols, whose choices their own guides explain
+    const embedded = new Set(['npc', 'object', 'item'].includes(model) ? [...choicesIn(jsonSchemaOf('fight')), ...choicesIn(jsonSchemaOf('patrol'))] : []);
+    const missing = choicesIn(jsonSchemaOf(model)).filter((choice) => !embedded.has(choice) && !named.has(choice));
     expect(missing).toEqual([]);
   });
 

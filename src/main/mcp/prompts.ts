@@ -23,7 +23,7 @@ const str = (args: Record<string, unknown>, key: string): string => String(args[
 const questChain: PromptDef = {
   name: 'quest_chain',
   title: 'Build a lore-accurate quest chain',
-  description: 'Research a zone, then draft a quest chain that fits it: quests, NPCs placed beside their neighbours, scenes, and checks.',
+  description: 'Research a zone, then draft a quest chain that fits it: quests, NPCs placed where they make sense, scenes, and checks.',
   args: {
     zone: z.string().describe('The zone, such as Elwynn Forest.'),
     minLevel: z.string().describe('The lowest level the chain is for.'),
@@ -42,7 +42,7 @@ const questChain: PromptDef = {
       '4. If wiki lookups are on, call `wiki_search` and read the best pages for the lore of the place; if the tool says wiki lookups are off, carry on without it. This server is at Wrath of the Lich King, so later events have not happened yet; later content is welcome as inspiration, but say where an idea comes from.',
       '5. Before naming anything, call `check_names` and `check_ids` so nothing clashes with what exists.',
       '6. Call `new_quest` for each quest and `set_quest_fields` to fill it in; call `describe_quest_fields` first if you are unsure what a field takes.',
-      '7. Place the NPCs the chain needs. For an NPC that already exists use `add_spawn`; for a new one call `new_entity` (a model and the right faction), then give it a spawn with `upsert_entity`, taking the spawn guid from `allocate_ids`. Copy `orientation` from a neighbour (or compute it) so they face the way their neighbours do.',
+      '7. Place the NPCs the chain needs. For an NPC that already exists use `add_spawn`; for a new one call `new_entity` (a model and the right faction), then give it a spawn with `upsert_entity`, taking the spawn guid from `allocate_ids`. Face each one toward what it is there for (the campfire, the road, the door, the people it talks to), never toward a tent, a wall or the NPC next to it: compute `orientation` with the formula in `area_overview`\'s description.',
       '8. Add scenes for the key moments with `set_scene` (call `describe_authoring` with model scene first).',
       '9. Call `validate_quest` for each quest and fix every error it reports.',
       '10. Call `preview_changes` for a quest, then summarise what you made, and ask before exporting.',
@@ -73,7 +73,7 @@ const legendaryItem: PromptDef = {
 const populatePlace: PromptDef = {
   name: 'populate_place',
   title: 'Add NPCs or objects that fit a place',
-  description: 'Read what stands around a point, then add NPCs or objects that fit and face the way their neighbours do.',
+  description: 'Read what stands around a point, then add NPCs or objects that fit and face what they are there for.',
   args: {
     map: z.string().describe('The map id (0 is Eastern Kingdoms).'),
     x: z.string().describe('World X (north) in yards.'),
@@ -89,7 +89,7 @@ const populatePlace: PromptDef = {
       '1. Call `area_overview` at that point to see the NPCs, objects, roles and factions there, and how they are placed.',
       '2. Call `check_names` for the names you plan to use.',
       '3. Call `new_entity` for each new NPC or object (call `describe_authoring` first) and give it a model and the right faction.',
-      '4. Place each new one by adding a spawn to it with `upsert_entity`, taking the spawn guid from `allocate_ids` (kind `creatureSpawn` or `gameobjectSpawn`); use `add_spawn` only for more spawns of an existing database NPC or object. Copy `orientation` (and `rotation` for objects) from a neighbour, or compute it with the formula in `area_overview`\'s description, so new spawns face the way their neighbours do.',
+      '4. Place each new one by adding a spawn to it with `upsert_entity`, taking the spawn guid from `allocate_ids` (kind `creatureSpawn` or `gameobjectSpawn`); use `add_spawn` only for more spawns of an existing database NPC or object. Face each new spawn toward what it is there for (the campfire, the road, the door, the people it talks to), never toward a tent, a wall or the NPC next to it: compute `orientation` with the formula in `area_overview`\'s description (and set `rotation` for objects to match). How the neighbours are turned shows where the tents and walls are, so you can turn away from them.',
       '5. Call `check_project_entities`, fix every error, then summarise what you added and ask before exporting.',
     ].join('\n'),
 };

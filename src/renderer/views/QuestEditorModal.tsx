@@ -23,6 +23,7 @@ function EditorDialog({ store }: { store: AppStore }): React.JSX.Element {
   const dialog = useRef<HTMLDivElement | null>(null);
   const [aside, placeInWorld, showInWorld] = useAsideForWorld();
   const wasAside = useRef(false);
+  const aiWriting = store((s) => s.aiWriting);
 
   // Focus moves in on opening and back to what opened it on closing.
   useEffect(() => {
@@ -37,6 +38,11 @@ function EditorDialog({ store }: { store: AppStore }): React.JSX.Element {
     if (aside) wasAside.current = true;
     else if (wasAside.current) dialog.current?.focus();
   }, [aside]);
+
+  // Focus inside the greyed-out part would be lost with it: it waits on the dialog itself
+  useEffect(() => {
+    if (aiWriting) dialog.current?.focus();
+  }, [aiWriting]);
 
   return (
     <PlaceInWorldProvider value={placeInWorld}>
@@ -54,7 +60,14 @@ function EditorDialog({ store }: { store: AppStore }): React.JSX.Element {
         <h2 id="quest-editor-modal-title" className="quest-editor-modal__title">
           Edit quest
         </h2>
-        <QuestFlowView store={store} />
+        {aiWriting && (
+          <p className="quest-editor-modal__writing" role="status">
+            The assistant is changing this quest. Editing is paused for a moment.
+          </p>
+        )}
+        <div className={aiWriting ? 'quest-editor-modal__body quest-editor-modal__body--paused' : 'quest-editor-modal__body'} inert={aiWriting || undefined}>
+          <QuestFlowView store={store} />
+        </div>
       </div>
     </div>
     </ShowInWorldProvider>

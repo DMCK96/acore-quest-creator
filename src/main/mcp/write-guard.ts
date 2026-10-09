@@ -62,39 +62,50 @@ export function createWriteGuard(): WriteGuard {
 
     return exclusively(async () => {
       const answered = await flushed(ctx);
-      const { session } = ctx;
-
-      if (mode.kind === 'travel') {
-        const result = await withinTime(ctx, () => tool.run(args as never, ctx));
-        if (result.ok) ctx.notify(result.value as HistoryResult);
-        return result;
-      }
-
-      const history = session.history;
-      const stepBefore = history.peekUndo()?.id ?? null;
-      const revisionBefore = session.revision();
-      const label = mode.label(args) + (answered ? '' : ' (window did not answer)');
-      const token = history.begin(label);
-      let result: Result<unknown>;
+      // From here until the change has been sent, the window keeps its own quest edits back
+      ctx.holdEdits?.(true);
       try {
-        result = await withinTime(ctx, () => tool.run(args as never, ctx));
+        return await writeStep(ctx, tool, mode, args, answered);
       } finally {
-        history.end(token);
+        ctx.holdEdits?.(false);
       }
-
-      const list = history.list(describeStep);
-      const step = history.peekUndo();
-      const stepNow = step?.id ?? null;
-      if (step && stepNow !== stepBefore && step.label === label) {
-        ctx.notify(resultOfSteps(session, [{ step, skip: new Set() }], 'redo', [], list));
-      } else if (stepNow !== stepBefore) {
-        // The user undid or edited part-way through, so what changed is no longer this step alone
-        ctx.notify(resultOfProject(session, list));
-      } else if (session.revision() !== revisionBefore) {
-        // A change that is not a step (a quest marked exported): the window reloads its canvas
-        ctx.notify({ step: null, direction: 'redo', quests: [], positions: true, world: null, entities: null, name: false, skipped: [], history: list });
-      }
-      return result;
     });
   };
+}
+
+/** Runs one write tool as the guard's step and tells the window what changed. */
+async function writeStep(ctx: McpContext, tool: ToolDef, mode: Exclude<ToolDef['write'], false>, args: unknown, answered: boolean): Promise<Result<unknown>> {
+  const { session } = ctx;
+
+  if (mode.kind === 'travel') {
+    const result = await withinTime(ctx, () => tool.run(args as never, ctx));
+    if (result.ok) ctx.notify(result.value as HistoryResult);
+    return result;
+  }
+
+  const history = session.history;
+  const stepBefore = history.peekUndo()?.id ?? null;
+  const revisionBefore = session.revision();
+  const label = mode.label(args) + (answered ? '' : ' (window did not answer)');
+  const token = history.begin(label);
+  let result: Result<unknown>;
+  try {
+    result = await withinTime(ctx, () => tool.run(args as never, ctx));
+  } finally {
+    history.end(token);
+  }
+
+  const list = history.list(describeStep);
+  const step = history.peekUndo();
+  const stepNow = step?.id ?? null;
+  if (step && stepNow !== stepBefore && step.label === label) {
+    ctx.notify(resultOfSteps(session, [{ step, skip: new Set() }], 'redo', [], list));
+  } else if (stepNow !== stepBefore) {
+    // The user undid or edited part-way through, so what changed is no longer this step alone
+    ctx.notify(resultOfProject(session, list));
+  } else if (session.revision() !== revisionBefore) {
+    // A change that is not a step (a quest marked exported): the window reloads its canvas
+    ctx.notify({ step: null, direction: 'redo', quests: [], positions: true, world: null, entities: null, name: false, skipped: [], history: list });
+  }
+  return result;
 }

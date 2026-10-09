@@ -111,6 +111,8 @@ export class Editor {
   #mode: GizmoMode = 'move';
   #drag: Drag | null = null;
   #drawing: Drawing | null = null;
+  /** An AI client is writing: nothing can be edited, but the view still moves */
+  #locked = false;
   /** Where the gizmo was last put, so it is put again only when that changes */
   #attached: { at: THREE.Vector3; quaternion: THREE.Quaternion; turns: GizmoTurns } | null = null;
 
@@ -127,6 +129,18 @@ export class Editor {
   /** Whether a press is the gizmo's, so the camera leaves it alone */
   get blocked(): boolean {
     return this.#gizmo.hovered || this.#gizmo.dragging;
+  }
+
+  /**
+   * While locked, no edit can begin: the gizmo is taken away (a drag under way is dropped, putting what it
+   * moved back), route points cannot be inserted or deleted, and a path being drawn waits to be finished
+   */
+  setLocked(locked: boolean): void {
+    this.#locked = locked;
+    if (!locked) return;
+    this.cancelDrag();
+    this.#gizmo.detach();
+    this.#attached = null;
   }
 
   /** Whether the gizmo is being dragged: a right-click then belongs to the drag, not the menu */
@@ -195,6 +209,7 @@ export class Editor {
    * the nearest leg of an active route, else after the last picked point. True when the click was used.
    */
   insertPoint(ndcX: number, ndcY: number): boolean {
+    if (this.#locked) return true;
     const { points } = this.#selection;
     const routes = this.#selection.routes.filter((guid) => this.#world.spawnRoute(guid) !== null);
     if (routes.length === 0) return false;
@@ -245,6 +260,7 @@ export class Editor {
    * point. Another path being drawn is finished first. Nothing is sent until the path is finished
    */
   startPath(guid: number, pathId: number, first: At): void {
+    if (this.#locked) return;
     if (this.#drawing) this.finishPath();
     const ref = this.#ref('creature', guid);
     if (!ref) return;
@@ -260,6 +276,7 @@ export class Editor {
   appendPoint(ndcX: number, ndcY: number): boolean {
     const drawing = this.#drawing;
     if (!drawing) return false;
+    if (this.#locked) return true;
     const ground = this.#world.pickGround(ndcX, ndcY);
     if (!ground) return true;
     drawing.points = [...drawing.points, { x: ground.x, y: ground.y, z: ground.z }];
@@ -303,7 +320,7 @@ export class Editor {
   /** Ends the path being drawn and sends it as one gesture; one with fewer than two points is cancelled, as no NPC can walk it */
   finishPath(): void {
     const drawing = this.#drawing;
-    if (!drawing) return;
+    if (!drawing || this.#locked) return;
     if (drawing.points.length < MIN_ROUTE_POINTS) {
       this.cancelPath();
       this.#options.onNotice?.(TOO_FEW_POINTS);
@@ -354,6 +371,8 @@ export class Editor {
   /** The editing keys; true when the key was one of them */
   keyDown(event: KeyboardEvent): boolean {
     const ctrl = event.ctrlKey || event.metaKey;
+    // Deleting points and finishing a path are edits
+    if (this.#locked && (event.code === 'Delete' || event.code === 'Enter')) return true;
     // While a path is drawn, Enter finishes it and Ctrl+Z takes back its last point; redo waits until it is finished
     if (this.#drawing && event.code === 'Enter') {
       this.finishPath();
@@ -391,6 +410,11 @@ export class Editor {
 
   /** Every frame: keeps the gizmo on the middle of what is selected, which a redraw may have replaced */
   update(): void {
+    if (this.#locked) {
+      if (this.#gizmo.attached) this.#gizmo.detach();
+      this.#attached = null;
+      return;
+    }
     if (this.#drag || this.#gizmo.dragging) return;
     // While a path is drawn the NPC cannot be dragged: a move would land among the path's undo steps
     if (this.#drawing) {

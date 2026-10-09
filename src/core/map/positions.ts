@@ -2,7 +2,7 @@ import { newSpawn, type ProjectEntities, type SpawnEvents } from '../entities/mo
 import type { FieldValue } from '../registry/types';
 import { newPatrol } from './patrol';
 import type { Movement } from '../world/movement';
-import { readScenes, SCRIPTS_FIELD, writeScenes, type Position, type QuestScene, type SceneStep } from '../scripts/model';
+import { readScenes, splitScenes, SCRIPTS_FIELD, writeScenes, type Position, type QuestScene, type SceneStep } from '../scripts/model';
 
 /**
  * The positions a quest uses that the World draws as markers (scene steps, escort and fight points,
@@ -138,7 +138,7 @@ const moved = (p: Position, to: To): Position => ({ ...p, x: to.x, y: to.y, z: t
 export function moveMarker(values: Values, entities: ProjectEntities, id: string, to: To): MarkerEdit {
   const parts = id.split(':');
   if (parts[0] === 'scene' || parts[0] === 'area') {
-    const scenes = readScenes(values);
+    const { scenes, unreadable } = splitScenes(values);
     const index = scenes.findIndex((s) => s.id === parts[1]);
     const scene = scenes[index];
     if (!scene) return null;
@@ -157,7 +157,7 @@ export function moveMarker(values: Values, entities: ProjectEntities, id: string
       }
       if (changed) next = { ...scene, steps: scene.steps.map((s, k) => (k === i ? changed! : s)) };
     }
-    return next ? { field: SCRIPTS_FIELD, value: writeScenes(scenes.map((s, k) => (k === index ? next! : s))) } : null;
+    return next ? { field: SCRIPTS_FIELD, value: writeScenes(scenes.map((s, k) => (k === index ? next! : s)), unreadable) } : null;
   }
   if (parts[0] === 'fight') {
     const [, entryText, reactionId, stepText] = parts;

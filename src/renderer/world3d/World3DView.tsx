@@ -12,6 +12,7 @@ import { FALLOFF_DEFAULT, FALLOFF_MAX, FALLOFF_MIN } from './scene/edit/falloff'
 import { summaryText } from './summary';
 import { useApi } from '../state/names';
 import { useHistorySteps } from '../state/history-context';
+import { AiLock, AiWritingNotice } from '../components/AiLock';
 import type { EventFilter, PickedSpawn, SpawnStatus, SpawnVisibility } from './scene/spawn/SpawnManager';
 import type { ViewSpawns } from '@core/db/view-spawns';
 import { chooseZ, floorCandidates } from '@core/map/floors';
@@ -352,7 +353,13 @@ function WorldStage({
     world.current?.setWorldLayer(next);
   };
   // An undo or redo changed the world layer: a drag under way is dropped first, then the layer is drawn
-  const { worldLayer: undone, runStep, hold } = useHistorySteps();
+  const { worldLayer: undone, runStep, hold, editLocked } = useHistorySteps();
+  const editLockedRef = useRef(editLocked);
+  editLockedRef.current = editLocked;
+  // The view keeps its camera while an AI client writes; its gizmos, placing and deleting wait
+  useEffect(() => {
+    world.current?.setEditLocked(editLocked);
+  }, [editLocked]);
   const runStepRef = useRef(runStep);
   runStepRef.current = runStep;
   const holdRef = useRef(hold);
@@ -710,6 +717,8 @@ function WorldStage({
           if (placingRef.current) created.setPlacing({ kind: placingRef.current.kind, entry: placingRef.current.entry });
           if (groupSpawnsRef.current.size > 0) created.setGroupSpawns(groupSpawnsRef.current);
           markerViewRef.current.attach(created);
+          // A view made while a write is on its way starts locked; otherwise it starts as it is
+          if (editLockedRef.current) created.setEditLocked(true);
           world.current = created;
           bringIntoViewRef.current();
           void apiRef.current?.worldLayer().then((result) => live && result.ok && applyLayer(result.value));
@@ -885,6 +894,7 @@ function WorldStage({
 
   /** Takes a spawn placed in this view back out of the world layer */
   async function removePlaced(spawn: PickedSpawn): Promise<void> {
+    if (editLockedRef.current) return;
     const result = await api?.worldRevert({ kind: 'spawn', spawnKind: spawn.kind === 'object' ? 'gameobject' : 'creature', guid: spawn.guid });
     if (!result) return;
     if (!result.ok) {
@@ -1059,7 +1069,7 @@ function WorldStage({
             </select>
           </label>
           <div className="world3d__layers-actions">
-            <button type="button" className="btn" disabled={!api} title="Choose an existing NPC or object, then click the ground to place it" onClick={() => setChoosing(true)}>
+            <button type="button" className="btn" disabled={!api || editLocked} title="Choose an existing NPC or object, then click the ground to place it" onClick={() => setChoosing(true)}>
               Place…
             </button>
             <button type="button" className="btn" disabled={changes === 0} onClick={() => setChangesOpen(true)}>
@@ -1127,7 +1137,9 @@ function WorldStage({
           </button>
         </p>
       )}
+      <AiWritingNotice className="world3d__ai-writing" />
       {choosing && api && (
+        <AiLock>
         <PlaceDialog
           onPick={(chosen) => {
             setChoosing(false);
@@ -1137,9 +1149,10 @@ function WorldStage({
           }}
           onClose={() => setChoosing(false)}
         />
+        </AiLock>
       )}
       {!unavailable && group && <GroupCard view={group} onEdit={api ? () => menu.editGroup(group.id) : undefined} onClose={closeGroup} />}
-      {!unavailable && selected && !several && <SelectedSpawn spawn={selected} note={note} onClose={clearSelection} onRemove={selected.added ? () => void removePlaced(selected) : undefined} />}
+      {!unavailable && selected && !several && <SelectedSpawn spawn={selected} note={note} onClose={clearSelection} onRemove={selected.added ? () => void removePlaced(selected) : undefined} locked={editLocked} />}
       {!unavailable && several && summary && (
         <section className="world3d__selected" aria-label="Selection">
           <header>
@@ -1160,6 +1173,7 @@ function WorldStage({
         </p>
       )}
       {changesOpen && api && (
+        <AiLock>
         <ProjectChanges
           api={api}
           onLayer={takeLayer}
@@ -1180,6 +1194,7 @@ function WorldStage({
               : undefined
           }
         />
+        </AiLock>
       )}
       {!unavailable && menu.elements}
       {shared && (
@@ -1251,7 +1266,7 @@ function SharedRouteDialog({ shared, onAnswer }: { shared: SharedRoute; onAnswer
 }
 
 /** The NPC or object picked in the view: what it is and where it stands, and what its last edit said. */
-function SelectedSpawn({ spawn, note, onClose, onRemove }: { spawn: PickedSpawn; note: string | null; onClose(): void; onRemove?(): void }): React.JSX.Element {
+function SelectedSpawn({ spawn, note, onClose, onRemove, locked }: { spawn: PickedSpawn; note: string | null; onClose(): void; onRemove?(): void; locked?: boolean }): React.JSX.Element {
   const kind = spawn.kind === 'creature' ? 'NPC' : 'Object';
   return (
     <section className="world3d__selected" aria-label="Selected spawn">
@@ -1277,7 +1292,7 @@ function SelectedSpawn({ spawn, note, onClose, onRemove }: { spawn: PickedSpawn;
           Deselect
         </button>
         {onRemove && (
-          <button type="button" className="btn" onClick={onRemove}>
+          <button type="button" className="btn" disabled={locked} onClick={onRemove}>
             Remove
           </button>
         )}

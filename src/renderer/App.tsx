@@ -31,12 +31,17 @@ export function App(): React.JSX.Element {
   useEffect(() => {
     void store.getState().start();
     // Closing the window asks for pending edits first, so the unsaved-changes check sees them.
-    window.appEvents?.onFlushRequest(() => store.getState().flushAll());
+    window.appEvents?.onFlushRequest(() => {
+      // Closing must not lose an edit, whatever write was on its way
+      store.getState().holdEdits(false);
+      return store.getState().flushAll();
+    });
     // The Undo buttons follow every step the main process records, whatever made it
     window.appEvents?.onHistory?.((list) => store.getState().setHistory(list));
     // An AI client connected the editor to a world database through MCP: leave the login screen
     window.appEvents?.onConnected?.((summary) => void store.getState().adoptConnection(summary));
     // What an AI client changed through MCP appears as an undo would: the open quest, the canvas, the world
+    window.appEvents?.onHoldEdits?.((held) => store.getState().holdEdits(held));
     window.appEvents?.onExternalChange?.((change) => void store.getState().applyExternalChange(change));
   }, [store]);
 

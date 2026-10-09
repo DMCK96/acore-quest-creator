@@ -1,10 +1,11 @@
 import { z } from 'zod';
 import { AUTHORING_MODELS, authoringSchema, describeAuthoring } from '../../../core/authoring';
 import { patrolInputSchema } from '../../../core/authoring/models';
-import { newItem, newNpc, newObject } from '../../../core/entities/model';
+import { newItem, newNpc, newObject, type CustomItem, type CustomNpc, type CustomObject, type ProjectEntities } from '../../../core/entities/model';
 import type { QuestAggregate } from '../../../core/model/aggregate';
 import { describeScene } from '../../../core/scripts/describe';
-import { SCRIPTS_FIELD, nextSceneId, readScenes, sceneSchema, writeScenes } from '../../../core/scripts/model';
+import { SCRIPTS_FIELD, nextSceneId, sceneSchema, splitScenes, writeScenes, type QuestScene } from '../../../core/scripts/model';
+import type { Issue } from '../../../core/validate/validate';
 import type { Result } from '../../../shared/ipc';
 import { defineTool, type McpContext } from '../tool';
 
@@ -33,16 +34,32 @@ async function projectQuest(ctx: McpContext, id: number): Promise<Result<QuestAg
   return opened.ok ? { ok: true, value: opened.value.aggregate } : opened;
 }
 
-/** Saves a quest's scenes and answers the quest's issues with them. */
-async function saveScenes(ctx: McpContext, aggregate: QuestAggregate, scenes: ReturnType<typeof readScenes>): Promise<Result<unknown[]>> {
-  const saved = await ctx.call('updateQuest', { ...aggregate, values: { ...aggregate.values, [SCRIPTS_FIELD]: writeScenes(scenes) } });
-  if (!saved.ok) return saved;
-  const issues = await ctx.call('validate', aggregate.questId);
-  return issues.ok ? { ok: true, value: issues.value } : issues;
+/**
+ * What a change that is already made answers with: the editor's issues, or why they could not be
+ * read. Failing to read them must not look like the change failing, or it would be made twice.
+ */
+async function answerIssues(load: () => Promise<Result<Issue[]>>): Promise<{ issues: Issue[]; issuesError?: string }> {
+  const issues = await load();
+  if (issues.ok) return { issues: issues.value };
+  return { issues: [], issuesError: `The change was made, but the editor's issues could not be read (${issues.error.message}). Check again with validate_quest or check_project_entities.` };
 }
 
-/** Writing scenes, fights, patrols and loot in the editor's own author-level models. */
-export const authoringTools = [
+/** Saves a quest's scenes (and the stored scenes that cannot be read, kept as they are) and answers the quest's issues with them. */
+async function saveScenes(
+  ctx: McpContext,
+  aggregate: QuestAggregate,
+  scenes: readonly QuestScene[],
+  unreadable: readonly unknown[],
+): Promise<Result<{ issues: Issue[]; issuesError?: string }>> {
+  const saved = await ctx.call('updateQuest', { ...aggregate, values: { ...aggregate.values, [SCRIPTS_FIELD]: writeScenes(scenes, unreadable) } });
+  if (!saved.ok) return saved;
+  return { ok: true, value: await answerIssues(() => ctx.call('validate', aggregate.questId)) };
+}
+
+/** The id a stored entry carries, if it has one. */
+const idOf = (entry: unknown): unknown => (entry as { id?: unknown } | null)?.id;
+
+const sceneTools = [
   defineTool({
     name: 'describe_authoring',
     title: 'How to write a scene, fight, patrol, loot table, NPC, object or item',
@@ -56,7 +73,7 @@ export const authoringTools = [
     name: 'get_scenes',
     title: "A quest's scenes",
     description:
-      "The scenes of a quest that is in the project, each as written and read aloud in the editor's words, plus the quest's validation issues. Use it to see what exists before adding or changing a scene.",
+      "The scenes of a quest that is in the project, each as written and read aloud in the editor's words, plus the quest's validation issues. Scenes stored on the quest that the editor cannot read are listed by id under `unreadable`; set_scene and remove_scene leave them as they are. Use it to see what exists before adding or changing a scene.",
     input: { questId },
     write: false,
     run: async ({ questId }, ctx) => {
@@ -64,8 +81,10 @@ export const authoringTools = [
       if (!quest.ok) return quest;
       const issues = await ctx.call('validate', questId);
       if (!issues.ok) return issues;
-      const scenes = readScenes(quest.value.values).map((scene) => ({ scene, reading: describeScene(scene) }));
-      return { ok: true, value: { questId, scenes, issues: issues.value } };
+      const stored = splitScenes(quest.value.values);
+      const scenes = stored.scenes.map((scene) => ({ scene, reading: describeScene(scene) }));
+      const unreadable = stored.unreadable.map((entry) => idOf(entry)).filter((id): id is string => typeof id === 'string');
+      return { ok: true, value: { questId, scenes, unreadable, issues: issues.value } };
     },
   }),
   defineTool({
@@ -85,87 +104,96 @@ export const authoringTools = [
       const parsed = sceneInput.safeParse(scene);
       if (!parsed.success) return refused('BAD_REQUEST', `Nothing was changed. ${problemsOf(parsed.error, 'scene')}`);
 
-      const existing = readScenes(quest.value.values);
+      const { scenes: existing, unreadable } = splitScenes(quest.value.values);
       const given = parsed.data.id;
       if (given !== undefined && given !== '' && !SCENE_ID.test(given)) {
         return refused('BAD_REQUEST', `Nothing was changed. Scene ids look like s1, s2 (the letter s and a number, s<number>): "${given}" would not be recognised when the quest is exported again. Leave the id out to have one chosen.`);
       }
-      const id = given !== undefined && given !== '' ? given : nextSceneId(existing);
+      // A stored scene that cannot be read keeps its id taken; writing a scene with that id is a replacement
+      const id = given !== undefined && given !== '' ? given : nextSceneId([...existing, ...unreadable]);
       const written = { ...parsed.data, id };
       const next = existing.some((s) => s.id === id) ? existing.map((s) => (s.id === id ? written : s)) : [...existing, written];
 
-      const issues = await saveScenes(ctx, quest.value, next);
-      return issues.ok ? { ok: true, value: { questId, sceneId: id, issues: issues.value } } : issues;
+      const saved = await saveScenes(ctx, quest.value, next, unreadable.filter((entry) => idOf(entry) !== id));
+      return saved.ok ? { ok: true, value: { questId, sceneId: id, ...saved.value } } : saved;
     },
   }),
   defineTool({
     name: 'remove_scene',
     title: 'Remove a quest scene',
-    description: 'Removes the scene with this id from a quest in the project (see get_scenes for the ids). The other scenes are left as they are. A scene that another scene names (an escort a `waypointReached` trigger listens to) should be removed together with the scenes that name it.',
+    description: 'Removes the scene with this id from a quest in the project (see get_scenes for the ids). The other scenes are left as they are, and so are stored scenes the editor cannot read, unless one of those is the id given. A scene that another scene names (an escort a `waypointReached` trigger listens to) should be removed together with the scenes that name it.',
     input: { questId, sceneId: z.string().min(1) },
     write: { kind: 'step', label: ({ questId, sceneId }: { questId: number; sceneId: string }) => `AI: remove scene ${sceneId} of quest ${questId}` },
     run: async ({ questId, sceneId }, ctx) => {
       const quest = await projectQuest(ctx, questId);
       if (!quest.ok) return quest;
-      const existing = readScenes(quest.value.values);
-      if (!existing.some((s) => s.id === sceneId)) {
+      const { scenes: existing, unreadable } = splitScenes(quest.value.values);
+      if (!existing.some((s) => s.id === sceneId) && !unreadable.some((entry) => idOf(entry) === sceneId)) {
         return refused('BAD_REQUEST', `Quest ${questId} has no scene "${sceneId}". Its scenes are: ${existing.map((s) => s.id).join(', ') || '(none)'}.`);
       }
-      const issues = await saveScenes(ctx, quest.value, existing.filter((s) => s.id !== sceneId));
-      return issues.ok ? { ok: true, value: { questId, removed: sceneId, issues: issues.value } } : issues;
+      const saved = await saveScenes(ctx, quest.value, existing.filter((s) => s.id !== sceneId), unreadable.filter((entry) => idOf(entry) !== sceneId));
+      return saved.ok ? { ok: true, value: { questId, removed: sceneId, ...saved.value } } : saved;
     },
   }),
 ];
 
 type Kind = 'npc' | 'object' | 'item';
-const STORE_LIST = { npc: 'npcs', object: 'objects', item: 'items' } as const;
+type Entity = CustomNpc | CustomObject | CustomItem;
 const WORDS = { npc: 'NPC', object: 'Object', item: 'Item' } as const;
+/** What each kind is called by the id allocator, and by an issue that is about one. */
 const ALLOCATE = { npc: 'creature', object: 'gameobject', item: 'item' } as const;
+const MAKE = { npc: newNpc, object: newObject, item: newItem } as const;
 
-/** The editor's label for an entity in its issue messages: `NPC "Name"`, or `NPC 123` when it has no name. */
-const labelOf = (kind: Kind, entity: { entry: number; name: string }): string =>
-  entity.name.trim() ? `${WORDS[kind]} "${entity.name.trim()}"` : `${WORDS[kind]} ${entity.entry}`;
-
-/** The project's issues about one entity. */
-async function issuesAbout(ctx: McpContext, kind: Kind, entity: { entry: number; name: string }): Promise<Result<unknown[]>> {
-  const all = await ctx.call('projectIssues');
-  if (!all.ok) return all;
-  const prefix = `${labelOf(kind, entity)}:`;
-  return { ok: true, value: all.value.filter((issue) => issue.message.startsWith(prefix)) };
+/** The project's issues about one entity, told apart by its entry (two may share a name). */
+function issuesAbout(ctx: McpContext, kind: Kind, entry: number): Promise<{ issues: Issue[]; issuesError?: string }> {
+  return answerIssues(async () => {
+    const all = await ctx.call('projectIssues');
+    return all.ok ? { ok: true, value: all.value.filter((issue) => issue.about?.kind === ALLOCATE[kind] && issue.about.entry === entry) } : all;
+  });
 }
 
-type Store = { npcs: any[]; objects: any[]; items: any[] };
+/** The store with a new entity added to its list. */
+function appended(store: ProjectEntities, kind: Kind, entity: Entity): ProjectEntities {
+  switch (kind) {
+    case 'npc':
+      return { ...store, npcs: [...store.npcs, entity as CustomNpc] };
+    case 'object':
+      return { ...store, objects: [...store.objects, entity as CustomObject] };
+    case 'item':
+      return { ...store, items: [...store.items, entity as CustomItem] };
+  }
+}
 
 /** Why a database entity's fight or loot may not be changed, or null when it may. */
-function lockReason(entity: { entry: number; origin?: { kind?: string; locked?: string[] } }, part: 'fight' | 'loot', word: string): string | null {
-  if (entity.origin?.kind === 'existing' && entity.origin.locked?.includes(part)) {
+function lockReason(entity: CustomNpc | CustomObject, part: 'fight' | 'loot', word: string): string | null {
+  if (entity.origin.kind === 'existing' && entity.origin.locked.includes(part)) {
     return `${word} ${entity.entry} is a database ${word} whose ${part} is locked (the database's own scripts or shared loot would be overwritten). Make a new ${word} with new_entity instead.`;
   }
   return null;
 }
 
 /** One NPC of the project by entry, with the project's whole store, or why there is none. */
-async function projectNpc(ctx: McpContext, entry: number): Promise<Result<{ store: Store; npc: any }>> {
+async function projectNpc(ctx: McpContext, entry: number): Promise<Result<{ store: ProjectEntities; npc: CustomNpc }>> {
   const store = await ctx.call('projectEntities');
   if (!store.ok) return store;
-  const npc = (store.value.npcs as any[]).find((n) => n.entry === entry);
+  const npc = store.value.npcs.find((n) => n.entry === entry);
   if (!npc) return refused('BAD_REQUEST', `There is no NPC ${entry} in this project. Make one with new_entity.`);
-  return { ok: true, value: { store: store.value as Store, npc } };
+  return { ok: true, value: { store: store.value, npc } };
 }
 
-const entityAuthoringTools = [
+const entityTools = [
   defineTool({
     name: 'new_entity',
     title: 'Make a new NPC, object or item',
     description:
       "Adds a new NPC, object or item to the project with the editor's defaults and a free entry, and answers it with the editor's issues about it (a new NPC still needs a model, for example). `fields` sets anything else, by the names in describe_authoring for npc, object or item; it may not set entry, origin or spawns. Then use set_npc_fight, set_npc_patrol and set_loot. To place a new NPC or object, add spawns to it with upsert_entity, taking each spawn guid from allocate_ids (kind creatureSpawn or gameobjectSpawn); add_spawn only places existing database NPCs and objects.",
-    input: { kind: z.enum(['npc', 'object', 'item']), name: z.string().min(1).max(100), fields: z.record(z.string(), z.unknown()).optional() },
+    input: { kind: z.enum(['npc', 'object', 'item']), name: z.string().trim().min(1, 'give it a name').max(100), fields: z.record(z.string(), z.unknown()).optional() },
     write: { kind: 'step', label: ({ kind }: { kind: string }) => `AI: new ${kind}` },
     run: async ({ kind, name, fields }, ctx) => {
       for (const key of ['entry', 'origin', 'spawns']) {
         if (fields && key in fields) return refused('BAD_REQUEST', `Nothing was changed. "${key}" is chosen by the editor and cannot be set in fields.`);
       }
-      const known = Object.keys(kind === 'npc' ? newNpc(0) : kind === 'object' ? newObject(0) : newItem(0));
+      const known = Object.keys(MAKE[kind](0));
       const unknown = Object.keys(fields ?? {}).filter((key) => !known.includes(key));
       if (unknown.length > 0) {
         return refused('BAD_REQUEST', `Nothing was changed. ${WORDS[kind]}s have no field called ${unknown.join(', ')}. Their fields are: ${known.join(', ')}.`);
@@ -173,17 +201,15 @@ const entityAuthoringTools = [
       const allocated = await ctx.call('allocateIds', ALLOCATE[kind], 1);
       if (!allocated.ok) return allocated;
       const entry = allocated.value[0]!;
-      const base = kind === 'npc' ? newNpc(entry) : kind === 'object' ? newObject(entry) : newItem(entry);
-      const parsed = authoringSchema(kind).safeParse({ ...base, ...fields, name });
+      const parsed = authoringSchema(kind).safeParse({ ...MAKE[kind](entry), ...fields, name });
       if (!parsed.success) return refused('BAD_REQUEST', `Nothing was changed. ${problemsOf(parsed.error, 'fields')}`);
+      const entity = parsed.data as Entity;
 
       const store = await ctx.call('projectEntities');
       if (!store.ok) return store;
-      const key = STORE_LIST[kind];
-      const saved = await ctx.call('putProjectEntities', { ...store.value, [key]: [...(store.value[key] as unknown[]), parsed.data] } as never);
+      const saved = await ctx.call('putProjectEntities', appended(store.value, kind, entity));
       if (!saved.ok) return saved;
-      const issues = await issuesAbout(ctx, kind, parsed.data as { entry: number; name: string });
-      return issues.ok ? { ok: true, value: { kind, entity: parsed.data, issues: issues.value } } : issues;
+      return { ok: true, value: { kind, entity, ...(await issuesAbout(ctx, kind, entity.entry)) } };
     },
   }),
   defineTool({
@@ -199,16 +225,15 @@ const entityAuthoringTools = [
       const { store, npc } = found.value;
       const locked = lockReason(npc, 'fight', 'NPC');
       if (locked) return refused('BAD_REQUEST', locked);
-      let next = null;
+      let next: CustomNpc['fight'] = null;
       if (fight !== null) {
         const parsed = authoringSchema('fight').safeParse(fight);
         if (!parsed.success) return refused('BAD_REQUEST', `Nothing was changed. ${problemsOf(parsed.error, 'fight')}`);
-        next = parsed.data;
+        next = parsed.data as CustomNpc['fight'];
       }
-      const saved = await ctx.call('putProjectEntities', { ...store, npcs: store.npcs.map((n) => (n.entry === entry ? { ...n, fight: next } : n)) } as never);
+      const saved = await ctx.call('putProjectEntities', { ...store, npcs: store.npcs.map((n) => (n.entry === entry ? { ...n, fight: next } : n)) });
       if (!saved.ok) return saved;
-      const issues = await issuesAbout(ctx, 'npc', npc);
-      return issues.ok ? { ok: true, value: { entry, fight: next !== null, issues: issues.value } } : issues;
+      return { ok: true, value: { entry, fight: next !== null, ...(await issuesAbout(ctx, 'npc', entry)) } };
     },
   }),
   defineTool({
@@ -222,53 +247,59 @@ const entityAuthoringTools = [
       const found = await projectNpc(ctx, entry);
       if (!found.ok) return found;
       const { store, npc } = found.value;
-      if (!npc.spawns.some((s: { guid: number }) => s.guid === guid)) {
-        return refused('BAD_REQUEST', `NPC ${entry} has no spawn ${guid}. Its spawns are: ${npc.spawns.map((s: { guid: number }) => s.guid).join(', ') || '(none)'}.`);
+      const spawn = npc.spawns.find((s) => s.guid === guid);
+      if (!spawn) {
+        return refused('BAD_REQUEST', `NPC ${entry} has no spawn ${guid}. Its spawns are: ${npc.spawns.map((s) => s.guid).join(', ') || '(none)'}.`);
       }
-      let next = null;
+      let next: CustomNpc['spawns'][number]['patrol'] = null;
       if (patrol !== null) {
         const parsed = patrolInputSchema.safeParse(patrol);
         if (!parsed.success) return refused('BAD_REQUEST', `Nothing was changed. ${problemsOf(parsed.error, 'patrol')}`);
         // The editor owns the path id: any given one is ignored (it could be another route's), and the
         // spawn keeps the one it already has when its patrol is set again
-        const own = npc.spawns.find((s: { guid: number }) => s.guid === guid)?.patrol?.pathId;
+        const own = spawn.patrol?.pathId;
         let pathId = typeof own === 'number' && own > 0 ? own : 0;
         if (pathId === 0) {
           const allocated = await ctx.call('patrolPathId', guid);
           if (!allocated.ok) return allocated;
           pathId = allocated.value;
         }
-        next = { ...parsed.data, pathId };
+        next = { ...parsed.data, pathId } as NonNullable<typeof next>;
       }
-      const npcs = store.npcs.map((n) => (n.entry === entry ? { ...n, spawns: n.spawns.map((s: { guid: number }) => (s.guid === guid ? { ...s, patrol: next } : s)) } : n));
-      const saved = await ctx.call('putProjectEntities', { ...store, npcs } as never);
+      const npcs = store.npcs.map((n) => (n.entry === entry ? { ...n, spawns: n.spawns.map((s) => (s.guid === guid ? { ...s, patrol: next } : s)) } : n));
+      const saved = await ctx.call('putProjectEntities', { ...store, npcs });
       if (!saved.ok) return saved;
-      const issues = await issuesAbout(ctx, 'npc', npc);
-      return issues.ok ? { ok: true, value: { entry, guid, patrol: next, issues: issues.value } } : issues;
+      return { ok: true, value: { entry, guid, patrol: next, ...(await issuesAbout(ctx, 'npc', entry)) } };
     },
   }),
   defineTool({
     name: 'set_loot',
     title: "Set a new NPC's or object's loot",
     description:
-      "Replaces the loot of one of the project's NPCs or objects: rows of { item, chance (percent), min, max, questOnly }. See describe_authoring with model loot. An existing database NPC or object whose loot the editor has locked is refused. The answer includes the editor's issues about it.",
+      "Replaces the loot of one of the project's NPCs or objects: rows of { item, chance (percent), min, max, questOnly }. See describe_authoring with model loot. An existing database NPC or object whose loot the editor has locked is refused. Only a chest object can be looted: for any other object type the loot is saved but not exported, and the answer says so under `warning`. The answer includes the editor's issues about it.",
     input: { kind: z.enum(['npc', 'object']), entry: z.number().int().min(1), rows: z.array(z.record(z.string(), z.unknown())) },
     write: { kind: 'step', label: ({ entry }: { entry: number }) => `AI: set loot of ${entry}` },
     run: async ({ kind, entry, rows }, ctx) => {
       const store = await ctx.call('projectEntities');
       if (!store.ok) return store;
-      const list = store.value[STORE_LIST[kind]] as any[];
-      const entity = list.find((e) => e.entry === entry);
+      const entity: CustomNpc | CustomObject | undefined = (kind === 'npc' ? store.value.npcs : store.value.objects).find((e) => e.entry === entry);
       if (!entity) return refused('BAD_REQUEST', `There is no ${WORDS[kind]} ${entry} in this project. Make one with new_entity.`);
       const locked = lockReason(entity, 'loot', WORDS[kind]);
       if (locked) return refused('BAD_REQUEST', locked);
       const parsed = authoringSchema('loot').safeParse(rows);
       if (!parsed.success) return refused('BAD_REQUEST', `Nothing was changed. ${problemsOf(parsed.error, 'rows')}`);
-      const key = STORE_LIST[kind];
-      const saved = await ctx.call('putProjectEntities', { ...store.value, [key]: list.map((e) => (e.entry === entry ? { ...e, loot: parsed.data } : e)) } as never);
+      const loot = parsed.data as CustomNpc['loot'];
+      const next: ProjectEntities =
+        kind === 'npc'
+          ? { ...store.value, npcs: store.value.npcs.map((e) => (e.entry === entry ? { ...e, loot } : e)) }
+          : { ...store.value, objects: store.value.objects.map((e) => (e.entry === entry ? { ...e, loot } : e)) };
+      const saved = await ctx.call('putProjectEntities', next);
       if (!saved.ok) return saved;
-      const issues = await issuesAbout(ctx, kind, entity);
-      return issues.ok ? { ok: true, value: { kind, entry, rows: (parsed.data as unknown[]).length, issues: issues.value } } : issues;
+      const warning =
+        kind === 'object' && 'pages' in entity && entity.type !== 'chest' && loot.length > 0
+          ? `Object ${entry} is a ${entity.type}, not a chest, and only a chest can be looted: this loot is saved but will not be exported. Change its type to chest with upsert_entity.`
+          : undefined;
+      return { ok: true, value: { kind, entry, rows: loot.length, ...(warning ? { warning } : {}), ...(await issuesAbout(ctx, kind, entry)) } };
     },
   }),
   defineTool({
@@ -281,4 +312,5 @@ const entityAuthoringTools = [
   }),
 ];
 
-authoringTools.push(...entityAuthoringTools);
+/** Writing scenes, fights, patrols and loot in the editor's own author-level models. */
+export const authoringTools = [...sceneTools, ...entityTools];

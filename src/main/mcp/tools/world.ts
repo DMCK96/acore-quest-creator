@@ -3,7 +3,7 @@ import { defineTool } from '../tool';
 
 const kind = z.enum(['creature', 'gameobject']);
 const guid = z.number().int().min(1);
-const ROTATION_NOTE = 'An object also takes a `rotation` quaternion [x, y, z, w] (copy it from area_overview to turn it like its neighbour); NPCs leave it out.';
+const ROTATION_NOTE = 'An object also takes a `rotation` quaternion [x, y, z, w] (how nearby objects are turned is in area_overview; set it for what the object should face); NPCs leave it out.';
 const place = {
   x: z.number().describe('World yards, X north.'),
   y: z.number().describe('World yards, Y west.'),

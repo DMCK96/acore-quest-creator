@@ -70,6 +70,8 @@ export async function mcpFixture(tools: readonly ToolDef[], opts: McpFixtureOpti
   const changes: HistoryResult[] = [];
   const connections: ConnectSummary[] = [];
   const order: string[] = [];
+  /** `hold` and `release`, and `notify` between them, in the order the window would hear them */
+  const holds: string[] = [];
   const ctx: McpContext = {
     api,
     session,
@@ -79,7 +81,8 @@ export async function mcpFixture(tools: readonly ToolDef[], opts: McpFixtureOpti
       await opts.flush?.();
     },
     notifyConnected: (summary) => { connections.push(summary); },
-    notify: (change) => { order.push('notify'); changes.push(change); },
+    holdEdits: (held) => { holds.push(held ? 'hold' : 'release'); },
+    notify: (change) => { order.push('notify'); holds.push('notify'); changes.push(change); },
     ...(opts.flushTimeoutMs !== undefined ? { flushTimeoutMs: opts.flushTimeoutMs } : {}),
     ...(opts.toolTimeoutMs !== undefined ? { toolTimeoutMs: opts.toolTimeoutMs } : {}),
   };
@@ -106,5 +109,5 @@ export async function mcpFixture(tools: readonly ToolDef[], opts: McpFixtureOpti
     }
   };
 
-  return { api, db, session, client, call, changes, connections, order, ctx, profileId: rec.value.id as number };
+  return { api, db, session, client, call, changes, connections, order, holds, ctx, profileId: rec.value.id as number };
 }

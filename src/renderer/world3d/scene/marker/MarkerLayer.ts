@@ -69,6 +69,7 @@ export class MarkerLayer {
   #selected: string | null = null;
   #drag: { id: string; start: THREE.Vector3; last: GizmoChange | null } | null = null;
   #frame = 0;
+  #locked = false;
 
   constructor(camera: THREE.Camera, dom: HTMLElement, scene: THREE.Scene, ground: () => THREE.Object3D[], events: MarkerEvents) {
     this.#root.name = 'quest-markers';
@@ -125,6 +126,23 @@ export class MarkerLayer {
     return best?.id ?? null;
   }
 
+  /** While locked the handles are taken away, and a drag under way is dropped, the marker going back */
+  setLocked(locked: boolean): void {
+    this.#locked = locked;
+    if (!locked) {
+      this.select(this.#selected);
+      return;
+    }
+    const drag = this.#drag;
+    this.#drag = null;
+    const group = drag && this.#drawn.get(drag.id)?.group;
+    if (drag && group) {
+      group.position.copy(drag.start);
+      group.updateMatrixWorld(true);
+    }
+    this.#gizmo.detach();
+  }
+
   /** Selects a marker (its handles on it when it can be dragged), or none; false when there is no such marker */
   select(id: string | null): boolean {
     const next = id === null ? undefined : this.#drawn.get(id);
@@ -133,7 +151,7 @@ export class MarkerLayer {
       this.#gizmo.detach();
       return id === null;
     }
-    if (next.drawing.draggable) {
+    if (next.drawing.draggable && !this.#locked) {
       this.#gizmo.attach(next.group.position.clone(), new THREE.Quaternion(), 'none');
       this.#gizmo.setMode('move');
     } else {

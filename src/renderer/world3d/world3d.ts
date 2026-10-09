@@ -141,6 +141,8 @@ export interface World3D {
   setGroupSpawns(byGroup: ReadonlyMap<number, readonly { kind: 'npc' | 'object'; guid: number }[]>): void;
   /** Whether the gizmo moves or rotates. */
   setMode(mode: 'move' | 'rotate'): void;
+  /** While locked (an AI client is writing) the camera still moves, but nothing can be moved, rotated, placed or deleted here. */
+  setEditLocked(locked: boolean): void;
   /** Starts placing an existing NPC or object (each click on the ground places one), or stops with null. */
   setPlacing(target: PlaceTarget | null): void;
   /** Starts drawing a new path for a drawn NPC, its first point at `first`; each click then adds a point. */
@@ -308,6 +310,8 @@ export function createWorld3D(options: World3DOptions): World3D {
   };
   // While placing, a click puts the chosen NPC or object on the ground instead of selecting anything
   let placing: PlaceTarget | null = null;
+  /** An AI client is writing: the view moves, but nothing can be edited */
+  let editLocked = false;
   let tool: Tool = 'camera';
   const refreshEscape = (): void => {
     renderer.domElement.dataset.selection = !isEmpty(selection) || placing || markers.selected !== null ? 'on' : '';
@@ -321,7 +325,7 @@ export function createWorld3D(options: World3DOptions): World3D {
   const place = async (x: number, y: number): Promise<void> => {
     const target = placing;
     const ground = target ? pick(x, y) : null;
-    if (!target) return;
+    if (!target || editLocked) return;
     if (!ground) {
       options.onNotice?.('Click the ground or a building to place it.');
       return;
@@ -727,6 +731,11 @@ export function createWorld3D(options: World3DOptions): World3D {
     setWorldLayer: (layer) => followLayer(manager.setWorldLayer(layer)),
     setGroupSpawns: (byGroup) => followLayer(manager.setGroupSpawns(byGroup)),
     setMode: (mode) => editor.setMode(mode),
+    setEditLocked: (locked) => {
+      editLocked = locked;
+      editor.setLocked(locked);
+      markers.setLocked(locked);
+    },
     setPlacing: (target) => {
       placing = target;
       // Placing starts from nothing selected, so a click never means anything else

@@ -11,6 +11,12 @@ export interface McpContext {
   call<M extends keyof Api>(method: M, ...args: Parameters<Api[M]>): ReturnType<Api[M]>;
   /** Asks the window to hand over any pending edit; resolves at once when there is no window. */
   flush(): Promise<void>;
+  /**
+   * Tells the window an AI client's write is about to run (`true`) or is over (`false`). Between the two
+   * the window keeps its own quest edits back, so a copy of the quest older than the write cannot be
+   * sent over it; what was typed meanwhile is put on top of the change when it arrives.
+   */
+  holdEdits?(held: boolean): void;
   /** Tells the window what changed in the project, so it shows the project as it now is. */
   notify(change: HistoryResult): void;
   /** Tells the window it was connected, so it leaves the login screen. */

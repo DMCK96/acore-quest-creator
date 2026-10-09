@@ -94,29 +94,47 @@ export type OwnerKind = SceneOwner['kind'];
 export type TriggerKind = SceneTrigger['kind'];
 export type StepKind = SceneStep['kind'];
 
+/**
+ * The scenes stored on the quest that parse, and the stored entries that do not. A reader that only
+ * shows the first must hand the second back to `writeScenes`, or saving would erase them.
+ */
+export function splitScenes(values: Readonly<Record<string, unknown>>): { scenes: QuestScene[]; unreadable: unknown[] } {
+  const raw = values[SCRIPTS_FIELD];
+  const scenes: QuestScene[] = [];
+  const unreadable: unknown[] = [];
+  if (!Array.isArray(raw)) return { scenes, unreadable };
+  for (const entry of raw) {
+    const parsed = sceneSchema.safeParse(entry);
+    if (parsed.success) scenes.push(parsed.data);
+    else unreadable.push(entry);
+  }
+  return { scenes, unreadable };
+}
+
 /** Every scene stored on the quest; anything that is not a valid scene is left out, never thrown. */
 export function readScenes(values: Readonly<Record<string, unknown>>): QuestScene[] {
-  const raw = values[SCRIPTS_FIELD];
-  if (!Array.isArray(raw)) return [];
-  return raw.flatMap((entry) => {
-    const parsed = sceneSchema.safeParse(entry);
-    return parsed.success ? [parsed.data] : [];
-  });
+  return splitScenes(values).scenes;
 }
 
 /**
- * Scenes in the shape the values map carries. The registry's value types describe table columns;
- * scenes are nested data no column holds, so this is the one place they are passed off as one.
+ * Scenes in the shape the values map carries, followed by the stored entries that could not be read
+ * (see `splitScenes`), which are kept as they were. The registry's value types describe table
+ * columns; scenes are nested data no column holds, so this is the one place they are passed off as one.
  */
-export function writeScenes(scenes: readonly QuestScene[]): FieldValue {
-  return scenes as unknown as FieldValue;
+export function writeScenes(scenes: readonly QuestScene[], unreadable: readonly unknown[] = []): FieldValue {
+  return [...scenes, ...unreadable] as unknown as FieldValue;
 }
 
-/** `s<n+1>` past the highest `s<n>` in use, so a removed scene's id is never handed out again. */
-export function nextSceneId(scenes: readonly QuestScene[]): string {
+/**
+ * `s<n+1>` past the highest `s<n>` in use, so the id of a scene that is still stored is never handed
+ * out twice. The id of the highest scene, once it is removed, is handed out again. Entries that could
+ * not be read count too: pass them as well so their ids are not taken.
+ */
+export function nextSceneId(scenes: readonly unknown[]): string {
   let highest = 0;
   for (const scene of scenes) {
-    const match = /^s(\d+)$/.exec(scene.id);
+    const id = (scene as { id?: unknown } | null)?.id;
+    const match = typeof id === 'string' ? /^s(\d+)$/.exec(id) : null;
     if (match) highest = Math.max(highest, Number(match[1]));
   }
   return `s${highest + 1}`;

@@ -7,6 +7,6 @@ declare global {
     /** The preload bridge. Every call answers with a `Result`; none of them reject. */
     readonly api: Api;
     /** Main-process events; absent outside Electron (tests render without a preload). */
-    readonly appEvents?: { onFlushRequest(handler: () => Promise<void>): void; onHistory?(handler: (list: HistoryList) => void): void; onExternalChange?(handler: (change: HistoryResult) => void): void; onConnected?(handler: (summary: ConnectSummary) => void): void };
+    readonly appEvents?: { onFlushRequest(handler: () => Promise<void>): void; onHistory?(handler: (list: HistoryList) => void): void; onHoldEdits?(handler: (held: boolean) => void): void; onExternalChange?(handler: (change: HistoryResult) => void): void; onConnected?(handler: (summary: ConnectSummary) => void): void };
   }
 }

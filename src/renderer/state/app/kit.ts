@@ -37,6 +37,12 @@ export interface Kit {
   /** Edits to the open quest made while an undo is on its way: kept on top of what the undo hands back */
   lateEdits: Map<string, FieldValue> | null;
   /**
+   * An AI client's write is on its way: quest edits are kept back (not sent) until it is over, so a copy
+   * of the quest older than the write cannot be sent over it. `holdTimer` lets go if the end never comes.
+   */
+  held: boolean;
+  holdTimer: ReturnType<typeof setTimeout> | null;
+  /**
    * The latest position per quest queued by a drag, and the latest queued viewport, cleared once
    * `flushMoves` has sent them. `lastSavedViewport` is what the API last saw, so an unchanged
    * viewport (a pan back to where it started) does not trigger a redundant save.
@@ -68,6 +74,8 @@ export function createKit(api: Api, opts: { saveDelayMs?: number }): Kit {
     holds: new Set(),
     stepChain: Promise.resolve(),
     lateEdits: null,
+    held: false,
+    holdTimer: null,
     pendingMoves: new Map(),
     pendingViewport: null,
     lastSavedViewport: { x: 0, y: 0, zoom: 1 },
