@@ -274,7 +274,7 @@ function npcStatements(out: Statements, npc: CustomNpc, origin: Existing, givers
   const gossipChanged = !gossipUnread(npc) && !sameGossip(npc.gossipMenu, asRead.gossipMenu);
   const rootNow = npc.gossipMenu?.menus[0]?.menuId ?? 0;
   const rootRead = asRead.gossipMenu?.menus[0]?.menuId ?? 0;
-  const gossipRoot = gossipChanged && rootNow !== rootRead ? text(rootNow) : (original.gossip_menu_id ?? '0');
+  const rootChanged = gossipChanged && rootNow !== rootRead;
   const templateRow = (n: CustomNpc): Row => {
     const flags =
       (num(original.npcflag) & ~(GOSSIP_BIT | QUEST_GIVER_BIT | VENDOR_BIT | TRAINER_BIT)) |
@@ -285,7 +285,7 @@ function npcStatements(out: Statements, npc: CustomNpc, origin: Existing, givers
       ...original, entry, name: n.name, subname: n.subname, minlevel: text(n.minLevel), maxlevel: text(n.maxLevel),
       faction: text(n.faction), rank: text(RANK_VALUE[n.rank]), type: text(NPC_TYPE_VALUE[n.type]),
       HealthModifier: text(n.healthModifier), DamageModifier: text(n.damageModifier), npcflag: text(flags),
-      gossip_menu_id: gossipRoot,
+      ...(rootChanged ? { gossip_menu_id: text(rootNow) } : {}),
       AIName: !fightLocked && !fightIsEmpty(n.fight) ? 'SmartAI' : (original.AIName ?? ''),
       lootid: text(lootId),
       // Written only when changed: absent on an NPC saved before it could be set, its flags stay as they are
