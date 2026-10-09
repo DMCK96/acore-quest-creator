@@ -72,12 +72,13 @@ describe('reading an existing NPC\'s gossip tree', () => {
 
   it('locks a menu others use, one whose text others use, one with several text rows, one with a text condition, and one with no text row', () => {
     const shared = npcFromRows(1423, rows, { ...counts, sharedMenus: { 5000: 2 } }).gossipMenu!.menus;
-    expect(shared.map((m) => m.locked)).toEqual([true, false]);
+    // (the menu it opens is used by everyone who uses it)
+    expect(shared.map((m) => m.locked)).toEqual([true, true]);
     expect(npcFromRows(1423, rows, { ...counts, sharedTexts: { 7001: 1 } }).gossipMenu!.menus.map((m) => m.locked)).toEqual([false, true]);
     const twoTexts = { ...rows, gossip_menu: [menu('5000', '7000'), menu('5000', '7002'), menu('5001', '7001')] };
     expect(npcFromRows(1423, twoTexts, counts).gossipMenu!.menus[0]).toMatchObject({ textId: 7000, locked: true });
     const conditioned = { ...rows, conditions: [{ SourceTypeOrReferenceId: '14', SourceGroup: '5000', SourceEntry: '7000' }] };
-    expect(npcFromRows(1423, conditioned, counts).gossipMenu!.menus.map((m) => m.locked)).toEqual([true, false]);
+    expect(npcFromRows(1423, conditioned, counts).gossipMenu!.menus.map((m) => m.locked)).toEqual([true, true]);
   });
 
   it('keeps an option a condition or a gossip-select script names', () => {

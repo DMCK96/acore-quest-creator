@@ -8,8 +8,8 @@ import { seenByColumns, seenByOf } from './visibility';
 import { npcSpawnGuids, spawnEventRows } from './spawn-events-read';
 import { rowsOrNone } from '../db/rows-or-none';
 import {
-  existingOnly, sameTrainer, sameVendor, trainerUnread, TRAINER_TYPE_VALUE, vendorUnread, NPC_TYPE_VALUE, OBJECT_TYPE_VALUE, RANK_VALUE,
-  type CustomItem, type CustomNpc, type CustomObject, type LootRow, type OriginalRows, type Page, type ProjectEntities, type StoredOrigin, type Trainer, type VendorItem,
+  existingOnly, gossipUnread, sameGossip, sameGossipMenu, sameGossipOption, sameTrainer, sameVendor, trainerUnread, TRAINER_TYPE_VALUE, vendorUnread, NPC_TYPE_VALUE, OBJECT_TYPE_VALUE, RANK_VALUE,
+  type CustomItem, type CustomNpc, type CustomObject, type LootRow, type OriginalRows, type Page, type ProjectEntities, type StoredOrigin, type GossipMenu, type GossipOption, type GossipTree, type Trainer, type VendorItem,
 } from './model';
 
 /**
@@ -113,6 +113,86 @@ function writeTrainer(out: Statements, origin: Existing, entry: string, trainer:
   writeTable(out, origin, 'trainer_spell', [{ TrainerId: id }], spells);
 }
 
+const VARIANTS = 8;
+
+/** A menu's text row: the original columns with the greeting laid over; a variant whose text changed loses its broadcast text */
+function gossipTextRow(menu: GossipMenu, read: GossipMenu | undefined, original: Row | undefined): Row {
+  const row: Row = { ...original, ID: text(menu.textId) };
+  // A column the database left NULL stays NULL while the text it holds is empty
+  const keepNull = (column: string, value: string): string | null => (value === '' && original !== undefined && original[column] === null ? null : value);
+  for (let i = 0; i < VARIANTS; i++) {
+    const v = menu.greeting[i];
+    const was = read?.greeting[i];
+    if (v) {
+      const same = was !== undefined && was.text === v.text && was.textFemale === v.textFemale && was.probability === v.probability;
+      row[`text${i}_0`] = keepNull(`text${i}_0`, v.text);
+      row[`text${i}_1`] = keepNull(`text${i}_1`, v.textFemale);
+      row[`Probability${i}`] = text(v.probability);
+      row[`BroadcastTextID${i}`] = same ? (original?.[`BroadcastTextID${i}`] ?? '0') : '0';
+    } else if (was) {
+      // A variant that was read and is gone
+      row[`text${i}_0`] = keepNull(`text${i}_0`, '');
+      row[`text${i}_1`] = keepNull(`text${i}_1`, '');
+      row[`Probability${i}`] = '0';
+      row[`BroadcastTextID${i}`] = '0';
+    }
+  }
+  return row;
+}
+
+/** An option's row: the original (written as it is when the option is unchanged) with the modelled columns laid over it */
+function gossipOptionRow(menuId: number, option: GossipOption, read: GossipOption | undefined, original: Row | undefined): Row {
+  if (read && original && sameGossipOption(option, read)) return original;
+  const row: Row = { ...original, MenuID: text(menuId), OptionID: text(option.optionId), OptionIcon: text(option.icon), OptionText: option.text };
+  // The translation of a text that changed no longer says what it does
+  if (original) row.OptionBroadcastTextID = read && read.text === option.text ? (original.OptionBroadcastTextID ?? '0') : '0';
+  const action = option.action;
+  if (action.kind === 'service') Object.assign(row, { OptionType: text(action.type), OptionNpcFlag: text(action.npcFlag), ActionMenuID: '0' });
+  else if (action.kind === 'close') Object.assign(row, { OptionType: '1', OptionNpcFlag: '1', ActionMenuID: '0' });
+  else {
+    // A plain option keeps the type and flag it was read with when it still only opens or closes
+    const plain = original !== undefined && read !== undefined && read.action.kind !== 'service';
+    Object.assign(row, { OptionType: plain ? (original.OptionType ?? '1') : '1', OptionNpcFlag: plain ? (original.OptionNpcFlag ?? '1') : '1', ActionMenuID: text(action.menuId) });
+  }
+  return row;
+}
+
+/**
+ * The NPC's gossip menus. Each menu that is new, changed or removed and not locked is written: its text row, its
+ * menu row and its options, option by option (never by whole menu, so options another writer added survive). A
+ * menu under a new id (a copy) is all new rows; the menu it was copied from is in no key. An option the database
+ * ties to a condition or a script is never deleted, nor is a removed menu that holds one.
+ */
+function writeGossip(out: Statements, origin: Existing, tree: GossipTree | null, read: GossipTree | null): void {
+  const held = tree?.menus ?? [];
+  const was = read?.menus ?? [];
+  const write = (menu: GossipMenu | null, before: GossipMenu | undefined): void => {
+    const textIds = [...new Set([menu?.textId, before?.textId].filter((id): id is number => id !== undefined && id > 0))];
+    const menuId = (menu ?? before)!.menuId;
+    const originalOption = (id: number): Row | undefined => rowsOf(origin, 'gossip_menu_option').find((r) => num(r.MenuID) === menuId && num(r.OptionID) === id);
+    writeTable(out, origin, 'gossip_menu', textIds.map((id) => ({ MenuID: text(menuId), TextID: text(id) })),
+      menu && menu.textId > 0 ? [{ ...rowsOf(origin, 'gossip_menu').find((r) => num(r.MenuID) === menuId && num(r.TextID) === menu.textId), MenuID: text(menuId), TextID: text(menu.textId) }] : []);
+    writeTable(out, origin, 'npc_text', textIds.map((id) => ({ ID: text(id) })),
+      menu && menu.textId > 0 ? [gossipTextRow(menu, before, rowsOf(origin, 'npc_text').find((r) => num(r.ID) === menu.textId))] : []);
+    const keptIds = new Set((before?.options ?? []).filter((o) => o.kept).map((o) => o.optionId));
+    const ids = [...new Set([...(menu?.options ?? []).map((o) => o.optionId), ...(before?.options ?? []).filter((o) => !o.kept).map((o) => o.optionId)])].sort((a, b) => a - b);
+    if (ids.length > 0) {
+      writeTable(out, origin, 'gossip_menu_option', ids.map((id) => ({ MenuID: text(menuId), OptionID: text(id) })),
+        (menu?.options ?? []).filter((o) => !keptIds.has(o.optionId)).map((o) => gossipOptionRow(menuId, o, before?.options.find((b) => b.optionId === o.optionId), originalOption(o.optionId))));
+    }
+  };
+  for (const menu of held) {
+    if (menu.locked) continue;
+    const before = was.find((m) => m.menuId === menu.menuId);
+    if (before && sameGossipMenu(menu, before)) continue;
+    write(menu, before);
+  }
+  for (const before of was) {
+    if (before.locked || held.some((m) => m.menuId === before.menuId) || before.options.some((o) => o.kept)) continue;
+    write(null, before);
+  }
+}
+
 /** Pages: the original chain's and the current chain's rows deleted, the current ones written over their original columns */
 function writePages(out: Statements, origin: Existing, pages: readonly Page[]): void {
   const original = rowsOf(origin, 'page_text');
@@ -182,7 +262,7 @@ function npcStatements(out: Statements, npc: CustomNpc, origin: Existing, givers
   const fightLocked = origin.locked.includes('fight');
   const originalLoot = num(original.lootid);
   const lootId = originalLoot > 0 ? originalLoot : !lootLocked && npc.loot.length > 0 ? (lootIds.get(`npc:${npc.entry}`) ?? npc.entry) : 0;
-  const asRead = npcFromRows(npc.entry, origin.original, { sharedLoot: origin.sharedLoot, spawnCount: origin.spawnCount });
+  const asRead = npcFromRows(npc.entry, origin.original, { sharedLoot: origin.sharedLoot, spawnCount: origin.spawnCount, sharedMenus: origin.sharedMenus, sharedTexts: origin.sharedTexts });
   // Stock a project saved before vendors existed never read is not ours to replace; stock left as read is not written
   const vendorChanged = !vendorUnread(npc) && !sameVendor(npc.vendor, asRead.vendor);
   const vendorBit = vendorChanged ? (npc.vendor.length > 0 ? VENDOR_BIT : 0) : num(original.npcflag) & VENDOR_BIT;
@@ -190,6 +270,11 @@ function npcStatements(out: Statements, npc: CustomNpc, origin: Existing, givers
   // (A shared trainer can still be walked away from: that deletes only this NPC's own link)
   const trainerChanged = !trainerUnread(npc) && (!origin.locked.includes('trainer') || npc.trainer === null) && !sameTrainer(npc.trainer, asRead.trainer);
   const trainerBit = trainerChanged ? (npc.trainer ? TRAINER_BIT : 0) : num(original.npcflag) & TRAINER_BIT;
+  // Gossip never read is not ours to write; menus left as read are not written; the root menu is the NPC's gossip_menu_id
+  const gossipChanged = !gossipUnread(npc) && !sameGossip(npc.gossipMenu, asRead.gossipMenu);
+  const rootNow = npc.gossipMenu?.menus[0]?.menuId ?? 0;
+  const rootRead = asRead.gossipMenu?.menus[0]?.menuId ?? 0;
+  const gossipRoot = gossipChanged && rootNow !== rootRead ? text(rootNow) : (original.gossip_menu_id ?? '0');
   const templateRow = (n: CustomNpc): Row => {
     const flags =
       (num(original.npcflag) & ~(GOSSIP_BIT | QUEST_GIVER_BIT | VENDOR_BIT | TRAINER_BIT)) |
@@ -200,13 +285,14 @@ function npcStatements(out: Statements, npc: CustomNpc, origin: Existing, givers
       ...original, entry, name: n.name, subname: n.subname, minlevel: text(n.minLevel), maxlevel: text(n.maxLevel),
       faction: text(n.faction), rank: text(RANK_VALUE[n.rank]), type: text(NPC_TYPE_VALUE[n.type]),
       HealthModifier: text(n.healthModifier), DamageModifier: text(n.damageModifier), npcflag: text(flags),
+      gossip_menu_id: gossipRoot,
       AIName: !fightLocked && !fightIsEmpty(n.fight) ? 'SmartAI' : (original.AIName ?? ''),
       lootid: text(lootId),
       // Written only when changed: absent on an NPC saved before it could be set, its flags stay as they are
       ...(n.seenBy && n.seenBy !== seenByOf(original) ? seenByColumns(n.seenBy, original) : {}),
     };
   };
-  writeTable(out, origin, 'creature_template', [{ entry }], [keepUnedited(templateRow(npc), templateRow(asRead), original, [], ['npcflag', 'lootid', 'AIName'])]);
+  writeTable(out, origin, 'creature_template', [{ entry }], [keepUnedited(templateRow(npc), templateRow(asRead), original, [], ['npcflag', 'lootid', 'AIName', 'gossip_menu_id'])]);
 
   const model = rowsOf(origin, 'creature_template_model').find((r) => num(r.Idx) === 0) ?? { CreatureID: entry, Idx: '0', Probability: '1' };
   writeTable(out, origin, 'creature_template_model', [{ CreatureID: entry, Idx: '0' }], [
@@ -225,6 +311,7 @@ function npcStatements(out: Statements, npc: CustomNpc, origin: Existing, givers
   if (!lootLocked && lootId > 0) writeTable(out, origin, 'creature_loot_template', [{ Entry: text(lootId) }], lootRows(lootId, npc.loot));
   if (vendorChanged) writeTable(out, origin, 'npc_vendor', [{ entry }], vendorRows(entry, npc.vendor, rowsOf(origin, 'npc_vendor')));
   if (trainerChanged) writeTrainer(out, origin, entry, npc.trainer, asRead.trainer);
+  if (gossipChanged) writeGossip(out, origin, npc.gossipMenu, asRead.gossipMenu);
 }
 
 function objectStatements(out: Statements, object: CustomObject, origin: Existing, lootIds: LootIds): void {

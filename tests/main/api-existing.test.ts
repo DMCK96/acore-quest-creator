@@ -69,6 +69,10 @@ describe('editing an existing entity', () => {
     db.insert('npc_text', { ID: '7500', text0_0: 'Mine', Probability0: '1' });
     const own: any = await api.readExistingEntity('npc', 4242);
     expect(own.value.gossipMenu.menus.map((m: any) => [m.menuId, m.locked])).toEqual([[5500, false]]);
+    // Another menu that opens it is a user too
+    db.insert('gossip_menu_option', { MenuID: '9000', OptionID: '0', OptionText: 'Go', OptionType: '1', OptionNpcFlag: '1', ActionMenuID: '5500' });
+    const opened: any = await api.readExistingEntity('npc', 4242);
+    expect(opened.value.gossipMenu.menus.map((m: any) => m.locked)).toEqual([true]);
   });
 
   it('refuses one the database does not have', async () => {

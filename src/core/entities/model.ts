@@ -128,6 +128,9 @@ const originSchema = z.discriminatedUnion('kind', [
     spawnCount: int.min(0),
     // How many other NPCs use its trainer; absent in projects saved before trainers
     sharedTrainer: int.min(0).optional(),
+    // How many other creatures and objects use each menu of its gossip tree, and how many outside menus use each text (by id)
+    sharedMenus: z.record(z.string(), int.min(0)).optional(),
+    sharedTexts: z.record(z.string(), int.min(0)).optional(),
     locked: z.array(z.enum(['type', 'loot', 'fight', 'trainer'])),
   }),
 ]);
@@ -370,17 +373,20 @@ export function gossipUnread(npc: { origin: StoredOrigin }): boolean {
   return npc.origin.kind === 'existing' && !Object.prototype.hasOwnProperty.call(npc.origin.original, 'gossip_menu');
 }
 
+/** Whether two options hold the same values */
+export function sameGossipOption(o: GossipOption, p: GossipOption): boolean {
+  const x = o.action;
+  const y = p.action;
+  const sameAction = x.kind === y.kind && (x.kind !== 'menu' || x.menuId === (y as typeof x).menuId) && (x.kind !== 'service' || (x.type === (y as typeof x).type && x.npcFlag === (y as typeof x).npcFlag));
+  return o.optionId === p.optionId && o.icon === p.icon && o.text === p.text && o.kept === p.kept && sameAction;
+}
+
 /** Whether two menus hold the same values; `locked` says nothing of what they hold */
 export function sameGossipMenu(a: GossipMenu, b: GossipMenu): boolean {
-  const sameAction = (x: GossipAction, y: GossipAction): boolean =>
-    x.kind === y.kind && (x.kind !== 'menu' || x.menuId === (y as typeof x).menuId) && (x.kind !== 'service' || (x.type === (y as typeof x).type && x.npcFlag === (y as typeof x).npcFlag));
   return (
     a.menuId === b.menuId && a.textId === b.textId &&
     a.greeting.length === b.greeting.length && a.greeting.every((v, i) => v.text === b.greeting[i]!.text && v.textFemale === b.greeting[i]!.textFemale && v.probability === b.greeting[i]!.probability) &&
-    a.options.length === b.options.length && a.options.every((o, i) => {
-      const p = b.options[i]!;
-      return o.optionId === p.optionId && o.icon === p.icon && o.text === p.text && o.kept === p.kept && sameAction(o.action, p.action);
-    })
+    a.options.length === b.options.length && a.options.every((o, i) => sameGossipOption(o, b.options[i]!))
   );
 }
 

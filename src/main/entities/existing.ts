@@ -30,13 +30,16 @@ async function gossipUsers(db: WorldDb, rows: OriginalRows, entry: number): Prom
   if (menus.length === 0) return { sharedMenus, sharedTexts };
   const names = menus.map(str);
   const texts = [...new Set((rows.gossip_menu ?? []).map((r) => r.TextID ?? '0'))];
-  const [creatures, objects, users] = await Promise.all([
+  const [creatures, objects, users, openers] = await Promise.all([
     rowsOrNone(db, 'creature_template', { gossip_menu_id: names }),
     rowsOrNone(db, 'gameobject_template', { type: '2', Data3: names }),
     texts.length > 0 ? rowsOrNone(db, 'gossip_menu', { TextID: texts }) : Promise.resolve([]),
+    rowsOrNone(db, 'gossip_menu_option', { ActionMenuID: names }),
   ]);
   for (const r of creatures) if (num(r.entry) !== entry) sharedMenus[num(r.gossip_menu_id)] = (sharedMenus[num(r.gossip_menu_id)] ?? 0) + 1;
   for (const r of objects) sharedMenus[num(r.Data3)] = (sharedMenus[num(r.Data3)] ?? 0) + 1;
+  // A menu outside the tree that opens one of its menus uses it too
+  for (const r of openers) if (!menus.includes(num(r.MenuID))) sharedMenus[num(r.ActionMenuID)] = (sharedMenus[num(r.ActionMenuID)] ?? 0) + 1;
   for (const r of users) if (!menus.includes(num(r.MenuID))) sharedTexts[num(r.TextID)] = (sharedTexts[num(r.TextID)] ?? 0) + 1;
   return { sharedMenus, sharedTexts };
 }

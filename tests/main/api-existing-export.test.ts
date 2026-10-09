@@ -117,6 +117,54 @@ describe('exporting an edited existing NPC', () => {
     });
   });
 
+  describe('the gossip of an existing NPC', () => {
+    const mine = async (db: any) => {
+      db.update('creature_template', { entry: '1423' }, { gossip_menu_id: '5000' });
+      db.insert('gossip_menu', { MenuID: '5000', TextID: '7000' });
+      db.insert('npc_text', { ID: '7000', text0_0: 'Hello', Probability0: '1', VerifiedBuild: '12340' });
+      db.insert('gossip_menu_option', { MenuID: '5000', OptionID: '0', OptionText: 'Bye', OptionType: '1', OptionNpcFlag: '1', VerifiedBuild: '12340' });
+    };
+    const close = (id: number, text: string) => ({ optionId: id, icon: 0, text, action: { kind: 'close' as const }, kept: false });
+
+    it('exports a database NPC given a menu, filling the columns the editor does not set', async () => {
+      const { api } = await setup();
+      const read: any = await api.readExistingEntity('npc', 1423);
+      const menu = { menuId: 932535, textId: 9780013, locked: false, greeting: [{ text: 'Hail', textFemale: '', probability: 1 }], options: [close(0, 'Goodbye')] };
+      await api.putProjectEntities({ npcs: [{ ...read.value, gossipMenu: { menus: [menu] } }], objects: [], items: [] });
+      const out: any = await api.exportProject();
+      expect(out.ok, JSON.stringify(out.error)).toBe(true);
+      expect(out.value.sql).toMatch(/INSERT INTO `gossip_menu` \(.*\) VALUES \(932535, 9780013/);
+      expect(out.value.sql).toMatch(/INSERT INTO `npc_text` \(.*\) VALUES \(9780013, 'Hail'/);
+      expect(out.value.sql).toMatch(/INSERT INTO `gossip_menu_option` \(.*\) VALUES \(932535, 0, /);
+      expect(out.value.sql).toMatch(/INSERT INTO `creature_template` \(.*\) VALUES \(1423,.*932535/);
+    });
+
+    it('exports an option added to its own menu', async () => {
+      const { api, db } = await setup();
+      await mine(db);
+      const read: any = await api.readExistingEntity('npc', 1423);
+      const menus = read.value.gossipMenu.menus.map((m: any) => ({ ...m, options: [...m.options, close(1, 'Farewell')] }));
+      await api.putProjectEntities({ npcs: [{ ...read.value, gossipMenu: { menus } }], objects: [], items: [] });
+      const out: any = await api.exportProject();
+      expect(out.ok, JSON.stringify(out.error)).toBe(true);
+      expect(out.value.sql).toMatch(/INSERT INTO `gossip_menu_option` \(.*\) VALUES \(5000, 1, /);
+    });
+
+    it('exports an NPC given its own copy of a shared menu, leaving the shared menu alone', async () => {
+      const { api, db } = await setup();
+      await mine(db);
+      db.insert('creature_template', { entry: '68', name: 'City Guard', gossip_menu_id: '5000' });
+      const read: any = await api.readExistingEntity('npc', 1423);
+      expect(read.value.gossipMenu.menus[0].locked).toBe(true);
+      const copied = { ...read.value.gossipMenu.menus[0], menuId: 932535, textId: 9780013, locked: false };
+      await api.putProjectEntities({ npcs: [{ ...read.value, gossipMenu: { menus: [copied] } }], objects: [], items: [] });
+      const out: any = await api.exportProject();
+      expect(out.ok, JSON.stringify(out.error)).toBe(true);
+      expect(out.value.sql).toMatch(/INSERT INTO `gossip_menu` \(.*\) VALUES \(932535, 9780013/);
+      expect(out.value.sql).not.toMatch(/(DELETE FROM|INSERT INTO) `(gossip_menu|gossip_menu_option)`.*5000/);
+    });
+  });
+
   it('warns, and still exports, when the database changed the NPC since it was edited here', async () => {
     const { api, db, guard } = await setup();
     await api.putProjectEntities({ npcs: [{ ...guard, minLevel: 60, maxLevel: 60 }], objects: [], items: [] });

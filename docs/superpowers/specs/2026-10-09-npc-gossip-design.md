@@ -130,8 +130,9 @@ gossipAction = { kind: 'close' } | { kind: 'menu', menuId: int.positive() }
   - `conditions` and `smart_scripts` are never written.
 - Opening an NPC never changes it; the revert restores the originals.
 - Give it its own copy (per menu, or **Copy the whole menu tree** for the NPC): allocates new menu and text ids,
-  keeps the content, clears `locked`; options that opened a copied menu are repointed at its copy. The shared
-  menus are never deleted or rewritten. A `kept` option stays `kept` in the copy but its condition and script do
+  keeps the content, clears `locked`; options that opened a copied menu are repointed at its copy. A copy is all new rows:
+  what the editor does not model (map markers, boxes, translations) is not copied. A menu only a locked menu opens is
+  locked too (everyone who uses the first uses it). The shared menus are never deleted or rewritten. A `kept` option stays `kept` in the copy but its condition and script do
   not follow it (they name the old menu): the copy drops `kept` and the tab says so before copying.
 - New NPCs: `compile.ts` writes the same rows, and deletes by key on every export what a past export wrote for the
   NPC's menus (found through `creature_template.gossip_menu_id` and the option ids the database holds for menus

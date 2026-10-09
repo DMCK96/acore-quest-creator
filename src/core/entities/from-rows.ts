@@ -29,7 +29,7 @@ const nameOf = <T extends Record<string, number>>(map: T, value: number, fallbac
   (Object.keys(map) as (keyof T)[]).find((k) => map[k] === value) ?? fallback;
 
 const origin = (rows: OriginalRows, counts: ExistingCounts, locked: EntityLock[]) =>
-  ({ kind: 'existing', original: rows, sharedLoot: counts.sharedLoot, spawnCount: counts.spawnCount, sharedTrainer: counts.sharedTrainer ?? 0, locked }) as const;
+  ({ kind: 'existing', original: rows, sharedLoot: counts.sharedLoot, spawnCount: counts.spawnCount, sharedTrainer: counts.sharedTrainer ?? 0, sharedMenus: counts.sharedMenus ?? {}, sharedTexts: counts.sharedTexts ?? {}, locked }) as const;
 
 /** The loot a plain list holds; lists with references or groups cannot be edited as one list, so none */
 function lootOf(rows: Row[] | undefined): { loot: LootRow[]; locked: boolean } {
@@ -123,6 +123,20 @@ function gossipOf(rows: OriginalRows, counts: ExistingCounts): GossipTree | null
     });
     return { menuId: id, textId, greeting: greetingOf(text), options, locked };
   });
+  // A menu only a locked menu opens is used by everyone who uses that one
+  for (let changed = true; changed; ) {
+    changed = false;
+    for (const m of menus) {
+      if (!m.locked) continue;
+      for (const o of m.options) {
+        const next = o.action.kind === 'menu' ? menus.find((x) => x.menuId === (o.action as { menuId: number }).menuId) : undefined;
+        if (next && !next.locked) {
+          next.locked = true;
+          changed = true;
+        }
+      }
+    }
+  }
   return { menus };
 }
 
