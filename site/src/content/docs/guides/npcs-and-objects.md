@@ -55,6 +55,7 @@ An NPC holds a weapon by its item's display alone, so any item works, even one y
 - **Fight**: how it fights. See the [combat wizard](/azeroth-world-editor/guides/combat-wizard/).
 - **Loot**: what it drops. See [Loot](/azeroth-world-editor/guides/loot/).
 - **Vendor**: what it sells. See [Selling things](#selling-things) below.
+- **Trainer**: the spells it teaches. See [Teaching spells](#teaching-spells) below.
 - **Placement**: where it stands. **Add spawn** and paste the output of the in-game `.gps` command, or choose **Place in world** to put it down in [the World](/azeroth-world-editor/guides/the-world/#your-own-npcs-from-their-editor). Each spawn has its own **Event**, which starts as **Same as the NPC**.
 
 ### Selling things
@@ -77,6 +78,25 @@ Some vendors in the database list a negative item: that is not an item but anoth
 Changing the stock back to what it was when you opened the NPC writes nothing. If you had already applied a patch with other stock to your database, run that patch's revert file to undo it.
 
 Stock that depends on a game event is not edited here.
+
+### Teaching spells
+
+Any NPC can be a trainer, a new one or one the database already has. On the **Trainer** tab, **Make this NPC a trainer** gives it a trainer of its own, and then:
+
+- **Type**: **Class**, **Mount**, **Profession** or **Pet**.
+- **Class** (class trainers only): which class it serves. A class trainer with no class can be used by no player, so the editor will not export it. The stock classes are listed by name; the fork's own classes show as **Class N**.
+- **Greeting**: what the trainer says when a player opens the window.
+- Each spell has a **Spell**, a **Cost** in gold, silver and copper, a **Required level**, an optional **Skill** and **Skill rank** (for professions), and up to three **Needs spell** entries, the spells a player must already know.
+
+**Add spell** adds a row and **Remove** takes one away. **Copy spells from…** replaces the list with another NPC's, new or from the database, together with its type, class and greeting, and asks first when this NPC already teaches something. **Remove trainer** makes the NPC teach nothing again.
+
+An NPC the database already makes a trainer opens with its spells listed, ready to edit. Opening it changes nothing; the patch writes the trainer only if you change it, and the revert patch puts the original rows back. Most class trainers share one trainer with many other NPCs (one mage trainer serves every mage trainer in the world). Changing a shared trainer would change them all, so the editor shows its spells read-only, says how many other NPCs use it, and offers **Give it its own copy**. That gives this NPC a trainer of its own with the same spells, which you can then edit; the shared trainer is never touched.
+
+This database also keeps an older table of shared spell lists, `npc_trainer`. If an NPC uses some, the tab says so ("Also teaches the spells of N shared lists"). They are shown but not edited here. An NPC added to a project before the app could read trainers does not show its trainer; choose **Put back as the database has it** and edit the NPC again to read it.
+
+In [the World](/azeroth-world-editor/guides/the-world/#the-right-click-menu), right-click an NPC and choose **Make trainer…**, or **Edit trainer spells…** when it already teaches; both open this tab. Checks: a spell row with no spell, the same spell twice, a spell that needs itself, a class trainer with no class, or a trainer with no ID are errors; an empty trainer, a spell the server does not have, and a trainer ID the database already uses for another NPC are warnings.
+
+Translated greetings are not edited here.
 
 ### Visibility
 

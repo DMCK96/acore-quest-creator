@@ -54,13 +54,13 @@ describe('the guides tell the truth about the editor', () => {
 
   it('cite only issue codes the editor really has', () => {
     for (const model of AUTHORING_MODELS) {
-      const cited = [...guideOf(model).matchAll(/`((?:SCENE|FIGHT|ENTITY|ITEM|LOOT|PATROL|VENDOR)_[A-Z_]+)`/g)].map((m) => m[1]!);
+      const cited = [...guideOf(model).matchAll(/`((?:SCENE|FIGHT|ENTITY|ITEM|LOOT|PATROL|VENDOR|TRAINER)_[A-Z_]+)`/g)].map((m) => m[1]!);
       for (const code of cited) expect(sources.includes(`'${code}'`), `${model} guide cites ${code}`).toBe(true);
     }
   });
 
   it('cite enough codes that a reader can match what the editor reports', () => {
-    const count = (model: Parameters<typeof guideOf>[0]) => new Set([...guideOf(model).matchAll(/`(?:SCENE|FIGHT|ENTITY|ITEM|LOOT|PATROL|VENDOR)_[A-Z_]+`/g)].map((m) => m[0])).size;
+    const count = (model: Parameters<typeof guideOf>[0]) => new Set([...guideOf(model).matchAll(/`(?:SCENE|FIGHT|ENTITY|ITEM|LOOT|PATROL|VENDOR|TRAINER)_[A-Z_]+`/g)].map((m) => m[0])).size;
     expect(count('scene')).toBeGreaterThanOrEqual(4);
     expect(count('fight')).toBeGreaterThanOrEqual(4);
     expect(count('npc')).toBeGreaterThanOrEqual(3);
@@ -93,6 +93,15 @@ describe('the guides tell the truth about the editor', () => {
     expect(guide).toMatch(/negative/i);
     expect(authoringSummary('npc')).toMatch(/sells/);
     expect((examplesOf('npc')[0]!.value as { vendor: unknown[] }).vendor.length).toBeGreaterThan(0);
+  });
+
+  it('npc guide and example cover trainers and cite their codes', async () => {
+    const { examplesOf } = await import('../../src/core/authoring/examples');
+    const guide = guideOf('npc');
+    for (const word of ['`trainer`', '`trainerId`', '`requirement`', '`reqSpells`', 'allocate_ids', 'Give it its own copy', '`TRAINER_NO_ID`', '`TRAINER_NO_SPELL`', '`TRAINER_DUPLICATE`', '`TRAINER_REQ_SPELL`', '`TRAINER_NO_CLASS`', '`TRAINER_EMPTY`', '`TRAINER_UNKNOWN_SPELL`', '`TRAINER_NOT_READ`', '`TRAINER_ID_TAKEN`']) expect(guide).toContain(word);
+    expect(jsonSchemaOf('npc')).toHaveProperty('properties.trainer');
+    expect(examplesOf('npc').some((e) => (e.value as { trainer?: unknown }).trainer)).toBe(true);
+    expect(authoringSummary('npc')).toMatch(/teaches/);
   });
 
   it('say scene ids look like s1, s2 and so on', () => {

@@ -74,6 +74,34 @@ function npcExample(): AuthoringExample {
   };
 }
 
+function trainerExample(): AuthoringExample {
+  const value = {
+    ...newNpc(90004),
+    name: 'Magister Orrin',
+    subname: 'Mage Trainer',
+    minLevel: 30,
+    maxLevel: 30,
+    faction: 35,
+    displayId: 1000,
+    spawns: [{ ...newSpawn(90101), x: -9470, y: 34, z: 200, o: 0 }],
+    trainer: {
+      trainerId: 900033,
+      type: 'class' as const,
+      requirement: 8,
+      greeting: 'Hello, mage! Ready for some training?',
+      spells: [
+        { spell: 133, cost: 100, reqLevel: 4, reqSkill: 0, reqSkillRank: 0, reqSpells: [] },
+        { spell: 145, cost: 400, reqLevel: 8, reqSkill: 0, reqSkillRank: 0, reqSpells: [133] },
+      ],
+    },
+  };
+  return {
+    title: 'A friendly mage trainer with two spells',
+    value,
+    reading: 'Magister Orrin, a friendly level 30 mage trainer. He teaches spell 133 at level 4 for 1 silver, and spell 145 at level 8 for 4 silver once spell 133 is known.',
+  };
+}
+
 function objectExample(): AuthoringExample {
   const value = { ...newObject(90002), name: "Rellick's Strongbox", type: 'chest' as const, displayId: 259, spawns: [{ ...newSpawn(90200), x: -9462, y: 32, z: 200 }] };
   return { title: 'A chest with one spawn', value, reading: "Rellick's Strongbox, a chest standing at one spawn." };
@@ -116,7 +144,7 @@ export function examplesOf(model: AuthoringModel): AuthoringExample[] {
     case 'loot':
       return [lootExample()];
     case 'npc':
-      return [npcExample()];
+      return [npcExample(), trainerExample()];
     case 'object':
       return [objectExample()];
     case 'item':
