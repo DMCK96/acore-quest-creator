@@ -8,8 +8,8 @@ import { seenByColumns, seenByOf } from './visibility';
 import { npcSpawnGuids, spawnEventRows } from './spawn-events-read';
 import { rowsOrNone } from '../db/rows-or-none';
 import {
-  existingOnly, sameVendor, vendorUnread, NPC_TYPE_VALUE, OBJECT_TYPE_VALUE, RANK_VALUE,
-  type CustomItem, type CustomNpc, type CustomObject, type LootRow, type OriginalRows, type Page, type ProjectEntities, type StoredOrigin, type VendorItem,
+  existingOnly, sameTrainer, sameVendor, trainerUnread, TRAINER_TYPE_VALUE, vendorUnread, NPC_TYPE_VALUE, OBJECT_TYPE_VALUE, RANK_VALUE,
+  type CustomItem, type CustomNpc, type CustomObject, type LootRow, type OriginalRows, type Page, type ProjectEntities, type StoredOrigin, type Trainer, type VendorItem,
 } from './model';
 
 /**
@@ -26,6 +26,7 @@ type Statements = { apply: PatchStatement[]; revert: PatchStatement[] };
 const GOSSIP_BIT = 1;
 const QUEST_GIVER_BIT = 2;
 const VENDOR_BIT = 128;
+const TRAINER_BIT = 16;
 const DATA_COLUMN = /^Data\d+$/;
 
 const text = (n: number): string => String(n);
@@ -85,6 +86,30 @@ const vendorRows = (entry: string, vendor: readonly VendorItem[], original: read
       incrtime: text(v.maxCount === 0 ? 0 : v.restockSecs), ExtendedCost: text(v.extendedCost),
     };
   });
+
+/**
+ * The NPC's trainer: its default-trainer row, and under the trainer's own id the trainer row and its spells. A
+ * trainer under the id that was read keeps the original columns the editor does not model; one under a new id
+ * (an own copy of a shared trainer, or a new trainer) is all new rows, and the trainer it was read from is in no key.
+ * An NPC that stops being a trainer loses only its default-trainer row: the trainer's rows may be another NPC's.
+ */
+function writeTrainer(out: Statements, origin: Existing, entry: string, trainer: Trainer | null, read: Trainer | null): void {
+  const link = rowsOf(origin, 'creature_default_trainer')[0] ?? {};
+  writeTable(out, origin, 'creature_default_trainer', [{ CreatureId: entry }], trainer ? [{ ...link, CreatureId: entry, TrainerId: text(trainer.trainerId) }] : []);
+  if (!trainer) return;
+  const id = text(trainer.trainerId);
+  const sameId = read !== null && read.trainerId === trainer.trainerId;
+  const original = sameId ? rowsOf(origin, 'trainer').find((r) => num(r.Id) === trainer.trainerId) : undefined;
+  writeTable(out, origin, 'trainer', [{ Id: id }], [
+    { ...original, Id: id, Type: text(TRAINER_TYPE_VALUE[trainer.type]), Requirement: text(trainer.type === 'class' ? trainer.requirement : 0), Greeting: trainer.greeting },
+  ]);
+  const carried = new Map(sameId ? rowsOf(origin, 'trainer_spell').map((r) => [num(r.SpellId), r] as const) : []);
+  const spells = [...trainer.spells].sort((a, b) => a.spell - b.spell).map((s): Row => ({
+    ...carried.get(s.spell), TrainerId: id, SpellId: text(s.spell), MoneyCost: text(s.cost), ReqSkillLine: text(s.reqSkill), ReqSkillRank: text(s.reqSkillRank),
+    ReqAbility1: text(s.reqSpells[0] ?? 0), ReqAbility2: text(s.reqSpells[1] ?? 0), ReqAbility3: text(s.reqSpells[2] ?? 0), ReqLevel: text(s.reqLevel),
+  }));
+  writeTable(out, origin, 'trainer_spell', [{ TrainerId: id }], spells);
+}
 
 /** Pages: the original chain's and the current chain's rows deleted, the current ones written over their original columns */
 function writePages(out: Statements, origin: Existing, pages: readonly Page[]): void {
@@ -159,12 +184,15 @@ function npcStatements(out: Statements, npc: CustomNpc, origin: Existing, givers
   // Stock a project saved before vendors existed never read is not ours to replace; stock left as read is not written
   const vendorChanged = !vendorUnread(npc) && !sameVendor(npc.vendor, asRead.vendor);
   const vendorBit = vendorChanged ? (npc.vendor.length > 0 ? VENDOR_BIT : 0) : num(original.npcflag) & VENDOR_BIT;
+  // A trainer other NPCs share, or one never read, is not ours to write; one left as read is not written
+  const trainerChanged = !trainerUnread(npc) && !origin.locked.includes('trainer') && !sameTrainer(npc.trainer, asRead.trainer);
+  const trainerBit = trainerChanged ? (npc.trainer ? TRAINER_BIT : 0) : num(original.npcflag) & TRAINER_BIT;
   const templateRow = (n: CustomNpc): Row => {
     const flags =
-      (num(original.npcflag) & ~(GOSSIP_BIT | QUEST_GIVER_BIT | VENDOR_BIT)) |
+      (num(original.npcflag) & ~(GOSSIP_BIT | QUEST_GIVER_BIT | VENDOR_BIT | TRAINER_BIT)) |
       (n.questGiver || givers.includes(n.entry) ? QUEST_GIVER_BIT : 0) |
       (n.gossip ? GOSSIP_BIT : 0) |
-      vendorBit;
+      vendorBit | trainerBit;
     return {
       ...original, entry, name: n.name, subname: n.subname, minlevel: text(n.minLevel), maxlevel: text(n.maxLevel),
       faction: text(n.faction), rank: text(RANK_VALUE[n.rank]), type: text(NPC_TYPE_VALUE[n.type]),
@@ -193,6 +221,7 @@ function npcStatements(out: Statements, npc: CustomNpc, origin: Existing, givers
 
   if (!lootLocked && lootId > 0) writeTable(out, origin, 'creature_loot_template', [{ Entry: text(lootId) }], lootRows(lootId, npc.loot));
   if (vendorChanged) writeTable(out, origin, 'npc_vendor', [{ entry }], vendorRows(entry, npc.vendor, rowsOf(origin, 'npc_vendor')));
+  if (trainerChanged) writeTrainer(out, origin, entry, npc.trainer, asRead.trainer);
 }
 
 function objectStatements(out: Statements, object: CustomObject, origin: Existing, lootIds: LootIds): void {
