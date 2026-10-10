@@ -17,7 +17,9 @@ import { centreOf, movedBy, turnedAbout, turnQuaternion } from './scene/edit/gro
  * Undo is the project's: an undo hands the view a new layer, and `layerChanged` follows it.
  */
 
-export const NOT_SNAPPED = 'The height is from the drawn ground, not the server.';
+/** How far above the drawn ground a thing must stand for a ground move to leave its height alone */
+const RAISED = 0.5;
+export const NOT_SNAPPED ='The height is from the drawn ground, not the server.';
 export const TOO_SHORT = 'A route keeps at least two points.';
 export const PICK_POINT_FIRST = 'Pick a point of the route first, or click on one of its legs.';
 export const TOO_FEW_POINTS = 'A path needs at least two points';
@@ -519,11 +521,14 @@ export class Editor {
     if (!drag) return;
     drag.last = change;
     const turning = this.#mode === 'rotate' && this.#attached?.turns !== 'none';
-    const onGround = (p: At): At => {
+    // A move along the ground keeps the height above the ground the thing had when the drag began
+    const onGround = (p: At, start: At): At => {
       if (turning || change.axis === 'Z') return p;
-      return { ...p, z: this.#gizmo.groundAt(p.x, p.y, p.z) ?? p.z };
+      const clearance = Math.max(0, start.z - (this.#gizmo.groundAt(start.x, start.y, start.z) ?? start.z));
+      const ground = this.#gizmo.groundAt(p.x, p.y, p.z - clearance);
+      return { ...p, z: ground === null ? p.z : ground + clearance };
     };
-    const moved = (start: At, weight: number): At => (turning ? turnedAbout(start, drag.centre, change.angle) : onGround(movedBy(start, change.delta, weight)));
+    const moved = (start: At, weight: number): At => (turning ? turnedAbout(start, drag.centre, change.angle) : onGround(movedBy(start, change.delta, weight), start));
 
     for (const spawn of drag.spawns) {
       const object = this.#world.findSpawn(spawn.kind, spawn.guid);
@@ -577,6 +582,8 @@ export class Editor {
         const asks = [
           ...spawns.map(async (s) => {
             if (this.#world.aboard?.(s.kind, s.guid)) return true;
+            // One held above the ground when the drag began keeps that height
+            if (s.start.z - (this.#gizmo.groundAt(s.start.x, s.start.y, s.start.z) ?? s.start.z) > RAISED) return true;
             const floor = await floorZ(s.object.position.x, s.object.position.y, s.object.position.z);
             if (floor !== null) s.object.position.z = floor;
             return floor !== null;

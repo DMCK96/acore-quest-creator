@@ -157,8 +157,10 @@ export class Gizmo {
   /** A move along the ground keeps the stand-in on the drawn ground under it */
   #follow(axis: string | null): void {
     if (this.#controls.mode === 'translate' && axis !== 'Z') {
-      const ground = this.groundAt(this.#proxy.position.x, this.#proxy.position.y, this.#proxy.position.z);
-      if (ground !== null) this.#proxy.position.z = ground;
+      const { x, y, z } = this.#start.position;
+      const clearance = Math.max(0, z - (this.groundAt(x, y, z) ?? z));
+      const ground = this.groundAt(this.#proxy.position.x, this.#proxy.position.y, this.#proxy.position.z - clearance);
+      if (ground !== null) this.#proxy.position.z = ground + clearance;
     }
     this.#proxy.updateMatrixWorld(true);
   }
