@@ -2,6 +2,7 @@ import type { Api, DebugEventInput, RendererRequest } from '@shared/ipc';
 import { fieldState, focusSnapshot, rectOf } from './focus-snapshot';
 import { frameStats } from './frame-stats';
 import { attachTaps } from './taps';
+import { cameraHandle } from '../world3d/camera-handle';
 
 const DEFAULT_FLUSH_MS = 250;
 /** The most events one `debugRecord` call may carry */
@@ -71,10 +72,15 @@ export function startDebugBridge(options: {
     else detach();
   });
   events.onDebugRequest?.((request) => {
+    const handle = cameraHandle();
     const answer =
       request.kind === 'snapshot'
         ? { focus: focusSnapshot(doc), field: fieldState(doc, request.includeValue) }
-        : { rect: rectOf(doc, request.selector) };
+        : request.kind === 'camera'
+          ? { camera: handle?.status() ?? null }
+          : request.kind === 'teleport'
+            ? { camera: handle?.teleport(request.target) ?? null }
+            : { rect: rectOf(doc, request.selector) };
     try {
       void Promise.resolve(api.debugAnswer(request.id, answer)).catch(() => {});
     } catch {

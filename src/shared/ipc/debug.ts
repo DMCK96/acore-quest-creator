@@ -56,9 +56,31 @@ export interface Rect {
 }
 
 /** A question main asks the page */
-export type RendererQuery = { kind: 'snapshot'; includeValue: boolean } | { kind: 'rect'; selector: string };
+export type RendererQuery =
+  | { kind: 'snapshot'; includeValue: boolean }
+  | { kind: 'rect'; selector: string }
+  | { kind: 'camera' }
+  | { kind: 'teleport'; target: CameraTarget };
 export type RendererRequest = RendererQuery & { id: number };
-export type RendererAnswer = { focus: FocusSnapshot; field: FieldState | null } | { rect: Rect | null };
+export type RendererAnswer = { focus: FocusSnapshot; field: FieldState | null } | { rect: Rect | null } | { camera: CameraState | null };
+
+/** Where the 3D view's camera is, in the game's own coordinates */
+export interface CameraState {
+  map: number;
+  x: number;
+  y: number;
+  z: number;
+  /** The area the camera is over, when the view has named it */
+  area: string | null;
+}
+
+/** A place to take the camera to: a map and a point on it */
+export interface CameraTarget {
+  map: number;
+  x: number;
+  y: number;
+  z: number;
+}
 
 export interface DebugStatus {
   enabled: boolean;
@@ -109,6 +131,10 @@ export interface DebugApi {
   debugSnapshot(): Promise<Result<DebugSnapshot>>;
   debugType(text: string): Promise<Result<DebugTypeResult>>;
   captureScreenshot(options?: ScreenshotOptions): Promise<Result<ScreenshotResult>>;
+  /** Where the 3D view's camera is now; fails when the view does not answer */
+  cameraStatus(): Promise<Result<CameraState>>;
+  /** Takes the 3D view's camera to a place (the Back button returns from it) and says where it landed */
+  cameraTeleport(target: CameraTarget): Promise<Result<CameraState>>;
   /** The window hands over a batch of the events its taps saw. No MCP tool may call this. */
   debugRecord(batch: DebugEventInput[]): Promise<Result<null>>;
   /** The window answers a question main asked it. No MCP tool may call this. */

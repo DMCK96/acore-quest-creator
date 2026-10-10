@@ -15,6 +15,8 @@ export function createDebugApi(deps: ApiDeps): DebugApi {
     debugSnapshot: () => run(() => controller().snapshot()),
     debugType: (text) => run(() => controller().type(text)),
     captureScreenshot: (options) => run(() => controller().screenshot(options)),
+    cameraStatus: () => run(() => controller().cameraStatus()),
+    cameraTeleport: (target) => run(() => controller().cameraTeleport(target)),
     debugRecord: (batch) =>
       run(async () => {
         controller().ingest(batch);

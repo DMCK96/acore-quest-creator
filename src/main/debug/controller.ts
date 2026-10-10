@@ -1,4 +1,6 @@
 import type {
+  CameraState,
+  CameraTarget,
   DebugEvent,
   DebugEventInput,
   DebugEventQuery,
@@ -8,6 +10,7 @@ import type {
   FieldState,
   Rect,
   RendererAnswer,
+  RendererQuery,
   ScreenshotOptions,
   ScreenshotResult,
   WindowState,
@@ -39,6 +42,10 @@ export interface DebugController {
   snapshot(): Promise<DebugSnapshot>;
   type(text: string): Promise<DebugTypeResult>;
   screenshot(options?: ScreenshotOptions): Promise<ScreenshotResult>;
+  /** Where the 3D view's camera is; works with Debug mode off */
+  cameraStatus(): Promise<CameraState>;
+  /** Takes the camera to a place and returns where it landed */
+  cameraTeleport(target: CameraTarget): Promise<CameraState>;
   /** A batch of the page's own events */
   ingest(batch: DebugEventInput[]): void;
   /** The page's answer to a question main asked it */
@@ -106,6 +113,13 @@ export function createDebugController(options: {
     return { focus: null, field: null, answered: false };
   };
 
+  const askCamera = async (query: RendererQuery): Promise<CameraState> => {
+    const answer = await link.ask(query);
+    if (!answer) throw fail('BAD_REQUEST', 'The window did not answer; is the editor open?');
+    if (!('camera' in answer) || !answer.camera) throw fail('BAD_REQUEST', 'The 3D view is not open, or that map cannot be shown. Open the World view and try again.');
+    return answer.camera;
+  };
+
   const controller: DebugController = {
     async start() {
       await (queue = queue.then(() => apply(settings.enabled())));
@@ -149,6 +163,15 @@ export function createDebugController(options: {
       const after = (await look(true)).field;
       const changed = before && after ? before.value !== after.value : before !== after;
       return { typed: text.length, before, after, changed, window: port.state(), events: recorder.events().slice(earlier) };
+    },
+
+    async cameraStatus() {
+      return askCamera({ kind: 'camera' });
+    },
+
+    async cameraTeleport(target) {
+      controller.note('probe', 'teleport', { ...target });
+      return askCamera({ kind: 'teleport', target });
     },
 
     async screenshot(opts = {}) {

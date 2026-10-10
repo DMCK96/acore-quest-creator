@@ -92,6 +92,16 @@ The pause only shows if the write takes longer than a moment.
 
 Every change the assistant makes is one step in **History**, named **AI: …** (for example *AI: edit quest 60001*). The open quest, the quest graph and the World update as it works. Undo with **Ctrl+Z** or from History, like any other change. See [Undo and redo](/azeroth-world-editor/guides/undo/).
 
+## Moving the 3D camera
+
+An assistant can go and look at a place in the World view, then take a `screenshot` of it. None of these change the project, and they work with Debug mode off. The Back button returns from a teleport.
+
+| Tool | What it does |
+| --- | --- |
+| `camera_status` | The map, position and area the camera is at now. |
+| `teleport_search` | Named places (cities, towns, landmarks, instances) whose name, zone or region match the words, best match first, with their map and coordinates. |
+| `teleport` | Takes the camera to a named place (`spot`) or to `map`, `x`, `y`, `z`, and says where it landed. An ambiguous name answers the candidates. |
+
 ## Debug mode and the screenshot tool
 
 For tracking down a fault that only shows in the live window, such as text fields that stop taking the keyboard, or a view that runs slowly in one place, the app has a **Debug mode**. It is off by default, and only you can switch it on: **Settings**, **Preferences**, **Diagnostics**, **Debug mode**. An assistant cannot turn it on.

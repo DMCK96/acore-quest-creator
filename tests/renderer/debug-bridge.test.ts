@@ -3,6 +3,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { startDebugBridge } from '../../src/renderer/debug/bridge';
 import { frameStats, type FrameSample } from '../../src/renderer/debug/frame-stats';
+import { registerCameraHandle } from '../../src/renderer/world3d/camera-handle';
 import type { RendererRequest } from '../../src/shared/ipc';
 
 const ok = <T,>(value: T) => ({ ok: true as const, value });
@@ -134,5 +135,24 @@ describe('the debug bridge and the 3D view\'s frame stats', () => {
     expect(frameStats.on).toBe(true);
     stop();
     expect(frameStats.on).toBe(false);
+  });
+
+  it('answers camera questions from the World view, and null when none is open', async () => {
+    const { answer, handlers, stop } = rig(false);
+    await settle();
+    handlers.request!({ id: 1, kind: 'camera' });
+    expect(answer).toHaveBeenLastCalledWith(1, { camera: null });
+    const state = { map: 0, x: 1, y: 2, z: 3, area: 'Elwynn' };
+    const teleport = vi.fn(() => state);
+    const unregister = registerCameraHandle({ status: () => state, teleport });
+    handlers.request!({ id: 2, kind: 'camera' });
+    expect(answer).toHaveBeenLastCalledWith(2, { camera: state });
+    handlers.request!({ id: 3, kind: 'teleport', target: { map: 0, x: 1, y: 2, z: 3 } });
+    expect(teleport).toHaveBeenCalledWith({ map: 0, x: 1, y: 2, z: 3 });
+    expect(answer).toHaveBeenLastCalledWith(3, { camera: state });
+    unregister();
+    handlers.request!({ id: 4, kind: 'camera' });
+    expect(answer).toHaveBeenLastCalledWith(4, { camera: null });
+    stop();
   });
 });
