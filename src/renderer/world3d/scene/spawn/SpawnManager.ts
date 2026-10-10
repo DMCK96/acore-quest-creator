@@ -583,6 +583,8 @@ class SpawnManager {
     const eventNames = new globalThis.Map(this.status.events.map((e) => [e.id, e.name]));
     const ownCreatures = new Set(this.#own.creatures.map((c) => c.guid));
     const ownObjects = new Set(this.#own.objects.map((o) => o.guid));
+    // Database spawns the layer deletes are not drawn
+    const deleted = new Set((this.#layer.deletes ?? []).map((d) => `${d.kind}:${d.guid}`));
     const placed = (kind: 'creature' | 'gameobject', guid: number) => this.#layer.spawns.find((s) => s.kind === kind && s.guid === guid)?.current;
     const routes = new globalThis.Map(this.#layer.routes.map((r) => [r.pathId, r.current]));
     const movements = new globalThis.Map((this.#layer.movements ?? []).map((m) => [m.guid, m.current]));
@@ -720,12 +722,12 @@ class SpawnManager {
     );
     return {
       creatures: [
-        ...spawns.creatures.filter((c) => !ownCreatures.has(c.guid)).map((c) => evented('npc', c)).filter(shown).map(creature),
+        ...spawns.creatures.filter((c) => !ownCreatures.has(c.guid) && !deleted.has(`creature:${c.guid}`)).map((c) => evented('npc', c)).filter(shown).map(creature),
         ...this.#own.creatures.filter(inBox).map((c) => evented('npc', grouped('npc', c))).filter(shown),
         ...placedCreatures.filter(inBox).map((c) => evented('npc', grouped('npc', routed(c)))).filter(shown),
       ].map(pending),
       objects: [
-        ...spawns.objects.filter((o) => !ownObjects.has(o.guid)).map((o) => evented('object', o)).filter(shown).map(object),
+        ...spawns.objects.filter((o) => !ownObjects.has(o.guid) && !deleted.has(`gameobject:${o.guid}`)).map((o) => evented('object', o)).filter(shown).map(object),
         ...this.#own.objects.filter(inBox).map((o) => evented('object', grouped('object', o))).filter(shown),
         ...placedObjects.filter(inBox).map((o) => evented('object', grouped('object', o))).filter(shown),
       ],

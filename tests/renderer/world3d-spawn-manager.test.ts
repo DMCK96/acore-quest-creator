@@ -1207,3 +1207,36 @@ describe('drawing spawns through a vessel’s frame', () => {
     expect([npc.position.x, npc.position.y, npc.position.z]).toEqual([4, 5, 6]);
   });
 });
+
+describe('spawns the world layer deletes', () => {
+  const gone = (kind: 'creature' | 'gameobject', guid: number) => ({ kind, guid, entry: 1, name: 'n', map: 0, placement: { x: 0, y: 0, z: 0, orientation: 0, rotation: null }, rows: [] });
+  const layerWith = (...deletes: ReturnType<typeof gone>[]): WorldLayer => ({ spawns: [], routes: [], added: [], deletes });
+  const guids = (group: THREE.Object3D, name: 'creatures' | 'objects') => group.getObjectByName(name)!.children.map((c) => c.userData.spawn.guid).sort();
+
+  it('are no longer drawn, and are drawn again when the layer lets them go', async () => {
+    const m = manager({ creatures: [creature(1, 1), creature(2, 1)], objects: [object(3, 2), object(4, 2)], capped: { creatures: false, objects: false } });
+    const group = (await m.loadArea(1, 0, box))!;
+    await m.setWorldLayer(layerWith(gone('creature', 1), gone('gameobject', 4)));
+    expect(guids(group, 'creatures')).toEqual([2]);
+    expect(guids(group, 'objects')).toEqual([3]);
+    await m.setWorldLayer({ spawns: [], routes: [], added: [] });
+    expect(guids(group, 'creatures')).toEqual([1, 2]);
+    expect(guids(group, 'objects')).toEqual([3, 4]);
+  });
+
+  it('only the kind that was deleted: an object with the same guid as a deleted NPC stays', async () => {
+    const m = manager({ creatures: [creature(7, 1)], objects: [object(7, 2)], capped: { creatures: false, objects: false } });
+    const group = (await m.loadArea(1, 0, box))!;
+    await m.setWorldLayer(layerWith(gone('creature', 7)));
+    expect(guids(group, 'creatures')).toEqual([]);
+    expect(guids(group, 'objects')).toEqual([7]);
+  });
+
+  it('are not among what a selection box can catch', async () => {
+    const m = manager({ creatures: [creature(1, 1)], objects: [], capped: { creatures: false, objects: false } });
+    await m.loadArea(1, 0, box);
+    expect(m.candidates(new THREE.Vector3()).spawns).toHaveLength(1);
+    await m.setWorldLayer(layerWith(gone('creature', 1)));
+    expect(m.candidates(new THREE.Vector3()).spawns).toEqual([]);
+  });
+});
