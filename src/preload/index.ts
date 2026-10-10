@@ -1,6 +1,6 @@
 import { contextBridge, ipcRenderer } from 'electron';
 // Not `../shared/ipc`: a sandboxed preload cannot `require` zod out of node_modules.
-import { API_METHODS, channelFor, CONNECTED_CHANNEL, EXTERNAL_CHANGE_CHANNEL, FLUSH_DONE_CHANNEL, FLUSH_REQUEST_CHANNEL, HISTORY_CHANNEL, HOLD_EDITS_CHANNEL } from '../shared/api-methods';
+import { API_METHODS, channelFor, CONNECTED_CHANNEL, DEBUG_CHANGED_CHANNEL, DEBUG_REQUEST_CHANNEL, EXTERNAL_CHANGE_CHANNEL, FLUSH_DONE_CHANNEL, FLUSH_REQUEST_CHANNEL, HISTORY_CHANNEL, HOLD_EDITS_CHANNEL } from '../shared/api-methods';
 
 /**
  * The only thing the renderer can reach: one function per API method, each forwarding to the
@@ -30,6 +30,14 @@ contextBridge.exposeInMainWorld('appEvents', {
   /** An AI client's write begins (`true`) or is over (`false`): the window keeps its quest edits back meanwhile. */
   onHoldEdits(handler: (held: boolean) => void): void {
     ipcRenderer.on(HOLD_EDITS_CHANNEL, (_event, held: boolean) => handler(held));
+  },
+  /** Debug mode was switched on (`true`) or off (`false`). */
+  onDebugChanged(handler: (enabled: boolean) => void): void {
+    ipcRenderer.on(DEBUG_CHANGED_CHANNEL, (_event, enabled: boolean) => handler(enabled));
+  },
+  /** Main asks the page a question (a focus snapshot or an element's rectangle); the answer goes back through `debugAnswer`. */
+  onDebugRequest(handler: (request: unknown) => void): void {
+    ipcRenderer.on(DEBUG_REQUEST_CHANNEL, (_event, request: unknown) => handler(request));
   },
   onFlushRequest(handler: () => Promise<void>): void {
     ipcRenderer.on(FLUSH_REQUEST_CHANNEL, () => {

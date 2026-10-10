@@ -1,10 +1,10 @@
 import { app, BrowserWindow, dialog, ipcMain, protocol, safeStorage } from 'electron';
 import { existsSync } from 'node:fs';
-import { mkdir, readdir, writeFile } from 'node:fs/promises';
+import { appendFile, mkdir, readdir, rm, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { openMysqlDevDb } from '../core/db/mysql-dev-db';
 import { openMysqlWorldDb } from '../core/db/mysql-world-db';
-import { CONNECTED_CHANNEL, EXTERNAL_CHANGE_CHANNEL, FLUSH_DONE_CHANNEL, FLUSH_REQUEST_CHANNEL, HISTORY_CHANNEL, HOLD_EDITS_CHANNEL } from '../shared/api-methods';
+import { CONNECTED_CHANNEL, DEBUG_CHANGED_CHANNEL, DEBUG_REQUEST_CHANNEL, EXTERNAL_CHANGE_CHANNEL, FLUSH_DONE_CHANNEL, FLUSH_REQUEST_CHANNEL, HISTORY_CHANNEL, HOLD_EDITS_CHANNEL } from '../shared/api-methods';
 import { describeStep } from './project/step-labels';
 import { API_METHODS, channelFor, type Api } from '../shared/ipc';
 import { invokeApi } from './api/invoke';
@@ -31,6 +31,12 @@ import { createProjectController, type Dialogs, type ProjectController } from '.
 import { createCloseGuard, windowTitle } from './project/close-guard';
 import { createRecovery, type Recovery } from './project/recovery';
 import { nodeProjectFs } from './project/node-fs';
+import { createDebugController, type DebugController, type DebugWindowPort } from './debug/controller';
+import { createLogFiles } from './debug/log-file';
+import { createMainTaps, dialogNote } from './debug/main-taps';
+import { createDebugRecorder } from './debug/recorder';
+import { createRendererLink } from './debug/renderer-link';
+import { createDebugSettings } from './debug/settings';
 
 /**
  * The Electron shell: it owns the window, the SQLite store and the IPC surface, and nothing else.
@@ -39,6 +45,16 @@ import { nodeProjectFs } from './project/node-fs';
  */
 
 const STORE_FILE = 'quest-creator.sqlite';
+
+/**
+ * Where the native dialogs report themselves to the Debug mode timeline. The dialogs below are defined
+ * before the controller exists, so they reach it through this holder, assigned once it is made.
+ */
+let debugNote: (category: string, name: string, data?: Record<string, unknown>) => void = () => {};
+const noted = <T>(kind: string, work: () => Promise<T>): Promise<T> => dialogNote((c, n, d) => debugNote(c, n, d), kind, work);
+
+/** The window a dialog or a probe belongs to: the first one still open */
+const liveWindow = (): BrowserWindow | null => BrowserWindow.getAllWindows().find((w) => !w.isDestroyed()) ?? null;
 
 /**
  * Test isolation. An end-to-end run points the app at a throwaway profile directory and patch
@@ -101,10 +117,12 @@ function buildDeps(
   startupProfileId: number | null,
   client: GameClient,
   mcp: McpController,
+  debug: DebugController,
 ): ApiDeps {
   return {
     store,
     mcp,
+    debug,
     fetch: globalThis.fetch,
     onClientDir: (dir) => client.setDir(dir),
     clientStatus: () => client.status(),
@@ -127,12 +145,13 @@ function buildDeps(
     now: () => new Date(),
     serverDataFiles: nodeServerDataFiles,
     mapDataFiles,
-    async chooseDirectory() {
-      const parent = BrowserWindow.getFocusedWindow() ?? BrowserWindow.getAllWindows()[0];
-      const options = { title: 'Choose a folder', properties: ['openDirectory' as const] };
-      const r = parent ? await dialog.showOpenDialog(parent, options) : await dialog.showOpenDialog(options);
-      return r.canceled || r.filePaths.length === 0 ? null : r.filePaths[0]!;
-    },
+    chooseDirectory: () =>
+      noted('choose-folder', async () => {
+        const parent = BrowserWindow.getFocusedWindow() ?? BrowserWindow.getAllWindows()[0];
+        const options = { title: 'Choose a folder', properties: ['openDirectory' as const] };
+        const r = parent ? await dialog.showOpenDialog(parent, options) : await dialog.showOpenDialog(options);
+        return r.canceled || r.filePaths.length === 0 ? null : r.filePaths[0]!;
+      }),
   };
 }
 
@@ -157,31 +176,34 @@ const PROJECT_FILTERS = [{ name: 'Azeroth World Editor project', extensions: [..
  * call rather than destructured, so the end-to-end test can answer them through `app.evaluate`.
  */
 const electronDialogs: Dialogs = {
-  async showSave(suggestedFileName) {
-    const parent = BrowserWindow.getFocusedWindow() ?? BrowserWindow.getAllWindows()[0];
-    const options = { defaultPath: join(app.getPath('documents'), suggestedFileName), filters: PROJECT_FILTERS };
-    const r = parent ? await dialog.showSaveDialog(parent, options) : await dialog.showSaveDialog(options);
-    return r.canceled || !r.filePath ? null : r.filePath;
-  },
-  async showOpen() {
-    const parent = BrowserWindow.getFocusedWindow() ?? BrowserWindow.getAllWindows()[0];
-    const options = { properties: ['openFile' as const], filters: PROJECT_FILTERS };
-    const r = parent ? await dialog.showOpenDialog(parent, options) : await dialog.showOpenDialog(options);
-    return r.canceled || r.filePaths.length === 0 ? null : r.filePaths[0]!;
-  },
-  async confirmUnsaved(name) {
-    const parent = BrowserWindow.getFocusedWindow() ?? BrowserWindow.getAllWindows()[0];
-    const options = {
-      type: 'warning' as const,
-      buttons: ['Save', "Don't Save", 'Cancel'],
-      defaultId: 0,
-      cancelId: 2,
-      message: `Save changes to "${name}"?`,
-      detail: "Your changes will be lost if you don't save them.",
-    };
-    const { response } = parent ? await dialog.showMessageBox(parent, options) : await dialog.showMessageBox(options);
-    return response === 0 ? 'save' : response === 1 ? 'discard' : 'cancel';
-  },
+  showSave: (suggestedFileName) =>
+    noted('save-project', async () => {
+      const parent = BrowserWindow.getFocusedWindow() ?? BrowserWindow.getAllWindows()[0];
+      const options = { defaultPath: join(app.getPath('documents'), suggestedFileName), filters: PROJECT_FILTERS };
+      const r = parent ? await dialog.showSaveDialog(parent, options) : await dialog.showSaveDialog(options);
+      return r.canceled || !r.filePath ? null : r.filePath;
+    }),
+  showOpen: () =>
+    noted('open-project', async () => {
+      const parent = BrowserWindow.getFocusedWindow() ?? BrowserWindow.getAllWindows()[0];
+      const options = { properties: ['openFile' as const], filters: PROJECT_FILTERS };
+      const r = parent ? await dialog.showOpenDialog(parent, options) : await dialog.showOpenDialog(options);
+      return r.canceled || r.filePaths.length === 0 ? null : r.filePaths[0]!;
+    }),
+  confirmUnsaved: (name) =>
+    noted('confirm-unsaved', async () => {
+      const parent = BrowserWindow.getFocusedWindow() ?? BrowserWindow.getAllWindows()[0];
+      const options = {
+        type: 'warning' as const,
+        buttons: ['Save', "Don't Save", 'Cancel'],
+        defaultId: 0,
+        cancelId: 2,
+        message: `Save changes to "${name}"?`,
+        detail: "Your changes will be lost if you don't save them.",
+      };
+      const { response } = parent ? await dialog.showMessageBox(parent, options) : await dialog.showMessageBox(options);
+      return response === 0 ? 'save' : response === 1 ? 'discard' : 'cancel';
+    }),
 };
 
 /** Asks a window to hand over any edit it still holds back, and waits until it has (or the timeout, when given). */
@@ -195,7 +217,7 @@ const requestFlush = (win: BrowserWindow, timeoutMs?: number): Promise<void> =>
     ...(timeoutMs !== undefined ? { timeoutMs } : {}),
   });
 
-function createWindow(session: ProjectSession, recovery: Recovery, projects: ProjectController): void {
+function createWindow(session: ProjectSession, recovery: Recovery, projects: ProjectController, debug: DebugController): void {
   const win = new BrowserWindow({
     width: 1280,
     height: 880,
@@ -262,10 +284,16 @@ function createWindow(session: ProjectSession, recovery: Recovery, projects: Pro
       win.close();
     });
   });
+  // Debug mode: what only this process sees, recorded while the switch is on
+  const taps = createMainTaps({ note: debug.note, win, contents: win.webContents, app });
+  const stopDebug = debug.onChange((on) => (on ? taps.attach() : taps.detach()));
+  if (debug.status().enabled) taps.attach();
   win.on('closed', () => {
     clearInterval(timer);
     stopTitle();
     stopHistory();
+    taps.detach();
+    stopDebug();
   });
 
   if (process.env['ELECTRON_RENDERER_URL']) {
@@ -328,14 +356,68 @@ void app.whenReady().then(() => {
     settings: createMcpSettings(store),
     listen: ({ port, token }) => startMcpHttp({ port, token, createServer: () => createMcpServer(mcpContext, allTools, writeGuard, allPrompts) }),
   });
-  api = createApi(buildDeps(store, session, projects, startupProfileId, client, mcp));
+  // Debug mode (off unless the user turns it on in Preferences): a timeline of both processes, and probes of the live window.
+  const debugPort: DebugWindowPort = {
+    state() {
+      const w = liveWindow();
+      return w ? { focused: w.isFocused(), contentsFocused: w.webContents.isFocused(), visible: w.isVisible(), minimized: w.isMinimized() } : null;
+    },
+    async capture({ rect, maxWidth }) {
+      const w = liveWindow();
+      if (!w || !w.isVisible() || w.isMinimized()) return null;
+      const taken = await w.webContents.capturePage(rect);
+      const image = taken.getSize().width > maxWidth ? taken.resize({ width: maxWidth }) : taken;
+      const { width, height } = image.getSize();
+      return { data: image.toPNG().toString('base64'), width, height };
+    },
+    async sendText(text) {
+      const w = liveWindow();
+      if (!w) return;
+      for (const keyCode of text) {
+        w.webContents.sendInputEvent({ type: 'keyDown', keyCode });
+        w.webContents.sendInputEvent({ type: 'char', keyCode });
+        w.webContents.sendInputEvent({ type: 'keyUp', keyCode });
+      }
+    },
+    announce(enabled) {
+      for (const win of BrowserWindow.getAllWindows()) if (!win.isDestroyed()) win.webContents.send(DEBUG_CHANGED_CHANNEL, enabled);
+    },
+  };
+  const debug = createDebugController({
+    settings: createDebugSettings(store),
+    recorder: createDebugRecorder({ now: () => performance.timeOrigin + performance.now() }),
+    logs: createLogFiles({
+      dir: join(app.getPath('userData'), 'logs'),
+      fs: {
+        mkdir: async (path) => void (await mkdir(path, { recursive: true })),
+        readdir: (path) => readdir(path),
+        rm: (path) => rm(path, { force: true }),
+        append: (path, text) => appendFile(path, text, 'utf8'),
+      },
+      now: () => new Date(),
+    }),
+    window: debugPort,
+    link: createRendererLink({
+      send(request) {
+        const w = liveWindow();
+        if (!w) return false;
+        w.webContents.send(DEBUG_REQUEST_CHANNEL, request);
+        return true;
+      },
+    }),
+  });
+  debugNote = debug.note;
+
+  api = createApi(buildDeps(store, session, projects, startupProfileId, client, mcp, debug));
   registerIpc(api);
   app.on('will-quit', () => void mcp.stop());
+  app.on('will-quit', () => void debug.stop());
 
-  createWindow(session, recovery, projects);
+  createWindow(session, recovery, projects, debug);
   mcp.start().catch((error: unknown) => console.error('Could not start the MCP server:', error));
+  debug.start().catch((error: unknown) => console.error('Could not start Debug mode:', error));
   app.on('activate', () => {
-    if (BrowserWindow.getAllWindows().length === 0) createWindow(session, recovery, projects);
+    if (BrowserWindow.getAllWindows().length === 0) createWindow(session, recovery, projects, debug);
   });
 });
 
