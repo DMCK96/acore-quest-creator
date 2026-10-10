@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { npcFromRows } from '../../src/core/entities/from-rows';
 import { blankNpcScene } from '../../src/core/scripts/npc-scenes';
+import { npcTriggerComment } from '../../src/core/scripts/tag';
 
 const creature = { entry: '100', name: 'Old', gossip_menu_id: '5', npcflag: '1', AIName: 'SmartAI', ScriptName: '' };
 const rows = (scripts: Record<string, string>[]) => ({
@@ -16,7 +17,7 @@ const counts = { sharedLoot: 0, spawnCount: 1 };
 
 describe('existing NPCs and scenes', () => {
   it('does not freeze an option because one of our own scenes hangs off it', () => {
-    expect(optionOf(npcFromRows(100, rows([select('AQC npc100 s1: When a player picks option 0 of menu 5')]), counts)).kept).toBe(false);
+    expect(optionOf(npcFromRows(100, rows([select(npcTriggerComment(100, { ...blankNpcScene('s1'), trigger: { kind: 'gossipPicked', menuId: 5, optionId: 0 } }))]), counts)).kept).toBe(false);
   });
   it('still freezes an option a database script, or another tag, names', () => {
     expect(optionOf(npcFromRows(100, rows([select('')]), counts)).kept).toBe(true);

@@ -243,6 +243,12 @@ export function compileUnits(input: UnitInput): CompiledScripts {
     options.add(num(row.OptionID));
     usedOptions.set(num(row.MenuID), options);
   }
+  // What the rows already taken in this export hold: paths, options, menus and texts of other compilers are as good as in the database
+  for (const row of input.taken?.inserts.gossip_menu_option ?? []) {
+    const options = usedOptions.get(num(row.MenuID)) ?? new Set<number>();
+    options.add(num(row.OptionID));
+    usedOptions.set(num(row.MenuID), options);
+  }
   const previousPath = new Map<string, number>();
   for (const row of context.waypoints) {
     if (!ours(row.point_comment)) continue;
@@ -271,7 +277,8 @@ export function compileUnits(input: UnitInput): CompiledScripts {
   // --- Global numbers: escort paths, new area triggers, new gossip menus -----------------------------
   const pathOf = new Map<string, number>();
   const takenPaths = new Set<number>(previousPath.values());
-  let nextPath = context.waypointsMax;
+  const maxOf = (rows: readonly Row[] | undefined, column: string): number => Math.max(0, ...(rows ?? []).map((r) => num(r[column])));
+  let nextPath = Math.max(context.waypointsMax, maxOf(input.taken?.inserts.waypoints, 'entry'));
   for (const scene of units) {
     if (!scene.steps.some((s) => s.kind === 'startEscort')) continue;
     const previous = previousPath.get(scene.key);
@@ -285,7 +292,7 @@ export function compileUnits(input: UnitInput): CompiledScripts {
     pathOf.set(scene.key, nextPath);
   }
   const takenAreas = new Set<number>(previousArea.values());
-  let nextArea = context.areatriggerMax;
+  let nextArea = Math.max(context.areatriggerMax, maxOf(input.taken?.inserts.areatrigger, 'entry'));
   const areaOf = (scene: SceneUnit): number => {
     const previous = previousArea.get(scene.key);
     if (previous !== undefined) return previous;
@@ -294,8 +301,8 @@ export function compileUnits(input: UnitInput): CompiledScripts {
     takenAreas.add(nextArea);
     return nextArea;
   };
-  let nextMenu = Math.max(context.gossipMenuMax, input.gossip?.maxMenu ?? 0);
-  let nextText = Math.max(context.npcTextMax, input.gossip?.maxText ?? 0);
+  let nextMenu = Math.max(context.gossipMenuMax, input.gossip?.maxMenu ?? 0, maxOf(input.taken?.inserts.gossip_menu, 'MenuID'));
+  let nextText = Math.max(context.npcTextMax, input.gossip?.maxText ?? 0, maxOf(input.taken?.inserts.npc_text, 'ID'));
   const menuOf = new Map<number, number>();
 
   const setupDone = new Set<string>();

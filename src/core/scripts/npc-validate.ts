@@ -25,6 +25,8 @@ export function npcSceneIssues(input: {
   knownQuest: (id: number) => boolean;
   /** The NPC runs another AI or a script, so its scenes are not written */
   locked: boolean;
+  /** `RequiredNpcOrGo` of the quests scenes are about (index 0 is objective 1); a quest not in it is not checked */
+  objectives?: ReadonlyMap<number, readonly number[]>;
 }): Issue[] {
   const { npc, label } = input;
   const scenes = npc.scenes;
@@ -58,6 +60,13 @@ export function npcSceneIssues(input: {
       say('warning', 'NPC_SCENE_QUEST_UNKNOWN', `quest ${scene.questId} is not in the project or the database.`);
     }
     if (scene.steps.length === 0) say('warning', 'NPC_SCENE_NO_STEPS', 'it does nothing yet; add a step.');
+
+    const objectives = input.objectives?.get(scene.questId);
+    for (const step of scene.steps) {
+      if (step.kind === 'credit' && objectives && !((objectives[step.objective - 1] ?? 0) > 0)) {
+        say('error', 'SCENE_CREDIT_EMPTY', `objective ${step.objective} of quest ${scene.questId} is not an NPC objective.`);
+      }
+    }
 
     if (scene.trigger.kind === 'gossipPicked') {
       const menu = options.get(scene.trigger.menuId);

@@ -297,7 +297,7 @@ const NPC_SCRIPTS = lines(
   'The scenes an NPC owns: when a `trigger` happens to it, and only if every one of `gates` holds, the `steps` run in order. It is the `scenes` of an NPC, written with `upsert_entity`, and compiled into the game server\'s scripts when a patch is exported. Unlike a quest scene (`describe_authoring` `scene`) it has no owner, because the NPC is the owner, and it works without a quest.',
   '',
   '## How the parts fit',
-  '- `id` looks like `s1`, `s2`, unique on the NPC; `name` is a short label for the author. At most 32 scenes. Scenes with the same trigger all run, in list order.',
+  '- `id` looks like `s1`, `s2`, unique on the NPC; `name` is a short label for the author. At most 32 scenes. Scenes with the same trigger are all written, in list order; but a scene with waits or several steps runs as a timed list, which the server skips while another list on the NPC still runs, so give a trigger one scene when it has waits.',
   '- `questId` is 0 for no quest, or a quest in the project or the database. `questAccepted`, `questHandedIn`, the steps `credit`, `eventCredit` and `failQuest`, and a `quest` gate with `questId` 0 ("this quest") all need it.',
   '- `gossipPicked` runs when a player picks option `optionId` of menu `menuId` from the NPC\'s own gossip menu (`describe_authoring` `gossip`). It adds no option: pick one the tree already has, that is not in a `locked` menu and not `kept`.',
   '- A step that acts on the player only works when a player sets the trigger off: every trigger except `signal`, `waypointReached` and `summoned`.',

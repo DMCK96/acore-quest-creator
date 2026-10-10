@@ -1,7 +1,7 @@
 import { MODELLED_ITEM_COLUMNS, itemFromRow } from './item-columns';
 import { seenByOf } from './visibility';
 import { scenesLocked, type NpcScene } from '../scripts/npc-scenes';
-import { npcRowOwner } from '../scripts/tag';
+import { npcRowOwner, npcSceneFromComment } from '../scripts/tag';
 import { npcEventsOf } from './spawn-events';
 import {
   NPC_TYPE_VALUE, OBJECT_TYPE_VALUE, RANK_VALUE, newItem, newNpc, newObject,
@@ -126,8 +126,8 @@ function gossipOf(entry: number, rows: OriginalRows, counts: ExistingCounts): Go
     const options = optionsOf(id).map((r): GossipOption => {
       const optionId = numberOf(r.OptionID);
       const tied = conditions.some((c) => numberOf(c.SourceTypeOrReferenceId) === 15 && numberOf(c.SourceGroup) === id && numberOf(c.SourceEntry) === optionId) ||
-        // A scene of our own hanging off the option does not freeze it; any other script does
-        scripts.some((s) => numberOf(s.source_type) === 0 && numberOf(s.event_type) === 62 && numberOf(s.event_param1) === id && numberOf(s.event_param2) === optionId && npcRowOwner(s.comment, 'scene') !== entry);
+        // A scene of our own that only waits for the option does not freeze it; any other script does, a scene that added the option too
+        scripts.some((s) => numberOf(s.source_type) === 0 && numberOf(s.event_type) === 62 && numberOf(s.event_param1) === id && numberOf(s.event_param2) === optionId && !(npcRowOwner(s.comment, 'scene') === entry && npcSceneFromComment(s.comment)?.trigger.kind === 'gossipPicked'));
       const type = numberOf(r.OptionType);
       const npcFlag = numberOf(r.OptionNpcFlag);
       const next = numberOf(r.ActionMenuID);

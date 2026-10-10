@@ -14,7 +14,8 @@ const int = z.number().int();
 const gossipPickedSchema = z.object({ kind: z.literal('gossipPicked'), menuId: int, optionId: int });
 
 export const npcSceneSchema = z.object({
-  id: z.string(),
+  // `s<n>`: the tag on its rows is how a later export finds them again
+  id: z.string().regex(/^s\d+$/),
   name: z.string(),
   questId: int.min(0),
   trigger: z.union([triggerSchema, gossipPickedSchema]),

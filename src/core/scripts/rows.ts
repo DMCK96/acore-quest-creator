@@ -97,6 +97,8 @@ export function createAllocator(input: { smartScripts: readonly RawRow[]; creatu
     const key = `${num(row.entryorguid)}/${source}`;
     const ids = usedIds.get(key) ?? new Set<number>();
     ids.add(num(row.id));
+    // An id a row links to is taken, though no row holds it: a new row there would be run by the link
+    if (num(row.link) > 0) ids.add(num(row.link));
     usedIds.set(key, ids);
   }
   const usedGroups = new Map<number, Set<number>>();

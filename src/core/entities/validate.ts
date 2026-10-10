@@ -59,6 +59,8 @@ export function entityIssues(input: {
   sceneGossipOwners?: ReadonlySet<number>;
   /** NPC entries whose template in the database runs another AI or a script, so their scenes are not written. */
   scriptLocked?: ReadonlySet<number>;
+  /** `RequiredNpcOrGo` of the quests NPC scenes are about, from the project and the database. */
+  sceneObjectives?: ReadonlyMap<number, readonly number[]>;
 }): Issue[] {
   const questItems = new Set(input.questItems ?? []);
   // How many of the project's NPCs hold each gossip menu and text id that is new to it (not one an existing NPC read)
@@ -309,7 +311,7 @@ export function entityIssues(input: {
     }
     if ('fight' in entity && entity.fight) issues.push(...fightIssues(entity.fight, label, input.knownSpell ?? null, input.objectives ?? null));
     if ('scenes' in entity) {
-      issues.push(...npcSceneIssues({ npc: entity, label, knownQuest: input.knownQuest ?? (() => true), locked: input.scriptLocked?.has(entity.entry) ?? false }));
+      issues.push(...npcSceneIssues({ npc: entity, label, knownQuest: input.knownQuest ?? (() => true), locked: input.scriptLocked?.has(entity.entry) ?? false, objectives: input.sceneObjectives }));
     }
     const held = existing ? undefined : input.dbNames.get(`${kind}:${entity.entry}`);
     if (held !== undefined && held !== entity.name) {

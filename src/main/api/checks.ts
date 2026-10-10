@@ -127,6 +127,10 @@ export function createChecks(ctx: ApiContext, files: ServerFiles) {
       knownSpell: spells ? (id) => spells.get(id) !== undefined : null, itemInventoryTypes,
       knownQuest: (id) => knownQuests.has(id), knownItem: (id) => knownItems.has(id), trainerUsers, gossipFacts, sceneGossipOwners,
       scriptLocked: new Set(creatures.filter((r) => scenesLocked(r)).map((r) => Number(r.entry))),
+      sceneObjectives: new Map<number, readonly number[]>([
+        ...questRows.map((r) => [Number(r.ID), [1, 2, 3, 4].map((i) => Number(r[`RequiredNpcOrGo${i}`] ?? 0))] as const),
+        ...objectivesByQuest(),
+      ]),
       knownExtendedCost: costs && !('reason' in costs) ? (id) => costs.get(id) !== undefined : null, itemColumnTypes: itemColumnTypes.size > 0 ? itemColumnTypes : null,
     });
   }

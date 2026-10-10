@@ -297,7 +297,8 @@ function npcStatements(out: Statements, npc: CustomNpc, origin: Existing, givers
       faction: text(n.faction), rank: text(RANK_VALUE[n.rank]), type: text(NPC_TYPE_VALUE[n.type]),
       HealthModifier: text(n.healthModifier), DamageModifier: text(n.damageModifier), npcflag: text(flags),
       ...(rootChanged ? { gossip_menu_id: text(rootNow) } : {}),
-      AIName: !fightLocked && !fightIsEmpty(n.fight) ? 'SmartAI' : (original.AIName ?? ''),
+      // Scenes run on SmartAI too; the snapshot of an NPC adopted with no AI says '', so it is set again at every export
+      AIName: !fightLocked && (!fightIsEmpty(n.fight) || (n.scenes.length > 0 && !origin.locked.includes('scenes'))) ? 'SmartAI' : (original.AIName ?? ''),
       lootid: text(lootId),
       // Written only when changed: absent on an NPC saved before it could be set, its flags stay as they are
       ...(n.seenBy && n.seenBy !== seenByOf(original) ? seenByColumns(n.seenBy, original) : {}),
