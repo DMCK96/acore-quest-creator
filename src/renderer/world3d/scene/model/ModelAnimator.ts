@@ -179,12 +179,6 @@ class ModelAnimator {
   ) {
     for (let s = 0; s < track.sequenceTimes.length; s++) {
       const sequence = this.#sequencesByIndex[s];
-
-      // Malformed track with more entries than the model has sequences
-      if (!sequence) {
-        continue;
-      }
-
       const clip = this.#sequenceClips.get(sequence.id)[sequence.variationIndex];
 
       const times = track.sequenceTimes[s];
