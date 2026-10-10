@@ -114,6 +114,24 @@ export interface WorldEventEdit {
   current: EventRule;
 }
 
+/** The tables a deleted spawn's rows come from: its own row and what hangs on its guid */
+export type DeletedTable = 'creature' | 'gameobject' | 'creature_addon' | 'game_event_creature' | 'game_event_gameobject' | 'pool_creature' | 'pool_gameobject';
+
+/**
+ * A database spawn deleted in the view. Its rows are kept whole, so the project patch's revert can
+ * write them back: `rows[0]` is the spawn's own row, the rest are the rows that hang on its guid.
+ */
+export interface WorldDeletedSpawn {
+  kind: WorldSpawnKind;
+  guid: number;
+  entry: number;
+  name: string;
+  map: number;
+  /** Where it stood, for naming the change */
+  placement: Placement;
+  rows: { table: DeletedTable; row: Record<string, string | null> }[];
+}
+
 export interface WorldLayer {
   spawns: WorldSpawnEdit[];
   routes: WorldRouteEdit[];
@@ -127,6 +145,8 @@ export interface WorldLayer {
   groups?: SpawnGroup[];
   /** Database NPC spawns' own game events; a project saved before they could be changed has none */
   spawnEvents?: WorldEventEdit[];
+  /** Database spawns deleted in the view; a project saved before they could be has none */
+  deletes?: WorldDeletedSpawn[];
 }
 
 export const EMPTY_WORLD: WorldLayer = { spawns: [], routes: [], added: [] };
@@ -136,11 +156,15 @@ export const movementsOf = (layer: WorldLayer): WorldMovementEdit[] => layer.mov
 export const respawnsOf = (layer: WorldLayer): WorldRespawnEdit[] => layer.respawns ?? [];
 export const groupsOf = (layer: WorldLayer): SpawnGroup[] => layer.groups ?? [];
 export const spawnEventsOf = (layer: WorldLayer): WorldEventEdit[] => layer.spawnEvents ?? [];
+export const deletesOf = (layer: WorldLayer): WorldDeletedSpawn[] => layer.deletes ?? [];
+
+/** Whether a database spawn is deleted in the layer */
+export const isDeleted = (layer: WorldLayer, kind: WorldSpawnKind, guid: number): boolean => deletesOf(layer).some((d) => d.kind === kind && d.guid === guid);
 
 /** Whether the layer holds anything to export */
 export const hasWorldChanges = (layer: WorldLayer): boolean =>
   layer.spawns.length > 0 || layer.routes.length > 0 || layer.added.length > 0 || movementsOf(layer).length > 0 || respawnsOf(layer).length > 0 ||
-  groupsOf(layer).length > 0 || spawnEventsOf(layer).length > 0;
+  groupsOf(layer).length > 0 || spawnEventsOf(layer).length > 0 || deletesOf(layer).length > 0;
 
 /** What a point added in the 3D view has in the columns the view does not edit */
 export const NEW_POINT_REST: Record<string, string | null> = {
@@ -246,6 +270,32 @@ export function revertSpawn(layer: WorldLayer, kind: WorldSpawnKind, guid: numbe
   };
   const reverted = placed && kind === 'creature' ? revertMovement(next, guid) : next;
   return placed ? dropMember(reverted, kind === 'creature' ? 'npc' : 'object', guid) : reverted;
+}
+
+/**
+ * Deletes a database spawn: it is recorded with its rows, and its other edits (a move, its movement,
+ * respawn time and own events) and its place in the layer's groups go with it. A spawn placed in the
+ * view is not deleted but taken back out, by `revertSpawn`.
+ */
+export function deleteSpawn(layer: WorldLayer, deleted: WorldDeletedSpawn): WorldLayer {
+  const { kind, guid } = deleted;
+  const creature = kind === 'creature';
+  const next: WorldLayer = {
+    ...layer,
+    spawns: layer.spawns.filter((s) => !(s.kind === kind && s.guid === guid)),
+    deletes: [...deletesOf(layer).filter((d) => !(d.kind === kind && d.guid === guid)), deleted],
+  };
+  if (layer.movements && creature) next.movements = layer.movements.filter((m) => m.guid !== guid);
+  if (layer.respawns) next.respawns = layer.respawns.filter((r) => !(r.kind === kind && r.guid === guid));
+  if (layer.spawnEvents && creature) next.spawnEvents = layer.spawnEvents.filter((e) => e.guid !== guid);
+  return layer.groups ? dropMember(next, creature ? 'npc' : 'object', guid) : next;
+}
+
+/** Takes back a deletion; the list goes altogether when it was the last */
+export function revertDelete(layer: WorldLayer, kind: WorldSpawnKind, guid: number): WorldLayer {
+  const { deletes: _, ...rest } = layer;
+  const left = deletesOf(layer).filter((d) => !(d.kind === kind && d.guid === guid));
+  return left.length === 0 ? rest : { ...rest, deletes: left };
 }
 
 /** Adds a group, or replaces the one with its id */
@@ -488,6 +538,14 @@ function movementStatements(m: WorldMovementEdit, addonDefaults: Record<string, 
   return { apply, revert };
 }
 
+/** A deleted spawn's statements: one DELETE per table by guid, its own table last, and the inserts that put its rows back */
+function deletedStatements(d: WorldDeletedSpawn): { deletes: PatchStatement[]; inserts: PatchStatement[] } {
+  const own = d.rows[0]?.table ?? d.kind;
+  const tables = [...new Set(d.rows.map((r) => r.table))].filter((t) => t !== own);
+  const deletes = [...tables, own].map((table): PatchStatement => ({ kind: 'delete', table, key: { guid: text(d.guid) } }));
+  return { deletes, inserts: d.rows.map((r): PatchStatement => ({ kind: 'insert', table: r.table, row: r.row })) };
+}
+
 const POOL_KEYS: [PatchStatement['table'], string][] = [
   ['pool_template', 'entry'],
   ['pool_creature', 'pool_entry'],
@@ -552,8 +610,10 @@ export function worldStatements(
   const movements = movementsOf(layer).map((m) => movementStatements(m, addonDefaults));
   const respawn = (r: WorldRespawnEdit, secs: number): PatchStatement => ({ kind: 'update', table: r.kind, key: { guid: text(r.guid) }, set: { spawntimesecs: text(secs) } });
   const groups = groupsOf(layer).map(groupStatements);
+  const deleted = deletesOf(layer).map(deletedStatements);
   return {
     apply: [
+      ...deleted.flatMap((d) => d.deletes),
       ...layer.spawns.map((s) => placementStatement(s, s.current)),
       ...added.flatMap((a) => a.apply),
       ...movements.flatMap((m) => m.apply),
@@ -572,6 +632,7 @@ export function worldStatements(
       ...groups.flatMap((g) => g.deletes),
       ...groups.flatMap((g) => g.revert),
       ...layer.routes.flatMap((r) => routeStatements(r.pathId, r.original, base)),
+      ...deleted.flatMap((d) => [...d.deletes, ...d.inserts]),
     ],
   };
 }

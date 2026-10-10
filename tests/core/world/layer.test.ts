@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
-  EMPTY_WORLD, NEW_POINT_REST, addSpawn, deleteGroup, dropMember, groupsOf, hasWorldChanges, isAdded, moveSpawn, movementsOf, putGroup, respawnsOf, revertGroup, revertMovement, revertRespawn, revertRoute, revertSpawn, revertSpawnEvents, setMovement, setRespawn, setRoute, setSpawnEvents, spawnEventsOf, worldStatements,
-  type Placement, type RoutePoint, type WorldAddedSpawn, type WorldMovementEdit, type WorldSpawnEdit,
+  EMPTY_WORLD, NEW_POINT_REST, addSpawn, deleteGroup, deleteSpawn, deletesOf, isDeleted, revertDelete, dropMember, groupsOf, hasWorldChanges, isAdded, moveSpawn, movementsOf, putGroup, respawnsOf, revertGroup, revertMovement, revertRespawn, revertRoute, revertSpawn, revertSpawnEvents, setMovement, setRespawn, setRoute, setSpawnEvents, spawnEventsOf, worldStatements,
+  type Placement, type RoutePoint, type WorldAddedSpawn, type WorldDeletedSpawn, type WorldMovementEdit, type WorldSpawnEdit,
 } from '../../../src/core/world/layer';
 import { IDLE } from '../../../src/core/world/movement';
 
@@ -456,5 +456,95 @@ describe("a spawn's events", () => {
   it('is not written by the world patch: the spawn event writer owns those rows', () => {
     const { apply } = worldStatements(setSpawnEvents(EMPTY_WORLD, edit, during4));
     expect(apply.some((s) => s.table === 'game_event_creature')).toBe(false);
+  });
+});
+
+describe('deleting a database spawn', () => {
+  const gone: WorldDeletedSpawn = {
+    kind: 'creature', guid: 80330, entry: 1423, name: 'Stormwind Guard', map: 0, placement: at(1),
+    rows: [
+      { table: 'creature', row: { guid: '80330', id1: '1423', map: '0' } },
+      { table: 'creature_addon', row: { guid: '80330', path_id: '801' } },
+      { table: 'game_event_creature', row: { eventEntry: '3', guid: '80330' } },
+      { table: 'game_event_creature', row: { eventEntry: '-4', guid: '80330' } },
+      { table: 'pool_creature', row: { guid: '80330', pool_entry: '9', chance: '0' } },
+    ],
+  };
+  const crate: WorldDeletedSpawn = { kind: 'gameobject', guid: 5, entry: 143981, name: 'Mailbox', map: 0, placement: at(10), rows: [{ table: 'gameobject', row: { guid: '5', id: '143981' } }] };
+
+  it('records the spawn, leaves the layer it was given alone, and counts as a change', () => {
+    const layer = deleteSpawn(EMPTY_WORLD, gone);
+    expect(deletesOf(layer)).toEqual([gone]);
+    expect(deletesOf(EMPTY_WORLD)).toEqual([]);
+    expect(hasWorldChanges(layer)).toBe(true);
+  });
+
+  it('keeps creatures and objects with the same guid apart', () => {
+    const layer = deleteSpawn(EMPTY_WORLD, { ...crate, guid: 80330 });
+    expect(isDeleted(layer, 'gameobject', 80330)).toBe(true);
+    expect(isDeleted(layer, 'creature', 80330)).toBe(false);
+  });
+
+  it('deleting the same spawn twice keeps one entry', () => {
+    const layer = deleteSpawn(deleteSpawn(EMPTY_WORLD, gone), gone);
+    expect(deletesOf(layer)).toHaveLength(1);
+  });
+
+  it("takes the spawn's other edits with it: move, respawn and movement", () => {
+    let layer = moveSpawn(EMPTY_WORLD, guard, at(5));
+    layer = setRespawn(layer, { kind: 'creature', guid: 80330, entry: 1423, name: 'Stormwind Guard', map: 0, original: 300 }, 60);
+    layer = setMovement(layer, { guid: 80330, entry: 1423, name: 'Stormwind Guard', map: 0, addonRow: true, original: IDLE }, { type: 'wander', wander: 5, pathId: null });
+    layer = moveSpawn(layer, mailbox, at(11, { rotation: [0, 0, 0, 1] }));
+    const after = deleteSpawn(layer, gone);
+    expect(after.spawns.map((s) => s.guid)).toEqual([5]);
+    expect(respawnsOf(after)).toEqual([]);
+    expect(movementsOf(after)).toEqual([]);
+  });
+
+  it("takes the spawn out of the layer's groups", () => {
+    const member = { type: 'spawn' as const, kind: 'npc' as const, guid: 80330, entry: 1423, chance: 0 };
+    const other = { type: 'spawn' as const, kind: 'npc' as const, guid: 80331, entry: 1423, chance: 0 };
+    const layer = putGroup(EMPTY_WORLD, { id: 900001, name: 'Pack', map: 0, maxActive: 1, event: null, members: [member, other], origin: { kind: 'new' } });
+    expect(groupsOf(deleteSpawn(layer, gone))[0]!.members).toEqual([other]);
+  });
+
+  it('reverting the delete forgets it, and leaves no empty list behind when it was the only one', () => {
+    const layer = deleteSpawn(deleteSpawn(EMPTY_WORLD, gone), crate);
+    expect(deletesOf(revertDelete(layer, 'creature', 80330))).toEqual([crate]);
+    expect(revertDelete(deleteSpawn(EMPTY_WORLD, gone), 'creature', 80330)).toEqual({ spawns: [], routes: [], added: [] });
+    expect('deletes' in revertDelete(deleteSpawn(EMPTY_WORLD, gone), 'creature', 80330)).toBe(false);
+  });
+
+  it('reads a layer saved before deletes as having none', () => {
+    expect(deletesOf({ spawns: [], routes: [], added: [] })).toEqual([]);
+    expect(isDeleted({ spawns: [], routes: [], added: [] }, 'creature', 1)).toBe(false);
+    expect(worldStatements({ spawns: [], routes: [], added: [] })).toEqual({ apply: [], revert: [] });
+  });
+
+  it('writes one DELETE per table by guid, dependents first and the spawn row last, and reverts by deleting then inserting every captured row, the spawn row first', () => {
+    const { apply, revert } = worldStatements(deleteSpawn(EMPTY_WORLD, gone));
+    expect(apply).toEqual([
+      { kind: 'delete', table: 'creature_addon', key: { guid: '80330' } },
+      { kind: 'delete', table: 'game_event_creature', key: { guid: '80330' } },
+      { kind: 'delete', table: 'pool_creature', key: { guid: '80330' } },
+      { kind: 'delete', table: 'creature', key: { guid: '80330' } },
+    ]);
+    expect(revert).toEqual([
+      ...apply,
+      { kind: 'insert', table: 'creature', row: { guid: '80330', id1: '1423', map: '0' } },
+      { kind: 'insert', table: 'creature_addon', row: { guid: '80330', path_id: '801' } },
+      { kind: 'insert', table: 'game_event_creature', row: { eventEntry: '3', guid: '80330' } },
+      { kind: 'insert', table: 'game_event_creature', row: { eventEntry: '-4', guid: '80330' } },
+      { kind: 'insert', table: 'pool_creature', row: { guid: '80330', pool_entry: '9', chance: '0' } },
+    ]);
+  });
+
+  it('puts the deletes before every other statement when applying, and the restoring inserts after every other statement when reverting', () => {
+    const layer = deleteSpawn(moveSpawn(EMPTY_WORLD, mailbox, at(12, { rotation: [0, 0, 0, 1] })), gone);
+    const { apply, revert } = worldStatements(layer);
+    expect(apply[0]).toEqual({ kind: 'delete', table: 'creature_addon', key: { guid: '80330' } });
+    expect(apply.at(-1)).toMatchObject({ kind: 'update', table: 'gameobject' });
+    expect(revert[0]).toMatchObject({ kind: 'update', table: 'gameobject' });
+    expect(revert.at(-1)).toEqual({ kind: 'insert', table: 'pool_creature', row: { guid: '80330', pool_entry: '9', chance: '0' } });
   });
 });
