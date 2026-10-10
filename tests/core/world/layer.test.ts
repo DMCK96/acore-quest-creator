@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
-  EMPTY_WORLD, NEW_POINT_REST, addSpawn, deleteGroup, deleteSpawn, deletesOf, isDeleted, revertDelete, dropMember, groupsOf, hasWorldChanges, isAdded, moveSpawn, movementsOf, putGroup, respawnsOf, revertGroup, revertMovement, revertRespawn, revertRoute, revertSpawn, revertSpawnEvents, setMovement, setRespawn, setRoute, setSpawnEvents, spawnEventsOf, worldStatements,
+  EMPTY_WORLD, NEW_POINT_REST, addSpawn, deleteGroup, deleteSpawn, withoutDeletedMembers, deletesOf, isDeleted, revertDelete, dropMember, groupsOf, hasWorldChanges, isAdded, moveSpawn, movementsOf, putGroup, respawnsOf, revertGroup, revertMovement, revertRespawn, revertRoute, revertSpawn, revertSpawnEvents, setMovement, setRespawn, setRoute, setSpawnEvents, spawnEventsOf, worldStatements,
   type Placement, type RoutePoint, type WorldAddedSpawn, type WorldDeletedSpawn, type WorldMovementEdit, type WorldSpawnEdit,
 } from '../../../src/core/world/layer';
 import { IDLE } from '../../../src/core/world/movement';
@@ -546,5 +546,34 @@ describe('deleting a database spawn', () => {
     expect(apply.at(-1)).toMatchObject({ kind: 'update', table: 'gameobject' });
     expect(revert[0]).toMatchObject({ kind: 'update', table: 'gameobject' });
     expect(revert.at(-1)).toEqual({ kind: 'insert', table: 'pool_creature', row: { guid: '80330', pool_entry: '9', chance: '0' } });
+  });
+});
+
+describe('deleting an NPC that walks a path made in the view', () => {
+  const gone: WorldDeletedSpawn = { kind: 'creature', guid: 80330, entry: 1423, name: 'Stormwind Guard', map: 0, placement: at(1), rows: [{ table: 'creature', row: { guid: '80330' } }] };
+
+  it('takes the new path with it, as taking back a placed NPC does, but keeps a path the database has', () => {
+    const walking = { guid: 80330, entry: 1423, name: 'Stormwind Guard', map: 0, addonRow: false, original: IDLE };
+    let layer = setMovement(EMPTY_WORLD, walking, { type: 'path', wander: 0, pathId: 900801 });
+    layer = setRoute(layer, { pathId: 900801, walkers: 1, original: [] }, [point(1), point(2)]);
+    layer = setRoute(layer, route, [point(1), point(5)]);
+    const after = deleteSpawn(layer, gone);
+    expect(movementsOf(after)).toEqual([]);
+    expect(after.routes.map((r) => r.pathId)).toEqual([801]);
+  });
+});
+
+describe("a group read from the database, less the spawns the layer deletes", () => {
+  const member = (guid: number) => ({ type: 'spawn' as const, kind: 'npc' as const, guid, entry: 1423, chance: 0 });
+  const group = { id: 5000, name: 'Guards', map: 0, maxActive: 1, event: null, members: [member(1), member(2), { type: 'quest' as const, questId: 60001 }], origin: { kind: 'new' as const } };
+  const gone = (kind: 'creature' | 'gameobject', guid: number): WorldDeletedSpawn => ({ kind, guid, entry: 1423, name: 'n', map: 0, placement: at(1), rows: [] });
+
+  it('leaves out the deleted NPC and keeps everyone else, by kind', () => {
+    const layer = { ...EMPTY_WORLD, deletes: [gone('creature', 1), gone('gameobject', 2)] };
+    expect(withoutDeletedMembers(group, layer).members).toEqual([member(2), { type: 'quest', questId: 60001 }]);
+  });
+
+  it('is the group itself when nothing in it is deleted', () => {
+    expect(withoutDeletedMembers(group, EMPTY_WORLD)).toBe(group);
   });
 });

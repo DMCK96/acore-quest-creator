@@ -101,7 +101,10 @@ describe('the right-click menu in the 3D view', () => {
     rightClick(world, { ground: at, hit: { type: 'spawn', spawn: guard }, selection: [guard, { ...guard, guid: 80331, name: 'Second' }] });
     await userEvent.click(screen.getByRole('menuitem', { name: 'Delete 2' }));
     await waitFor(() => expect(api.worldDeleteSpawn).toHaveBeenCalledTimes(2));
-    expect(await screen.findByText('Could not delete Guard')).toBeTruthy();
+    expect(await screen.findByText('Could not delete Guard: Spawn 80330 is no longer in the database.')).toBeTruthy();
+    // The spawn that could not be deleted stays selected; the other one is gone from the selection
+    expect(world.selectSpawns).toHaveBeenLastCalledWith([{ kind: 'creature', guid: 80330 }]);
+    expect(world.select).not.toHaveBeenCalledWith(null);
   });
 
   it('deletes the selected spawns with no menu, for the Delete key', async () => {

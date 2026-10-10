@@ -1,5 +1,5 @@
 import type { PatchStatement } from '../export/build-patch';
-import { spawnEventsOf, type WorldLayer } from '../world/layer';
+import { deletesOf, isDeleted, spawnEventsOf, type WorldLayer } from '../world/layer';
 import type { CustomNpc, EventRule, NpcEvents, SpawnEvents } from './model';
 
 /**
@@ -86,7 +86,8 @@ export function spawnEventPlan(input: {
   const plan: PlannedSpawn[] = [];
   const planned = new Set<number>();
   const put = (guid: number, entry: number, rule: EventRule | undefined): void => {
-    if (rule === undefined || planned.has(guid)) return;
+    // A spawn the layer deletes is left out: the patch removes it, so it must not write rows for it
+    if (rule === undefined || planned.has(guid) || isDeleted(layer, 'creature', guid)) return;
     planned.add(guid);
     plan.push({ guid, entry, rule });
   };
@@ -135,5 +136,6 @@ export function npcSpawnFacts(npc: CustomNpc, layer: WorldLayer, existingSpawns:
     return { spawns: npc.spawns.length + placed.length, overrides: npc.spawns.filter((s) => s.events !== 'npc').length + placedOwn };
   }
   const edits = spawnEventsOf(layer).filter((e) => e.entry === npc.entry);
-  return { spawns: existingSpawns + placed.length, overrides: edits.length + placedOwn };
+  const deleted = deletesOf(layer).filter((d) => d.kind === 'creature' && d.entry === npc.entry).length;
+  return { spawns: Math.max(0, existingSpawns - deleted) + placed.length, overrides: edits.length + placedOwn };
 }

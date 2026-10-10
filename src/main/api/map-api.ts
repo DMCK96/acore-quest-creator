@@ -1,7 +1,7 @@
 import { SPAWN_VIEW_CAP } from '@core/db/view-spawns';
 import { rowsOrNone } from '../../core/links/context';
 import type { QuestAggregate } from '../../core/model/aggregate';
-import { movementsOf } from '../../core/world/layer';
+import { isDeleted, movementsOf } from '../../core/world/layer';
 import type { MapApi, QuestSpawn, QuestSpawnGroup, SpawnDot } from '../../shared/ipc';
 import { buildClientMaps } from '@core/map/client-maps';
 import type { WorldMap } from '@core/map/world-maps';
@@ -188,11 +188,12 @@ export function createMapApi(s: Services): MapApi {
       }),
 
     entitySpawns: (kind, entry) =>
-      run(async () => (await connected().db.spawnsOfEntries?.(kind, [entry], REF_SPAWNS_PER_ENTRY)) ?? []),
+      run(async () => ((await connected().db.spawnsOfEntries?.(kind, [entry], REF_SPAWNS_PER_ENTRY)) ?? []).filter((d) => !isDeleted(deps.session.world.get(), d.kind, d.guid))),
 
     findSpawns: (kind, entry) =>
       run(async () => {
-        const found = (await connected().db.spawnsOfEntries?.(kind, [entry], FIND_SPAWNS_LIMIT + 1)) ?? [];
+        const layer = deps.session.world.get();
+        const found = ((await connected().db.spawnsOfEntries?.(kind, [entry], FIND_SPAWNS_LIMIT + 1)) ?? []).filter((d) => !isDeleted(layer, d.kind, d.guid));
         return { spawns: found.slice(0, FIND_SPAWNS_LIMIT), capped: found.length > FIND_SPAWNS_LIMIT };
       }),
 
@@ -235,7 +236,7 @@ export function createMapApi(s: Services): MapApi {
             if (db?.spawnsOfEntries) {
               const dots: SpawnDot[] = await db.spawnsOfEntries(want.kind, [want.entry], QUEST_SPAWNS_PER_ENTRY + 1);
               if (dots.length > QUEST_SPAWNS_PER_ENTRY) cut += 1;
-              for (const dot of dots.slice(0, QUEST_SPAWNS_PER_ENTRY)) {
+              for (const dot of dots.filter((d) => !isDeleted(layer, d.kind, d.guid)).slice(0, QUEST_SPAWNS_PER_ENTRY)) {
                 const at = layer.spawns.find((m) => m.kind === dot.kind && m.guid === dot.guid)?.current;
                 add({ ...dot, ...(at ? { x: at.x, y: at.y, z: at.z } : {}), role: want.role });
               }

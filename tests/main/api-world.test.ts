@@ -4,13 +4,13 @@ import { openStore } from '../../src/main/store/store';
 import { createProjectSession } from '../../src/main/project/session';
 import { defaultProjectMeta } from '../../src/main/project/project-file';
 import type { ProjectController } from '../../src/main/project/controller';
-import { forkDb } from '../helpers/fixtures';
+import { forkDb, forkDbWith } from '../helpers/fixtures';
 import { newNpc, newSpawn, writeEntities } from '../../src/core/entities/model';
 
 const box = { encrypt: (s: string) => Uint8Array.from(Buffer.from(s)), decrypt: (b: Uint8Array) => Buffer.from(b).toString() };
 
-async function setup(seed: (db: ReturnType<typeof forkDb>) => void = () => {}) {
-  const db = forkDb();
+async function setup(seed: (db: ReturnType<typeof forkDb>) => void = () => {}, extraTables: string[] = []) {
+  const db = extraTables.length > 0 ? forkDbWith(extraTables) : forkDb();
   seed(db);
   const written = new Map<string, string>();
   const session = createProjectSession(defaultProjectMeta('P', 'C:\\out'));
@@ -565,5 +565,78 @@ describe('deleting a spawn through the API', () => {
     expect(revert).toMatch(/INSERT INTO `creature` \(.*\) VALUES \(.*80331/s);
     expect(revert.match(/INSERT INTO `game_event_creature`/g)).toHaveLength(2);
     expect(revert).toMatch(/INSERT INTO `pool_creature`/);
+  });
+});
+
+describe('after a spawn is deleted', () => {
+  const seeded = (db: ReturnType<typeof forkDb>) => world(db);
+  const REFUSED = 'Spawn 80331 is deleted in this project; revert the deletion first.';
+
+  it('refuses a move, movement, respawn time or events of it, whoever asks', async () => {
+    const { api } = await setup(seeded);
+    await api.worldDeleteSpawn('creature', 80331);
+    for (const out of [
+      await api.worldMoveSpawn('creature', 80331, to(1)),
+      await api.worldSetMovement(80331, { type: 'wander', wander: 5, pathId: null }),
+      await api.worldSetRespawn('creature', 80331, 60),
+      await api.worldSetSpawnEvents(80331, { mode: 'during', events: [4] }),
+    ] as any[]) {
+      expect(out.ok).toBe(false);
+      expect(out.error.message).toBe(REFUSED);
+    }
+  });
+
+  it('allows them again once the deletion is reverted', async () => {
+    const { api } = await setup(seeded);
+    await api.worldDeleteSpawn('creature', 80331);
+    await api.worldRevert({ kind: 'delete', spawnKind: 'creature', guid: 80331 });
+    expect(((await api.worldMoveSpawn('creature', 80331, to(1))) as any).ok).toBe(true);
+  });
+
+  it('is no longer found among the spawns of its NPC, and no longer in a quest\'s spawns', async () => {
+    const { api } = await setup(seeded);
+    const before: any = await api.findSpawns('creature', 1423);
+    expect(before.value.spawns.map((s: any) => s.guid)).toContain(80331);
+    await api.worldDeleteSpawn('creature', 80331);
+    const after: any = await api.findSpawns('creature', 1423);
+    expect(after.value.spawns.map((s: any) => s.guid)).not.toContain(80331);
+    expect(after.value.spawns.map((s: any) => s.guid)).toContain(80330);
+    const created: any = await api.newQuest();
+    await api.updateQuest({ ...created.value.aggregate, values: { ...created.value.aggregate.values, creature_queststarter: [{ id: 1423 }] } });
+    const quest: any = await api.questSpawnList([created.value.questId]);
+    expect(quest.value[0].spawns.map((s: any) => s.guid).sort()).toEqual([80330, 80332]);
+  });
+
+  it('deleting a placed spawn works with no database connected', async () => {
+    const { api, offline } = await setup(seeded);
+    const placed: any = await api.worldAddSpawn('creature', 1423, 0, to(1));
+    const out: any = await offline().worldDeleteSpawn('creature', placed.value.guid);
+    expect(out.ok).toBe(true);
+    expect(out.value.added).toEqual([]);
+  });
+
+  it('a spawn that is gone between the two reads of its row is refused, not stored as an empty row', async () => {
+    const { db } = await setup(seeded);
+    let reads = 0;
+    const flaky = new Proxy(db, {
+      get(target, prop, receiver) {
+        if (prop !== 'selectRows') return Reflect.get(target, prop, receiver);
+        return async (table: string, where: any) => (table === 'creature' && ++reads > 1 ? [] : target.selectRows(table, where));
+      },
+    });
+    const { readDeletedSpawn } = await import('../../src/main/world/world-api');
+    expect(await readDeletedSpawn(flaky as any, 'creature', 80331)).toBeNull();
+  });
+
+  it('captures the rows of an object\'s addon and an NPC\'s model equipment too', async () => {
+    const { api } = await setup((db) => {
+      world(db);
+      db.insert('game_event_model_equip', { eventEntry: '3', guid: '80331' });
+      db.insert('gameobject_addon', { guid: '5' });
+    }, ['game_event_model_equip', 'gameobject_addon']);
+    const npc: any = await api.worldDeleteSpawn('creature', 80331);
+    expect(npc.value.deletes[0].rows.map((r: any) => r.table)).toContain('game_event_model_equip');
+    const crate: any = await api.worldDeleteSpawn('gameobject', 5);
+    expect(crate.value.deletes.find((d: any) => d.kind === 'gameobject').rows.map((r: any) => r.table)).toContain('gameobject_addon');
   });
 });

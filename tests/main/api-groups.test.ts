@@ -363,3 +363,16 @@ describe('spawn groups through the API', () => {
     expect(((await api.worldLayer()) as any).value.groups ?? []).toEqual([]);
   });
 });
+
+describe('a group read after one of its spawns is deleted', () => {
+  it('no longer holds the deleted spawn, so saving the group cannot put its row back', async () => {
+    const { api } = await setup();
+    const before: any = await api.worldGroup(32492);
+    expect(before.value.members.map((m: any) => m.guid)).toEqual([39203, 39207]);
+    await api.worldDeleteSpawn('creature', 39207);
+    const after: any = await api.worldGroup(32492);
+    expect(after.value.members.map((m: any) => m.guid)).toEqual([39203]);
+    const view: any = await api.worldGroupView(32492);
+    expect(view.value.members).toHaveLength(1);
+  });
+});

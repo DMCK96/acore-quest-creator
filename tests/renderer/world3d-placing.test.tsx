@@ -13,7 +13,7 @@ const worlds = vi.hoisted(() => [] as any[]);
 vi.mock('../../src/renderer/world3d/world3d', () => ({
   createWorld3D: (options: any) => {
     const world = { options, dispose: vi.fn(), cancelPath: vi.fn(), lookAt: vi.fn(), setDocks: vi.fn(), setDocksEnabled: vi.fn(), setMovementPlaying: vi.fn(), resetMovement: vi.fn(), frameOfSpawn: vi.fn(() => null), setSpawnVisibility: vi.fn(), setOwnSpawns: vi.fn(), select: vi.fn(),
-      setWorldLayer: vi.fn(), setMode: vi.fn(), setPlacing: vi.fn(), cancelDrag: vi.fn(),
+      setWorldLayer: vi.fn(), spawnOf: vi.fn(() => ({})), selectedSpawns: vi.fn(() => []), selectSpawns: vi.fn(), setMode: vi.fn(), setPlacing: vi.fn(), cancelDrag: vi.fn(),
       setScenery: vi.fn(), setTool: vi.fn(), setFalloff: vi.fn(), groundAt: vi.fn(() => ({ x: 10, y: 0, z: 2 })),
       camera: () => ({ position: { x: 10, y: 5, z: 40 }, direction: { x: 0, y: 0, z: -1 } }), target: () => ({ x: 0, y: 0, z: 0 }), spawnStatus: () => ({ capped: { creatures: false, objects: false }, error: null }) };
     worlds.push(world);
@@ -98,6 +98,7 @@ describe('placing an existing NPC or object from the 3D view', () => {
 
   it('deletes a placed spawn from its card', async () => {
     const { api, world } = await threeD({ worldDeleteSpawn: vi.fn(async () => okv(EMPTY)) });
+    world.spawnOf.mockImplementation((kind: string, guid: number) => ({ kind, guid, entry: 1423, name: 'Stormwind Guard', own: false, added: true, pathId: 0, wander: 0, map: 0, group: null, placement: at }));
     await choose('NPC', 'guard', 'Stormwind Guard');
     world.options.onPlace({ target: { kind: 'creature', entry: 1423 }, at });
     await userEvent.click(await screen.findByRole('button', { name: 'Delete' }));

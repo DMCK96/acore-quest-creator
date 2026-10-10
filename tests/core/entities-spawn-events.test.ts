@@ -75,6 +75,12 @@ describe('the spawn event plan', () => {
     ]);
   });
 
+  it('leaves out a database spawn the layer deletes, so no event rows are written for a spawn the patch removes', () => {
+    const gone = { kind: 'creature' as const, guid: 80330, entry: 1423, name: 'Guard', map: 0, placement: { x: 0, y: 0, z: 0, orientation: 0, rotation: null }, rows: [] };
+    const layer: WorldLayer = { ...EMPTY_WORLD, deletes: [gone], spawnEvents: [{ guid: 80330, entry: 1423, name: 'Guard', map: 0, original: [], current: during12 }] };
+    expect(spawnEventPlan({ npcs: [existing(1423, during12)], layer, dbGuids: new Map([[1423, [80330, 80331]]]) })).toEqual([{ guid: 80331, entry: 1423, rule: during12 }]);
+  });
+
   it('an existing NPC covers every database spawn and its placed ones; a layer edit or a placed spawn\'s own rule wins', () => {
     const layer: WorldLayer = {
       ...EMPTY_WORLD,
@@ -143,5 +149,13 @@ describe('an NPC\'s spawn facts', () => {
       spawnEvents: [{ guid: 80331, entry: 1423, name: 'Guard', map: 0, original: [], current: null }],
     };
     expect(npcSpawnFacts(existing(1423, null), layer, 12)).toEqual({ spawns: 14, overrides: 2 });
+  });
+});
+
+describe('an NPC editor\'s spawn count, with spawns deleted in the layer', () => {
+  it('takes away the database spawns of that NPC the layer deletes, and no other NPC\'s', () => {
+    const gone = (guid: number, entry: number) => ({ kind: 'creature' as const, guid, entry, name: 'Guard', map: 0, placement: { x: 0, y: 0, z: 0, orientation: 0, rotation: null }, rows: [] });
+    const layer: WorldLayer = { ...EMPTY_WORLD, deletes: [gone(80330, 1423), gone(80500, 999)] };
+    expect(npcSpawnFacts(existing(1423, null), layer, 5)).toEqual({ spawns: 4, overrides: 0 });
   });
 });

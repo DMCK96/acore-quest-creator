@@ -13,7 +13,7 @@ import { clearProblems, onProblems } from './scene/diagnostics';
 import { ASSET_BASE_URL } from '@core/client/asset-url';
 import type { WorldLayer } from '@core/world/layer';
 import { Editor, NOT_SNAPPED } from './editing';
-import { combine, EMPTY_SELECTION, isEmpty, type Hit, type Modifier, type Selection } from './scene/edit/selection';
+import { combine, EMPTY_SELECTION, isEmpty, withoutDeleted, type Hit, type Modifier, type Selection } from './scene/edit/selection';
 import { boxHits, type Rect } from './scene/edit/box';
 import type { Falloff } from './scene/edit/falloff';
 import type { SpawnEdit, SpawnRef } from './edits';
@@ -741,7 +741,12 @@ export function createWorld3D(options: World3DOptions): World3D {
     select: (spawn) => setSelection(spawn ? combine(EMPTY_SELECTION, { spawns: [spawn] }, 'replace') : EMPTY_SELECTION, false),
     setTool: (next) => applyTool(next),
     setFalloff: (falloff) => editor.setFalloff(falloff),
-    setWorldLayer: (layer) => followLayer(manager.setWorldLayer(layer)),
+    setWorldLayer: (layer) => {
+      // A spawn the layer deletes is let go of, so no card or gizmo stays on it
+      const kept = withoutDeleted(selection, layer);
+      if (kept !== selection) setSelection(kept);
+      followLayer(manager.setWorldLayer(layer));
+    },
     setGroupSpawns: (byGroup) => followLayer(manager.setGroupSpawns(byGroup)),
     setMode: (mode) => editor.setMode(mode),
     setEditLocked: (locked) => {

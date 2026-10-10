@@ -111,6 +111,7 @@ function spawnEntries(
   for (const a of layer.added) put(spawnKindOf(a.kind), a.guid, a.entry);
   for (const r of respawnsOf(layer)) put(spawnKindOf(r.kind), r.guid, r.entry);
   for (const e of spawnEventsOf(layer)) put('npc', e.guid, e.entry);
+  for (const d of deletesOf(layer)) put(spawnKindOf(d.kind), d.guid, d.entry);
   for (const m of movementsOf(layer)) put('npc', m.guid, m.entry);
   for (const g of groupsOf(layer)) for (const m of g.members) if (m.type === 'spawn') put(m.kind, m.guid, m.entry);
   for (const n of store.npcs) for (const s of n.spawns) put('npc', s.guid, n.entry);

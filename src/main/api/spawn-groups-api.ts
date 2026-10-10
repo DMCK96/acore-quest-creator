@@ -1,6 +1,6 @@
 import { isDeepStrictEqual } from 'node:util';
 import type { Issue } from '../../core/validate/validate';
-import { deleteGroup, dropGroupMember, dropMember, dropQuestMember, groupsOf, putGroup, revertGroup, type WorldLayer } from '../../core/world/layer';
+import { deleteGroup, dropGroupMember, dropMember, dropQuestMember, groupsOf, putGroup, revertGroup, withoutDeletedMembers, type WorldLayer } from '../../core/world/layer';
 import { isQuestPool, memberKey } from '../../core/world/groups';
 import { databaseQuestFacts, projectQuestFacts, spawnsUnder } from '../world/groups-api';
 import type { GroupView, SpawnGroupsApi } from '../../shared/ipc';
@@ -12,8 +12,11 @@ export function createSpawnGroupsApi(s: Services): SpawnGroupsApi {
   const { deps, connected, quests, asOneStep, projectEntities } = s.ctx;
   const { pools, groupOf, checkGroup, motherToRead, renumberGroup, freeGroupId, spawnAt, groupSpots } = s.groups;
 
+  /** A group as the database has it, less the spawns this project deletes */
+  const live = <T extends Parameters<typeof withoutDeletedMembers>[0] | null>(group: T): T => (group ? (withoutDeletedMembers(group, deps.session.world.get()) as T) : group);
+
   return {
-    worldGroup: (id) => run(async () => groupOf(connected().db, id)),
+    worldGroup: (id) => run(async () => live(await groupOf(connected().db, id))),
 
     worldGroupSpawns: (id) =>
       run(async () => {
@@ -24,7 +27,7 @@ export function createSpawnGroupsApi(s: Services): SpawnGroupsApi {
     worldGroupView: (id) =>
       run(async () => {
         const db = connected().db;
-        const group = await groupOf(db, id);
+        const group = live(await groupOf(db, id));
         if (!group) return null;
         const store = projectEntities();
         const members: GroupView['members'] = [];
@@ -32,7 +35,7 @@ export function createSpawnGroupsApi(s: Services): SpawnGroupsApi {
           // Quest members are not shown in the 3D view's group card
           if (m.type === 'quest') continue;
           if (m.type === 'group') {
-            const child = await groupOf(db, m.id);
+            const child = live(await groupOf(db, m.id));
             // A group member stands at the centre of every spawn under it
             const spots = await groupSpots(db, m.id, new Set([group.id]));
             const mean = (axis: 'x' | 'y' | 'z') => spots.reduce((sum, s) => sum + s[axis], 0) / spots.length;

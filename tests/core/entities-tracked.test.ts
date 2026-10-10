@@ -124,6 +124,13 @@ describe('trackedEntities', () => {
       expect(trackedEntities({ store: EMPTY_ENTITIES, layer, quests: [] }).find((t) => t.entry === 1004)!.changes).toEqual(['spawns', 'group']);
     });
 
+    it('the entry of a deleted spawn taken out of a group is read from the layer, so its NPC keeps the group change', () => {
+      const layer: WorldLayer = { ...EMPTY_WORLD,
+        deletes: [{ kind: 'creature', guid: 400, entry: 1004, name: 'Guard', map: 0, placement: place(1), rows: [] }],
+        groups: [{ id: 5000, name: 'Guards', map: 0, maxActive: 1, event: null, members: [spawn(100, 1001)], origin: existing([row(100), row(400)]) }] };
+      expect(changed(layer)).toEqual([1004]);
+    });
+
     it('a chance-only or name-only edit of an existing group changes no membership', () => {
       const layer: WorldLayer = { ...EMPTY_WORLD, groups: [{ id: 5000, name: 'Renamed', map: 0, maxActive: 1, event: null,
         members: [spawn(100, 1001, 40), spawn(300, 1003, 60)], origin: existing([row(100, 50), row(300, 50)]) }] };

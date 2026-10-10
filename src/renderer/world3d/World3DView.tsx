@@ -25,7 +25,7 @@ import { PlaceDialog, type Chosen } from './PlaceDialog';
 import { OrbMark } from '../components/OrbMark';
 import type { PlaceRequest } from './placing';
 import { CHAIN_DRAG_TYPE, dropToRequest, groundOverDrag } from './chain-drop';
-import { useWorldMenu } from './useWorldMenu';
+import { NO_LONGER_HERE, useWorldMenu } from './useWorldMenu';
 import type { MenuEditorTab, QuestMenuInfo } from './menu/model';
 import type { Role, RoleTarget } from '@core/modules/quest-roles';
 import type { GroupView, QuestSpawnGroup } from '@shared/ipc';
@@ -431,6 +431,8 @@ function WorldStage({
   mapRef.current = map;
   // Edits as the view sends them, set by the world that is up; paths started here, which the database lacks
   const sendRef = useRef<(change: SpawnEdit) => Promise<boolean>>(async () => false);
+  // Why the last edit was refused, for a gesture of several that names what failed
+  const failureRef = useRef<string | null>(null);
   // Places a spawn in the world that is up; a click while placing and a part dropped from the chain alike
   const placeRef = useRef<(request: PlaceRequest) => Promise<void>>(async () => {});
   /** One placement is one step of the project's history */
@@ -450,6 +452,11 @@ function WorldStage({
     api,
     map,
     send: (change) => sendRef.current(change),
+    failure: () => {
+      const why = failureRef.current;
+      failureRef.current = null;
+      return why;
+    },
     takeLayer: (next) => takeLayer(next),
     setNote,
     floorZ: floorAt,
@@ -547,6 +554,7 @@ function WorldStage({
         : await current.worldSetRoute(change.pathId, points);
       if (!live) return false;
       if (!result.ok) {
+        failureRef.current = result.error.message;
         setNote(result.error.message);
         return false;
       }
@@ -608,7 +616,10 @@ function WorldStage({
       const kept = queue
         .then(() => edit(change))
         .catch((error: unknown) => {
-          if (live) setNote(`The change could not be kept: ${error instanceof Error ? error.message : String(error)}`);
+          if (live) {
+            failureRef.current = `The change could not be kept: ${error instanceof Error ? error.message : String(error)}`;
+            setNote(failureRef.current);
+          }
           return false;
         })
         .finally(() => {
@@ -895,15 +906,15 @@ function WorldStage({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [patrolRequest?.nonce]);
 
-  /** Deletes the spawn on the card, as one undo step: placed ones leave the layer, database ones are recorded as deleted */
+  /** Deletes the spawn on the card as the menu and the Delete key do: one undo step */
   async function deletePicked(spawn: PickedSpawn): Promise<void> {
     if (editLockedRef.current) return;
-    const at = { x: spawn.position.x, y: spawn.position.y, z: spawn.position.z, orientation: 0, rotation: null };
-    const name = spawn.name || `${spawn.kind === 'creature' ? 'NPC' : 'Object'} ${spawn.entry}`;
-    await runStepRef.current(async () => {
-      await sendRef.current({ kind: 'presence', spawn: { kind: spawn.kind, guid: spawn.guid, entry: spawn.entry, own: spawn.own }, present: false, at, map });
-    }, `Delete ${name}`);
-    clearSelection();
+    const info = world.current?.spawnOf(spawn.kind, spawn.guid);
+    if (!info) {
+      setNote(NO_LONGER_HERE);
+      return;
+    }
+    await menuRef.current.deleteSpawns([info]);
   }
 
   function clearSelection(): void {

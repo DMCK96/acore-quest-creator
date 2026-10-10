@@ -243,8 +243,8 @@ export async function respawnDrifted(db: WorldDb, edit: WorldRespawnEdit): Promi
 
 /** The tables whose rows hang on a spawn's guid, by the kind of spawn */
 const DEPENDENTS: Record<WorldSpawnKind, DeletedTable[]> = {
-  creature: ['creature_addon', 'game_event_creature', 'pool_creature'],
-  gameobject: ['game_event_gameobject', 'pool_gameobject'],
+  creature: ['creature_addon', 'game_event_creature', 'game_event_model_equip', 'pool_creature'],
+  gameobject: ['gameobject_addon', 'game_event_gameobject', 'pool_gameobject'],
 };
 
 /**
@@ -256,7 +256,9 @@ export async function readDeletedSpawn(db: WorldDb, kind: WorldSpawnKind, guid: 
   if (!spawn) return null;
   const key = { guid: String(guid) };
   const [own] = await db.selectRows(kind, key);
-  const rows: WorldDeletedSpawn['rows'] = [{ table: kind, row: { ...own! } }];
+  // Gone between the two reads
+  if (!own) return null;
+  const rows: WorldDeletedSpawn['rows'] = [{ table: kind, row: { ...own } }];
   for (const table of DEPENDENTS[kind]) {
     for (const row of await rowsOrNone(db, table, key)) rows.push({ table, row: { ...row } });
   }

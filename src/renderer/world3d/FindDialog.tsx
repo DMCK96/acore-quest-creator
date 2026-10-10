@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import type { SpawnDot } from '@core/db/spawns';
 import { worldMapById } from '@core/map/world-maps';
 import type { GroupView } from '@shared/ipc';
-import type { WorldLayer } from '@core/world/layer';
+import { isDeleted, type WorldLayer } from '@core/world/layer';
 import { useApi } from '../state/names';
 import { trapTab } from '../components/trap-tab';
 import { useEntityHits } from './useEntityHits';
@@ -35,7 +35,7 @@ const distance = (a: { x: number; y: number; z: number }, b: { x: number; y: num
 export function foundSpawns(dots: readonly SpawnDot[], layer: WorldLayer, entry: number, kind: Kind, from: { map: number; x: number; y: number; z: number }): FoundSpawn[] {
   const layerKind = kind === 'creature' ? 'creature' : 'gameobject';
   const moved = new Map(layer.spawns.filter((s) => s.kind === layerKind).map((s) => [s.guid, s]));
-  const fromDatabase = dots.map((d): FoundSpawn => {
+  const fromDatabase = dots.filter((d) => !isDeleted(layer, layerKind, d.guid)).map((d): FoundSpawn => {
     const edit = moved.get(d.guid);
     return {
       kind, guid: d.guid, entry: d.entry, name: d.name, map: d.map,

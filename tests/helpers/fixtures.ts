@@ -38,6 +38,11 @@ export function forkDb(): FakeWorldDb {
   return FakeWorldDb.fromFork([...registryTables(), ...LOOKUP_TABLES]);
 }
 
+/** `forkDb` with more of the fork's tables, for a test about rows the registry does not read */
+export function forkDbWith(extra: string[]): FakeWorldDb {
+  return FakeWorldDb.fromFork([...registryTables(), ...LOOKUP_TABLES, ...extra]);
+}
+
 /** Loads the schema for every registry table, then imports one quest through the real importer. */
 export async function importFixture(
   db: WorldDb,

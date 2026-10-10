@@ -5,6 +5,8 @@
  * active, so its NPC need not stay selected.
  */
 
+import { isDeleted, type WorldLayer } from '@core/world/layer';
+
 export type SelectedSpawn = { kind: 'creature' | 'object'; guid: number };
 /** A point of an NPC's route: `guid` is the NPC whose route it is */
 export type SelectedPoint = { guid: number; index: number };
@@ -84,6 +86,22 @@ export function afterRouteChange(
     return [{ guid, index: p.index - change.indexes.filter((i) => i < p.index).length }];
   });
   return { ...selection, points };
+}
+
+/**
+ * The selection once the layer deletes spawns: a deleted spawn is let go, and so is its route unless a
+ * point of it is still picked. The same selection when nothing selected is deleted.
+ */
+export function withoutDeleted(selection: Selection, layer: WorldLayer): Selection {
+  const gone = (s: SelectedSpawn): boolean => isDeleted(layer, s.kind === 'creature' ? 'creature' : 'gameobject', s.guid);
+  if (!selection.spawns.some(gone)) return selection;
+  const dropped = new Set(selection.spawns.filter((s) => s.kind === 'creature' && gone(s)).map((s) => s.guid));
+  const picked = new Set(selection.points.map((p) => p.guid));
+  return {
+    spawns: selection.spawns.filter((s) => !gone(s)),
+    points: selection.points,
+    routes: selection.routes.filter((guid) => !dropped.has(guid) || picked.has(guid)),
+  };
 }
 
 export function isEmpty(selection: Selection): boolean {

@@ -149,6 +149,16 @@ describe('moving and turning a selection in the 3D view', () => {
     expect(t.deletes).not.toHaveBeenCalled();
   });
 
+  it('Delete while a path is being drawn deletes nothing, and the path goes on', () => {
+    const t = setup();
+    t.npc(1, 0, 0);
+    t.editor.setSelection(sel({ spawns: [{ kind: 'creature', guid: 1 }] }));
+    t.editor.startPath(1, 77, { x: 0, y: 0, z: 0 });
+    expect(t.editor.keyDown(key('Delete'))).toBe(true);
+    expect(t.deletes).not.toHaveBeenCalled();
+    expect(t.editor.drawing).not.toBeNull();
+  });
+
   it('Delete with nothing selected deletes nothing, and the key is still used', () => {
     const t = setup();
     expect(t.editor.keyDown(key('Delete'))).toBe(true);

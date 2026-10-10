@@ -71,6 +71,15 @@ describe('listing the spawns of an NPC or object', () => {
   });
 });
 
+describe('listing the spawns of an NPC with some deleted', () => {
+  it('leaves out a database spawn the layer deletes, and lists the others', () => {
+    const layer = { spawns: [], routes: [], added: [], deletes: [{ kind: 'creature' as const, guid: 2, entry: 1423, name: 'n', map: 0, placement: { x: 0, y: 0, z: 0, orientation: 0, rotation: null }, rows: [] }] };
+    const list = foundSpawns(spawns, layer, 1423, 'creature', { map: 0, x: 0, y: 0, z: 10 });
+    expect(list.map((s) => s.guid)).not.toContain(2);
+    expect(list.map((s) => s.guid).sort()).toEqual([1, 3, 4, 5]);
+  });
+});
+
 describe('the find panel in the 3D screen', () => {
   it('lists the spawns with how far they are, what marks them, and no way to go to a map the view does not draw', async () => {
     const { api } = await open();

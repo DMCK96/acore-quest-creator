@@ -38,6 +38,8 @@ export interface WorldMenuDeps {
   map: number;
   /** Sends an edit as the view sends any: the quest's own to the quest, the rest to the world layer, in order; whether it was kept */
   send(edit: SpawnEdit): Promise<boolean>;
+  /** Why the last edit that was not kept was refused, taken once; null when there was no reason said */
+  failure(): string | null;
   takeLayer(layer: WorldLayer): void;
   setNote(note: string | null): void;
   /** The server's floor nearest a height at a place, or null when it has none there */
@@ -105,6 +107,8 @@ export function useWorldMenu(deps: WorldMenuDeps): {
   shortcut(code: 'KeyC' | 'KeyV' | 'KeyD'): boolean;
   /** Deletes the selected spawns as one undo step: the Delete key */
   deleteSelected(): Promise<void>;
+  /** Deletes these spawns as one undo step: the card's Delete button */
+  deleteSpawns(spawns: readonly MenuSpawn[]): Promise<void>;
   onDrawing(drawing: { guid: number; points: number } | null): void;
   /** Opens the spawn group dialog on a group */
   editGroup(id: number): void;
@@ -252,13 +256,16 @@ export function useWorldMenu(deps: WorldMenuDeps): {
   const deleteSpawns = async (spawns: readonly MenuSpawn[]): Promise<void> => {
     const targets = spawns.filter(still);
     if (targets.length === 0) return;
-    const failed: string[] = [];
+    const failed: MenuSpawn[] = [];
+    const reasons: string[] = [];
     const named = (s: MenuSpawn): string => s.name || `${s.kind === 'creature' ? 'NPC' : 'Object'} ${s.entry}`;
     await step.current(async () => {
       for (const spawn of targets) {
         const gone: SpawnEdit = { kind: 'presence', spawn: refOf(spawn), present: false, at: spawn.placement, map: spawn.map };
         if (!(await d.current.send(gone))) {
-          failed.push(named(spawn));
+          failed.push(spawn);
+          const why = d.current.failure();
+          reasons.push(why ? `${named(spawn)}: ${why}` : named(spawn));
           continue;
         }
         // A quest's own or a placed spawn in a spawn group leaves it in the same step; a database spawn's pool rows go with its delete
@@ -270,8 +277,13 @@ export function useWorldMenu(deps: WorldMenuDeps): {
         }
       }
     }, targets.length === 1 ? `Delete ${named(targets[0]!)}` : `Delete ${targets.length} spawns`);
-    if (failed.length > 0) d.current.setNote(`Could not delete ${failed.join(', ')}`);
-    if (failed.length < targets.length) d.current.clearSelection();
+    if (failed.length === 0) {
+      d.current.clearSelection();
+      return;
+    }
+    // The ones that could not be deleted stay selected, and the note says which and why
+    d.current.setNote(`Could not delete ${reasons.join(', ')}`);
+    d.current.world.current?.selectSpawns(failed.map((s) => ({ kind: s.kind, guid: s.guid })));
   };
 
   const deleteSelected = (): Promise<void> => deleteSpawns(d.current.world.current?.selectedSpawns() ?? []);
@@ -741,5 +753,5 @@ export function useWorldMenu(deps: WorldMenuDeps): {
     openGroup(id).catch((error: unknown) => d.current.setNote(error instanceof Error ? error.message : String(error)));
   };
 
-  return { open, shortcut, deleteSelected, onDrawing: setDrawing, editGroup, elements };
+  return { open, shortcut, deleteSelected, deleteSpawns, onDrawing: setDrawing, editGroup, elements };
 }

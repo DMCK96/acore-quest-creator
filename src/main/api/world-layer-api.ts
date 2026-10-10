@@ -19,6 +19,11 @@ export function createWorldLayerApi(s: Services): WorldLayerApi {
     return { original, walkers: await countWalkers(db, pathId), walkerEntries: await readWalkerEntries(db, pathId), ...(name ? { name } : {}) };
   };
 
+  /** An edit to a spawn the layer deletes is refused: the patch would write rows for a spawn it removes */
+  const refuseDeleted = (layer: WorldLayer, kind: 'creature' | 'gameobject', guid: number): void => {
+    if (isDeleted(layer, kind, guid)) throw fail('BAD_REQUEST', `Spawn ${guid} is deleted in this project; revert the deletion first.`);
+  };
+
   return {
     worldLayer: () =>
       run(async () => {
@@ -81,6 +86,7 @@ export function createWorldLayerApi(s: Services): WorldLayerApi {
           deps.session.world.put(next);
           return next;
         }
+        refuseDeleted(deps.session.world.get(), kind, guid);
         const knownIn = (layer: WorldLayer) => layer.spawns.find((s) => s.kind === kind && s.guid === guid);
         // The database is read first and the layer after it, with nothing awaited before the layer is
         // put back, so an edit to another spawn made meanwhile is kept
@@ -95,6 +101,7 @@ export function createWorldLayerApi(s: Services): WorldLayerApi {
         }
         if (!known && !read) throw fail('BAD_REQUEST', `Spawn ${guid} is no longer in the database.`);
         const spawn = known ?? { kind, guid, entry: read!.entry, name: read!.name, map: read!.map, original: read!.placement };
+        refuseDeleted(layer, kind, guid);
         const next = moveSpawn(layer, spawn, to);
         deps.session.world.put(next);
         return next;
@@ -131,6 +138,7 @@ export function createWorldLayerApi(s: Services): WorldLayerApi {
     worldSetMovement: (guid, to) =>
       run(async () => {
         const db = connected().db;
+        refuseDeleted(deps.session.world.get(), 'creature', guid);
         const knownIn = (layer: WorldLayer) => movementsOf(layer).find((m) => m.guid === guid);
         // A spawn placed in the view stood still when it was placed, and the database does not have it
         const fromPlaced = (layer: WorldLayer) => {
@@ -154,6 +162,7 @@ export function createWorldLayerApi(s: Services): WorldLayerApi {
           ...(was!.addonSeed ? { addonSeed: was!.addonSeed } : {}),
           ...(was!.originalRaw ? { originalRaw: was!.originalRaw } : {}),
         };
+        refuseDeleted(layer, 'creature', guid);
         const next = setMovement(layer, edit, to);
         deps.session.world.put(next);
         return next;
@@ -162,6 +171,7 @@ export function createWorldLayerApi(s: Services): WorldLayerApi {
     worldSetRespawn: (kind, guid, secs) =>
       run(async () => {
         const db = connected().db;
+        refuseDeleted(deps.session.world.get(), kind, guid);
         const knownIn = (layer: WorldLayer) => respawnsOf(layer).find((r) => r.kind === kind && r.guid === guid);
         // A spawn placed in the view carries its own respawn; the database does not have it
         const placedIn = (layer: WorldLayer) => isAdded(layer, kind, guid);
@@ -178,6 +188,7 @@ export function createWorldLayerApi(s: Services): WorldLayerApi {
         const edit = known ?? (read
           ? { kind, guid, entry: read.entry, name: read.name, map: read.map, original: read.secs }
           : { kind, guid, entry: 0, name: '', map: 0, original: 0 });
+        refuseDeleted(layer, kind, guid);
         const next = setRespawn(layer, edit, secs);
         deps.session.world.put(next);
         return next;
@@ -186,6 +197,7 @@ export function createWorldLayerApi(s: Services): WorldLayerApi {
     worldSetSpawnEvents: (guid, to) =>
       run(async () => {
         const db = connected().db;
+        refuseDeleted(deps.session.world.get(), 'creature', guid);
         const knownIn = (layer: WorldLayer) => spawnEventsOf(layer).find((e) => e.guid === guid);
         // A spawn placed in the view carries its own events; the database does not have it
         const placedIn = (layer: WorldLayer) => isAdded(layer, 'creature', guid);
@@ -202,6 +214,7 @@ export function createWorldLayerApi(s: Services): WorldLayerApi {
         const edit = known ?? (read
           ? { guid, entry: read.entry, name: read.name, map: read.map, original: read.rows }
           : { guid, entry: 0, name: '', map: 0, original: [] });
+        refuseDeleted(layer, 'creature', guid);
         const next = setSpawnEvents(layer, edit, to);
         deps.session.world.put(next);
         return next;
@@ -209,15 +222,15 @@ export function createWorldLayerApi(s: Services): WorldLayerApi {
 
     worldDeleteSpawn: (kind, guid) =>
       run(async () => {
-        const db = connected().db;
         const start = deps.session.world.get();
-        // A spawn placed in the view is no database row: it is taken back out of the layer
+        // A spawn placed in the view is no database row: it is taken back out of the layer, connected or not
         if (isAdded(start, kind, guid)) {
           const next = revertSpawn(start, kind, guid);
           deps.session.world.put(next);
           return next;
         }
         if (isDeleted(start, kind, guid)) return start;
+        const db = connected().db;
         // Database first, layer after, with nothing awaited between the last layer read and the put
         const read = await readDeletedSpawn(db, kind, guid);
         const layer = deps.session.world.get();

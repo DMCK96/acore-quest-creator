@@ -115,7 +115,8 @@ export interface WorldEventEdit {
 }
 
 /** The tables a deleted spawn's rows come from: its own row and what hangs on its guid */
-export type DeletedTable = 'creature' | 'gameobject' | 'creature_addon' | 'game_event_creature' | 'game_event_gameobject' | 'pool_creature' | 'pool_gameobject';
+export type DeletedTable =
+  | 'creature' | 'gameobject' | 'creature_addon' | 'gameobject_addon' | 'game_event_creature' | 'game_event_gameobject' | 'game_event_model_equip' | 'pool_creature' | 'pool_gameobject';
 
 /**
  * A database spawn deleted in the view. Its rows are kept whole, so the project patch's revert can
@@ -285,10 +286,17 @@ export function deleteSpawn(layer: WorldLayer, deleted: WorldDeletedSpawn): Worl
     spawns: layer.spawns.filter((s) => !(s.kind === kind && s.guid === guid)),
     deletes: [...deletesOf(layer).filter((d) => !(d.kind === kind && d.guid === guid)), deleted],
   };
-  if (layer.movements && creature) next.movements = layer.movements.filter((m) => m.guid !== guid);
   if (layer.respawns) next.respawns = layer.respawns.filter((r) => !(r.kind === kind && r.guid === guid));
   if (layer.spawnEvents && creature) next.spawnEvents = layer.spawnEvents.filter((e) => e.guid !== guid);
-  return layer.groups ? dropMember(next, creature ? 'npc' : 'object', guid) : next;
+  // A path made in the view for it goes with its movement, as with a placed NPC taken back
+  const unwalked = creature && layer.movements ? revertMovement(next, guid) : next;
+  return layer.groups ? dropMember(unwalked, creature ? 'npc' : 'object', guid) : unwalked;
+}
+
+/** A group as the database has it, less the spawns the layer deletes: what a card or a save must start from */
+export function withoutDeletedMembers(group: SpawnGroup, layer: WorldLayer): SpawnGroup {
+  const gone = (m: SpawnGroup['members'][number]): boolean => m.type === 'spawn' && isDeleted(layer, m.kind === 'npc' ? 'creature' : 'gameobject', m.guid);
+  return group.members.some(gone) ? { ...group, members: group.members.filter((m) => !gone(m)) } : group;
 }
 
 /** Takes back a deletion; the list goes altogether when it was the last */

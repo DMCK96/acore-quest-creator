@@ -380,7 +380,7 @@ const worldSchema = z.object({
         placement: placementSchema,
         rows: z.array(
           z.object({
-            table: z.enum(['creature', 'gameobject', 'creature_addon', 'game_event_creature', 'game_event_gameobject', 'pool_creature', 'pool_gameobject']),
+            table: z.enum(['creature', 'gameobject', 'creature_addon', 'gameobject_addon', 'game_event_creature', 'game_event_gameobject', 'game_event_model_equip', 'pool_creature', 'pool_gameobject']),
             row: rowSchema,
           }),
         ),

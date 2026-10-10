@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { afterRouteChange, combine, EMPTY_SELECTION, isEmpty, type Selection } from '../../src/renderer/world3d/scene/edit/selection';
+import { afterRouteChange, combine, EMPTY_SELECTION, isEmpty, withoutDeleted, type Selection } from '../../src/renderer/world3d/scene/edit/selection';
 
 const npc = (guid: number) => ({ kind: 'creature' as const, guid });
 const obj = (guid: number) => ({ kind: 'object' as const, guid });
@@ -56,5 +56,26 @@ describe('picked points after their route changes', () => {
   it('an insert moves the points at and after it up', () => {
     const s: Selection = { spawns: [], points: [pt(1, 0), pt(1, 2), pt(2, 2)], routes: [1, 2] };
     expect(afterRouteChange(s, 1, { kind: 'insert', index: 2 }).points).toEqual([pt(1, 0), pt(1, 3), pt(2, 2)]);
+  });
+});
+
+describe('what is selected when the layer deletes spawns', () => {
+  const gone = (kind: 'creature' | 'gameobject', guid: number) => ({ kind, guid, entry: 1, name: 'n', map: 0, placement: { x: 0, y: 0, z: 0, orientation: 0, rotation: null }, rows: [] });
+  const layer = (...deletes: ReturnType<typeof gone>[]) => ({ spawns: [], routes: [], added: [], deletes });
+
+  it('lets go of a deleted spawn, by kind, and of the route it had active when nothing of it is picked', () => {
+    const before: Selection = { spawns: [npc(1), npc(2), obj(1)], points: [], routes: [1, 2] };
+    expect(withoutDeleted(before, layer(gone('creature', 1)))).toEqual({ spawns: [npc(2), obj(1)], points: [], routes: [2] });
+  });
+
+  it('is the same selection when nothing selected is deleted', () => {
+    const before: Selection = { spawns: [npc(1)], points: [pt(1, 0)], routes: [1] };
+    expect(withoutDeleted(before, layer(gone('creature', 9)))).toBe(before);
+    expect(withoutDeleted(before, { spawns: [], routes: [], added: [] })).toBe(before);
+  });
+
+  it('keeps a route active while any of its points is picked', () => {
+    const before: Selection = { spawns: [npc(1)], points: [pt(1, 0)], routes: [1] };
+    expect(withoutDeleted(before, layer(gone('creature', 1)))).toEqual({ spawns: [], points: [pt(1, 0)], routes: [1] });
   });
 });

@@ -396,7 +396,8 @@ export class Editor {
         return true;
       case 'Delete':
         // Picked route points are deleted first; with none picked, the selected spawns are
-        if (this.#selection.points.length === 0 && this.#selection.spawns.length > 0) this.#options.onDeleteSpawns?.();
+        // While a path is drawn the NPC it is for cannot be deleted from under it
+        if (this.#selection.points.length === 0 && this.#selection.spawns.length > 0 && !this.#drawing) this.#options.onDeleteSpawns?.();
         else this.#deletePoints();
         return true;
       case 'KeyO':
