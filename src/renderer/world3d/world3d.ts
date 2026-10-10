@@ -6,7 +6,7 @@ import { WorldControls, type ClickKeys, type Tool } from './controls';
 import { CharacterTexture } from './scene/character/CharacterTexture';
 import { getAssetUrl } from './scene/asset';
 import { floorHeightBelow } from './scene/spawn/ground-probe';
-import { spawnBounds, type PickedSpawn, type SpawnSource, type SpawnStatus, type SpawnVisibility } from './scene/spawn/SpawnManager';
+import { spawnLocalBounds, type PickedSpawn, type SpawnSource, type SpawnStatus, type SpawnVisibility } from './scene/spawn/SpawnManager';
 import type { ViewSpawns } from '@core/db/view-spawns';
 import type { EntityLooks } from '@core/entities/view-spawns';
 import { clearProblems, onProblems } from './scene/diagnostics';
@@ -532,7 +532,7 @@ export function createWorld3D(options: World3DOptions): World3D {
 
   // An outline round each selected spawn (its bounds), and a falloff ring round each picked point,
   // followed every frame: what they are on may be redrawn, move, or leave
-  const outlines: THREE.Box3Helper[] = [];
+  const outlines: THREE.Group[] = [];
   const rings: THREE.LineLoop[] = [];
   const ringGeometry = new THREE.BufferGeometry().setFromPoints(
     Array.from({ length: RING_SEGMENTS }, (_, i) => new THREE.Vector3(Math.cos((i / RING_SEGMENTS) * Math.PI * 2), Math.sin((i / RING_SEGMENTS) * Math.PI * 2), 0)),
@@ -550,12 +550,22 @@ export function createWorld3D(options: World3DOptions): World3D {
   };
   const followSelected = (): void => {
     const drawn = selection.spawns.flatMap((s) => manager.findSpawn(s.kind, s.guid) ?? []);
+    // Each outline is the spawn's bounds in its own frame, carried by the spawn's matrix: it turns with the model
     pooled(outlines, drawn.length, () => {
-      const outline = new THREE.Box3Helper(new THREE.Box3(), SELECTED_COLOUR);
-      (outline.material as THREE.LineBasicMaterial).depthTest = false;
-      outline.renderOrder = 1;
+      const box = new THREE.Box3Helper(new THREE.Box3(), SELECTED_COLOUR);
+      (box.material as THREE.LineBasicMaterial).depthTest = false;
+      box.renderOrder = 1;
+      const outline = new THREE.Group();
+      outline.matrixAutoUpdate = false;
+      outline.userData.box = box;
+      outline.add(box);
       return outline;
-    }).forEach((outline, i) => spawnBounds(drawn[i]!, outline.box));
+    }).forEach((outline, i) => {
+      const spawn = drawn[i]!;
+      spawnLocalBounds(spawn, (outline.userData.box as THREE.Box3Helper).box);
+      outline.matrix.copy(spawn.matrixWorld);
+      outline.updateMatrixWorld(true);
+    });
     const falloff = editor.falloff;
     const points = falloff.on ? editor.pointPositions() : [];
     pooled(rings, points.length, () => {

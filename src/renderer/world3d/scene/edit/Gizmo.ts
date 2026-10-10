@@ -64,12 +64,14 @@ export class Gizmo {
   readonly #down = new THREE.Raycaster();
   #turns: GizmoTurns | null = null;
   #mode: GizmoMode = 'move';
+  /** The spawn's whole rotation, which the proxy has only while rotating: it is turned about Z alone while moving */
+  #full = new THREE.Quaternion();
   #start = { position: new THREE.Vector3(), quaternion: new THREE.Quaternion() };
 
   constructor(camera: THREE.Camera, dom: HTMLElement, scene: THREE.Scene, ground: () => THREE.Object3D[], events: GizmoEvents) {
     this.#ground = ground;
     this.#controls = new TransformControls(camera, dom);
-    this.#controls.setSpace('world');
+    this.#controls.setSpace('local');
     scene.add(this.#proxy);
     scene.add(this.#controls);
 
@@ -81,7 +83,7 @@ export class Gizmo {
     });
     this.#controls.addEventListener('objectChange', () => {
       this.#follow(axis);
-      events.moved({ delta: this.#proxy.position.clone().sub(this.#start.position), angle: this.#turned(), quaternion: this.#proxy.quaternion.clone(), axis });
+      events.moved({ delta: this.#proxy.position.clone().sub(this.#start.position), angle: this.#turned(), quaternion: (this.#mode === 'rotate' ? this.#proxy.quaternion : this.#full).clone(), axis });
     });
     this.#controls.addEventListener('mouseUp', () => void events.ended(this.#mode === 'move' && axis === 'Z'));
   }
@@ -103,10 +105,15 @@ export class Gizmo {
   attach(at: THREE.Vector3, quaternion: THREE.Quaternion, turns: GizmoTurns): void {
     this.#turns = turns;
     this.#proxy.position.copy(at);
-    this.#proxy.quaternion.copy(quaternion);
-    this.#proxy.updateMatrixWorld(true);
+    this.#full.copy(quaternion);
+    this.#orient();
     this.#controls.attach(this.#proxy);
     this.#apply();
+  }
+
+  /** The rotation the handles are drawn in: along the spawn, so a drag follows how it faces */
+  get orientation(): THREE.Quaternion {
+    return this.#proxy.quaternion;
   }
 
   detach(): void {
@@ -116,6 +123,7 @@ export class Gizmo {
 
   setMode(mode: GizmoMode): void {
     this.#mode = mode;
+    this.#orient();
     this.#apply();
   }
 
@@ -124,6 +132,16 @@ export class Gizmo {
     this.#controls.dispose();
     this.#controls.removeFromParent();
     this.#proxy.removeFromParent();
+  }
+
+  /** Moving keeps the Z arrow upright, so the proxy takes only the spawn's heading; rotating takes all of it */
+  #orient(): void {
+    if (this.#mode === 'rotate') this.#proxy.quaternion.copy(this.#full);
+    else {
+      const facing = X.clone().applyQuaternion(this.#full);
+      this.#proxy.quaternion.setFromAxisAngle(UP, Math.atan2(facing.y, facing.x));
+    }
+    this.#proxy.updateMatrixWorld(true);
   }
 
   /** Route points only move; NPCs and groups turn about Z; one object turns every way */

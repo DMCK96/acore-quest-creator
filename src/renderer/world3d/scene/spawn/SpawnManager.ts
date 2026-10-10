@@ -291,6 +291,22 @@ function spawnBounds(spawn: THREE.Object3D, target: THREE.Box3): THREE.Box3 {
   return target;
 }
 
+/**
+ * A drawn spawn's bounds in its own frame, into `target`: as big as the model however it is turned, so
+ * drawn with the spawn's matrix they hug it, where `spawnBounds` is the wider box round it in the world
+ */
+function spawnLocalBounds(spawn: THREE.Object3D, target: THREE.Box3): THREE.Box3 {
+  const part = new THREE.Box3();
+  const toSpawn = new THREE.Matrix4().copy(spawn.matrixWorld).invert();
+  const inSpawn = new THREE.Matrix4();
+  target.makeEmpty();
+  spawn.traverseVisible((object) => {
+    const geometry = (object as THREE.Mesh).geometry;
+    if (geometry) target.union(part.copy(boundsOf(geometry)).applyMatrix4(inSpawn.multiplyMatrices(toSpawn, object.matrixWorld)));
+  });
+  return target;
+}
+
 /** Event spawns are left out until asked for: a town would otherwise show every holiday at once */
 const DEFAULT_VISIBILITY: SpawnVisibility = { creatures: true, objects: true, paths: true, events: 'none' };
 
@@ -1315,5 +1331,5 @@ class SpawnManager {
 }
 
 export default SpawnManager;
-export { SpawnManager, spawnBounds };
+export { SpawnManager, spawnBounds, spawnLocalBounds };
 export type { EventFilter, PickedSpawn, SpawnSource, SpawnStatus, SpawnVisibility };
