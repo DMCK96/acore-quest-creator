@@ -88,7 +88,7 @@ The recorder keeps key codes and modifiers, not the characters typed, and never 
 
 ## Errors
 
-- Debug mode off: `debug_snapshot` and `debug_type` fail with `BAD_REQUEST` and the message "Turn on Debug mode in Preferences first."
+- Debug mode off: `debug_snapshot` and `debug_type` fail with `NOT_ENABLED` (the existing code for a feature the user has not switched on) and the message "Turn on Debug mode in Preferences first."
 - No window (headless, tests): window-dependent tools fail with `UNKNOWN` and a plain message; `debug_events` still works.
 - The window does not answer a snapshot within 2 s: the answer carries main's view alone and says the page did not respond. That is itself the evidence for a stalled renderer.
 - A screenshot of a hidden or minimised window fails with a message saying so.
