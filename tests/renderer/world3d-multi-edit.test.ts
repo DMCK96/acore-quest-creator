@@ -179,6 +179,15 @@ describe('moving and turning a selection in the 3D view', () => {
     expect(placed(t.gestures[0]!)).toEqual([[1, 0, 4, 1], [2, 10, 4, 1]]);
   });
 
+  it('a move along the ground keeps the height an NPC was held above the ground, and does not drop it to the server floor', async () => {
+    const t = setup({ floor: 1 });
+    t.npc(1, 0, 0).position.z = 30;
+    t.editor.setSelection(sel({ spawns: [{ kind: 'creature', guid: 1 }] }));
+    await t.drag([0, 4, 0]);
+    expect(t.floorZ).not.toHaveBeenCalled();
+    expect(placed(t.gestures[0]!)).toEqual([[1, 0, 4, 30]]);
+  });
+
   it('leaves a spawn aboard a docked vessel on its deck: the continent’s floor under the vessel is not its floor', async () => {
     const t = setup({ floor: -50, aboard: [2] });
     t.npc(1, 0, 0);
