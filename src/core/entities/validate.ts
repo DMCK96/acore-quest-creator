@@ -4,6 +4,7 @@ import { npcFromRows } from './from-rows';
 import { GOSSIP_SERVICES, serviceFlagBits } from '../game/gossip-services';
 import { ENTITIES_FIELD, gossipUnread, sameGossip, sameGossipMenu, sameTrainer, trainerUnread, vendorUnread, type CustomItem, type CustomNpc, type CustomObject, type QuestEntities } from './model';
 import { missingChoice } from '../patrol/compile';
+import { npcSceneIssues } from '../scripts/npc-validate';
 
 /**
  * Inventory types the server lets an NPC hold (`ObjectMgr::LoadEquipmentTemplates`): weapon, shield,
@@ -56,6 +57,8 @@ export function entityIssues(input: {
   gossipFacts?: GossipFacts | null;
   /** Creature entries that a quest scene with a gossip option trigger belongs to. */
   sceneGossipOwners?: ReadonlySet<number>;
+  /** NPC entries whose template in the database runs another AI or a script, so their scenes are not written. */
+  scriptLocked?: ReadonlySet<number>;
 }): Issue[] {
   const questItems = new Set(input.questItems ?? []);
   // How many of the project's NPCs hold each gossip menu and text id that is new to it (not one an existing NPC read)
@@ -305,6 +308,9 @@ export function entityIssues(input: {
       }
     }
     if ('fight' in entity && entity.fight) issues.push(...fightIssues(entity.fight, label, input.knownSpell ?? null, input.objectives ?? null));
+    if ('scenes' in entity) {
+      issues.push(...npcSceneIssues({ npc: entity, label, knownQuest: input.knownQuest ?? (() => true), locked: input.scriptLocked?.has(entity.entry) ?? false }));
+    }
     const held = existing ? undefined : input.dbNames.get(`${kind}:${entity.entry}`);
     if (held !== undefined && held !== entity.name) {
       add('warning', 'ENTITY_TAKEN', `entry ${entity.entry} already holds "${held}" in the database, which this would replace.`);

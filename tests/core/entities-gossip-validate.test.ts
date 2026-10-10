@@ -114,4 +114,21 @@ describe('gossip that was never read', () => {
     expect(codes(check(npc([menu({ options: [close(0, '')] })], { origin })))).toEqual(['warning:GOSSIP_NOT_READ']);
     expect(check(npc(null, { origin }))).toEqual([]);
   });
+
+  it('refuses a scene whose option the author removes, copies away, or whose menu becomes locked', () => {
+    const hangs = { id: 's1', name: 'Thanks', questId: 0, trigger: { kind: 'gossipPicked' as const, menuId: 932535, optionId: 1 }, gates: [], steps: [{ kind: 'emote' as const, emote: 1, waitMs: 0 }] };
+    const two = menu({ options: [close(0), close(1, 'Thanks')] });
+    expect(check(npc([two], { scenes: [hangs] }))).toEqual([]);
+    // The option is removed
+    expect(codes(check(npc([menu()], { scenes: [hangs] })))).toEqual(['error:NPC_SCENE_OPTION_GONE']);
+    // The menu is copied under a new id ("Give it its own copy"): the scene still names the old one
+    expect(codes(check(npc([{ ...two, menuId: 932600 }], { scenes: [hangs] })))).toEqual(['error:NPC_SCENE_OPTION_LOCKED']);
+    // The menu is locked
+    expect(codes(check(npc([{ ...two, locked: true }], { scenes: [hangs] })))).toEqual(['error:NPC_SCENE_OPTION_LOCKED']);
+  });
+  it("warns once that a scripted NPC's scenes are not written, from the live template", () => {
+    const scene = { id: 's1', name: '', questId: 0, trigger: { kind: 'dies' as const }, gates: [], steps: [{ kind: 'emote' as const, emote: 1, waitMs: 0 }] };
+    expect(codes(check(npc(null, { scenes: [scene] }), { scriptLocked: new Set([12000001]) }))).toEqual(['warning:NPC_SCENES_LOCKED']);
+    expect(check(npc(null, { scenes: [scene] }), { scriptLocked: new Set() })).toEqual([]);
+  });
 });

@@ -67,4 +67,13 @@ describe('exporting an NPC with scenes', () => {
     expect(groups.length).toBeGreaterThan(2);
     expect(new Set(groups).size).toBe(groups.length);
   });
+
+  it("warns when the database's template for the NPC runs another AI, and says nothing about an unknown quest it can find", async () => {
+    const { api, db } = await setup();
+    db.insert('creature_template', { entry: '12000001', name: 'Hela', AIName: 'ReactorAI', ScriptName: '' });
+    db.insert('quest_template', { ID: '60001', LogTitle: 'Q' });
+    await api.putProjectEntities({ npcs: [hela([scene('s1', { questId: 60001 })])], objects: [], items: [] });
+    const out: any = await api.projectIssues();
+    expect(out.value.map((i: any) => i.code)).toEqual(['NPC_SCENES_LOCKED']);
+  });
 });

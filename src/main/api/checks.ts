@@ -9,6 +9,7 @@ import { validateGroup } from '../../core/world/groups';
 import { groupContext } from '../world/groups-api';
 import { readScenes } from '../../core/scripts/model';
 import { sceneIssues } from '../../core/scripts/validate';
+import { scenesLocked } from '../../core/scripts/npc-scenes';
 import { objectivesOf, questItemsOf, relationOwners } from '../../core/entities/links';
 import type { ProjectEntities } from '../../core/entities/model';
 import { entityIssues } from '../../core/entities/validate';
@@ -65,7 +66,8 @@ export function createChecks(ctx: ApiContext, files: ServerFiles) {
 
   async function newEntityIssues(live: Session, entities: ProjectEntities): Promise<Issue[]> {
     if (entities.npcs.length + entities.objects.length + entities.items.length === 0) return [];
-    const startedQuests = [...new Set(entities.items.map((i) => i.startsQuest).filter((q) => q > 0))];
+    // The quests items start and NPC scenes are about
+    const startedQuests = [...new Set([...entities.items.map((i) => i.startsQuest), ...entities.npcs.flatMap((n) => n.scenes.map((sc) => sc.questId))].filter((q) => q > 0))];
     const [creatures, objects, itemRows, questRows] = await Promise.all([
       rowsOrNone(live.db, 'creature_template', { entry: entities.npcs.map((n) => String(n.entry)) }),
       rowsOrNone(live.db, 'gameobject_template', { entry: entities.objects.map((o) => String(o.entry)) }),
@@ -124,6 +126,7 @@ export function createChecks(ctx: ApiContext, files: ServerFiles) {
       entities, dbNames, questItems: [...new Set(quests.list().flatMap((q) => questItemsOf(q.aggregate)))], objectives: objectivesByQuest(),
       knownSpell: spells ? (id) => spells.get(id) !== undefined : null, itemInventoryTypes,
       knownQuest: (id) => knownQuests.has(id), knownItem: (id) => knownItems.has(id), trainerUsers, gossipFacts, sceneGossipOwners,
+      scriptLocked: new Set(creatures.filter((r) => scenesLocked(r)).map((r) => Number(r.entry))),
       knownExtendedCost: costs && !('reason' in costs) ? (id) => costs.get(id) !== undefined : null, itemColumnTypes: itemColumnTypes.size > 0 ? itemColumnTypes : null,
     });
   }
