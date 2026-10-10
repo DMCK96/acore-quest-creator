@@ -7,6 +7,8 @@ import type { Result } from './result';
 export interface NpcQuest {
   id: number;
   title: string;
+  /** 'project' when the project's own copy of the quest says so (new or changed, not yet in the database) */
+  source?: 'project';
 }
 
 /** What `spellFacts` answers: the spells found, or why spell names are not available. */
@@ -18,7 +20,7 @@ export interface SpellFactsResult {
 
 /** Searches and names: quests, NPCs, objects, items, spells, sounds, looks, rewards and events */
 export interface LookupApi {
-  searchQuests(text: string): Promise<Result<QuestSummary[]>>;
+  searchQuests(text: string): Promise<Result<(QuestSummary & { source?: 'project' })[]>>;
   /** The quests an NPC starts and the quests it ends, by the database's own giver tables. */
   questsOfNpc(entry: number): Promise<Result<{ starts: NpcQuest[]; ends: NpcQuest[] }>>;
   /** Items, NPCs, objects or quests whose name contains the text, or whose ID is it. */

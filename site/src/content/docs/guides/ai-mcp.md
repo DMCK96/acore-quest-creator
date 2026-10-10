@@ -48,6 +48,8 @@ Before it writes, the assistant can look at what already exists, so new content 
 
 Zones and factions are shown by name when the connection has a server data folder, and by number otherwise.
 
+The assistant reads your project before the database, so it does not work from outdated information. Quests you added or retitled, NPCs and objects you made, and spawns you moved, placed or deleted are laid over what the database has. A result that comes from the project rather than the database is marked `source: "project"`, and a spawn you moved also says where the database has it (`movedFrom`).
+
 ## Lore from the wiki
 
 The assistant can also search and read pages on [warcraft.wiki.gg](https://warcraft.wiki.gg/) to check new content against the story. This is **off until you turn it on**: in Settings, MCP / AI tab, tick **Allow lookups on warcraft.wiki.gg**.

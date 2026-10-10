@@ -1,5 +1,7 @@
 import type { RawRow, RefKind } from '../../core/db/types';
 import { UnknownColumnError, UnknownTableError, type WorldDb } from '../../core/db/world-db';
+import { relationOwners } from '../../core/entities/links';
+import { overlayNpcQuests, overlayQuestSearch, type ProjectQuestFacts } from '../../core/lookup/project-quests';
 import { registry } from '../../core/registry';
 import type { LookupApi, NpcQuest, SpellFactsResult } from '../../shared/ipc';
 import { spellDetail, spellLabel } from '../../core/game/spells';
@@ -41,11 +43,20 @@ async function readRewardRow(
 
 /** Searches and names: quests, NPCs, objects, items, spells, sounds, looks, rewards and events */
 export function createLookupApi(s: Services): LookupApi {
-  const { connected, projectEntities } = s.ctx;
+  const { connected, projectEntities, quests: projectStore } = s.ctx;
+  /** The project's quests as a lookup sees them: its own title, level and givers, which win over the database's */
+  const projectQuests = (): ProjectQuestFacts[] =>
+    projectStore.list().map((q) => ({
+      id: q.questId,
+      title: String(q.aggregate.values['quest_template.LogTitle'] ?? ''),
+      level: Number(q.aggregate.values['quest_template.QuestLevel'] ?? 0),
+      starters: relationOwners(q.aggregate, 'starter').flatMap((o) => (o.kind === 'areatrigger' ? [] : [{ kind: o.kind, entry: o.entry }])),
+      enders: relationOwners(q.aggregate, 'ender').flatMap((o) => (o.kind === 'areatrigger' ? [] : [{ kind: o.kind, entry: o.entry }])),
+    }));
   const { spellsOf, soundsOf, extendedCostsOf, questSortsOf, lookOf, isLookKind, lookHits } = s.files;
 
   return {
-    searchQuests: (text) => run(async () => connected().db.searchQuests(text, SEARCH_LIMIT)),
+    searchQuests: (text) => run(async () => overlayQuestSearch(await connected().db.searchQuests(text, SEARCH_LIMIT), projectQuests(), text, SEARCH_LIMIT)),
     questsOfNpc: (entry) =>
       run(async () => {
         const { db } = connected();
@@ -61,7 +72,7 @@ export function createLookupApi(s: Services): LookupApi {
           const names = await db.lookupNames('quest', ids);
           return ids.map((id) => ({ id, title: names.get(id) ?? `#${id}` }));
         };
-        return { starts: await quests('creature_queststarter'), ends: await quests('creature_questender') };
+        return overlayNpcQuests({ starts: await quests('creature_queststarter'), ends: await quests('creature_questender') }, projectQuests(), entry);
       }),
     searchEntities: (kind, text) =>
       run(async () => {
@@ -92,7 +103,7 @@ export function createLookupApi(s: Services): LookupApi {
         const word = { creature: 'NPC', gameobject: 'object', item: 'item' }[kind];
         const mine = (kind === 'creature' ? npcs : kind === 'gameobject' ? objects : items)
           .filter((e) => e.name.toLowerCase().includes(needle) || String(e.entry) === needle)
-          .map((e) => ({ id: e.entry, name: e.name || `New ${word} ${e.entry}`, detail: 'new' }));
+          .map((e) => ({ id: e.entry, name: e.name || `New ${word} ${e.entry}`, detail: 'new', source: 'project' as const }));
         const ids = new Set(mine.map((h) => h.id));
         return [...mine, ...found.filter((h) => !ids.has(h.id))].slice(0, ENTITY_SEARCH_LIMIT);
       }),
