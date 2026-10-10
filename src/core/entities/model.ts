@@ -2,6 +2,7 @@ import { z } from 'zod';
 import type { FieldValue } from '../registry/types';
 import { fightSchema } from '../combat/model';
 import type { EntityOrigin } from './entity';
+import { npcSceneSchema } from '../scripts/npc-scenes';
 
 /**
  * New NPCs and objects a quest needs, and where they stand. Stored in the quest's values under
@@ -110,7 +111,7 @@ export const OBJECT_TYPE_VALUE = { questGiver: 2, chest: 3, generic: 5, text: 9,
 const keysOf = <T extends Record<string, number>>(o: T) => Object.keys(o) as [keyof T & string, ...(keyof T & string)[]];
 
 /** What of an existing entity the project may not change, because other things share it */
-export type EntityLock = 'type' | 'loot' | 'fight' | 'trainer';
+export type EntityLock = 'type' | 'loot' | 'fight' | 'trainer' | 'scenes';
 /** An existing entity's rows as the database had them, by table name */
 export type OriginalRows = Record<string, Record<string, string | null>[]>;
 
@@ -131,7 +132,9 @@ const originSchema = z.discriminatedUnion('kind', [
     // How many other creatures and objects use each menu of its gossip tree, and how many outside menus use each text (by id)
     sharedMenus: z.record(z.string(), int.min(0)).optional(),
     sharedTexts: z.record(z.string(), int.min(0)).optional(),
-    locked: z.array(z.enum(['type', 'loot', 'fight', 'trainer'])),
+    // How many of its SmartAI rows the database already runs (not ours); absent in projects saved before NPC scripts
+    databaseScripts: int.min(0).optional(),
+    locked: z.array(z.enum(['type', 'loot', 'fight', 'trainer', 'scenes'])),
   }),
 ]);
 const NEW_ORIGIN = { kind: 'new' } as const;
@@ -234,6 +237,8 @@ const npcFields = z.object({
   trainer: trainerSchema.nullable().default(null),
   // Added with NPC gossip; null has no menu (`gossip` is the Can be talked to flag). The default keeps NPCs saved before then as they were.
   gossipMenu: gossipTreeSchema.nullable().default(null),
+  // Added with NPC scripts: scenes this NPC owns, whatever the quest. The default keeps NPCs saved before then as they were.
+  scenes: z.array(npcSceneSchema).default([]),
 });
 
 /**
@@ -483,6 +488,7 @@ export function newNpc(entry: number): CustomNpc {
     vendor: [],
     trainer: null,
     gossipMenu: null,
+    scenes: [],
   };
 }
 

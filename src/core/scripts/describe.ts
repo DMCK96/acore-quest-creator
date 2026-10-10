@@ -1,4 +1,5 @@
 import type { QuestScene, SceneGate, SceneTrigger, StepBody } from './model';
+import type { NpcTrigger } from './npc-scenes';
 
 const QUEST_STATES = {
   inLog: 'is in the log',
@@ -22,8 +23,10 @@ export function describeGate(gate: SceneGate): string {
 }
 
 /** A scene's trigger in the words the editor and the row comments use. */
-export function describeTrigger(trigger: SceneTrigger): string {
+export function describeTrigger(trigger: SceneTrigger | NpcTrigger): string {
   switch (trigger.kind) {
+    case 'gossipPicked':
+      return `When a player picks option ${trigger.optionId} of menu ${trigger.menuId}`;
     case 'questAccepted':
       return 'When the quest is accepted';
     case 'questHandedIn':

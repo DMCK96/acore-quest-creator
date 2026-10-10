@@ -1,4 +1,5 @@
-import { describeScene } from './describe';
+import { describeScene, describeTrigger } from './describe';
+import { npcSceneSchema, type NpcScene } from './npc-scenes';
 import { sceneSchema, type QuestScene } from './model';
 
 /**
@@ -100,6 +101,37 @@ export function entityOf(comment: string | null | undefined): { kind: 'npc' | 'o
   return match ? { kind: match[1] as 'npc' | 'obj', entry: Number(match[2]), rest: match[3]!.trimEnd() } : null;
 }
 
+/** The tag on every row of one of an NPC's own scenes */
+export function entitySceneTag(entry: number, sceneId: string): string {
+  return `${entityTag('npc', entry)}${sceneId}`;
+}
+
+/** The scene an NPC-tagged row belongs to, or null for a row that is not this NPC's scene row */
+export function npcSceneIdOf(comment: string | null | undefined, entry: number): string | null {
+  const prefix = entityTag('npc', entry);
+  if (typeof comment !== 'string' || !comment.startsWith(prefix)) return null;
+  const id = comment.slice(prefix.length).split(':', 1)[0]!.trim();
+  return /^s\d+$/.test(id) ? id : null;
+}
+
+/** The trigger row's comment for an NPC's scene, with the whole scene as data after the marker */
+export function npcTriggerComment(entry: number, scene: NpcScene): string {
+  return `${entitySceneTag(entry, scene.id)}: ${describeTrigger(scene.trigger)}${DATA_MARKER}${JSON.stringify(scene)}`;
+}
+
+/** The NPC scene a trigger row carries, or null when the data is missing, damaged or a quest scene's */
+export function npcSceneFromComment(comment: string | null | undefined): NpcScene | null {
+  if (typeof comment !== 'string') return null;
+  const at = comment.lastIndexOf(DATA_MARKER);
+  if (at < 0) return null;
+  try {
+    const parsed = npcSceneSchema.safeParse(JSON.parse(comment.slice(at + DATA_MARKER.length)));
+    return parsed.success ? parsed.data : null;
+  } catch {
+    return null;
+  }
+}
+
 /** The spawn tags exports before version 4 wrote for an entity, one per quest, for cleaning up their rows */
 export function legacyEntityTags(kind: 'npc' | 'obj', entry: number, questIds: readonly number[]): string[] {
   return questIds.map((q) => `${questTagPrefix(q)}${kind}${entry}`);
@@ -109,10 +141,12 @@ export function legacyEntityTags(kind: 'npc' | 'obj', entry: number, questIds: r
  * The NPC a fight (`'fight'`) or patrol (`'patrol'`) row belongs to: by its NPC tag, or by the quest tag
  * exports before version 4 wrote. Null for any other row.
  */
-export function npcRowOwner(comment: string | null | undefined, kind: 'fight' | 'patrol'): number | null {
+export function npcRowOwner(comment: string | null | undefined, kind: 'fight' | 'patrol' | 'scene'): number | null {
   if (typeof comment !== 'string') return null;
   const tagged = entityOf(comment);
-  if (tagged && tagged.kind === 'npc' && new RegExp(`^${kind}(?::|$)`).test(tagged.rest)) return tagged.entry;
+  const own = kind === 'scene' ? /^s\d+(?::|$)/ : new RegExp(`^${kind}(?::|$)`);
+  if (tagged && tagged.kind === 'npc' && own.test(tagged.rest)) return tagged.entry;
+  if (kind === 'scene') return null;
   const legacy = new RegExp(`^AQC q\\d+ ${kind}(\\d+)(?::|$)`).exec(comment);
   return legacy ? Number(legacy[1]) : null;
 }

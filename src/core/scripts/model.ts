@@ -22,7 +22,7 @@ const ownerSchema = z.discriminatedUnion('kind', [
   z.object({ kind: z.literal('areatrigger'), id: int, area: areaSchema.optional() }),
 ]);
 
-const triggerSchema = z.discriminatedUnion('kind', [
+export const triggerSchema = z.discriminatedUnion('kind', [
   z.object({ kind: z.literal('questAccepted') }),
   z.object({ kind: z.literal('questHandedIn') }),
   z.object({ kind: z.literal('spellHit'), spellId: int }),
@@ -36,7 +36,7 @@ const triggerSchema = z.discriminatedUnion('kind', [
   z.object({ kind: z.literal('summoned') }),
 ]);
 
-const gateSchema = z.discriminatedUnion('kind', [
+export const gateSchema = z.discriminatedUnion('kind', [
   z.object({
     kind: z.literal('quest'),
     questId: int,
@@ -50,7 +50,7 @@ const gateSchema = z.discriminatedUnion('kind', [
 const wait = { waitMs: int.min(0) };
 const toggle = z.enum(['on', 'off', 'keep']);
 
-const stepSchema = z.discriminatedUnion('kind', [
+export const stepSchema = z.discriminatedUnion('kind', [
   z.object({ kind: z.literal('say'), text: z.string(), style: z.enum(['say', 'yell', 'emote']), ...wait }),
   z.object({ kind: z.literal('emote'), emote: int, ...wait }),
   z.object({ kind: z.literal('credit'), objective: z.union([z.literal(1), z.literal(2), z.literal(3), z.literal(4)]), group: z.boolean(), ...wait }),
