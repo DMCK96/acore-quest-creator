@@ -86,3 +86,20 @@ describe('the MCP server', () => {
     expect(((await api.historyList()) as any).value.steps.map((s: any) => s.label)).toEqual(['AI: big write']);
   });
 });
+
+const picture = defineTool({
+  name: 'picture', title: 'Picture', description: 'Returns an image.', input: {}, write: false,
+  run: async () => ({ ok: true, value: { width: 2, height: 1, data: 'QUJD' } }),
+  present: ({ data: _data, ...rest }: { data: string }) => rest,
+  image: (v: { data: string }) => ({ data: v.data, mimeType: 'image/png' }),
+});
+
+describe('an MCP tool that returns an image', () => {
+  it('answers the shown JSON first and the image second, and keeps the base64 out of the JSON', async () => {
+    const { client } = await mcpFixture([picture]);
+    const r: any = await client.callTool({ name: 'picture', arguments: {} });
+    expect(r.isError).toBeFalsy();
+    expect(JSON.parse(r.content[0].text)).toEqual({ width: 2, height: 1 });
+    expect(r.content[1]).toMatchObject({ type: 'image', data: 'QUJD', mimeType: 'image/png' });
+  });
+});

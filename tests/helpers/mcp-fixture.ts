@@ -29,6 +29,8 @@ export interface McpFixtureOptions {
   /** What the wiki answers; absent means nothing is reachable. */
   fetch?: (url: string) => { ok: boolean; status: number; text(): Promise<string> };
   flush?: () => Promise<void>;
+  /** A stand-in for Debug mode's controller; absent means the app has none. */
+  debug?: unknown;
 }
 
 /**
@@ -62,6 +64,7 @@ export async function mcpFixture(tools: readonly ToolDef[], opts: McpFixtureOpti
     session,
     projects,
     mcp: { wikiEnabled: () => opts.wiki ?? false } as never,
+    ...(opts.debug ? { debug: opts.debug as never } : {}),
     ...(opts.fetch ? { fetch: async (url: string) => opts.fetch!(url) } : {}),
   });
   const rec: any = await api.saveProfile({ name: 'w', role: 'world', host: 'h', port: 1, user: 'u', database: 'd', password: 'p' });

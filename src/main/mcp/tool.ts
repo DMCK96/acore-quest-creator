@@ -43,6 +43,11 @@ export interface ToolDef<S extends z.ZodRawShape = z.ZodRawShape> {
   run(args: z.infer<z.ZodObject<S>>, ctx: McpContext): Promise<Result<unknown>>;
   /** Shortens a successful value for the model; the write guard still sees the raw value. */
   present?(value: any): unknown;
+  /**
+   * A picture in a successful value (base64 data and its media type), or null for none. The server then
+   * answers the shown JSON first and the image second; the base64 belongs in the image, not in `present`'s text.
+   */
+  image?(value: any): { data: string; mimeType: string } | null;
 }
 
 /** Identity, so `run` gets its `args` typed from `input`. */

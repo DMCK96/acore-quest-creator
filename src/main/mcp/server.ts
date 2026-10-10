@@ -40,6 +40,8 @@ export function createMcpServer(
       if (length > MAX_ANSWER_CHARS) {
         return failure({ code: 'BAD_REQUEST', message: `The answer is too large to send (${length} characters). Narrow the request: a smaller area, fewer ids or a shorter list.` });
       }
+      const picture = tool.image?.(result.value) ?? null;
+      if (picture) return { content: [...answer.content, { type: 'image' as const, data: picture.data, mimeType: picture.mimeType }], isError: false };
       return answer;
     });
   }
