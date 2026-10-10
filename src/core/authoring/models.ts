@@ -2,6 +2,7 @@ import { z } from 'zod';
 import { fightSchema } from '../combat/model';
 import { gossipTreeSchema, lootSchema, patrolSchema, projectEntitiesSchema } from '../entities/model';
 import { sceneSchema } from '../scripts/model';
+import { NPC_SCENE_LIMIT, npcSceneSchema } from '../scripts/npc-scenes';
 
 /**
  * The things an assistant can author in the editor's own author-level terms. Each has a zod schema
@@ -9,7 +10,7 @@ import { sceneSchema } from '../scripts/model';
  * so a kind added to a model later shows up here with no further work.
  */
 
-export const AUTHORING_MODELS = ['scene', 'fight', 'patrol', 'loot', 'npc', 'object', 'item', 'gossip'] as const;
+export const AUTHORING_MODELS = ['scene', 'fight', 'patrol', 'loot', 'npc', 'object', 'item', 'gossip', 'npc-scripts'] as const;
 export type AuthoringModel = (typeof AUTHORING_MODELS)[number];
 
 const SUMMARIES: Record<AuthoringModel, string> = {
@@ -21,6 +22,7 @@ const SUMMARIES: Record<AuthoringModel, string> = {
   object: 'A new object for the project: a chest, book, door or other thing in the world.',
   item: 'A new item for the project: its quality, level, stats, spells and text.',
   gossip: 'An NPC gossip menu tree: what it says when talked to, and options that close, open another menu or open a service window.',
+  'npc-scripts': 'The scenes an NPC owns: when something happens to it, and only when some conditions hold, do these steps in order, with or without a quest.',
 };
 
 /** A patrol as the assistant writes it: the editor chooses the path id, so it is optional here. */
@@ -45,6 +47,8 @@ export function authoringSchema(model: AuthoringModel): z.ZodType {
       return projectEntitiesSchema.shape.items.element;
     case 'gossip':
       return gossipTreeSchema;
+    case 'npc-scripts':
+      return z.array(npcSceneSchema).max(NPC_SCENE_LIMIT);
   }
 }
 

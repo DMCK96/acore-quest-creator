@@ -62,9 +62,9 @@ const idOf = (entry: unknown): unknown => (entry as { id?: unknown } | null)?.id
 const sceneTools = [
   defineTool({
     name: 'describe_authoring',
-    title: 'How to write a scene, fight, patrol, loot table, NPC, object, item or gossip menu',
+    title: 'How to write a scene, fight, patrol, loot table, NPC, object, item, gossip menu or NPC scripts',
     description:
-      'Call this before writing a model. For one of scene, fight, patrol, loot, npc, object, item or gossip it returns the model\'s JSON Schema, a plain-language guide (what each trigger, step, reaction, field and kind means and when to use it, common mistakes, what the editor checks) and worked examples with their readings. Scenes are written with set_scene; fights, patrols and loot with set_npc_fight, set_npc_patrol and set_loot; new NPCs, objects and items start with new_entity.',
+      'Call this before writing a model. For one of scene, fight, patrol, loot, npc, object, item, gossip or npc-scripts it returns the model\'s JSON Schema, a plain-language guide (what each trigger, step, reaction, field and kind means and when to use it, common mistakes, what the editor checks) and worked examples with their readings. Scenes are written with set_scene; fights, patrols and loot with set_npc_fight, set_npc_patrol and set_loot; new NPCs, objects and items start with new_entity; the scenes an NPC owns (npc-scripts) are its `scenes`, written with upsert_entity.',
     input: { model: z.enum(AUTHORING_MODELS) },
     write: false,
     run: async ({ model }) => ({ ok: true, value: describeAuthoring(model) }),

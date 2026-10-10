@@ -23,7 +23,7 @@ describe('the guides', () => {
     const guide = guideOf(model);
     const named = new Set([...guide.matchAll(/`([^`]+)`/g)].map((m) => m[1]!));
     // An NPC embeds a fight, patrols and scenes, whose choices their own guides explain
-    const embedded = new Set(['npc', 'object', 'item'].includes(model) ? [...choicesIn(jsonSchemaOf('fight')), ...choicesIn(jsonSchemaOf('patrol')), ...choicesIn(jsonSchemaOf('scene')), 'gossipPicked'] : []);
+    const embedded = new Set(['npc', 'object', 'item'].includes(model) ? [...choicesIn(jsonSchemaOf('fight')), ...choicesIn(jsonSchemaOf('patrol')), ...choicesIn(jsonSchemaOf('npc-scripts'))] : []);
     const missing = choicesIn(jsonSchemaOf(model)).filter((choice) => !embedded.has(choice) && !named.has(choice));
     expect(missing).toEqual([]);
   });
@@ -48,19 +48,19 @@ describe('the guides', () => {
 });
 
 describe('the guides tell the truth about the editor', () => {
-  const sources = ['src/core/scripts/validate.ts', 'src/core/combat/validate.ts', 'src/core/entities/validate.ts', 'src/core/patrol/compile.ts']
+  const sources = ['src/core/scripts/validate.ts', 'src/core/combat/validate.ts', 'src/core/entities/validate.ts', 'src/core/patrol/compile.ts', 'src/core/scripts/npc-validate.ts']
     .map((path) => readFileSync(path, 'utf8'))
     .join('\n');
 
   it('cite only issue codes the editor really has', () => {
     for (const model of AUTHORING_MODELS) {
-      const cited = [...guideOf(model).matchAll(/`((?:SCENE|FIGHT|ENTITY|ITEM|LOOT|PATROL|VENDOR|TRAINER|GOSSIP)_[A-Z_]+)`/g)].map((m) => m[1]!);
+      const cited = [...guideOf(model).matchAll(/`((?:NPC_SCENE|SCENE|FIGHT|ENTITY|ITEM|LOOT|PATROL|VENDOR|TRAINER|GOSSIP)_[A-Z_]+)`/g)].map((m) => m[1]!);
       for (const code of cited) expect(sources.includes(`'${code}'`), `${model} guide cites ${code}`).toBe(true);
     }
   });
 
   it('cite enough codes that a reader can match what the editor reports', () => {
-    const count = (model: Parameters<typeof guideOf>[0]) => new Set([...guideOf(model).matchAll(/`(?:SCENE|FIGHT|ENTITY|ITEM|LOOT|PATROL|VENDOR|TRAINER|GOSSIP)_[A-Z_]+`/g)].map((m) => m[0])).size;
+    const count = (model: Parameters<typeof guideOf>[0]) => new Set([...guideOf(model).matchAll(/`(?:NPC_SCENE|SCENE|FIGHT|ENTITY|ITEM|LOOT|PATROL|VENDOR|TRAINER|GOSSIP)_[A-Z_]+`/g)].map((m) => m[0])).size;
     expect(count('scene')).toBeGreaterThanOrEqual(4);
     expect(count('fight')).toBeGreaterThanOrEqual(4);
     expect(count('npc')).toBeGreaterThanOrEqual(3);
@@ -131,5 +131,17 @@ describe('the guides tell the truth about the editor', () => {
 
   it('say the patrol path id is chosen by the editor', () => {
     expect(guideOf('patrol')).toMatch(/pathId.*(chosen|allocat)/s);
+  });
+
+  it('npc-scripts guide covers the shape, the quest rules, gossipPicked, locking and that database scripts are never edited', async () => {
+    const { examplesOf } = await import('../../src/core/authoring/examples');
+    const guide = guideOf('npc-scripts');
+    const words = ['`gossipPicked`', '`questId`', 'locked', '`smart_scripts`', 'never edited', '`scenes`', 'AQC npc<entry> s<n>', '`NPC_SCENE_QUEST_NEEDED`', '`NPC_SCENE_OPTION_GONE`',
+      '`NPC_SCENE_OPTION_LOCKED`', '`NPC_SCENE_ESCORT`', '`NPC_SCENE_ID_DUPLICATE`', '`NPC_SCENE_LIMIT`', '`NPC_SCENES_LOCKED`', '`NPC_SCENE_QUEST_UNKNOWN`', '`NPC_SCENE_NO_STEPS`'];
+    for (const word of words) expect(guide).toContain(word);
+    expect(guideOf('npc')).toContain('`npc-scripts`');
+    expect(jsonSchemaOf('npc')).toHaveProperty('properties.scenes');
+    expect(authoringSummary('npc-scripts')).toMatch(/scenes/i);
+    expect(examplesOf('npc-scripts')[0]!.reading).toMatch(/handed in/);
   });
 });

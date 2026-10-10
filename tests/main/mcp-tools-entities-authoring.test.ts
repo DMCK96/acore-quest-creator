@@ -218,3 +218,25 @@ describe('new_entity fields', () => {
     expect(description).toMatch(/existing/);
   });
 });
+
+describe('the scenes of an NPC', () => {
+  const scene = { id: 's1', name: 'Greets', questId: 0, trigger: { kind: 'talkedTo' }, gates: [], steps: [{ kind: 'say', text: 'Hi', style: 'say', waitMs: 0 }] };
+
+  it('stores scenes sent with upsert_entity and hands them back', async () => {
+    const { call, entry } = await withNpc();
+    const entity = (await call('list_project_entities')).value.npcs[0];
+    const out = await call('upsert_entity', { kind: 'npc', entity: { ...entity, scenes: [scene] } });
+    expect(out.isError).toBe(false);
+    expect((await call('list_project_entities')).value.npcs.find((n: any) => n.entry === entry).scenes).toEqual([scene]);
+  });
+
+  it('refuses a scene with an invalid trigger, changing nothing', async () => {
+    const { call, api } = await withNpc();
+    const entity = (await call('list_project_entities')).value.npcs[0];
+    const before = (await labels(api)).length;
+    const out = await call('upsert_entity', { kind: 'npc', entity: { ...entity, scenes: [{ ...scene, trigger: { kind: 'bogus' } }] } });
+    expect(out.isError).toBe(true);
+    expect((await labels(api)).length).toBe(before);
+    expect((await call('list_project_entities')).value.npcs[0].scenes).toEqual([]);
+  });
+});

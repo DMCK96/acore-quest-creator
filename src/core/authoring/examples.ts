@@ -129,6 +129,22 @@ function gossipExample(): AuthoringExample {
   return { title: 'A shopkeeper who talks about the place', value, reading: 'Greets with one line. Offers a vendor window, or a second menu about the place that ends with a thank-you that closes the window.' };
 }
 
+function npcScriptsExample(): AuthoringExample {
+  const value = [
+    { id: 's1', name: 'Greets', questId: 0, trigger: { kind: 'talkedTo' as const }, gates: [], steps: [{ kind: 'say' as const, text: 'Well met, $N.', style: 'say' as const, waitMs: 0 }, { kind: 'emote' as const, emote: 1, waitMs: 1000 }] },
+    {
+      id: 's2', name: 'Thanks the hero', questId: 90001, trigger: { kind: 'questHandedIn' as const },
+      gates: [{ kind: 'team' as const, team: 'alliance' as const }],
+      steps: [{ kind: 'say' as const, text: 'You have my thanks.', style: 'yell' as const, waitMs: 0 }, { kind: 'castOnPlayer' as const, spellId: 1126, waitMs: 0 }],
+    },
+  ];
+  return {
+    title: 'An NPC that greets, and thanks an Alliance hero for a quest',
+    value,
+    reading: 'When a player talks to it, it says "Well met" and, a second later, waves. When quest 90001 is handed in to it by an Alliance player, it yells a thanks and casts spell 1126 on them.',
+  };
+}
+
 function objectExample(): AuthoringExample {
   const value = { ...newObject(90002), name: "Rellick's Strongbox", type: 'chest' as const, displayId: 259, spawns: [{ ...newSpawn(90200), x: -9462, y: 32, z: 200 }] };
   return { title: 'A chest with one spawn', value, reading: "Rellick's Strongbox, a chest standing at one spawn." };
@@ -178,5 +194,7 @@ export function examplesOf(model: AuthoringModel): AuthoringExample[] {
       return [itemExample()];
     case 'gossip':
       return [gossipExample()];
+    case 'npc-scripts':
+      return [npcScriptsExample()];
   }
 }

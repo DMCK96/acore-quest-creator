@@ -4,8 +4,8 @@ import { emptyFight } from '../../src/core/combat/model';
 import { newItem, newNpc, newObject } from '../../src/core/entities/model';
 
 describe('the authoring models', () => {
-  it('are the eight the assistant can author', () => {
-    expect(AUTHORING_MODELS).toEqual(['scene', 'fight', 'patrol', 'loot', 'npc', 'object', 'item', 'gossip']);
+  it('are the nine the assistant can author', () => {
+    expect(AUTHORING_MODELS).toEqual(['scene', 'fight', 'patrol', 'loot', 'npc', 'object', 'item', 'gossip', 'npc-scripts']);
   });
 
   it.each(AUTHORING_MODELS)('%s has a one-sentence summary and a JSON Schema that is not huge', (model) => {
@@ -53,5 +53,13 @@ describe('the authoring models', () => {
     expect(authoringSchema('patrol').safeParse(noPath).success).toBe(true);
     const required = (jsonSchemaOf('patrol') as { required?: string[] }).required ?? [];
     expect(required).not.toContain('pathId');
+  });
+
+  it('npc-scripts is a list of at most 32 scenes, each with a quest id of 0 or more', () => {
+    const scene = { id: 's1', name: '', questId: 0, trigger: { kind: 'talkedTo' }, gates: [], steps: [] };
+    const schema = authoringSchema('npc-scripts');
+    expect(schema.safeParse([scene]).success).toBe(true);
+    expect(schema.safeParse([{ ...scene, questId: -1 }]).success).toBe(false);
+    expect(schema.safeParse(Array.from({ length: 33 }, () => scene)).success).toBe(false);
   });
 });
