@@ -17,9 +17,10 @@ import { centreOf, movedBy, turnedAbout, turnQuaternion } from './scene/edit/gro
  * Undo is the project's: an undo hands the view a new layer, and `layerChanged` follows it.
  */
 
-/** How far above the drawn ground a thing must stand for a ground move to leave its height alone */
+/** How far above the drawn ground a thing lifted on the Z arrow must stand to count as held there */
 const RAISED = 0.5;
-export const NOT_SNAPPED ='The height is from the drawn ground, not the server.';
+const raisedKey = (kind: 'creature' | 'object', guid: number): string => `${kind}:${guid}`;
+export const NOT_SNAPPED = 'The height is from the drawn ground, not the server.';
 export const TOO_SHORT = 'A route keeps at least two points.';
 export const PICK_POINT_FIRST = 'Pick a point of the route first, or click on one of its legs.';
 export const TOO_FEW_POINTS = 'A path needs at least two points';
@@ -114,6 +115,8 @@ export class Editor {
   #falloff: Falloff = { on: false, radius: FALLOFF_DEFAULT };
   #mode: GizmoMode = 'move';
   #drag: Drag | null = null;
+  /** NPCs and objects lifted off the ground on the Z arrow in this session: a move along the ground keeps their height */
+  #raised = new Set<string>();
   #drawing: Drawing | null = null;
   /** An AI client is writing: nothing can be edited, but the view still moves */
   #locked = false;
@@ -512,6 +515,7 @@ export class Editor {
       return [{ guid, before, current: before, picked: pickedOf(this.#selection, guid) }];
     });
     const centre = this.#attached?.at.clone() ?? new THREE.Vector3();
+    this.#gizmo.keepHeight = spawns.some((s) => this.#raised.has(raisedKey(s.kind, s.guid)));
     this.#drag = { spawns, routes, centre, weights: this.#weights(routes), last: null };
   }
 
@@ -521,19 +525,20 @@ export class Editor {
     if (!drag) return;
     drag.last = change;
     const turning = this.#mode === 'rotate' && this.#attached?.turns !== 'none';
-    // A move along the ground keeps the height above the ground the thing had when the drag began
-    const onGround = (p: At, start: At): At => {
+    // A move along the ground follows the ground; a thing the user lifted on the Z arrow keeps its height above it
+    const onGround = (p: At, start: At, keepHeight: boolean): At => {
       if (turning || change.axis === 'Z') return p;
-      const clearance = Math.max(0, start.z - (this.#gizmo.groundAt(start.x, start.y, start.z) ?? start.z));
+      const clearance = keepHeight ? Math.max(0, start.z - (this.#gizmo.groundAt(start.x, start.y, start.z) ?? start.z)) : 0;
       const ground = this.#gizmo.groundAt(p.x, p.y, p.z - clearance);
       return { ...p, z: ground === null ? p.z : ground + clearance };
     };
-    const moved = (start: At, weight: number): At => (turning ? turnedAbout(start, drag.centre, change.angle) : onGround(movedBy(start, change.delta, weight), start));
+    const moved = (start: At, weight: number, keepHeight = false): At =>
+      turning ? turnedAbout(start, drag.centre, change.angle) : onGround(movedBy(start, change.delta, weight), start, keepHeight);
 
     for (const spawn of drag.spawns) {
       const object = this.#world.findSpawn(spawn.kind, spawn.guid);
       if (!object) continue;
-      const to = moved(spawn.start, 1);
+      const to = moved(spawn.start, 1, this.#raised.has(raisedKey(spawn.kind, spawn.guid)));
       object.position.set(to.x, to.y, to.z);
       if (turning) {
         const q = this.#attached?.turns === 'all' ? change.quaternion : new THREE.Quaternion(...turnQuaternion(spawn.quaternion.toArray() as [number, number, number, number], change.angle));
@@ -572,6 +577,15 @@ export class Editor {
         return object ? [{ ...s, object }] : [];
       });
       const routes = drag.routes.map((r) => ({ ...r, changed: r.current.flatMap((p, i) => (p === r.before[i] ? [] : [i])) }));
+      // A lift on the Z arrow is remembered, so later moves along the ground do not drop the thing back down
+      if (moving && lifted) {
+        for (const s of spawns) {
+          const { x, y, z } = s.object.position;
+          const key = raisedKey(s.kind, s.guid);
+          if (z - (this.#gizmo.groundAt(x, y, z) ?? z) > RAISED) this.#raised.add(key);
+          else this.#raised.delete(key);
+        }
+      }
       // Drawn where they were dragged from now on, while the server's floor and any question are awaited,
       // so the gizmo stays with them and a quick second drag starts from there
       for (const r of routes) if (r.changed.length > 0) this.#pend(r.guid, r.current);
@@ -582,8 +596,8 @@ export class Editor {
         const asks = [
           ...spawns.map(async (s) => {
             if (this.#world.aboard?.(s.kind, s.guid)) return true;
-            // One held above the ground when the drag began keeps that height
-            if (s.start.z - (this.#gizmo.groundAt(s.start.x, s.start.y, s.start.z) ?? s.start.z) > RAISED) return true;
+            // One the user lifted keeps its height rather than dropping to the floor
+            if (this.#raised.has(raisedKey(s.kind, s.guid))) return true;
             const floor = await floorZ(s.object.position.x, s.object.position.y, s.object.position.z);
             if (floor !== null) s.object.position.z = floor;
             return floor !== null;

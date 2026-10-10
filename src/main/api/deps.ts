@@ -6,12 +6,15 @@ import type { ServerDataFiles } from '../server-data';
 import type { ProjectSession } from '../project/session';
 import type { ProjectController } from '../project/controller';
 import type { McpController } from '../mcp/controller';
+import type { DebugController } from '../debug/controller';
 import type { WikiFetch } from '../../core/lore/wiki';
 
 /** Every side effect the API has, given to it so tests can run the real thing against fakes */
 export interface ApiDeps {
   /** The MCP server's controller; absent where the app does not run one (tests). */
   mcp?: McpController;
+  /** Debug mode's controller; absent where the app does not run one (tests). */
+  debug?: DebugController;
   /** Reaches the internet, for wiki lookups; absent where the app has none (tests). */
   fetch?: WikiFetch;
   store: Store;

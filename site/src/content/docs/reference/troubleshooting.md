@@ -40,6 +40,14 @@ Some changes only load after a server restart: new spawns, new or changed patrol
 
 An AI assistant connected through [MCP / AI](/azeroth-world-editor/guides/ai-mcp/) is writing to the project. Editing pauses until it finishes, usually under a second, and what you typed is kept. If it stays greyed out, turn off **MCP / AI** in Settings.
 
+## Text fields ignore the keyboard
+
+An outline shows on the field but nothing you type appears. Turn on **Debug mode** (**Settings**, **Preferences**, **Diagnostics**), keep working until it happens, then ask a connected [AI assistant](/azeroth-world-editor/guides/ai-mcp/#debug-mode-and-the-screenshot-tool) to read the timeline and the window's focus. It tells keys that never reached the window from keys the page received and something consumed.
+
+## The 3D view is slow in one place
+
+Turn on **Debug mode**, stand in the slow place for a few seconds, then in a place that runs well, and ask a connected [AI assistant](/azeroth-world-editor/guides/ai-mcp/#debug-mode-and-the-screenshot-tool) to compare the `perf` events: draw calls and triangles show whether too much is drawn, and the update and render times show where the frame goes.
+
 ## Installing
 
 - **Windows says "Windows protected your PC"**: choose **More info**, then **Run anyway**.

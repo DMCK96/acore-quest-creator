@@ -92,6 +92,41 @@ The pause only shows if the write takes longer than a moment.
 
 Every change the assistant makes is one step in **History**, named **AI: …** (for example *AI: edit quest 60001*). The open quest, the quest graph and the World update as it works. Undo with **Ctrl+Z** or from History, like any other change. See [Undo and redo](/azeroth-world-editor/guides/undo/).
 
+## Debug mode and the screenshot tool
+
+For tracking down a fault that only shows in the live window, such as text fields that stop taking the keyboard, or a view that runs slowly in one place, the app has a **Debug mode**. It is off by default, and only you can switch it on: **Settings**, **Preferences**, **Diagnostics**, **Debug mode**. An assistant cannot turn it on.
+
+While it is on, the app keeps a timeline of what both the window and the main process see, in memory and in a log file (`logs` in the app's data folder, the newest five kept, each stopping at 20 MB). It records key **codes** and focus changes, window and dialog events, errors, crashes and hangs, and once a second the 3D view's frame rate, draw time and draw calls. It **never** records the characters you type or what is in a field, and a password field is only ever called `[password]`. Nothing leaves your computer.
+
+Five tools use it:
+
+| Tool | Needs Debug mode | What it gives the assistant |
+|---|---|---|
+| `debug_status` | No | Whether it is on, how many events are held, the log file, and the window's focus state now. |
+| `debug_events` | Empty when off | The timeline, filtered by time, category (`input`, `focus`, `window`, `dialog`, `health`, `error`, `probe`, `perf`) and count. |
+| `debug_snapshot` | Yes | Where keyboard focus is right now, whether that field can take text, anything inert, hidden or covering it, and the open dialogs. |
+| `debug_type` | Yes | Types a few characters into whatever has focus and reports whether the field changed, with the events that produced. |
+| `screenshot` | No | A picture of the window, optionally cropped to an element or a rectangle. |
+
+`screenshot` works with Debug mode off, so an assistant can look at the result of a change.
+
+### Example: the keyboard stopped working
+
+Switch Debug mode on and carry on until the fault shows. Then ask the assistant to look. It reads `debug_events` for `orphan-key` and `before-input`, runs `debug_snapshot`, tries `debug_type`, and takes a `screenshot`. How to read what it finds:
+
+- The main process saw the keys (`before-input`) but the page did not (no `keydown`): the window lost the keyboard to the system or another window.
+- The page saw the keys and recorded an `orphan-key` with `defaultPrevented: true`: something on the page cancelled them.
+- The snapshot lists a `blockedBy` or `coveredBy` entry: something disables the field or sits over it.
+- `debug_type` changes the field: the field itself accepts text, so the question is why your own keys were not reaching it.
+
+### Example: it is slow in one place
+
+With Debug mode on, stand in the slow place in the 3D view for a few seconds, then somewhere that runs well, and ask the assistant to compare the `perf` events from `debug_events`. Each holds `fps`, `updateMs` (everything before drawing), `renderMs` (drawing), `calls`, `triangles`, `geometries`, `textures`, `programs` and where the camera was:
+
+- Many `calls` or `triangles` there: too much is being drawn at once.
+- A high `renderMs` with few calls: the drawing itself is costly, for example lights, fog or overdraw.
+- A high `updateMs`: the per-frame work before drawing is the cost.
+
 ## Things to try
 
 - *"Build a quest chain in Elwynn Forest for level 10, and make it lore accurate."*

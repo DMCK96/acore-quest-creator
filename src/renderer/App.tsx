@@ -6,6 +6,7 @@ import { NamesProvider, localNamesOf } from './state/names';
 import { RewardTablesProvider } from './state/reward-tables';
 import { HistoryProvider } from './state/history-context';
 import { searchingFresh } from './state/project-entities';
+import { startDebugBridge } from './debug/bridge';
 import './App.css';
 
 const inApp = (screen: AppState['screen']): boolean => screen === 'pick' || screen === 'preview' || screen === 'edit';
@@ -44,6 +45,8 @@ export function App(): React.JSX.Element {
     // What an AI client changed through MCP appears as an undo would: the open quest, the canvas, the world
     window.appEvents?.onHoldEdits?.((held) => store.getState().holdEdits(held));
     window.appEvents?.onExternalChange?.((change) => void store.getState().applyExternalChange(change));
+    // Debug mode: the window's recorders, while the Preferences switch is on, and answers to the probes
+    return startDebugBridge({ api: window.api, events: window.appEvents ?? {}, win: window });
   }, [store]);
 
   // Both stay in the same slots, so the login screen is not remounted when the canvas appears.

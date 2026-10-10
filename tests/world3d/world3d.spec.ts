@@ -60,6 +60,7 @@ interface PageState {
   falloffs: { on: boolean; radius: number }[];
   contexts: any[];
   drawings: any[];
+  perf: { category: string; name: string; data: Record<string, number> }[];
 }
 const state = async (page: Page): Promise<PageState> => (await page.evaluate('window.__state')) as PageState;
 const open = (page: Page, directory: string, map: number): Promise<unknown> =>
@@ -683,4 +684,23 @@ test('a right-click on a selected NPC, under its gizmo, still asks for the menu'
   await page.mouse.click(middle.x, middle.y, { button: 'right' });
   await expect.poll(async () => (await state(page)).contexts.length).toBe(1);
   expect((await state(page)).contexts[0].target.selection.map((s: any) => s.guid)).toEqual([9]);
+});
+
+test('Debug mode frame stats: the real tick reports a perf/frame event about every second while sampling is on, and nothing once it is off', async ({ page }) => {
+  await openPage(page);
+  await page.evaluate('window.__perf(true)');
+  await open(page, 'azeroth', 0);
+  await page.waitForFunction('window.__state.ready', null, { timeout: 45000 });
+  await expect.poll(async () => (await state(page)).perf.length, { timeout: 20000 }).toBeGreaterThan(0);
+  const [event] = (await state(page)).perf;
+  expect(event).toMatchObject({ category: 'perf', name: 'frame' });
+  expect(event!.data.fps).toBeGreaterThan(0);
+  expect(event!.data.renderMs).toBeGreaterThanOrEqual(0);
+  expect(event!.data.updateMs).toBeGreaterThanOrEqual(0);
+  expect(event!.data.calls).toBeGreaterThan(0);
+  expect(event!.data.triangles).toBeGreaterThan(0);
+  // Switched off, the tick stops sampling at once
+  await page.evaluate('window.__perf(false)');
+  await page.waitForTimeout(2500);
+  expect((await state(page)).perf).toEqual([]);
 });

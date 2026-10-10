@@ -57,6 +57,10 @@ const MAX_RECOVERY_ID = 100;
 const positionSchema = z.object({ x: z.number(), y: z.number() });
 const viewportSchema = z.object({ x: z.number(), y: z.number(), zoom: z.number().positive() });
 const finite = z.number().finite();
+/** Debug mode: a whole coordinate or size on screen, and a string in an answer from the page */
+const debugCoord = z.number().int().min(0).max(20000);
+const debugSize = z.number().int().min(1).max(20000);
+const debugText = z.string().max(500);
 const worldKindArg = z.enum(['creature', 'gameobject']);
 const movementArg = z.object({ type: z.enum(['idle', 'wander', 'path']), wander: z.number().min(0), pathId: z.number().int().min(1).nullable() });
 const stepPlaceArg = z.union([
@@ -248,6 +252,40 @@ const REQUEST_SCHEMAS: Record<keyof Api, z.ZodType<unknown[]>> = {
   wikiSearch: z.tuple([z.string().min(1).max(200), z.number().int().min(1).max(10).optional()]),
   wikiPage: z.tuple([z.string().min(1).max(200), z.string().min(1).max(200).optional()]),
   projectIssues: z.tuple([]),
+  debugStatus: z.tuple([]),
+  debugSetEnabled: z.tuple([z.boolean()]),
+  debugEvents: z.tuple([z.object({ since: finite.optional(), categories: z.array(z.string().max(40)).max(20).optional(), limit: z.number().int().min(1).max(1000).optional() }).optional()]),
+  debugSnapshot: z.tuple([]),
+  debugType: z.tuple([z.string().min(1).max(200)]),
+  captureScreenshot: z.tuple([
+    z
+      .object({
+        selector: z.string().max(300).optional(),
+        rect: z.object({ x: debugCoord, y: debugCoord, width: debugSize, height: debugSize }).optional(),
+        maxWidth: z.number().int().min(1).max(1600).optional(),
+      })
+      .optional(),
+  ]),
+  debugRecord: z.tuple([
+    z.array(z.object({ at: finite, category: z.string().max(40), name: z.string().max(60), data: z.record(z.string(), z.unknown()).optional() })).max(500),
+  ]),
+  debugAnswer: z.tuple([
+    z.number().int(),
+    z.union([
+      z.object({
+        focus: z.object({
+          documentHasFocus: z.boolean(),
+          active: debugText.nullable(),
+          activeState: z.object({ editable: z.boolean(), disabled: z.boolean(), readOnly: z.boolean() }).nullable(),
+          blockedBy: z.array(debugText).max(50),
+          modals: z.array(debugText).max(50),
+          coveredBy: debugText.nullable(),
+        }),
+        field: z.object({ target: debugText, value: debugText }).nullable(),
+      }),
+      z.object({ rect: z.object({ x: finite, y: finite, width: finite, height: finite }).nullable() }),
+    ]),
+  ]),
 };
 
 /**
