@@ -69,6 +69,8 @@ export interface EditingOptions {
   onFalloff?(falloff: Falloff): void;
   /** Told when the gizmo changed between move and rotate (buttons or the G and R keys) */
   onMode?(mode: GizmoMode): void;
+  /** Asked to delete the selected NPCs and objects: Delete with spawns selected and no route points picked */
+  onDeleteSpawns?(): void;
   /** Told when a new path starts or stops being drawn, and how many points it has */
   onDrawing?(drawing: { guid: number; points: number } | null): void;
 }
@@ -393,7 +395,9 @@ export class Editor {
         this.setMode('rotate');
         return true;
       case 'Delete':
-        this.#deletePoints();
+        // Picked route points are deleted first; with none picked, the selected spawns are
+        if (this.#selection.points.length === 0 && this.#selection.spawns.length > 0) this.#options.onDeleteSpawns?.();
+        else this.#deletePoints();
         return true;
       case 'KeyO':
         this.#setFalloff({ ...this.#falloff, on: !this.#falloff.on });

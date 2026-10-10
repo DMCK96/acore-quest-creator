@@ -98,7 +98,9 @@ function setup(opts: { routes?: Record<number, Route>; floor?: number | null; ab
   const selections: Selection[] = [];
   const falloffs: Falloff[] = [];
   const floorZ = vi.fn(async () => (opts.floor === undefined ? 1 : opts.floor));
+  const deletes = vi.fn();
   const editor = new Editor(world, {
+    onDeleteSpawns: deletes,
     onGesture: (g) => {
       gestures.push(g);
       edits.push(...g);
@@ -122,12 +124,37 @@ function setup(opts: { routes?: Record<number, Route>; floor?: number | null; ab
   };
   const pendingMovement = (guid: number) => movements.filter(([g]) => g === guid).at(-1)?.[1];
   const pendingRoute = (guid: number) => pending.filter(([g]) => g === guid).at(-1)?.[1];
-  return { editor, world, edits, gestures, pendingMovement, pendingRoute, notices, asked, selections, falloffs, floorZ, gizmo, npc, drop, drag, change, pending, previews, homes, movements, setGround: (v: THREE.Vector3 | null) => { groundAt = v; } };
+  return { editor, world, deletes, edits, gestures, pendingMovement, pendingRoute, notices, asked, selections, falloffs, floorZ, gizmo, npc, drop, drag, change, pending, previews, homes, movements, setGround: (v: THREE.Vector3 | null) => { groundAt = v; } };
 }
 
 const placed = (edits: SpawnEdit[]) => edits.map((e) => (e.kind === 'place' ? [e.spawn.guid, e.to.x, e.to.y, e.to.z] : null));
 
 describe('moving and turning a selection in the 3D view', () => {
+  it('Delete with spawns selected asks the host to delete them, and edits no route points', () => {
+    const t = setup({ routes: { 1: line(50, [0, 10, 20]) } });
+    t.npc(1, 0, 0);
+    t.npc(2, 10, 0);
+    t.editor.setSelection(sel({ spawns: [{ kind: 'creature', guid: 1 }, { kind: 'creature', guid: 2 }] }));
+    expect(t.editor.keyDown(key('Delete'))).toBe(true);
+    expect(t.deletes).toHaveBeenCalledTimes(1);
+    expect(t.edits).toEqual([]);
+  });
+
+  it('Delete with route points picked deletes the points, not the spawns, even when spawns are selected too', async () => {
+    const t = setup({ routes: { 7: line(50, [0, 10, 20, 30]) } });
+    t.npc(7, -5, 0);
+    t.editor.setSelection(sel({ spawns: [{ kind: 'creature', guid: 7 }], points: [{ guid: 7, index: 1 }], routes: [7] }));
+    expect(t.editor.keyDown(key('Delete'))).toBe(true);
+    await vi.waitFor(() => expect(t.edits).toHaveLength(1));
+    expect(t.deletes).not.toHaveBeenCalled();
+  });
+
+  it('Delete with nothing selected deletes nothing, and the key is still used', () => {
+    const t = setup();
+    expect(t.editor.keyDown(key('Delete'))).toBe(true);
+    expect(t.deletes).not.toHaveBeenCalled();
+  });
+
   it('moves every selected spawn by the drag, drops each on the server floor, as one gesture', async () => {
     const t = setup({ floor: 1 });
     t.npc(1, 0, 0);

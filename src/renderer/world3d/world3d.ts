@@ -488,6 +488,7 @@ export function createWorld3D(options: World3DOptions): World3D {
       onSelection: (next) => setSelection(next, false),
       onFalloff: (next) => options.onFalloff?.(next),
       onMode: (mode) => options.onMode?.(mode),
+      onDeleteSpawns: () => options.onDeleteSpawns?.(),
       onDrawing: (drawing) => options.onDrawing?.(drawing),
     },
   );

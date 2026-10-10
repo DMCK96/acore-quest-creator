@@ -54,9 +54,10 @@ function editorSetup() {
     setPendingRoute: () => {}, previewRoute: () => {}, previewHome: () => {}, setPendingMovement: () => {}, spawnMovement: () => null,
   };
   const gestures: unknown[] = [];
-  const editor = new Editor(world, { onGesture: (g) => gestures.push(g), floorZ: async () => 1 });
+  const deletes = vi.fn();
+  const editor = new Editor(world, { onGesture: (g) => gestures.push(g), floorZ: async () => 1, onDeleteSpawns: deletes });
   editor.setSelection({ ...EMPTY_SELECTION, spawns: [{ kind: 'creature', guid: 1 }], routes: [1], points: [{ guid: 1, index: 0 }] });
-  return { editor, gestures, gizmo: gizmos.at(-1), npc };
+  return { editor, gestures, deletes, gizmo: gizmos.at(-1), npc };
 }
 
 describe('the 3D editor while an AI client is writing', () => {
@@ -72,6 +73,14 @@ describe('the 3D editor while an AI client is writing', () => {
     editor.update();
     expect(gizmo.attached).toBe(false);
     expect(gestures).toEqual([]);
+  });
+
+  it('does not delete the selected spawns', () => {
+    const { editor, deletes } = editorSetup();
+    editor.setSelection({ ...EMPTY_SELECTION, spawns: [{ kind: 'creature', guid: 1 }] });
+    editor.setLocked(true);
+    expect(editor.keyDown(new KeyboardEvent('keydown', { code: 'Delete' }))).toBe(true);
+    expect(deletes).not.toHaveBeenCalled();
   });
 
   it('gives the gizmo back when it is over', () => {

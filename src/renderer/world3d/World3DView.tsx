@@ -54,7 +54,7 @@ const CONTROLS: [string, string][] = [
   ['[ / ]', 'Falloff radius'],
   ['Place…', 'Choose an existing NPC or object, then click the ground'],
   ['Drag from the Quests dock', 'Drop the open quest’s NPC or object on the ground to place it'],
-  ['Delete', 'Remove the selected route points'],
+  ['Delete', 'Delete the selected NPCs or objects, or the selected route points'],
   ['Ctrl+Z / Ctrl+Y', 'Undo and redo'],
   ['Right-click', 'Menu: place, copy, paste, paths, quest'],
   ['Ctrl+C / Ctrl+V / Ctrl+D', 'Copy, paste under the cursor, duplicate'],
