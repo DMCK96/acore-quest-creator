@@ -79,7 +79,7 @@ The bar at the top switches between **Camera** and **Select** (**Tab** flips it)
 With something selected:
 
 - **G** moves it and **R** turns it, with the handles on the selection. In Select mode the bar's **Move** and **Rotate** buttons do the same and show which one is on. A moved spawn drops onto the server's floor where you let go.
-- On a shown route, click a point to pick it, **Shift**-click (Alt-click in Select mode) to add one, and **Delete** to remove the picked points. A route keeps at least two points.
+- On a shown route, click a point to pick it, **Shift**-click (Alt-click in Select mode) to add one, and **Delete** to remove the picked points. A route keeps at least two points. With NPCs or objects selected and no route point picked, **Delete** deletes them instead (see below).
 - **O** turns on **Falloff**: nearby route points follow a move, less the further they are. **[** and **]** change its radius.
 - **Ctrl+Z** and **Ctrl+Y** undo and redo, one whole move or turn at a time. They're the project's undo, so they also reach changes made elsewhere; see [Undo and redo](/azeroth-world-editor/guides/undo/).
 
@@ -101,10 +101,10 @@ Right-click (without dragging) for a menu about what is under the cursor: a rout
 - **Copy**, **Paste here** and **Duplicate** (also **Ctrl+C**, **Ctrl+V** and **Ctrl+D**): a copied group keeps its layout and facing. **Ctrl+V** pastes under the cursor, and Duplicate puts the copy beside the original. A paste copies what a spawn is, how it faces, its respawn time, how far it wanders and an NPC's own game events. It does not copy a path: a pasted NPC that walked a path stands still, and you draw it a new one.
 - **Respawn time…**: how long a spawn takes to come back after it dies or is despawned, in minutes and seconds. It starts from the spawn's current time. With several spawns selected the item reads **Respawn time of _n_ spawns…** and sets them all; if they differ the boxes start empty. It works on any spawn, a new one, one you placed, or one the database already has.
 - **Event…**: which game events NPC spawns follow of their own: **Same as the NPC**, **Always**, **Only during…** or **Gone during…** one or more events. For one spawn the dialog first says what it follows now, including a spawn the database has both appearing during some events and gone during others, which is kept unless you choose something else. With several NPCs selected the item reads **Event of _n_ spawns…**; if they differ nothing is chosen at first. Objects are left out. The NPC's own setting is in the [NPC editor](/azeroth-world-editor/guides/npcs-and-objects/#visibility).
-- **Remove**: takes away a spawn you placed. Spawns already in the database are not deleted.
+- **Delete** (also the **Delete** key, on the selected NPCs and objects): deletes the spawn with no question asked, and the whole selection when the one you right-clicked is part of it. A spawn you placed just goes; one already in the database is written to the project patch as a delete, with its addon, game event and group rows, and the patch that undoes the project puts them back. It is listed in **Project changes**, where **Revert** brings it back. Rows that point at it from elsewhere (linked respawns, formations, SmartAI scripts keyed by its guid) are left as they are.
 - **Copy coordinates**: puts `.go xyz` with the place's X, Y, Z and map on the clipboard, ready to paste in game.
 
-Placing, pasting and removing are undone with **Ctrl+Z** like any other change.
+Placing, pasting and deleting are undone with **Ctrl+Z** like any other change.
 
 ### How an NPC moves
 
@@ -177,7 +177,7 @@ First comes the project's list of NPCs, objects and items: every one you made, a
 
 The quest panel shows the same list; see [NPCs and objects](/azeroth-world-editor/guides/npcs-and-objects/).
 
-Then come changes to spawns already in the database: spawns moved or turned, respawn times, routes changed, spawns placed, NPCs' movement and spawn groups, each with what it was before and after. **Revert** or **Remove** takes one back; a new path and the movement that walks it go back together.
+Then come changes to spawns already in the database: spawns moved or turned, spawns deleted, respawn times, routes changed, spawns placed, NPCs' movement and spawn groups, each with what it was before and after. **Revert** or **Remove** takes one back; a new path and the movement that walks it go back together.
 
 ![The Project changes list: a placed guard, its new path and its movement](../../../assets/screenshots/world-changes.png)
 
