@@ -4,9 +4,10 @@
     <div id="stage" style="width: 960px; height: 600px; position: relative"></div>
     <script type="module">
       import { createWorld3D } from '/src/renderer/world3d/world3d.ts';
+      import { frameStats } from '/src/renderer/debug/frame-stats.ts';
 
       // Each world the page makes is kept so a test can leave it; what a test reads is in `__state`.
-      const state = (window.__state = { ready: false, problems: [], errors: [], selected: null, edits: [], notices: [], placed: [], placeEnds: 0, selection: null, tools: [], falloffs: [], contexts: [], drawings: [] });
+      const state = (window.__state = { ready: false, problems: [], errors: [], selected: null, edits: [], notices: [], placed: [], placeEnds: 0, selection: null, tools: [], falloffs: [], contexts: [], drawings: [], perf: [] });
       window.addEventListener('error', (e) => state.errors.push(String(e.message)));
       // Esc that reaches the document: what a screen or editor round the view would see
       state.escapes = 0;
@@ -61,6 +62,12 @@
       window.__tool = (tool) => world?.setTool(tool);
       window.__falloff = (falloff) => world?.setFalloff(falloff);
       window.__placing = (target) => world?.setPlacing(target);
+      // Debug mode's frame stats: on collects the events the tick reports, off stops them
+      window.__perf = (on) => {
+        state.perf = [];
+        if (on) frameStats.attach((event) => state.perf.push(event), () => 0);
+        else frameStats.detach();
+      };
       window.__world = () => world;
       window.__close = () => {
         world?.dispose();

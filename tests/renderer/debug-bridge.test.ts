@@ -2,6 +2,7 @@
 // @vitest-environment jsdom
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { startDebugBridge } from '../../src/renderer/debug/bridge';
+import { frameStats, type FrameSample } from '../../src/renderer/debug/frame-stats';
 import type { RendererRequest } from '../../src/shared/ipc';
 
 const ok = <T,>(value: T) => ({ ok: true as const, value });
@@ -20,9 +21,11 @@ function rig(enabled: boolean) {
 }
 const press = (el: Element) => el.dispatchEvent(new KeyboardEvent('keydown', { bubbles: true, key: 'a', code: 'KeyA' }));
 const settle = async () => { await vi.advanceTimersByTimeAsync(0); };
+const frame = (over: Partial<FrameSample> = {}): FrameSample => ({ deltaSeconds: 0.1, updateMs: 2, renderMs: 8, calls: 120, triangles: 50000, geometries: 90, textures: 40, programs: 6, x: 1, y: 2, z: 3, ...over });
+const oneSecond = () => { for (let i = 0; i < 10; i++) frameStats.sample(frame()); };
 
 beforeEach(() => { vi.useFakeTimers(); document.body.innerHTML = '<input id="a" value="hello">'; });
-afterEach(() => { vi.useRealTimers(); document.body.innerHTML = ''; });
+afterEach(() => { frameStats.detach(); vi.useRealTimers(); document.body.innerHTML = ''; });
 
 describe('the debug bridge', () => {
   it('asks the main process whether Debug mode is on at start, and records nothing when it is off', async () => {
@@ -97,5 +100,39 @@ describe('the debug bridge', () => {
     press(document.getElementById('a')!);
     await vi.advanceTimersByTimeAsync(1000);
     expect(record).not.toHaveBeenCalled();
+  });
+});
+
+describe('the debug bridge and the 3D view\'s frame stats', () => {
+  it('turns the frame sampler on with Debug mode, and sends its event in the next batch', async () => {
+    const { record, stop } = rig(true);
+    await settle();
+    expect(frameStats.on).toBe(true);
+    oneSecond();
+    await vi.advanceTimersByTimeAsync(250);
+    const batch = (record.mock.calls[0] as unknown[])[0] as { category: string; name: string }[];
+    expect(batch.some((e) => e.category === 'perf' && e.name === 'frame')).toBe(true);
+    stop();
+  });
+
+  it('turns the sampler off when Debug mode is switched off, and records nothing more', async () => {
+    const { record, handlers, stop } = rig(true);
+    await settle();
+    handlers.changed!(false);
+    expect(frameStats.on).toBe(false);
+    oneSecond();
+    await vi.advanceTimersByTimeAsync(1000);
+    expect(record).not.toHaveBeenCalled();
+    stop();
+  });
+
+  it('leaves the sampler off when Debug mode is off at start, and switches it on when it is pushed on', async () => {
+    const { handlers, stop } = rig(false);
+    await settle();
+    expect(frameStats.on).toBe(false);
+    handlers.changed!(true);
+    expect(frameStats.on).toBe(true);
+    stop();
+    expect(frameStats.on).toBe(false);
   });
 });

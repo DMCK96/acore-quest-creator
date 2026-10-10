@@ -1,5 +1,6 @@
 import type { Api, DebugEventInput, RendererRequest } from '@shared/ipc';
 import { fieldState, focusSnapshot, rectOf } from './focus-snapshot';
+import { frameStats } from './frame-stats';
 import { attachTaps } from './taps';
 
 const DEFAULT_FLUSH_MS = 250;
@@ -46,13 +47,18 @@ export function startDebugBridge(options: {
 
   const attach = (): void => {
     if (detachTaps || stopped) return;
-    detachTaps = attachTaps({ win, report: (event) => queue.push(event), now: () => performance.timeOrigin + performance.now() });
+    const report = (event: DebugEventInput): void => void queue.push(event);
+    const now = (): number => performance.timeOrigin + performance.now();
+    detachTaps = attachTaps({ win, report, now });
+    // The 3D view's frame stats ride on the same switch, queue and clock
+    frameStats.attach(report, now);
     timer = setInterval(flush, flushMs);
     doc.addEventListener('visibilitychange', flushWhenHidden);
   };
   const detach = (): void => {
     detachTaps?.();
     detachTaps = null;
+    frameStats.detach();
     if (timer) clearInterval(timer);
     timer = null;
     doc.removeEventListener('visibilitychange', flushWhenHidden);

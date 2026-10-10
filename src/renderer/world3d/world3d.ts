@@ -26,6 +26,7 @@ import type { Frame } from '@core/map/transport-frame';
 import type { Dock } from '@core/map/transport-docks';
 import type { RouteLine as RouteData } from '@core/map/transport-view';
 import { buildRouteLines, disposeRouteLines } from './scene/transport/RouteLine';
+import { frameStats } from '../debug/frame-stats';
 
 /**
  * The 3D world: the game's own terrain, props and models for one map, read from the client's
@@ -703,6 +704,9 @@ export function createWorld3D(options: World3DOptions): World3D {
     if (disposed) return;
     frame = requestAnimationFrame(tick);
     const delta = clock.getDelta();
+    // Debug mode's frame stats: no clock is read and no renderer.info touched unless it is on
+    const sampling = frameStats.on;
+    const began = sampling ? performance.now() : 0;
     try {
       controls.update(delta);
       manager.setTarget(clamp(controls.target.x), clamp(controls.target.y));
@@ -716,7 +720,24 @@ export function createWorld3D(options: World3DOptions): World3D {
       markers.update();
       editor.update();
       renderer.setClearColor(manager.clearColor);
+      const updated = sampling ? performance.now() : 0;
       renderer.render(scene, camera);
+      if (sampling) {
+        const { render, memory, programs } = renderer.info;
+        frameStats.sample({
+          deltaSeconds: delta,
+          updateMs: updated - began,
+          renderMs: performance.now() - updated,
+          calls: render.calls,
+          triangles: render.triangles,
+          geometries: memory.geometries,
+          textures: memory.textures,
+          programs: programs?.length ?? 0,
+          x: camera.position.x,
+          y: camera.position.y,
+          z: camera.position.z,
+        });
+      }
       if (!ready && manager.root.children.length > 0) {
         ready = true;
         options.onReady?.();
