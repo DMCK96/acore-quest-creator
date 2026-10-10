@@ -1,10 +1,6 @@
-import { item, type MenuSpawn } from '../model';
+import { item } from '../model';
 import { NEEDS_DATABASE, type MenuSection } from '../section';
-import type { GroundSubject, SpawnSubject } from './kinds';
-
-/** The spawns a right-click acts on: the selection, or the right-clicked spawn when nothing is selected */
-const chosen = (subject: GroundSubject | SpawnSubject): MenuSpawn[] =>
-  subject.selection.length > 0 ? subject.selection : subject.type === 'spawn' ? [subject.info] : [];
+import { chosen, type GroundSubject, type SpawnSubject } from './kinds';
 
 /** How long spawns take to respawn: the world database keeps a database spawn's time, the project its own */
 export const respawn: MenuSection<GroundSubject | SpawnSubject> = {

@@ -172,7 +172,7 @@ describe('the right-click menu while an AI client is writing', () => {
   it('counts only reads as safe', () => {
     expect(editsProject({ kind: 'copy' })).toBe(false);
     expect(editsProject({ kind: 'copyCoordinates', at })).toBe(false);
-    expect(editsProject({ kind: 'remove', spawn: {} as never })).toBe(true);
+    expect(editsProject({ kind: 'delete', spawns: [] })).toBe(true);
     expect(editsProject({ kind: 'startPath', spawn: {} as never, at })).toBe(true);
   });
 });

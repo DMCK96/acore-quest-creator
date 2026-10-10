@@ -55,7 +55,7 @@ describe('a route point', () => {
 
 describe('the builder', () => {
   it('registers the sections in the spec order', () => {
-    expect(SECTIONS.map((s) => s.id)).toEqual(['busy', 'create', 'edit', 'loot', 'vendor', 'trainer', 'gossip', 'scripts', 'clipboard', 'coordinates', 'respawn', 'spawn-events', 'spawn-group', 'remove', 'movement', 'route-point', 'quest-parts', 'quest-spawns', 'vessel-stops']);
+    expect(SECTIONS.map((s) => s.id)).toEqual(['busy', 'create', 'edit', 'loot', 'vendor', 'trainer', 'gossip', 'scripts', 'clipboard', 'coordinates', 'respawn', 'spawn-events', 'spawn-group', 'delete', 'movement', 'route-point', 'quest-parts', 'quest-spawns', 'vessel-stops']);
   });
 
   it('runs only sections that apply, joins those of one group, and drops empty groups', () => {
@@ -119,19 +119,36 @@ describe('the ground', () => {
 describe('a spawn', () => {
   it('a database NPC can be edited too; offline it needs the database', () => {
     const world = buildMenu(on(npc()), context()).find((g) => g.id === 'world')!;
-    expect(world.items.map((i) => i.label)).toEqual(['Edit NPC…', 'Make vendor…', 'Make trainer…', 'Add gossip menu…', 'Add or edit scripts…', 'Copy', 'Duplicate', 'Copy coordinates', 'Respawn time…', 'Event…']);
+    expect(world.items.map((i) => i.label)).toEqual(['Edit NPC…', 'Make vendor…', 'Make trainer…', 'Add gossip menu…', 'Add or edit scripts…', 'Copy', 'Duplicate', 'Copy coordinates', 'Respawn time…', 'Event…', 'Delete']);
     expect(item(buildMenu(on(npc()), context({ connected: false })), 'Edit NPC…')!.disabledReason).toBe('Needs the world database');
     expect(item(buildMenu(on(hela), context({ connected: false })), 'Edit NPC…')!.action).toBeDefined();
   });
 
-  it('a project NPC: edit first, and remove last', () => {
+  it('a project NPC: edit first, and delete last', () => {
     const world = buildMenu(on(hela), context()).find((g) => g.id === 'world')!;
-    expect(world.items.map((i) => i.label)).toEqual(['Edit NPC…', 'Make vendor…', 'Make trainer…', 'Add gossip menu…', 'Add script…', 'Copy', 'Duplicate', 'Copy coordinates', 'Respawn time…', 'Event…', 'Remove']);
+    expect(world.items.map((i) => i.label)).toEqual(['Edit NPC…', 'Make vendor…', 'Make trainer…', 'Add gossip menu…', 'Add script…', 'Copy', 'Duplicate', 'Copy coordinates', 'Respawn time…', 'Event…', 'Delete']);
     expect(item(buildMenu(on(hela), context()), 'Edit NPC…')!.action).toEqual({ kind: 'editEntity', spawn: hela });
   });
 
-  it('a spawn placed in the view can be removed although its NPC is the database\'s', () => {
-    expect(item(buildMenu(on(npc({ added: true })), context()), 'Remove')!.action).toEqual({ kind: 'remove', spawn: npc({ added: true }) });
+  it('a database NPC or object can be deleted, and so can a spawn placed in the view', () => {
+    expect(item(buildMenu(on(npc()), context()), 'Delete')!.action).toEqual({ kind: 'delete', spawns: [npc()] });
+    expect(item(buildMenu(on(crate()), context()), 'Delete')!.action).toEqual({ kind: 'delete', spawns: [crate()] });
+    expect(item(buildMenu(on(npc({ added: true })), context()), 'Delete')!.action).toEqual({ kind: 'delete', spawns: [npc({ added: true })] });
+  });
+
+  it('deletes the whole selection when the right-clicked spawn is part of it, and names how many', () => {
+    const groups = buildMenu(subjectOf({ ground: at, hit: { type: 'spawn', spawn: npc() }, selection: [npc(), crate()] }, store), context());
+    expect(item(groups, 'Delete 2')!.action).toEqual({ kind: 'delete', spawns: [npc(), crate()] });
+  });
+
+  it("offline, deleting a database spawn needs the world database, a project's own or a placed one does not", () => {
+    expect(item(buildMenu(on(npc()), context({ connected: false })), 'Delete')!.disabledReason).toBe('Needs the world database');
+    expect(item(buildMenu(on(hela), context({ connected: false })), 'Delete')!.action).toBeDefined();
+    expect(item(buildMenu(on(npc({ added: true })), context({ connected: false })), 'Delete')!.action).toBeDefined();
+  });
+
+  it('is not offered on the ground', () => {
+    expect(item(buildMenu(ground(), context()), 'Delete')).toBeUndefined();
   });
 
   it('copies a whole selection and names how many', () => {

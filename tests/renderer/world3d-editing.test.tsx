@@ -72,6 +72,22 @@ describe('editing in the 3D view', () => {
     expect(saved.points.map((p) => [p.x, p.waitSecs])).toEqual([[1, 7], [5, 0], [2, 0]]);
   });
 
+  it('sends a deleted database spawn to the world layer, and draws the layer it gets back', async () => {
+    const deleted = { ...EMPTY, deletes: [{ kind: 'creature', guid: 80330, entry: 1423, name: 'Guard', map: 0, placement: { x: 1, y: 2, z: 3, orientation: 0, rotation: null }, rows: [] }] };
+    const worldDeleteSpawn = vi.fn(async () => okv(deleted));
+    const { world } = await ownView(makeMockApi({ worldLayer: vi.fn(async () => okv(EMPTY)), worldDeleteSpawn }));
+    world.options.onGesture([{ kind: 'presence', spawn: { kind: 'creature', guid: 80330, entry: 1423, own: false }, present: false, at: { x: 1, y: 2, z: 3, orientation: 0, rotation: null }, map: 0 }]);
+    await waitFor(() => expect(worldDeleteSpawn).toHaveBeenCalledWith('creature', 80330));
+    await waitFor(() => expect(world.setWorldLayer).toHaveBeenLastCalledWith(deleted));
+  });
+
+  it("takes a quest's own spawn out of the quest when it is deleted", async () => {
+    const { onChange, world } = await ownView();
+    world.options.onGesture([{ kind: 'presence', spawn: { kind: 'creature', guid: 900, entry: 12000001, own: true }, present: false, at: { x: 1, y: 2, z: 3, orientation: 0, rotation: null }, map: 0 }]);
+    const [, value] = onChange.mock.calls.at(-1)!;
+    expect(readEntities({ [ENTITIES_FIELD]: value }).npcs[0]!.spawns).toEqual([]);
+  });
+
   it('sends an existing spawn\'s placement to the world layer and draws the layer it gets back', async () => {
     const worldMoveSpawn = vi.fn(async () => okv(moved));
     const { onChange, world } = await ownView(makeMockApi({ worldLayer: vi.fn(async () => okv(EMPTY)), worldMoveSpawn }));

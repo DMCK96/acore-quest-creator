@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { createEvent, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, createEvent, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { NamesProvider } from '../../src/renderer/state/names';
 import { createAppStore } from '../../src/renderer/state/app-store';
@@ -96,14 +96,20 @@ describe('placing an existing NPC or object from the 3D view', () => {
     await waitFor(() => expect(api.worldAddSpawn).toHaveBeenCalledWith('gameobject', 143981, expect.any(Number), at));
   });
 
-  it('removes a placed spawn from its card', async () => {
-    const { api, world } = await threeD();
+  it('deletes a placed spawn from its card', async () => {
+    const { api, world } = await threeD({ worldDeleteSpawn: vi.fn(async () => okv(EMPTY)) });
     await choose('NPC', 'guard', 'Stormwind Guard');
     world.options.onPlace({ target: { kind: 'creature', entry: 1423 }, at });
-    await userEvent.click(await screen.findByRole('button', { name: 'Remove' }));
-    expect(api.worldRevert).toHaveBeenCalledWith({ kind: 'spawn', spawnKind: 'creature', guid: 90001 });
+    await userEvent.click(await screen.findByRole('button', { name: 'Delete' }));
+    expect(api.worldDeleteSpawn).toHaveBeenCalledWith('creature', 90001);
     await waitFor(() => expect(world.setWorldLayer).toHaveBeenLastCalledWith(EMPTY));
     expect(screen.queryByLabelText('Selected spawn')).toBeNull();
+  });
+
+  it('puts a Delete button on the card of a database spawn too', async () => {
+    const { world } = await threeD();
+    act(() => world.options.onSelect({ kind: 'creature', guid: 80330, entry: 1423, name: 'Guard', own: false, added: false, pathId: 0, event: null, position: { x: 1, y: 2, z: 3 } }));
+    expect(await screen.findByRole('button', { name: 'Delete' })).toBeEnabled();
   });
 
   it('says why when the spawn could not be placed, and draws nothing', async () => {

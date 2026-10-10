@@ -3,7 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { act, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { NamesProvider } from '../../src/renderer/state/names';
-import { makeMockApi, okv } from './mock-api';
+import { makeMockApi, okv, errv } from './mock-api';
 import { clearClipboard } from '../../src/renderer/world3d/clipboard';
 
 const worlds = vi.hoisted(() => [] as any[]);
@@ -72,6 +72,43 @@ describe('the right-click menu in the 3D view', () => {
     await waitFor(() => expect(api.worldAddSpawn).toHaveBeenCalledWith('creature', 1423, 0, expect.objectContaining({ x: 1, y: 2, z: 3 })));
     expect(world.setPlacing).not.toHaveBeenCalledWith(expect.objectContaining({ entry: 1423 }));
     await waitFor(() => expect(world.selectSpawns).toHaveBeenCalledWith([{ kind: 'creature', guid: 90001 }]));
+  });
+
+  it('Delete takes an NPC out of the world as one undo step and clears the selection', async () => {
+    const { api, world } = await view();
+    rightClick(world, { ground: at, hit: { type: 'spawn', spawn: guard }, selection: [guard] });
+    await userEvent.click(screen.getByRole('menuitem', { name: 'Delete' }));
+    await waitFor(() => expect(api.worldDeleteSpawn).toHaveBeenCalledWith('creature', 80330));
+    await waitFor(() => expect(api.historyEnd).toHaveBeenCalledTimes(1));
+    expect(api.historyBegin).toHaveBeenCalledWith('Delete Guard', undefined);
+    expect(world.select).toHaveBeenCalledWith(null);
+  });
+
+  it('Delete on a selection deletes every spawn in one step, and names them', async () => {
+    const { api, world } = await view();
+    const second = { ...guard, guid: 80331 };
+    rightClick(world, { ground: at, hit: { type: 'spawn', spawn: guard }, selection: [guard, second] });
+    await userEvent.click(screen.getByRole('menuitem', { name: 'Delete 2' }));
+    await waitFor(() => expect(api.worldDeleteSpawn).toHaveBeenCalledTimes(2));
+    expect((api.worldDeleteSpawn as any).mock.calls.map((c: any[]) => c[1])).toEqual([80330, 80331]);
+    await waitFor(() => expect(api.historyEnd).toHaveBeenCalledTimes(1));
+    expect(api.historyBegin).toHaveBeenCalledWith('Delete 2 spawns', undefined);
+  });
+
+  it('goes on deleting when one spawn cannot be, and says which', async () => {
+    const worldDeleteSpawn = vi.fn(async (_kind: string, guid: number) => (guid === 80330 ? errv('BAD_REQUEST', 'Spawn 80330 is no longer in the database.') : okv(EMPTY)));
+    const { api, world } = await view({ worldDeleteSpawn });
+    rightClick(world, { ground: at, hit: { type: 'spawn', spawn: guard }, selection: [guard, { ...guard, guid: 80331, name: 'Second' }] });
+    await userEvent.click(screen.getByRole('menuitem', { name: 'Delete 2' }));
+    await waitFor(() => expect(api.worldDeleteSpawn).toHaveBeenCalledTimes(2));
+    expect(await screen.findByText('Could not delete Guard')).toBeTruthy();
+  });
+
+  it('deletes the selected spawns with no menu, for the Delete key', async () => {
+    const { api, world } = await view();
+    world.selectedSpawns.mockReturnValue([guard]);
+    await act(async () => { world.options.onDeleteSpawns(); });
+    await waitFor(() => expect(api.worldDeleteSpawn).toHaveBeenCalledWith('creature', 80330));
   });
 
   it('copies the selection and pastes it where right-clicked, on the map being viewed', async () => {
@@ -168,11 +205,11 @@ describe('the right-click menu in the 3D view', () => {
   });
 
   it('an undone placement takes the spawn back out of the world layer, and its redo keeps the guid', async () => {
-    const { api, world } = await view({ worldRevert: vi.fn(async () => okv(EMPTY)) });
+    const { api, world } = await view({ worldDeleteSpawn: vi.fn(async () => okv(EMPTY)) });
     const spawn = { kind: 'creature', guid: 90001, entry: 1423, own: false };
     const placement = { x: 1, y: 2, z: 3, orientation: 0, rotation: null };
     act(() => world.options.onGesture([{ kind: 'presence', spawn, present: false, at: placement, map: 0 }]));
-    await waitFor(() => expect(api.worldRevert).toHaveBeenCalledWith({ kind: 'spawn', spawnKind: 'creature', guid: 90001 }));
+    await waitFor(() => expect(api.worldDeleteSpawn).toHaveBeenCalledWith('creature', 90001));
     act(() => world.options.onGesture([{ kind: 'presence', spawn, present: true, at: placement, map: 0 }]));
     await waitFor(() => expect(api.worldAddSpawn).toHaveBeenCalledWith('creature', 1423, 0, placement, 90001));
   });
@@ -314,11 +351,11 @@ describe('the right-click menu in the 3D view', () => {
     await waitFor(() => expect(api.historyEnd).toHaveBeenCalledTimes(1));
   });
 
-  it('Remove on a placed spawn also takes it out of its group, in the same step', async () => {
+  it('Delete on a placed spawn also takes it out of its group, in the same step', async () => {
     const { api, world } = await view({ worldDropMember: vi.fn(async () => okv(EMPTY)) });
     const placed = { ...guard, guid: 90001, added: true, group: 900001 };
     rightClick(world, { ground: at, hit: { type: 'spawn', spawn: placed }, selection: [placed] });
-    await userEvent.click(screen.getByRole('menuitem', { name: 'Remove' }));
+    await userEvent.click(screen.getByRole('menuitem', { name: 'Delete' }));
     await waitFor(() => expect(api.worldDropMember).toHaveBeenCalledWith('npc', 90001));
     await waitFor(() => expect(api.historyEnd).toHaveBeenCalledTimes(1));
   });

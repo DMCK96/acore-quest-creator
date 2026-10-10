@@ -12,7 +12,7 @@ import { coordinates } from './coordinates';
 import { respawn } from './respawn';
 import { spawnEvents } from './spawn-events';
 import { spawnGroup } from './spawn-group';
-import { remove } from './remove';
+import { deletion } from './delete';
 import { movement } from './movement';
 import { routePoint } from './route-point';
 import { questParts } from './quest-parts';
@@ -21,5 +21,5 @@ import { vesselStops } from './vessel-stops';
 
 /** Every section of the right-click menu, in the order their items are shown */
 export const SECTIONS: readonly MenuSection[] = [
-  busy, create, edit, loot, vendor, trainer, gossip, scripts, clipboard, coordinates, respawn, spawnEvents, spawnGroup, remove, movement, routePoint, questParts, questSpawns, vesselStops,
+  busy, create, edit, loot, vendor, trainer, gossip, scripts, clipboard, coordinates, respawn, spawnEvents, spawnGroup, deletion, movement, routePoint, questParts, questSpawns, vesselStops,
 ];

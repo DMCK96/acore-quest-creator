@@ -537,11 +537,11 @@ function WorldStage({
         : change.kind === 'movement' ? await current.worldSetMovement(change.spawn.guid, change.to)
         : change.kind === 'respawn' ? await current.worldSetRespawn(kind, change.spawn.guid, change.secs)
         : change.kind === 'spawnEvents' ? await current.worldSetSpawnEvents(change.spawn.guid, change.to)
-        // A spawn put back by a redo keeps its guid; one taken away by an undo leaves the layer
+        // A spawn put back by a redo keeps its guid; one taken away is deleted (a placed one leaves the layer, a database one is recorded as deleted)
         : change.kind === 'presence'
           ? change.present
             ? await current.worldAddSpawn(kind, change.spawn.entry, change.map, change.at, change.spawn.guid).then((r) => (r.ok ? { ok: true as const, value: r.value.layer } : r))
-            : await current.worldRevert({ kind: 'spawn', spawnKind: kind, guid: change.spawn.guid })
+            : await current.worldDeleteSpawn(kind, change.spawn.guid)
         // A path made in this view is not in the database
         : isNewPath(change.pathId) ? await current.worldSetRoute(change.pathId, points, { isNew: true })
         : await current.worldSetRoute(change.pathId, points);
@@ -682,6 +682,9 @@ function WorldStage({
               if (!drawing && patrollingRef.current?.stage === 'drawing') endPatrolRef.current();
             },
             onShortcut: (code) => live && menuRef.current.shortcut(code),
+            onDeleteSpawns: () => {
+              if (live) void menuRef.current.deleteSelected();
+            },
             onSelection: (next) => live && setSummary(next),
             onMode: (mode) => live && setGizmoMode(mode),
             onTool: (tool) => live && setLayers((l) => ({ ...l, tool })),
@@ -892,16 +895,14 @@ function WorldStage({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [patrolRequest?.nonce]);
 
-  /** Takes a spawn placed in this view back out of the world layer */
-  async function removePlaced(spawn: PickedSpawn): Promise<void> {
+  /** Deletes the spawn on the card, as one undo step: placed ones leave the layer, database ones are recorded as deleted */
+  async function deletePicked(spawn: PickedSpawn): Promise<void> {
     if (editLockedRef.current) return;
-    const result = await api?.worldRevert({ kind: 'spawn', spawnKind: spawn.kind === 'object' ? 'gameobject' : 'creature', guid: spawn.guid });
-    if (!result) return;
-    if (!result.ok) {
-      setNote(result.error.message);
-      return;
-    }
-    takeLayer(result.value);
+    const at = { x: spawn.position.x, y: spawn.position.y, z: spawn.position.z, orientation: 0, rotation: null };
+    const name = spawn.name || `${spawn.kind === 'creature' ? 'NPC' : 'Object'} ${spawn.entry}`;
+    await runStepRef.current(async () => {
+      await sendRef.current({ kind: 'presence', spawn: { kind: spawn.kind, guid: spawn.guid, entry: spawn.entry, own: spawn.own }, present: false, at, map });
+    }, `Delete ${name}`);
     clearSelection();
   }
 
@@ -1152,7 +1153,7 @@ function WorldStage({
         </AiLock>
       )}
       {!unavailable && group && <GroupCard view={group} onEdit={api ? () => menu.editGroup(group.id) : undefined} onClose={closeGroup} />}
-      {!unavailable && selected && !several && <SelectedSpawn spawn={selected} note={note} onClose={clearSelection} onRemove={selected.added ? () => void removePlaced(selected) : undefined} locked={editLocked} />}
+      {!unavailable && selected && !several && <SelectedSpawn spawn={selected} note={note} onClose={clearSelection} onDelete={() => void deletePicked(selected)} locked={editLocked} />}
       {!unavailable && several && summary && (
         <section className="world3d__selected" aria-label="Selection">
           <header>
@@ -1266,7 +1267,7 @@ function SharedRouteDialog({ shared, onAnswer }: { shared: SharedRoute; onAnswer
 }
 
 /** The NPC or object picked in the view: what it is and where it stands, and what its last edit said. */
-function SelectedSpawn({ spawn, note, onClose, onRemove, locked }: { spawn: PickedSpawn; note: string | null; onClose(): void; onRemove?(): void; locked?: boolean }): React.JSX.Element {
+function SelectedSpawn({ spawn, note, onClose, onDelete, locked }: { spawn: PickedSpawn; note: string | null; onClose(): void; onDelete(): void; locked?: boolean }): React.JSX.Element {
   const kind = spawn.kind === 'creature' ? 'NPC' : 'Object';
   return (
     <section className="world3d__selected" aria-label="Selected spawn">
@@ -1291,11 +1292,9 @@ function SelectedSpawn({ spawn, note, onClose, onRemove, locked }: { spawn: Pick
         <button type="button" className="btn" onClick={onClose}>
           Deselect
         </button>
-        {onRemove && (
-          <button type="button" className="btn" disabled={locked} onClick={onRemove}>
-            Remove
-          </button>
-        )}
+        <button type="button" className="btn" disabled={locked} onClick={onDelete}>
+          Delete
+        </button>
       </p>
     </section>
   );

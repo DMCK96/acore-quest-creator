@@ -103,6 +103,8 @@ type GroupEdit = { group: SpawnGroup; names: Map<string, string>; groupsOnMap: {
 export function useWorldMenu(deps: WorldMenuDeps): {
   open(target: MenuTarget, client: { x: number; y: number }): void;
   shortcut(code: 'KeyC' | 'KeyV' | 'KeyD'): boolean;
+  /** Deletes the selected spawns as one undo step: the Delete key */
+  deleteSelected(): Promise<void>;
   onDrawing(drawing: { guid: number; points: number } | null): void;
   /** Opens the spawn group dialog on a group */
   editGroup(id: number): void;
@@ -242,6 +244,38 @@ export function useWorldMenu(deps: WorldMenuDeps): {
     return false;
   };
 
+  /**
+   * Deletes spawns as one undo step, asking nothing: a quest's own goes out of the quest, a placed one out
+   * of the layer, a database one into the layer's deletes. One that cannot be deleted does not stop the
+   * rest; it is named afterwards, since each kept edit clears the note.
+   */
+  const deleteSpawns = async (spawns: readonly MenuSpawn[]): Promise<void> => {
+    const targets = spawns.filter(still);
+    if (targets.length === 0) return;
+    const failed: string[] = [];
+    const named = (s: MenuSpawn): string => s.name || `${s.kind === 'creature' ? 'NPC' : 'Object'} ${s.entry}`;
+    await step.current(async () => {
+      for (const spawn of targets) {
+        const gone: SpawnEdit = { kind: 'presence', spawn: refOf(spawn), present: false, at: spawn.placement, map: spawn.map };
+        if (!(await d.current.send(gone))) {
+          failed.push(named(spawn));
+          continue;
+        }
+        // A quest's own or a placed spawn in a spawn group leaves it in the same step; a database spawn's pool rows go with its delete
+        const { api } = d.current;
+        if ((spawn.own || spawn.added) && spawn.group !== null && spawn.group !== undefined && api) {
+          const dropped = await api.worldDropMember(poolKind(spawn.kind), spawn.guid);
+          if (dropped.ok) d.current.takeLayer(dropped.value);
+          else d.current.setNote(dropped.error.message);
+        }
+      }
+    }, targets.length === 1 ? `Delete ${named(targets[0]!)}` : `Delete ${targets.length} spawns`);
+    if (failed.length > 0) d.current.setNote(`Could not delete ${failed.join(', ')}`);
+    if (failed.length < targets.length) d.current.clearSelection();
+  };
+
+  const deleteSelected = (): Promise<void> => deleteSpawns(d.current.world.current?.selectedSpawns() ?? []);
+
   /** Sends edits the menu made, one after another, as one step */
   const commit = async (edits: SpawnEdit[], label?: string): Promise<void> => {
     await step.current(async () => {
@@ -357,21 +391,9 @@ export function useWorldMenu(deps: WorldMenuDeps): {
       case 'duplicate':
         await duplicate();
         return;
-      case 'remove': {
-        const { spawn } = action;
-        if (!still(spawn)) return;
-        const gone: SpawnEdit = { kind: 'presence', spawn: refOf(spawn), present: false, at: spawn.placement, map: spawn.map };
-        await step.current(async () => {
-          const kept = await d.current.send(gone);
-          // A removed spawn is no member of any group: taken out of its group in the same step
-          if (!kept || spawn.group === null || spawn.group === undefined || !api) return;
-          const dropped = await api.worldDropMember(poolKind(spawn.kind), spawn.guid);
-          if (dropped.ok) d.current.takeLayer(dropped.value);
-          else setNote(dropped.error.message);
-        });
-        d.current.clearSelection();
+      case 'delete':
+        await deleteSpawns(action.spawns);
         return;
-      }
       case 'vesselStops':
         d.current.onVessel?.(action.dock);
         return;
@@ -719,5 +741,5 @@ export function useWorldMenu(deps: WorldMenuDeps): {
     openGroup(id).catch((error: unknown) => d.current.setNote(error instanceof Error ? error.message : String(error)));
   };
 
-  return { open, shortcut, onDrawing: setDrawing, editGroup, elements };
+  return { open, shortcut, deleteSelected, onDrawing: setDrawing, editGroup, elements };
 }

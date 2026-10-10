@@ -64,7 +64,8 @@ export type MenuAction =
   | { kind: 'copy' }
   | { kind: 'paste'; at: At }
   | { kind: 'duplicate' }
-  | { kind: 'remove'; spawn: MenuSpawn }
+  /** Deletes these spawns, with no question asked: the undo step takes them back */
+  | { kind: 'delete'; spawns: MenuSpawn[] }
   | { kind: 'copyCoordinates'; at: At }
   /** How long the spawns take to respawn, asked for in a dialog */
   | { kind: 'respawn'; spawns: MenuSpawn[] }

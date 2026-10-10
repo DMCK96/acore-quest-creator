@@ -92,6 +92,8 @@ export interface World3DOptions {
   onContextMenu?(target: MenuTarget, client: { x: number; y: number }): void;
   /** Ctrl+C, Ctrl+V or Ctrl+D pressed on the view: copy, paste, duplicate; true when it was used. */
   onShortcut?(code: 'KeyC' | 'KeyV' | 'KeyD'): boolean;
+  /** Asked to delete the selected NPCs and objects: the Delete key with spawns selected and no route points picked. */
+  onDeleteSpawns?(): void;
   /** Told which quest marker was clicked, or null when it was let go (the host's own `selectMarker` is not told back). */
   onMarkerSelect?(id: string | null): void;
   /** Told where a quest marker was dragged to, on the server's floor when it has one there. */
