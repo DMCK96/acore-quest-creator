@@ -1,8 +1,9 @@
 import type { RawRow, SchemaInfo } from '../../core/db/types';
 import type { WorldDb } from '../../core/db/world-db';
 import { spawnEntryColumn } from '../../core/db/spawns';
+import { rowsOrNone } from '../../core/db/rows-or-none';
 import { pickPreset } from '../../core/db/view-spawns';
-import type { Placement, RoutePoint, WorldAddedSpawn, WorldEventEdit, WorldLook, WorldMovementEdit, WorldRespawnEdit, WorldRouteEdit, WorldSpawnEdit, WorldSpawnKind } from '../../core/world/layer';
+import type { DeletedTable, Placement, RoutePoint, WorldAddedSpawn, WorldDeletedSpawn, WorldEventEdit, WorldLook, WorldMovementEdit, WorldRespawnEdit, WorldRouteEdit, WorldSpawnEdit, WorldSpawnKind } from '../../core/world/layer';
 import { spawnEventRows } from '../../core/entities/spawn-events-read';
 import { sameRows } from '../../core/entities/existing';
 import { movementOfRow, sameMovement, type Movement } from '../../core/world/movement';
@@ -238,4 +239,32 @@ export async function spawnEventsDrifted(db: WorldDb, edit: WorldEventEdit): Pro
 export async function respawnDrifted(db: WorldDb, edit: WorldRespawnEdit): Promise<boolean> {
   const now = await readRespawn(db, edit.kind, edit.guid);
   return !now || now.secs !== edit.original;
+}
+
+/** The tables whose rows hang on a spawn's guid, by the kind of spawn */
+const DEPENDENTS: Record<WorldSpawnKind, DeletedTable[]> = {
+  creature: ['creature_addon', 'game_event_creature', 'pool_creature'],
+  gameobject: ['game_event_gameobject', 'pool_gameobject'],
+};
+
+/**
+ * A spawn as the database has it, whole, for deleting it: its own row first, then the rows that hang
+ * on its guid (a table the database does not have gives none). Null when the spawn is gone.
+ */
+export async function readDeletedSpawn(db: WorldDb, kind: WorldSpawnKind, guid: number): Promise<WorldDeletedSpawn | null> {
+  const spawn = await readPlacement(db, kind, guid);
+  if (!spawn) return null;
+  const key = { guid: String(guid) };
+  const [own] = await db.selectRows(kind, key);
+  const rows: WorldDeletedSpawn['rows'] = [{ table: kind, row: { ...own! } }];
+  for (const table of DEPENDENTS[kind]) {
+    for (const row of await rowsOrNone(db, table, key)) rows.push({ table, row: { ...row } });
+  }
+  return { kind, guid, entry: spawn.entry, name: spawn.name, map: spawn.map, placement: spawn.placement, rows };
+}
+
+/** Whether the database no longer holds a deleted spawn's row as it was when it was deleted */
+export async function deletedDrifted(db: WorldDb, deleted: WorldDeletedSpawn): Promise<boolean> {
+  const [now] = await db.selectRows(deleted.kind, { guid: String(deleted.guid) });
+  return !now || !sameRows([deleted.rows[0]!.row], [now]);
 }

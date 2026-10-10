@@ -463,3 +463,107 @@ describe('the spawns a quest uses', () => {
     expect(out.value[0].spawns).toHaveLength(200);
   });
 });
+
+describe('deleting a spawn through the API', () => {
+  const seeded = (db: ReturnType<typeof forkDb>) => {
+    world(db);
+    db.insert('game_event_creature', { eventEntry: '3', guid: '80331' });
+    db.insert('game_event_creature', { eventEntry: '-4', guid: '80331' });
+    db.insert('pool_creature', { guid: '80331', pool_entry: '9', chance: '0' });
+  };
+  // The fake database cannot remove a row, so a spawn "leaves" by taking a guid nothing asks for
+  const leave = (db: ReturnType<typeof forkDb>, guid: string) => db.update('creature', { guid }, { guid: '99999' });
+
+  it("records the spawn with its dependent rows, and the layer is the session's", async () => {
+    const { api, session } = await setup(seeded);
+    const out: any = await api.worldDeleteSpawn('creature', 80331);
+    expect(out.ok).toBe(true);
+    const [deleted] = out.value.deletes;
+    expect(deleted).toMatchObject({ kind: 'creature', guid: 80331, entry: 1423, name: 'Stormwind Guard', map: 0 });
+    expect(deleted.rows.map((r: any) => r.table)).toEqual(['creature', 'game_event_creature', 'game_event_creature', 'pool_creature']);
+    expect(deleted.rows[0].row).toMatchObject({ guid: '80331', map: '0' });
+    expect(session.world.get()).toEqual(out.value);
+    expect(session.dirty()).toBe(true);
+  });
+
+  it("captures the creature's addon row, and an object's row alone", async () => {
+    const { api } = await setup(seeded);
+    const npc: any = await api.worldDeleteSpawn('creature', 80330);
+    expect(npc.value.deletes[0].rows.map((r: any) => r.table)).toEqual(['creature', 'creature_addon']);
+    const crate: any = await api.worldDeleteSpawn('gameobject', 5);
+    expect(crate.value.deletes.find((d: any) => d.kind === 'gameobject').rows.map((r: any) => r.table)).toEqual(['gameobject']);
+  });
+
+  it('deleting a spawn already deleted changes nothing, and does not read the database again', async () => {
+    const { api, db } = await setup(seeded);
+    await api.worldDeleteSpawn('creature', 80331);
+    leave(db, '80331');
+    const again: any = await api.worldDeleteSpawn('creature', 80331);
+    expect(again.ok).toBe(true);
+    expect(again.value.deletes).toHaveLength(1);
+  });
+
+  it('refuses a spawn that is not in the database', async () => {
+    const { api } = await setup(seeded);
+    const out: any = await api.worldDeleteSpawn('creature', 4242);
+    expect(out.ok).toBe(false);
+    expect(out.error.message).toBe('Spawn 4242 is no longer in the database.');
+  });
+
+  it('a spawn placed in the view is taken out of the layer, with nothing recorded as deleted', async () => {
+    const { api } = await setup((db) => { seeded(db); });
+    const placed: any = await api.worldAddSpawn('creature', 1423, 0, to(1));
+    const out: any = await api.worldDeleteSpawn('creature', placed.value.guid);
+    expect(out.value.added).toEqual([]);
+    expect(out.value.deletes ?? []).toEqual([]);
+  });
+
+  it("drops the spawn's own move, so the layer has one entry for it", async () => {
+    const { api } = await setup(seeded);
+    await api.worldMoveSpawn('creature', 80331, to(-9470));
+    const out: any = await api.worldDeleteSpawn('creature', 80331);
+    expect(out.value.spawns).toEqual([]);
+    expect(out.value.deletes).toHaveLength(1);
+  });
+
+  it('worldRevert puts a deleted spawn back, and leaves the layer as it was before', async () => {
+    const { api } = await setup(seeded);
+    await api.worldDeleteSpawn('creature', 80331);
+    const out: any = await api.worldRevert({ kind: 'delete', spawnKind: 'creature', guid: 80331 });
+    expect(out.value).toEqual({ spawns: [], routes: [], added: [] });
+  });
+
+  it('lists a deleted spawn among the changes, flagged once the database no longer matches what was captured', async () => {
+    const { api, db } = await setup(seeded);
+    await api.worldDeleteSpawn('creature', 80331);
+    expect(((await api.worldChanges()) as any).value.find((c: any) => c.type === 'deleted')).toMatchObject({ guid: 80331, drifted: false });
+    db.update('creature', { guid: '80331' }, { position_x: '1' });
+    expect(((await api.worldChanges()) as any).value.find((c: any) => c.type === 'deleted').drifted).toBe(true);
+    leave(db, '80331');
+    expect(((await api.worldChanges()) as any).value.find((c: any) => c.type === 'deleted').drifted).toBe(true);
+  });
+
+  it('an undo of the delete takes it out of the layer again', async () => {
+    const { api, session } = await setup(seeded);
+    await api.worldDeleteSpawn('creature', 80331);
+    expect(session.world.get().deletes).toHaveLength(1);
+    const undone: any = await api.historyUndo();
+    expect(undone.ok).toBe(true);
+    expect(session.world.get().deletes ?? []).toEqual([]);
+  });
+
+  it('exports DELETEs for the spawn and its dependents, and a revert that inserts every captured row', async () => {
+    const { api, written } = await setup(seeded);
+    await api.worldDeleteSpawn('creature', 80331);
+    const out: any = await api.exportProject();
+    expect(out.ok).toBe(true);
+    const sql = written.get(out.value.applyPath)!;
+    expect(sql).toMatch(/DELETE FROM `game_event_creature` WHERE `guid` = 80331;/);
+    expect(sql).toMatch(/DELETE FROM `pool_creature` WHERE `guid` = 80331;/);
+    expect(sql).toMatch(/DELETE FROM `creature` WHERE `guid` = 80331;/);
+    const revert = written.get(out.value.revertPath)!;
+    expect(revert).toMatch(/INSERT INTO `creature` \(.*\) VALUES \(.*80331/s);
+    expect(revert.match(/INSERT INTO `game_event_creature`/g)).toHaveLength(2);
+    expect(revert).toMatch(/INSERT INTO `pool_creature`/);
+  });
+});

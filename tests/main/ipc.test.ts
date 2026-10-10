@@ -11,7 +11,7 @@ describe('parseRequest', () => {
       'openQuest', 'previewChanges', 'questLinks', 'questsOfNpc', 'removeNode', 'rewardTables', 'updateQuest', 'saveProfile', 'saveViewport', 'searchQuests', 'searchEntities', 'startupProfile',
       'testConnection', 'validate', 'questScripts', 'testCommands', 'groundHeight', 'spellFacts', 'clientMaps', 'mapFloors', 'viewSpawns', 'entitySpawns', 'findSpawns', 'spawnPlacement', 'allocateIds', 'entityTemplate', 'itemColumns',
       'patrolPathId', 'renameProject', 'newProject', 'openProject', 'saveProject', 'saveProjectAs', 'recentProjects', 'forgetRecent', 'recoveries', 'restoreRecovery', 'discardRecovery',
-      'projectEntities', 'putProjectEntities', 'deleteEntity', 'readExistingEntity', 'existingDrift', 'worldLayer', 'worldMoveSpawn', 'worldAddSpawn', 'worldRoute', 'worldSetRoute', 'worldRevert', 'worldChanges', 'exportProject', 'worldSetMovement', 'worldSetRespawn', 'worldSetSpawnEvents', 'worldNewPathId', 'questSpawnList',
+      'projectEntities', 'putProjectEntities', 'deleteEntity', 'readExistingEntity', 'existingDrift', 'worldLayer', 'worldMoveSpawn', 'worldAddSpawn', 'worldRoute', 'worldSetRoute', 'worldRevert', 'worldDeleteSpawn', 'worldChanges', 'exportProject', 'worldSetMovement', 'worldSetRespawn', 'worldSetSpawnEvents', 'worldNewPathId', 'questSpawnList',
       'worldGroup', 'worldGroupView', 'worldGroupSpawns', 'worldGroupsOnMap', 'worldNewGroupId', 'worldCheckGroup', 'worldSetGroup', 'worldDeleteGroup', 'worldDropMember', 'questPools', 'gameEvents',
       'historyList', 'historyUndo', 'historyRedo', 'historyJump', 'historyBegin', 'historyEnd',
       'mcpStatus', 'mcpConfigure', 'mcpRegenerateToken',
@@ -28,6 +28,13 @@ describe('parseRequest', () => {
     expect(parseRequest('worldMoveSpawn', ['creature', 5, { x: 1, y: 2, z: 3, orientation: 0 }]).ok).toBe(false);
     expect(parseRequest('worldSetRoute', [801, [{ x: 1, y: 2, z: 3 }]]).ok).toBe(false);
     expect(parseRequest('worldRevert', [{ kind: 'route', pathId: 801 }]).ok).toBe(true);
+  });
+  it('accepts a delete revert and a spawn delete, and refuses a bad kind or guid', () => {
+    expect(parseRequest('worldRevert', [{ kind: 'delete', spawnKind: 'creature', guid: 5 }]).ok).toBe(true);
+    expect(parseRequest('worldRevert', [{ kind: 'delete', spawnKind: 'npc', guid: 5 }]).ok).toBe(false);
+    expect(parseRequest('worldDeleteSpawn', ['creature', 80331]).ok).toBe(true);
+    expect(parseRequest('worldDeleteSpawn', ['npc', 80331]).ok).toBe(false);
+    expect(parseRequest('worldDeleteSpawn', ['creature', 0]).ok).toBe(false);
   });
   it('checks history requests', () => {
     expect(parseRequest('historyJump', [3]).ok).toBe(true);

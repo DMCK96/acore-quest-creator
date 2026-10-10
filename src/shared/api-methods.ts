@@ -50,6 +50,7 @@ export const API_METHODS = [
   'worldAddSpawn',
   'worldRoute',
   'worldSetRoute',
+  'worldDeleteSpawn',
   'worldRevert',
   'worldChanges',
   'worldGroup',

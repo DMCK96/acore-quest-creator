@@ -1,7 +1,7 @@
-import { addSpawn, groupsOf, isAdded, moveSpawn, movementsOf, respawnsOf, revertGroup, revertMovement, revertRespawn, revertRoute, revertSpawn, revertSpawnEvents, setMovement, setRespawn, setRoute, setSpawnEvents, spawnEventsOf, type RoutePoint, type WorldLayer } from '../../core/world/layer';
+import { addSpawn, deleteSpawn, deletesOf, groupsOf, isAdded, isDeleted, revertDelete, moveSpawn, movementsOf, respawnsOf, revertGroup, revertMovement, revertRespawn, revertRoute, revertSpawn, revertSpawnEvents, setMovement, setRespawn, setRoute, setSpawnEvents, spawnEventsOf, type RoutePoint, type WorldLayer } from '../../core/world/layer';
 import { groupDrifted } from '../world/groups-api';
 import { IDLE } from '../../core/world/movement';
-import { addedDrifted, countWalkers, routeWalkerName, movementDrifted, readMovement, readPlacement, readRespawn, readRoute, readSpawnEvents, readTemplateLook, readWalkerEntries, respawnDrifted, routeDrifted, spawnDrifted, spawnEventsDrifted } from '../world/world-api';
+import { addedDrifted, countWalkers, deletedDrifted, readDeletedSpawn, routeWalkerName, movementDrifted, readMovement, readPlacement, readRespawn, readRoute, readSpawnEvents, readTemplateLook, readWalkerEntries, respawnDrifted, routeDrifted, spawnDrifted, spawnEventsDrifted } from '../world/world-api';
 import type { WorldLayerApi } from '../../shared/ipc';
 import type { Services } from './services';
 import { fail, run } from './errors';
@@ -207,6 +207,27 @@ export function createWorldLayerApi(s: Services): WorldLayerApi {
         return next;
       }),
 
+    worldDeleteSpawn: (kind, guid) =>
+      run(async () => {
+        const db = connected().db;
+        const start = deps.session.world.get();
+        // A spawn placed in the view is no database row: it is taken back out of the layer
+        if (isAdded(start, kind, guid)) {
+          const next = revertSpawn(start, kind, guid);
+          deps.session.world.put(next);
+          return next;
+        }
+        if (isDeleted(start, kind, guid)) return start;
+        // Database first, layer after, with nothing awaited between the last layer read and the put
+        const read = await readDeletedSpawn(db, kind, guid);
+        const layer = deps.session.world.get();
+        if (isDeleted(layer, kind, guid)) return layer;
+        if (!read) throw fail('BAD_REQUEST', `Spawn ${guid} is no longer in the database.`);
+        const next = deleteSpawn(layer, read);
+        deps.session.world.put(next);
+        return next;
+      }),
+
     worldRevert: (target) =>
       run(async () => {
         const layer = deps.session.world.get();
@@ -216,11 +237,12 @@ export function createWorldLayerApi(s: Services): WorldLayerApi {
           : target.kind === 'respawn' ? revertRespawn(layer, target.spawnKind, target.guid)
           : target.kind === 'group' ? revertGroup(layer, target.id)
           : target.kind === 'spawnEvents' ? revertSpawnEvents(layer, target.guid)
+          : target.kind === 'delete' ? revertDelete(layer, target.spawnKind, target.guid)
           : revertMovement(layer, target.guid);
         const changed =
           next.spawns.length !== layer.spawns.length || next.routes.length !== layer.routes.length || next.added.length !== layer.added.length ||
           movementsOf(next).length !== movementsOf(layer).length || respawnsOf(next).length !== respawnsOf(layer).length ||
-          groupsOf(next).length !== groupsOf(layer).length || spawnEventsOf(next).length !== spawnEventsOf(layer).length;
+          groupsOf(next).length !== groupsOf(layer).length || spawnEventsOf(next).length !== spawnEventsOf(layer).length || deletesOf(next).length !== deletesOf(layer).length;
         if (changed) deps.session.world.put(next);
         return next;
       }),
@@ -239,6 +261,7 @@ export function createWorldLayerApi(s: Services): WorldLayerApi {
           ...(await Promise.all(respawnsOf(layer).map(async (r) => ({ ...r, type: 'respawn' as const, drifted: await respawnDrifted(db, r) })))),
           ...(await Promise.all(groupsOf(layer).map(async (g) => ({ ...g, type: 'group' as const, drifted: await groupDrifted(db, g) })))),
           ...(await Promise.all(spawnEventsOf(layer).map(async (e) => ({ ...e, type: 'spawnEvents' as const, drifted: await spawnEventsDrifted(db, e) })))),
+          ...(await Promise.all(deletesOf(layer).map(async (d) => ({ ...d, type: 'deleted' as const, drifted: await deletedDrifted(db, d) })))),
         ];
       }),
   };

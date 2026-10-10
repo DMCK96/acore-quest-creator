@@ -184,6 +184,7 @@ const REQUEST_SCHEMAS: Record<keyof Api, z.ZodType<unknown[]>> = {
   worldSetRespawn: z.tuple([z.enum(['creature', 'gameobject']), z.number().int().min(1), z.number().int().min(0)]),
   worldSetSpawnEvents: z.tuple([z.number().int().min(1), z.union([eventRuleSchema, z.literal('npc')])]),
   worldNewPathId: z.tuple([z.number().int().min(1)]),
+  worldDeleteSpawn: z.tuple([worldKindArg, z.number().int().min(1)]),
   worldRevert: z.tuple([z.discriminatedUnion('kind', [
     z.object({ kind: z.literal('spawn'), spawnKind: worldKindArg, guid: z.number().int() }),
     z.object({ kind: z.literal('route'), pathId: z.number().int() }),
@@ -191,6 +192,7 @@ const REQUEST_SCHEMAS: Record<keyof Api, z.ZodType<unknown[]>> = {
     z.object({ kind: z.literal('respawn'), spawnKind: worldKindArg, guid: z.number().int() }),
     z.object({ kind: z.literal('group'), id: z.number().int() }),
     z.object({ kind: z.literal('spawnEvents'), guid: z.number().int() }),
+    z.object({ kind: z.literal('delete'), spawnKind: worldKindArg, guid: z.number().int() }),
   ])]),
   worldChanges: z.tuple([]),
   worldGroup: z.tuple([z.number().int().min(1)]),
