@@ -125,3 +125,31 @@ describe('the Project changes modal', () => {
     worlds.length = 0;
   });
 });
+
+describe('deleted spawns in the Project changes modal', () => {
+  const deleted = { type: 'deleted', kind: 'creature', guid: 80330, entry: 1423, name: 'Stormwind Guard', map: 0, drifted: false,
+    placement: { x: -9481.31, y: 74.42, z: 56.55, orientation: 1.5, rotation: null }, rows: [] };
+
+  it('lists the spawn as deleted, with where it stood', async () => {
+    render(<ProjectChanges api={makeMockApi({ worldChanges: vi.fn(async () => okv([deleted])) })} onLayer={vi.fn()} onClose={vi.fn()} />);
+    const row = (await screen.findByText(/Stormwind Guard · deleted/)).closest('tr')!;
+    expect(row).toHaveTextContent('80330');
+    expect(row).toHaveTextContent('-9481.31, 74.42, 56.55');
+  });
+
+  it('says when the database no longer matches what was deleted', async () => {
+    render(<ProjectChanges api={makeMockApi({ worldChanges: vi.fn(async () => okv([{ ...deleted, drifted: true }])) })} onLayer={vi.fn()} onClose={vi.fn()} />);
+    expect(await screen.findByText('Changed in the database since')).toBeTruthy();
+  });
+
+  it('puts the spawn back, and hands the new layer on', async () => {
+    const layer = { spawns: [], routes: [], added: [] };
+    const worldRevert = vi.fn(async () => okv(layer));
+    const onLayer = vi.fn();
+    const worldChanges = vi.fn().mockResolvedValueOnce(okv([deleted])).mockResolvedValue(okv([]));
+    render(<ProjectChanges api={makeMockApi({ worldChanges, worldRevert })} onLayer={onLayer} onClose={vi.fn()} />);
+    await userEvent.click(await screen.findByRole('button', { name: 'Revert deletion of Stormwind Guard' }));
+    expect(worldRevert).toHaveBeenCalledWith({ kind: 'delete', spawnKind: 'creature', guid: 80330 });
+    await waitFor(() => expect(onLayer).toHaveBeenCalledWith(layer));
+  });
+});

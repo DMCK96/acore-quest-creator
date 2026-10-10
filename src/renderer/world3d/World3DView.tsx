@@ -16,7 +16,7 @@ import { AiLock, AiWritingNotice } from '../components/AiLock';
 import type { EventFilter, PickedSpawn, SpawnStatus, SpawnVisibility } from './scene/spawn/SpawnManager';
 import type { ViewSpawns } from '@core/db/view-spawns';
 import { chooseZ, floorCandidates } from '@core/map/floors';
-import { EMPTY_WORLD, groupsOf, movementsOf, respawnsOf, spawnEventsOf, type Placement, type WorldLayer } from '@core/world/layer';
+import { EMPTY_WORLD, deletesOf, groupsOf, movementsOf, respawnsOf, spawnEventsOf, type Placement, type WorldLayer } from '@core/world/layer';
 import type { SpawnEdit, SpawnRef } from './edits';
 import { ProjectChanges } from './ProjectChanges';
 import { useProjectEntities } from '../state/project-entities';
@@ -314,7 +314,7 @@ function WorldStage({
   projectEntitiesRef.current = projectEntities;
   const setProjectLayer = useRef(project?.setLayer);
   setProjectLayer.current = project?.setLayer;
-  const changes = layer.spawns.length + layer.routes.length + layer.added.length + movementsOf(layer).length + respawnsOf(layer).length + groupsOf(layer).length + spawnEventsOf(layer).length
+  const changes = layer.spawns.length + layer.routes.length + layer.added.length + movementsOf(layer).length + respawnsOf(layer).length + groupsOf(layer).length + spawnEventsOf(layer).length + deletesOf(layer).length
     + (projectEntities ? projectEntities.npcs.length + projectEntities.objects.length + projectEntities.items.length : 0);
   // Choosing an existing NPC or object to place, and the one being placed (each click on the ground puts one down)
   const [choosing, setChoosing] = useState(false);

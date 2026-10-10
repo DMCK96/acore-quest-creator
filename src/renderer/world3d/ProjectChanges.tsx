@@ -73,6 +73,7 @@ export function ProjectChanges({
       : change.type === 'respawn' ? { kind: 'respawn', spawnKind: change.kind, guid: change.guid }
       : change.type === 'group' ? { kind: 'group', id: change.id }
       : change.type === 'spawnEvents' ? { kind: 'spawnEvents', guid: change.guid }
+      : change.type === 'deleted' ? { kind: 'delete', spawnKind: change.kind, guid: change.guid }
       : { kind: 'spawn', spawnKind: change.kind, guid: change.guid },
     );
     if (!result.ok) {
@@ -206,6 +207,23 @@ function ChangeRow({ change, eventNames, onRevert }: { change: WorldChange; even
         <td>
           <button type="button" className="btn" aria-label={`Remove ${name}`} onClick={onRevert}>
             Remove
+          </button>
+        </td>
+      </tr>
+    );
+  }
+  if (change.type === 'deleted') {
+    const name = change.name || `${change.kind === 'creature' ? 'NPC' : 'Object'} ${change.entry}`;
+    return (
+      <tr>
+        <td>
+          {name} · deleted · {change.kind === 'creature' ? 'NPC' : 'Object'} {change.entry} · spawn {change.guid} {drift}
+        </td>
+        <td>{where(change.placement)}</td>
+        <td>Deleted</td>
+        <td>
+          <button type="button" className="btn" aria-label={`Revert deletion of ${name}`} onClick={onRevert}>
+            Revert
           </button>
         </td>
       </tr>
