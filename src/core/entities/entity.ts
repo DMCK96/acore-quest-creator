@@ -51,6 +51,8 @@ export interface NpcSpawn extends SpawnedEntity {
   trainer: { teaches: boolean; count: number | null };
   /** Whether it has a gossip menu, and how many options its menus hold when the project holds them (null when the database's has not been read) */
   gossipMenu: { has: boolean; count: number | null };
+  /** The scenes it owns: counted when the project holds it, unknown (null) while it is the database's alone */
+  scenes: { has: boolean; count: number | null };
 }
 
 /** A spawned object; `lootable` is null when it is the database's and cannot be changed */

@@ -35,7 +35,8 @@ export function spawnedEntityOf(info: MenuSpawn, store: ProjectEntities): NpcSpa
     const gossipMenu = stored && !gossipUnread(stored)
       ? { has: stored.gossipMenu !== null, count: stored.gossipMenu?.menus.reduce((n, m) => n + m.options.length, 0) ?? 0 }
       : { has: (info.gossipMenuId ?? 0) > 0, count: null };
-    return { kind, entry: info.entry, name: info.name, origin: stored ? originOf(stored) : 'existing', pathId: info.pathId, wander: info.wander, vendor, trainer, gossipMenu, spawn };
+    const scenes = stored ? { has: stored.scenes.length > 0, count: stored.scenes.length } : { has: false, count: null };
+    return { kind, entry: info.entry, name: info.name, origin: stored ? originOf(stored) : 'existing', pathId: info.pathId, wander: info.wander, vendor, trainer, gossipMenu, scenes, spawn };
   }
   const stored = store.objects.find((o) => o.entry === info.entry);
   const typeLocked = stored?.origin.kind === 'existing' && stored.origin.locked.includes('type');

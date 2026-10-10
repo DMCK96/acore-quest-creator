@@ -55,7 +55,7 @@ describe('a route point', () => {
 
 describe('the builder', () => {
   it('registers the sections in the spec order', () => {
-    expect(SECTIONS.map((s) => s.id)).toEqual(['busy', 'create', 'edit', 'loot', 'vendor', 'trainer', 'gossip', 'clipboard', 'coordinates', 'respawn', 'spawn-events', 'spawn-group', 'remove', 'movement', 'route-point', 'quest-parts', 'quest-spawns', 'vessel-stops']);
+    expect(SECTIONS.map((s) => s.id)).toEqual(['busy', 'create', 'edit', 'loot', 'vendor', 'trainer', 'gossip', 'scripts', 'clipboard', 'coordinates', 'respawn', 'spawn-events', 'spawn-group', 'remove', 'movement', 'route-point', 'quest-parts', 'quest-spawns', 'vessel-stops']);
   });
 
   it('runs only sections that apply, joins those of one group, and drops empty groups', () => {
@@ -119,14 +119,14 @@ describe('the ground', () => {
 describe('a spawn', () => {
   it('a database NPC can be edited too; offline it needs the database', () => {
     const world = buildMenu(on(npc()), context()).find((g) => g.id === 'world')!;
-    expect(world.items.map((i) => i.label)).toEqual(['Edit NPC…', 'Make vendor…', 'Make trainer…', 'Add gossip menu…', 'Copy', 'Duplicate', 'Copy coordinates', 'Respawn time…', 'Event…']);
+    expect(world.items.map((i) => i.label)).toEqual(['Edit NPC…', 'Make vendor…', 'Make trainer…', 'Add gossip menu…', 'Add script…', 'Copy', 'Duplicate', 'Copy coordinates', 'Respawn time…', 'Event…']);
     expect(item(buildMenu(on(npc()), context({ connected: false })), 'Edit NPC…')!.disabledReason).toBe('Needs the world database');
     expect(item(buildMenu(on(hela), context({ connected: false })), 'Edit NPC…')!.action).toBeDefined();
   });
 
   it('a project NPC: edit first, and remove last', () => {
     const world = buildMenu(on(hela), context()).find((g) => g.id === 'world')!;
-    expect(world.items.map((i) => i.label)).toEqual(['Edit NPC…', 'Make vendor…', 'Make trainer…', 'Add gossip menu…', 'Copy', 'Duplicate', 'Copy coordinates', 'Respawn time…', 'Event…', 'Remove']);
+    expect(world.items.map((i) => i.label)).toEqual(['Edit NPC…', 'Make vendor…', 'Make trainer…', 'Add gossip menu…', 'Add script…', 'Copy', 'Duplicate', 'Copy coordinates', 'Respawn time…', 'Event…', 'Remove']);
     expect(item(buildMenu(on(hela), context()), 'Edit NPC…')!.action).toEqual({ kind: 'editEntity', spawn: hela });
   });
 
@@ -376,5 +376,32 @@ describe('the gossip section', () => {
     const unread = { ...store, npcs: [{ ...newNpc(1423), origin: { kind: 'existing' as const, original: {}, sharedLoot: 0, spawnCount: 1, sharedTrainer: 0, locked: [] } }] };
     expect(item(buildMenu(on(npc({ gossipMenuId: 5000 }), unread), context()), 'Edit gossip menu…')).toBeDefined();
     expect(item(buildMenu(on(npc({ gossipMenuId: 0 }), unread), context()), 'Add gossip menu…')).toBeDefined();
+  });
+});
+
+describe('the scripts section', () => {
+  const sceneStore = (count: number): ProjectEntities => ({
+    ...store,
+    npcs: [{ ...newNpc(12000001), name: 'Hela', scenes: Array.from({ length: count }, (_, i) => ({ id: `s${i + 1}`, name: '', questId: 0, trigger: { kind: 'talkedTo' as const }, gates: [], steps: [] })) }],
+  });
+
+  it('offers Add script… on an NPC without scenes, opening the Scripts tab', () => {
+    const entry = item(buildMenu(on(hela), context()), 'Add script…')!;
+    expect(entry.action).toEqual({ kind: 'editEntity', spawn: hela, tab: 'scripts' });
+    expect(entry.hint).toBeUndefined();
+  });
+  it('offers Edit scripts… with the scenes counted', () => {
+    expect(item(buildMenu(on(hela, sceneStore(2)), context()), 'Edit scripts…')!.hint).toBe('2 scenes');
+    expect(item(buildMenu(on(hela, sceneStore(1)), context()), 'Edit scripts…')!.hint).toBe('1 scene');
+    expect(item(buildMenu(on(hela, sceneStore(1)), context()), 'Add script…')).toBeUndefined();
+  });
+  it('needs the world database for a database NPC, not for a project one; not on objects', () => {
+    expect(item(buildMenu(on(npc()), context({ connected: false })), 'Add script…')!.disabledReason).toBe('Needs the world database');
+    expect(item(buildMenu(on(hela), context({ connected: false })), 'Add script…')!.action).toBeDefined();
+    expect(item(buildMenu(on(chest), context()), 'Add script…')).toBeUndefined();
+  });
+  it('sits right after the gossip items', () => {
+    const labels = buildMenu(on(hela), context()).find((g) => g.id === 'world')!.items.map((i) => i.label);
+    expect(labels.indexOf('Add script…')).toBe(labels.indexOf('Add gossip menu…') + 1);
   });
 });
