@@ -4,7 +4,7 @@ import { rowsOrNone } from '../links/context';
 import { GOSSIP_TEXT_LIMIT } from '../entities/gossip-tree';
 import { EVENT, SOURCE } from '../smartai/ids';
 import type { QuestScene } from './model';
-import { questTagPrefix, sceneFromComment } from './tag';
+import { npcRowOwner, questTagPrefix, sceneFromComment } from './tag';
 
 /** Every table quest scripting reads or writes, loaded into the schema at connect. */
 export const SCRIPT_TABLES = [
@@ -159,11 +159,22 @@ export async function readScriptContext(
   /** Creatures with a fight (slice I): their rows, lists and text are read as a scene owner's are. */
   extraCreatures: readonly number[] = [],
 ): Promise<ScriptContext> {
-  const [taggedSmart, taggedText, taggedConditions, taggedWaypoints] = await Promise.all([
+  // Rows an NPC's own scenes wrote before: conditions and waypoints are found by tag, as the NPCs' rows in the other tables are by owner
+  const npcScenes = new Set(extraCreatures.filter((e) => e > 0));
+  const ofNpcScenes = async (table: string, column: string): Promise<RawRow[]> =>
+    npcScenes.size === 0
+      ? []
+      : (await prefixedRows(db, table, column, 'AQC npc')).filter((row) => {
+          const owner = npcRowOwner(row[column], 'scene');
+          return owner !== null && npcScenes.has(owner);
+        });
+  const [taggedSmart, taggedText, taggedConditions, taggedWaypoints, sceneConditions, sceneWaypoints] = await Promise.all([
     taggedRows(db, 'smart_scripts', 'comment', questId),
     taggedRows(db, 'creature_text', 'comment', questId),
     taggedRows(db, 'conditions', 'Comment', questId),
     taggedRows(db, 'waypoints', 'point_comment', questId),
+    ofNpcScenes('conditions', 'Comment'),
+    ofNpcScenes('waypoints', 'point_comment'),
   ]);
 
   const creatures = new Set<number>(extraCreatures.filter((e) => e > 0));
@@ -218,8 +229,8 @@ export async function readScriptContext(
   return {
     smartScripts: unique('smart_scripts', [...taggedSmart, ...onCreatures, ...onObjects, ...onAreas, ...onLists]),
     creatureText: unique('creature_text', [...taggedText, ...creatureText]),
-    conditions: unique('conditions', taggedConditions),
-    waypoints: unique('waypoints', taggedWaypoints),
+    conditions: unique('conditions', [...taggedConditions, ...sceneConditions]),
+    waypoints: unique('waypoints', [...taggedWaypoints, ...sceneWaypoints]),
     waypointsMax,
     gossipOptions,
     gossipMenuMax,

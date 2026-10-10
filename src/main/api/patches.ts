@@ -12,6 +12,7 @@ import { hasWorldChanges, movementsOf, worldStatements, type SpawnDefaults, type
 import { worldSchema } from '../world/world-api';
 import { compileScenes, mergeCompiled, type CompiledScripts } from '../../core/scripts/compile';
 import { compileFights } from '../../core/combat/compile';
+import { compileNpcScenes } from '../../core/scripts/npc-compile';
 import { SCRIPT_KEYS, readScriptContext, taggedRows, type ScriptContext } from '../../core/scripts/context';
 import { scenesFromRows } from '../../core/scripts/decompile';
 import { SCRIPTS_FIELD, readScenes, writeScenes } from '../../core/scripts/model';
@@ -81,7 +82,7 @@ export function createPatches(ctx: ApiContext) {
   }
 
   /**
-   * The SmartAI rows of the project's NPCs: their fights, then what they do at patrol points. Every
+   * The SmartAI rows of the project's NPCs: their fights, what they do at patrol points, then their own scenes. Every
    * project NPC goes in, so the rows of a fight or point action since removed are deleted.
    */
   async function projectScripts(live: Session): Promise<{ context: ScriptContext; compiled: CompiledScripts }> {
@@ -90,7 +91,9 @@ export function createPatches(ctx: ApiContext) {
     const none: CompiledScripts = { inserts: {}, deletes: {}, updates: [], flags: [], warnings: [] };
     const fights = compileFights({ npcs, objectives: objectivesByQuest(), context, taken: none });
     const patrols = compilePatrols({ npcs, context, taken: fights });
-    return { context, compiled: mergeCompiled(fights, patrols) };
+    const around = mergeCompiled(fights, patrols);
+    const scenes = compileNpcScenes({ npcs, objectives: objectivesByQuest(), context, taken: around, gossip: projectGossip(npcs) });
+    return { context, compiled: mergeCompiled(around, scenes) };
   }
 
   /**
