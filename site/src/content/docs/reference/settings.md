@@ -54,6 +54,8 @@ The **MCP / AI** tab turns on the MCP server that lets an AI assistant work in t
 
 The **Preferences** tab holds how the app looks on this computer. **Quest dock** puts the **Quests** dock **Under the world** or **Beside the world**; each side remembers its own size. Drag the bar between the World and the dock to resize it. Preferences are kept on this computer, not in the project. The **✕** in the corner closes Settings from either tab.
 
+**Debug mode**, under **Diagnostics**, is off by default. While it is on, the app records a timeline of key codes, focus changes, window and dialog events, errors and the 3D view's frame rate and draw calls, in memory and in a log file (shown under the switch), so a fault that only appears in the live window can be traced. It never records the characters you type or what is in a field. An [AI assistant](/azeroth-world-editor/guides/ai-mcp/#debug-mode-and-the-screenshot-tool) can read the timeline; only you can switch it on.
+
 ## Where the app keeps its data
 
 Connection details, recent projects and recovery copies live in the app's data folder:
