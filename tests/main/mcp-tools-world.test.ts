@@ -124,6 +124,21 @@ describe('entity tools', () => {
     expect((await labels(api)).at(-1)).toBe('AI: delete npc 1423');
   });
 
+  it('delete_world_spawn deletes a database spawn as one step, world_changes lists it, and revert_world_change puts it back', async () => {
+    const { call, api } = await mcpFixture(allTools);
+    expect((await call('delete_world_spawn', { kind: 'creature', guid: 80330 })).isError).toBe(false);
+    expect((await call('world_changes')).value.map((c: any) => c.type)).toEqual(['deleted']);
+    expect(await labels(api)).toEqual(['AI: delete creature 80330']);
+    expect((await call('revert_world_change', { target: { kind: 'delete', spawnKind: 'creature', guid: 80330 } })).isError).toBe(false);
+    expect((await call('world_changes')).value).toEqual([]);
+  });
+
+  it('delete_world_spawn says why when the spawn is not in the database', async () => {
+    const { call } = await mcpFixture(allTools);
+    const out = await call('delete_world_spawn', { kind: 'creature', guid: 4242 });
+    expect(out.isError).toBe(true);
+  });
+
   it('tells the model which way orientation 0 points when placing or moving a spawn', () => {
     for (const name of ['add_spawn', 'move_spawn']) {
       const tool = allTools.find((t) => t.name === name)!;

@@ -38,6 +38,18 @@ export const worldTools = [
     },
   }),
   defineTool({
+    name: 'delete_world_spawn',
+    title: 'Delete a spawn',
+    description:
+      "Deletes an existing NPC or object spawn (by its guid; see find_spawns) from the world. A database spawn is written as DELETEs in the project patch, with its addon, game event and group rows, and the patch's revert puts them back; a spawn the project placed is simply taken back out. The database is never written. Undo or revert_world_change ({kind:'delete',spawnKind,guid}) takes it back.",
+    input: { kind, guid },
+    write: { kind: 'step', label: ({ kind, guid }: { kind: string; guid: number }) => `AI: delete ${kind} ${guid}` },
+    run: async ({ kind, guid }, ctx) => {
+      const out = await ctx.call('worldDeleteSpawn', kind, guid);
+      return out.ok ? { ok: true, value: { deleted: { kind, guid } } } : out;
+    },
+  }),
+  defineTool({
     name: 'set_route',
     title: 'Set a patrol route',
     description: `Sets the points of a patrol path (waypoint_data) by path id; use isNew for a path that does not exist yet, with a free id from allocate_ids or the NPC's guid times ten. ${UNITS}`,
@@ -83,7 +95,7 @@ export const worldTools = [
     name: 'revert_world_change',
     title: 'Take back a world change',
     description:
-      "Takes one world edit back out of the project: a moved spawn ({kind:'spawn',spawnKind,guid}), a route ({kind:'route',pathId}), a movement ({kind:'movement',guid}), a respawn time ({kind:'respawn',spawnKind,guid}), a group ({kind:'group',id}) or spawn events ({kind:'spawnEvents',guid}). See world_changes.",
+      "Takes one world edit back out of the project: a moved spawn ({kind:'spawn',spawnKind,guid}), a route ({kind:'route',pathId}), a movement ({kind:'movement',guid}), a respawn time ({kind:'respawn',spawnKind,guid}), a group ({kind:'group',id}), spawn events ({kind:'spawnEvents',guid}) or a deleted spawn ({kind:'delete',spawnKind,guid}). See world_changes.",
     input: {
       target: z.discriminatedUnion('kind', [
         z.object({ kind: z.literal('spawn'), spawnKind: kind, guid: z.number().int() }),
@@ -92,6 +104,7 @@ export const worldTools = [
         z.object({ kind: z.literal('respawn'), spawnKind: kind, guid: z.number().int() }),
         z.object({ kind: z.literal('group'), id: z.number().int() }),
         z.object({ kind: z.literal('spawnEvents'), guid: z.number().int() }),
+        z.object({ kind: z.literal('delete'), spawnKind: kind, guid: z.number().int() }),
       ]),
     },
     write: { kind: 'step', label: () => 'AI: revert world change' },
