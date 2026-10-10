@@ -76,6 +76,8 @@ export function makeMockApi(overrides: Partial<Record<keyof Api, (...args: any[]
     debugSnapshot: vi.fn(async () => okv({ main: null, renderer: null, rendererAnswered: false })),
     debugType: vi.fn(async () => okv({ typed: 0, before: null, after: null, changed: false, window: null, events: [] })),
     captureScreenshot: vi.fn(async () => okv({ width: 1, height: 1, mimeType: 'image/png' as const, data: '', window: null })),
+    cameraStatus: vi.fn(async () => okv({ map: 0, x: 0, y: 0, z: 0, area: null })),
+    cameraTeleport: vi.fn(async () => okv({ map: 0, x: 0, y: 0, z: 0, area: null })),
     debugRecord: vi.fn(async () => okv(null)),
     debugAnswer: vi.fn(async () => okv(null)),
     questsInZone: vi.fn(async (zone: number) => okv({ zone: { id: zone, name: `Zone ${zone}` }, quests: [], total: 0, truncated: false })),

@@ -138,4 +138,18 @@ describe('the debug controller', () => {
     const hidden = rig({ capture: async () => null });
     await expect(hidden.controller.screenshot()).rejects.toMatchObject({ error: { code: 'BAD_REQUEST', message: 'The window is hidden or minimised, so there is nothing to capture.' } });
   });
+
+  it('cameraStatus and cameraTeleport ask the page, with Debug mode off', async () => {
+    const camera = { map: 0, x: 1, y: 2, z: 3, area: null };
+    const { controller, asked } = rig({ answers: [{ camera }, { camera }] });
+    expect(await controller.cameraStatus()).toEqual(camera);
+    expect(await controller.cameraTeleport({ map: 0, x: 1, y: 2, z: 3 })).toEqual(camera);
+    expect(asked).toEqual([{ kind: 'camera' }, { kind: 'teleport', target: { map: 0, x: 1, y: 2, z: 3 } }]);
+  });
+
+  it('the camera calls say plainly when the page does not answer or has no 3D view', async () => {
+    const { controller } = rig({ answers: [{ camera: null }] });
+    await expect(controller.cameraStatus()).rejects.toMatchObject({ message: expect.stringMatching(/3D view/) });
+    await expect(controller.cameraStatus()).rejects.toMatchObject({ message: expect.stringMatching(/did not answer/) });
+  });
 });

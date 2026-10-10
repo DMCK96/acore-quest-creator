@@ -29,6 +29,7 @@ import { World3DView, type FocusTarget } from './World3DView';
 import type { PickedSpawn } from './scene/spawn/SpawnManager';
 import { FindDialog, type FindPreset, type FoundSpawn } from './FindDialog';
 import { TeleportDialog } from './TeleportDialog';
+import { registerCameraHandle } from './camera-handle';
 import { QuestOrb } from '../components/QuestOrb';
 import { questPlace } from './quest-place';
 import { PlaceInWorldProvider, ShowInWorldProvider, useAsideForWorld, type ShowTarget, type WorldRequest } from './ShowInWorldContext';
@@ -387,6 +388,21 @@ export function WorldWorkspace({
     // Only a new request moves the camera
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [goToRequest?.nonce]);
+
+  // The AI bot's view of the camera (MCP camera_status and teleport), through the debug bridge; always the latest closures
+  const cameraTools = useRef<Parameters<typeof registerCameraHandle>[0]>(null as never);
+  cameraTools.current = {
+    status: () => {
+      const stored = asStored(mapRef.current, placeRef.current);
+      return { map: mapRef.current, x: stored.x, y: stored.y, z: stored.z, area: areaRef.current ?? null };
+    },
+    teleport: ({ map, x, y, z }) => {
+      if (!worldMapById(map)) return null;
+      jump(inWorld(map, { x, y, z }), map);
+      return cameraTools.current.status();
+    },
+  };
+  useEffect(() => registerCameraHandle({ status: () => cameraTools.current.status(), teleport: (target) => cameraTools.current.teleport(target) }), []);
 
   /**
    * Where a quest is, or the nearest spawn of one of its NPCs or objects: a spawn to go to, null when

@@ -113,6 +113,8 @@ export const API_METHODS = [
   'debugSnapshot',
   'debugType',
   'captureScreenshot',
+  'cameraStatus',
+  'cameraTeleport',
   'debugRecord',
   'debugAnswer',
 ] as const satisfies readonly (keyof Api)[];

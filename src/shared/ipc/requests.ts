@@ -266,6 +266,8 @@ const REQUEST_SCHEMAS: Record<keyof Api, z.ZodType<unknown[]>> = {
       })
       .optional(),
   ]),
+  cameraStatus: z.tuple([]),
+  cameraTeleport: z.tuple([z.object({ map: z.number().int().min(0), x: finite, y: finite, z: finite })]),
   debugRecord: z.tuple([
     z.array(z.object({ at: finite, category: z.string().max(40), name: z.string().max(60), data: z.record(z.string(), z.unknown()).optional() })).max(500),
   ]),
@@ -284,6 +286,7 @@ const REQUEST_SCHEMAS: Record<keyof Api, z.ZodType<unknown[]>> = {
         field: z.object({ target: debugText, value: debugText }).nullable(),
       }),
       z.object({ rect: z.object({ x: finite, y: finite, width: finite, height: finite }).nullable() }),
+      z.object({ camera: z.object({ map: z.number().int(), x: finite, y: finite, z: finite, area: debugText.nullable() }).nullable() }),
     ]),
   ]),
 };

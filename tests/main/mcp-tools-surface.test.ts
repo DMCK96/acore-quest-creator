@@ -16,8 +16,8 @@ describe('what the MCP tools may reach', () => {
   it('never call a method that writes a database, handles a password, or replaces the whole project', () => {
     for (const m of FORBIDDEN) expect(called).not.toContain(m);
   });
-  it('the debug tools reach the controller only through the five read and probe methods', () => {
-    for (const m of ['debugStatus', 'debugEvents', 'debugSnapshot', 'debugType', 'captureScreenshot']) expect(called).toContain(m);
+  it('the debug tools reach the controller only through its read and probe methods', () => {
+    for (const m of ['debugStatus', 'debugEvents', 'debugSnapshot', 'debugType', 'captureScreenshot', 'cameraStatus', 'cameraTeleport']) expect(called).toContain(m);
   });
   it('never use the API object directly, only ctx.call', () => {
     for (const s of sources) expect(s).not.toMatch(/ctx\.api\b/);
