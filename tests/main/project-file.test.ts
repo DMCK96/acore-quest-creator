@@ -55,7 +55,7 @@ describe('project file', () => {
   it('refuses a newer format version and says which', () => {
     const text = serializeProject(doc()).replace(`"version": ${PROJECT_VERSION}`, `"version": ${PROJECT_VERSION + 1}`);
     expect(reasonOf(() => parseProject(text))).toBe('newer-version');
-    expect(() => parseProject(text)).toThrow(/7/);
+    expect(() => parseProject(text)).toThrow(new RegExp(String(PROJECT_VERSION + 1)));
   });
 
   it('names the first invalid path of a corrupt project', () => {
@@ -144,8 +144,7 @@ describe('project file: the world layer', () => {
         members: [{ type: 'spawn' as const, kind: 'npc' as const, guid: 80331, entry: 1423, chance: 0 }] },
     ];
     const text = serializeProject(doc({ world: { ...world, groups } }));
-    expect(JSON.parse(text).version).toBe(6);
-    expect(PROJECT_VERSION).toBe(6);
+    expect(JSON.parse(text).version).toBe(PROJECT_VERSION);
     expect(parseProject(text).world.groups).toEqual(groups);
   });
 
@@ -166,6 +165,29 @@ describe('project file: the world layer', () => {
     };
     expect(parseProject(serializeProject(doc({ world: full }))).world).toEqual(full);
     expect(JSON.parse(serializeProject(doc({ world }))).world).not.toHaveProperty('spawnEvents');
+  });
+
+  it('keeps deleted spawns, rows and all, through a save and reopen, and writes none when there are none', () => {
+    const deletes = [{
+      kind: 'creature' as const, guid: 80330, entry: 1423, name: 'Stormwind Guard', map: 0, placement: { x: 1, y: 2, z: 3, orientation: 0.5, rotation: null },
+      rows: [
+        { table: 'creature' as const, row: { guid: '80330', id1: '1423', Comment: null } as Record<string, string | null> },
+        { table: 'pool_creature' as const, row: { guid: '80330', pool_entry: '9' } as Record<string, string | null> },
+      ],
+    }];
+    const full = { ...world, deletes };
+    expect(parseProject(serializeProject(doc({ world: full }))).world).toEqual(full);
+    expect(JSON.parse(serializeProject(doc({ world }))).world).not.toHaveProperty('deletes');
+  });
+
+  it('is saved as a version newer than one that cannot keep deleted spawns, so an older tool refuses it rather than dropping them', () => {
+    expect(PROJECT_VERSION).toBeGreaterThanOrEqual(7);
+  });
+
+  it('names a corrupt deleted spawn', () => {
+    const raw = JSON.parse(serializeProject(doc({ world: { ...world, deletes: [{ kind: 'creature', guid: 1, entry: 1, name: 'n', map: 0, placement: { x: 0, y: 0, z: 0, orientation: 0, rotation: null }, rows: [{ table: 'creature', row: {} }] }] } })));
+    raw.world.deletes[0].rows[0].table = 'quest_template';
+    expect(() => parseProject(JSON.stringify(raw))).toThrow(/world\.deletes\.0\.rows\.0\.table/);
   });
 
   it('writes no respawns or groups for a layer without any, as before', () => {

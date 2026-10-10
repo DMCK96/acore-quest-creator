@@ -2,7 +2,7 @@ import { isDeepStrictEqual } from 'node:util';
 import { fieldById } from '../../core/registry';
 import { moduleById, ownerOf } from '../../core/modules/catalog';
 import type { ModuleId } from '../../core/modules/model';
-import { groupsOf, movementsOf, respawnsOf, spawnEventsOf, type WorldLayer, type WorldRouteEdit } from '../../core/world/layer';
+import { deletesOf, groupsOf, movementsOf, respawnsOf, spawnEventsOf, type WorldLayer, type WorldRouteEdit } from '../../core/world/layer';
 import type { HistoryPart, QuestEdit, StepPlace, StepSummary } from '../../shared/history';
 import type { HistoryStep } from './history';
 
@@ -63,6 +63,9 @@ function worldChanges(before: WorldLayer, after: WorldLayer): WorldChange[] {
   const out: WorldChange[] = [];
   const keyed = <T,>(list: T[], key: (t: T) => string) => new Map(list.map((t) => [key(t), t]));
   const spawnKey = (s: { kind: string; guid: number }) => `${s.kind}:${s.guid}`;
+  // A spawn deleted in `after` loses its other edits: they are not reported as taken back
+  const deletedAfter = new Set(deletesOf(after).map(spawnKey));
+  const goneWith = (kind: string, guid: number) => deletedAfter.has(`${kind}:${guid}`);
 
   const spawnsBefore = keyed(before.spawns, spawnKey);
   const spawnsAfter = keyed(after.spawns, spawnKey);
@@ -71,7 +74,7 @@ function worldChanges(before: WorldLayer, after: WorldLayer): WorldChange[] {
     out.push({ text: `Moved ${s.name}`, where: { map: s.map, x: s.current.x, y: s.current.y, z: s.current.z, spawn: { kind: s.kind, guid: s.guid } } });
   }
   for (const [key, s] of spawnsBefore) {
-    if (spawnsAfter.has(key)) continue;
+    if (spawnsAfter.has(key) || goneWith(s.kind, s.guid)) continue;
     out.push({ text: `Reverted ${s.name}`, where: { map: s.map, x: s.original.x, y: s.original.y, z: s.original.z, spawn: { kind: s.kind, guid: s.guid } } });
   }
 
@@ -114,7 +117,7 @@ function worldChanges(before: WorldLayer, after: WorldLayer): WorldChange[] {
     if (isDeepStrictEqual(movesBefore.get(key), m)) continue;
     out.push({ text: `Movement of ${m.name}`, where: null });
   }
-  for (const [key, m] of movesBefore) if (!movesAfter.has(key)) out.push({ text: `Reverted movement of ${m.name}`, where: null });
+  for (const [key, m] of movesBefore) if (!movesAfter.has(key) && !goneWith('creature', m.guid)) out.push({ text: `Reverted movement of ${m.name}`, where: null });
 
   const respawnKey = (r: { kind: string; guid: number }) => `${r.kind}:${r.guid}`;
   const respawnsBefore = keyed(respawnsOf(before), respawnKey);
@@ -123,7 +126,7 @@ function worldChanges(before: WorldLayer, after: WorldLayer): WorldChange[] {
     if (isDeepStrictEqual(respawnsBefore.get(key), r)) continue;
     out.push({ text: `Respawn time of ${r.name}`, where: null });
   }
-  for (const [key, r] of respawnsBefore) if (!respawnsAfter.has(key)) out.push({ text: `Reverted respawn time of ${r.name}`, where: null });
+  for (const [key, r] of respawnsBefore) if (!respawnsAfter.has(key) && !goneWith(r.kind, r.guid)) out.push({ text: `Reverted respawn time of ${r.name}`, where: null });
 
   const eventsBefore = keyed(spawnEventsOf(before), (e) => String(e.guid));
   const eventsAfter = keyed(spawnEventsOf(after), (e) => String(e.guid));
@@ -131,7 +134,16 @@ function worldChanges(before: WorldLayer, after: WorldLayer): WorldChange[] {
     if (isDeepStrictEqual(eventsBefore.get(key), e)) continue;
     out.push({ text: `Events of ${e.name}`, where: null });
   }
-  for (const [key, e] of eventsBefore) if (!eventsAfter.has(key)) out.push({ text: `Reverted events of ${e.name}`, where: null });
+  for (const [key, e] of eventsBefore) if (!eventsAfter.has(key) && !goneWith('creature', e.guid)) out.push({ text: `Reverted events of ${e.name}`, where: null });
+
+  const deletesBefore = keyed(deletesOf(before), spawnKey);
+  const deletesAfter = keyed(deletesOf(after), spawnKey);
+  const stood = (d: { map: number; guid: number; kind: 'creature' | 'gameobject'; placement: { x: number; y: number; z: number } }) =>
+    ({ map: d.map, x: d.placement.x, y: d.placement.y, z: d.placement.z, spawn: { kind: d.kind, guid: d.guid } });
+  for (const [key, d] of deletesAfter) {
+    if (!isDeepStrictEqual(deletesBefore.get(key), d)) out.push({ text: `Deleted ${d.name}`, where: stood(d) });
+  }
+  for (const [key, d] of deletesBefore) if (!deletesAfter.has(key)) out.push({ text: `Reverted deletion of ${d.name}`, where: stood(d) });
 
   const groupsBefore = keyed(groupsOf(before), (g) => String(g.id));
   const groupsAfter = keyed(groupsOf(after), (g) => String(g.id));

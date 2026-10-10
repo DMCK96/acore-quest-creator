@@ -1,5 +1,5 @@
 import type { SpawnGroup } from '../world/groups';
-import { groupsOf, movementsOf, respawnsOf, spawnEventsOf, type WorldLayer } from '../world/layer';
+import { deletesOf, groupsOf, movementsOf, respawnsOf, spawnEventsOf, type WorldLayer } from '../world/layer';
 import { spawnKindOf, type EntityChange, type EntityKind, type SpawnLocation, type TrackedEntity } from './entity';
 import type { QuestUse } from './links';
 import type { ProjectEntities, StoredOrigin } from './model';
@@ -63,6 +63,7 @@ export function trackedEntities(input: {
 
   for (const s of layer.spawns) touch(spawnKindOf(s.kind), s.entry, s.name, 'spawns', locate(s.kind, s.guid, s.map, s.current));
   for (const a of layer.added) touch(spawnKindOf(a.kind), a.entry, a.name, 'spawns', locate(a.kind, a.guid, a.map, a.placement));
+  for (const d of deletesOf(layer)) touch(spawnKindOf(d.kind), d.entry, d.name, 'spawns', locate(d.kind, d.guid, d.map, d.placement));
   const spawnOf = (kind: 'npc' | 'object', guid: number, map: number): SpawnLocation => ({ kind: kind === 'npc' ? 'creature' : 'object', guid, map });
   for (const r of respawnsOf(layer)) touch(spawnKindOf(r.kind), r.entry, r.name, 'spawns', spawnOf(spawnKindOf(r.kind), r.guid, r.map));
   for (const e of spawnEventsOf(layer)) touch('npc', e.entry, e.name, 'spawns', spawnOf('npc', e.guid, e.map));

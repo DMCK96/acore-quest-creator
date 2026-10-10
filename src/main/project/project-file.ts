@@ -4,7 +4,7 @@ import type { FidelityReport } from '../../core/roundtrip/verify';
 import { TOOL_VERSION } from '../../core/version';
 import { migrateQuestEntities } from '../../core/entities/migrate';
 import { EMPTY_ENTITIES, eventRuleSchema, readProjectEntities, type ProjectEntities } from '../../core/entities/model';
-import { EMPTY_WORLD, groupsOf, movementsOf, respawnsOf, spawnEventsOf, type Placement, type RoutePoint, type WorldLayer } from '../../core/world/layer';
+import { EMPTY_WORLD, deletesOf, groupsOf, movementsOf, respawnsOf, spawnEventsOf, type Placement, type RoutePoint, type WorldLayer } from '../../core/world/layer';
 import type { GroupMember, SpawnGroup } from '../../core/world/groups';
 import type { Movement } from '../../core/world/movement';
 import type { Viewport } from '../../shared/ipc';
@@ -19,9 +19,9 @@ export const PROJECT_FORMAT = 'acore-quest-creator/project';
  * 2 added the world layer (a version 1 file opens with an empty one); 3 added the spawns placed in it;
  * 4 moved new NPCs, objects and items from quests into the project (older files move them on open);
  * 5 added respawn times, spawn groups and route walkers to the world layer (an older tool would drop
- * them on a save, so it refuses the file instead).
+ * them on a save, so it refuses the file instead); 7 added deleted spawns to it (same reason).
  */
-export const PROJECT_VERSION = 6;
+export const PROJECT_VERSION = 7;
 export const PROJECT_EXTENSION = 'awe';
 /** Every extension a project opens from: `.aqc` is what the app saved before it was renamed. */
 export const PROJECT_EXTENSIONS = [PROJECT_EXTENSION, 'aqc'] as const;
@@ -194,6 +194,15 @@ export function serializeProject(doc: ProjectDocument): string {
             })),
           }
         : {}),
+      // Left out while there are none, like respawns
+      ...(deletesOf(doc.world).length > 0
+        ? {
+            deletes: deletesOf(doc.world).map((d) => ({
+              kind: d.kind, guid: d.guid, entry: d.entry, name: d.name, map: d.map, placement: placement(d.placement),
+              rows: d.rows.map((r) => ({ table: r.table, row: { ...r.row } })),
+            })),
+          }
+        : {}),
     },
     entities: doc.entities,
   };
@@ -356,6 +365,25 @@ const worldSchema = z.object({
         map: z.number().int(),
         original: z.array(z.record(z.string(), z.string().nullable())),
         current: eventRuleSchema,
+      }),
+    )
+    .optional(),
+  // Absent from a project saved before spawns could be deleted
+  deletes: z
+    .array(
+      z.object({
+        kind: z.enum(['creature', 'gameobject']),
+        guid: z.number().int(),
+        entry: z.number().int(),
+        name: z.string(),
+        map: z.number().int(),
+        placement: placementSchema,
+        rows: z.array(
+          z.object({
+            table: z.enum(['creature', 'gameobject', 'creature_addon', 'game_event_creature', 'game_event_gameobject', 'pool_creature', 'pool_gameobject']),
+            row: rowSchema,
+          }),
+        ),
       }),
     )
     .optional(),

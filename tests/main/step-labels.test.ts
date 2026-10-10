@@ -69,6 +69,16 @@ describe('describeStep', () => {
     expect(changed({ events: null })).toBe('Events of Guard');
   });
 
+  it('names a deleted spawn, and taking the deletion back, without counting the edits that went with it', () => {
+    const gone = { kind: 'creature' as const, guid: 80330, entry: 1423, name: 'Stormwind Guard', map: 0, placement: at, rows: [] };
+    const moved = { kind: 'creature' as const, guid: 80330, entry: 1423, name: 'Stormwind Guard', map: 0, original: at, current: { ...at, x: 9 } };
+    const resp = { kind: 'creature' as const, guid: 80330, entry: 1423, name: 'Stormwind Guard', map: 0, original: 300, current: 60 };
+    expect(describeStep(step([{ kind: 'world', before: EMPTY_WORLD, after: { ...EMPTY_WORLD, deletes: [gone] } }])).label).toBe('Deleted Stormwind Guard');
+    expect(describeStep(step([{ kind: 'world', before: { ...EMPTY_WORLD, deletes: [gone] }, after: EMPTY_WORLD }])).label).toBe('Reverted deletion of Stormwind Guard');
+    const edited = { ...EMPTY_WORLD, spawns: [moved], respawns: [resp] };
+    expect(describeStep(step([{ kind: 'world', before: edited, after: { ...EMPTY_WORLD, deletes: [gone] } }])).label).toBe('Deleted Stormwind Guard');
+  });
+
   it('names spawn event steps', () => {
     const ev = { guid: 80330, entry: 1423, name: 'Stormwind Guard', map: 0, original: [], current: null };
     expect(describeStep(step([{ kind: 'world', before: EMPTY_WORLD, after: { ...EMPTY_WORLD, spawnEvents: [ev] } }])).label).toBe('Events of Stormwind Guard');

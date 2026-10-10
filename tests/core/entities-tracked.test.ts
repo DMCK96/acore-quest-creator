@@ -80,6 +80,15 @@ describe('trackedEntities', () => {
     expect(trackedEntities({ store: EMPTY_ENTITIES, layer, quests: [] })[0]).toMatchObject({ entry: 1423, changes: ['spawns'] });
   });
 
+  it('a deleted spawn is a spawns change of its NPC or object, going to where it stood', () => {
+    const gone = (kind: 'creature' | 'gameobject', guid: number, entry: number) => ({ kind, guid, entry, name: 'n', map: 0, placement: place(4), rows: [] });
+    const layer: WorldLayer = { ...EMPTY_WORLD, deletes: [gone('creature', 80330, 1423), gone('gameobject', 5, 143981)] };
+    expect(trackedEntities({ store: EMPTY_ENTITIES, layer, quests: [] })).toMatchObject([
+      { kind: 'npc', entry: 1423, changes: ['spawns'], goTo: { kind: 'creature', guid: 80330, map: 0, x: 4, y: 0, z: 0 } },
+      { kind: 'object', entry: 143981, changes: ['spawns'], goTo: { kind: 'object', guid: 5, map: 0, x: 4, y: 0, z: 0 } },
+    ]);
+  });
+
   it('a spawn events change is a spawns change', () => {
     const layer: WorldLayer = { ...EMPTY_WORLD, spawnEvents: [{ guid: 80330, entry: 1423, name: 'Stormwind Guard', map: 0, original: [], current: null }] };
     expect(trackedEntities({ store: EMPTY_ENTITIES, layer, quests: [] })[0]).toMatchObject({ entry: 1423, changes: ['spawns'] });
