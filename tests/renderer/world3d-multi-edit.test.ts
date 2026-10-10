@@ -115,7 +115,7 @@ function setup(opts: { routes?: Record<number, Route>; floor?: number | null; ab
     },
   });
   const gizmo = gizmos.at(-1);
-  const change = (delta: [number, number, number] = [0, 0, 0], angle = 0) => ({ delta: new THREE.Vector3(...delta), angle, quaternion: new THREE.Quaternion(), axis: null });
+  const change = (delta: [number, number, number] = [0, 0, 0], angle = 0) => ({ delta: new THREE.Vector3(...delta), angle, quaternion: new THREE.Quaternion(), axis: 'XY' });
   const drag = async (delta?: [number, number, number], angle?: number, lifted = false) => {
     editor.update();
     gizmo.events.started();
@@ -202,7 +202,7 @@ describe('moving and turning a selection in the 3D view', () => {
     expect(placed(t.gestures[0]!)).toEqual([[1, 0, 4, 1]]);
   });
 
-  it('leaves a spawn aboard a docked vessel on its deck: the continent’s floor under the vessel is not its floor', async () => {
+  it('leaves a spawn aboard a docked vessel on its deck: the continentâ€™s floor under the vessel is not its floor', async () => {
     const t = setup({ floor: -50, aboard: [2] });
     t.npc(1, 0, 0);
     t.npc(2, 10, 0);
@@ -212,6 +212,20 @@ describe('moving and turning a selection in the 3D view', () => {
     expect(t.floorZ).toHaveBeenCalledTimes(1);
     expect(placed(t.gestures[0]!)).toEqual([[1, 0, 4, -50], [2, 10, 4, 0]]);
     expect(t.notices.at(-1)).toBeNull();
+  });
+
+  it('an arrow (red, green) moves a thing freely: it neither follows the ground nor drops to the server floor, only the yellow handle does', async () => {
+    const t = setup({ floor: -50 });
+    t.npc(1, 0, 0);
+    t.editor.setSelection(sel({ spawns: [{ kind: 'creature', guid: 1 }] }));
+    t.editor.update();
+    for (const axis of ['X', 'Y']) {
+      t.gizmo.events.started();
+      t.gizmo.events.moved({ ...t.change([0, 4, 0]), axis });
+      await t.gizmo.events.ended(false);
+    }
+    expect(t.floorZ).not.toHaveBeenCalled();
+    expect(placed(t.gestures[0]!)).toEqual([[1, 0, 4, 0]]);
   });
 
   it('the editor keeps no history: Ctrl+Z and Ctrl+Y are left to the app when no path is drawn', () => {

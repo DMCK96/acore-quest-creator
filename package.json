@@ -21,6 +21,7 @@
     "test:e2e": "npm run build && playwright test",
     "test:world3d": "playwright test -c playwright.world3d.config.ts",
     "dist": "npm run rebuild:electron && electron-vite build && electron-builder",
+    "dist:win": "npm run rebuild:electron && electron-vite build && electron-builder --win dir",
     "corpus": "tsx scripts/corpus.ts",
     "rebuild:node": "npm rebuild better-sqlite3",
     "rebuild:electron": "electron-rebuild -f -w better-sqlite3",

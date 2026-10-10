@@ -19,6 +19,8 @@ import { centreOf, movedBy, turnedAbout, turnQuaternion } from './scene/edit/gro
 
 /** How far above the drawn ground a thing lifted on the Z arrow must stand to count as held there */
 const RAISED = 0.5;
+/** The gizmo handle that slides a thing along the ground (the yellow square): the only one that follows the ground and drops to the server floor */
+const GROUND_AXIS = 'XY';
 const raisedKey = (kind: 'creature' | 'object', guid: number): string => `${kind}:${guid}`;
 export const NOT_SNAPPED = 'The height is from the drawn ground, not the server.';
 export const TOO_SHORT = 'A route keeps at least two points.';
@@ -525,9 +527,9 @@ export class Editor {
     if (!drag) return;
     drag.last = change;
     const turning = this.#mode === 'rotate' && this.#attached?.turns !== 'none';
-    // A move along the ground follows the ground; a thing the user lifted on the Z arrow keeps its height above it
+    // Only the yellow plane handle follows the ground (a thing lifted on the Z arrow keeps its height above it); the arrows move freely
     const onGround = (p: At, start: At, keepHeight: boolean): At => {
-      if (turning || change.axis === 'Z') return p;
+      if (turning || change.axis !== GROUND_AXIS) return p;
       const clearance = keepHeight ? Math.max(0, start.z - (this.#gizmo.groundAt(start.x, start.y, start.z) ?? start.z)) : 0;
       const ground = this.#gizmo.groundAt(p.x, p.y, p.z - clearance);
       return { ...p, z: ground === null ? p.z : ground + clearance };
@@ -591,7 +593,7 @@ export class Editor {
       for (const r of routes) if (r.changed.length > 0) this.#pend(r.guid, r.current);
 
       // Dropped along the ground: onto the server's floor nearest where each thing was dragged, when it has one
-      if (moving && !lifted && this.#options.floorZ) {
+      if (moving && !lifted && change.axis === GROUND_AXIS && this.#options.floorZ) {
         const floorZ = this.#options.floorZ;
         const asks = [
           ...spawns.map(async (s) => {

@@ -156,9 +156,9 @@ export class Gizmo {
     this.#controls.showZ = true;
   }
 
-  /** A move along the ground keeps the stand-in on the drawn ground under it */
+  /** A slide on the yellow plane handle keeps the stand-in on the drawn ground under it; the arrows move it freely */
   #follow(axis: string | null): void {
-    if (this.#controls.mode === 'translate' && axis !== 'Z') {
+    if (this.#controls.mode === 'translate' && axis === 'XY') {
       const { x, y, z } = this.#start.position;
       const clearance = this.keepHeight ? Math.max(0, z - (this.groundAt(x, y, z) ?? z)) : 0;
       const ground = this.groundAt(this.#proxy.position.x, this.#proxy.position.y, this.#proxy.position.z - clearance);
