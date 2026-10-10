@@ -12,7 +12,7 @@ const store = { ...EMPTY_ENTITIES, npcs: [{ ...newNpc(12000001), name: 'Hela' }]
 describe('the clicked thing as an entity', () => {
   it('a database NPC is existing, with its spawn existing too', () => {
     expect(spawnedEntityOf(info(), store)).toEqual({
-      kind: 'npc', entry: 1423, name: 'Guard', origin: 'existing', pathId: 801, wander: 0, vendor: { sells: false, count: null }, trainer: { teaches: false, count: null }, gossipMenu: { has: false, count: null },
+      kind: 'npc', entry: 1423, name: 'Guard', origin: 'existing', pathId: 801, wander: 0, vendor: { sells: false, count: null }, trainer: { teaches: false, count: null }, gossipMenu: { has: false, count: null }, scenes: { has: false, count: null },
       spawn: { guid: 80330, map: 0, placement, origin: 'existing', group: null },
     });
   });
@@ -64,6 +64,14 @@ describe('the clicked thing as an entity', () => {
     const unread = { ...store, npcs: [{ ...newNpc(1423), origin: { kind: 'existing' as const, original: {}, sharedLoot: 0, spawnCount: 1, sharedTrainer: 0, locked: [] } }] };
     expect(spawnedEntityOf(info({ gossipMenuId: 5000 }), unread)).toMatchObject({ gossipMenu: { has: true, count: null } });
     expect(spawnedEntityOf(info({ gossipMenuId: 0 }), unread)).toMatchObject({ gossipMenu: { has: false, count: null } });
+  });
+
+  it('an NPC says how many scenes it owns when the project holds it, and nothing known otherwise', () => {
+    const scene = { id: 's1', name: '', questId: 0, trigger: { kind: 'talkedTo' as const }, gates: [], steps: [] };
+    const scripted = { ...store, npcs: [{ ...newNpc(12000001), scenes: [scene, { ...scene, id: 's2' }] }] };
+    expect(spawnedEntityOf(info({ entry: 12000001, own: true }), scripted)).toMatchObject({ scenes: { has: true, count: 2 } });
+    expect(spawnedEntityOf(info({ entry: 12000001, own: true }), store)).toMatchObject({ scenes: { has: false, count: 0 } });
+    expect(spawnedEntityOf(info({ entry: 1423 }), store)).toMatchObject({ scenes: { has: false, count: null } });
   });
 
   it('an object says whether it can be looted: a project chest yes, a project goober no, a database one cannot be changed', () => {
