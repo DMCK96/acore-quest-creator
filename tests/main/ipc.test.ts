@@ -16,6 +16,7 @@ describe('parseRequest', () => {
       'historyList', 'historyUndo', 'historyRedo', 'historyJump', 'historyBegin', 'historyEnd',
       'mcpStatus', 'mcpConfigure', 'mcpRegenerateToken',
       'questsInZone', 'questSummaries', 'areaOverview', 'checkNames', 'checkIds', 'wikiSearch', 'wikiPage', 'projectIssues',
+      'debugStatus', 'debugSetEnabled', 'debugEvents', 'debugSnapshot', 'debugType', 'captureScreenshot', 'debugRecord', 'debugAnswer',
     ].sort());
   });
   it('refuses world edits with a bad kind, a missing rotation or a point without its columns', () => {

@@ -10,6 +10,7 @@ import { createHistoryApi } from './history-api';
 import { createExportApi } from './export-api';
 import { createProjectApi } from './project-api';
 import { createMcpApi } from './mcp-api';
+import { createDebugApi } from './debug-api';
 import { createLoreApi } from './lore-api';
 import { createAuthoringApi } from './authoring-api';
 import type { ApiDeps } from './deps';
@@ -43,6 +44,7 @@ export function createApi(deps: ApiDeps): Api {
     ...createExportApi(services),
     ...createProjectApi(services),
     ...createMcpApi(deps),
+    ...createDebugApi(deps),
     ...createLoreApi(services, deps),
     ...createAuthoringApi(services),
   };
