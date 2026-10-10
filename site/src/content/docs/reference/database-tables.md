@@ -25,6 +25,7 @@ The app only writes when you **Export patch** or **Export project patch** (to a 
 | Trainers | `creature_default_trainer`, `trainer`, `trainer_spell`, and the trainer bit of `npcflag` on `creature_template` (the older `npc_trainer` is read, not written) |
 | Vendors | `npc_vendor` (what an NPC sells), and the vendor bit of `npcflag` on `creature_template` |
 | Quest scripting scenes | `smart_scripts`, `creature_text`, `gossip_menu`, `gossip_menu_option`, `npc_text`, `conditions`, `areatrigger`, `areatrigger_scripts`, `waypoints` (escort paths) |
+| NPC scripts | `smart_scripts`, `creature_text`, `conditions`, `waypoints` (escort paths), and `AIName` on `creature_template` where it is empty; the NPC's own `smart_scripts` rows are read and counted, never edited |
 | Combat wizard | `smart_scripts`, `creature_text` |
 | Patrols | `creature_addon`, `waypoint_data`, and `smart_scripts` / `creature_text` for point actions |
 | World changes (in the project patch) | `creature` and `gameobject` (moved and placed spawns; an NPC's `wander_distance` and `MovementType`), `creature_addon` (an NPC's path), `waypoint_data` (routes) |
@@ -33,4 +34,4 @@ The app only writes when you **Export patch** or **Export project patch** (to a 
 
 New quests, NPCs, objects and spawns get IDs in high ranges the app picks so they do not collide with existing rows; a new quest starts at `60000`. The app refuses to export when an ID it would write is already taken.
 
-Scripts the app writes carry a comment naming the quest and scene, so they are easy to find in `smart_scripts`.
+Scripts the app writes carry a comment naming the quest and scene, so they are easy to find in `smart_scripts`. A quest scene starts its comment with `AQC q<quest> s<n>`, a scene an NPC owns with `AQC npc<entry> s<n>`, and an NPC's fight and patrol rows with `AQC npc<entry> fight` and `AQC npc<entry> patrol`.

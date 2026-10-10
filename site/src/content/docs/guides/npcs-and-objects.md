@@ -57,6 +57,7 @@ An NPC holds a weapon by its item's display alone, so any item works, even one y
 - **Vendor**: what it sells. See [Selling things](#selling-things) below.
 - **Trainer**: the spells it teaches. See [Teaching spells](#teaching-spells) below.
 - **Gossip**: what it says when talked to. See [Talking](#talking) below.
+- **Scripts**: what it does when something happens to it. See [Scripts](#scripts) below.
 - **Placement**: where it stands. **Add spawn** and paste the output of the in-game `.gps` command, or choose **Place in world** to put it down in [the World](/azeroth-world-editor/guides/the-world/#your-own-npcs-from-their-editor). Each spawn has its own **Event**, which starts as **Same as the NPC**.
 
 ### Selling things
@@ -117,6 +118,20 @@ Changing the text of an option or a greeting clears its translations, so other-l
 In [the World](/azeroth-world-editor/guides/the-world/#the-right-click-menu), right-click an NPC and choose **Add gossip menu…**, or **Edit gossip menu…** when it has one; both open this tab. Checks: an option with no text, a greeting nothing could choose, two options of one menu with the same ID, an option that opens a menu the same edit removes, a menu or text ID that another NPC or object already uses (in the database or in the project), an edit that would overwrite a menu others use, and a kept option that was removed are errors; a greeting variant with no text, a service the NPC cannot do (or an option with no flag, which the server never shows), a menu no option reaches, an option opening a menu that does not exist, a menu that cannot be opened because **Can be talked to** is off, and an edit to a shared menu that is not written are warnings.
 
 A quest scene that is started by a gossip option adds its option to the first menu of the tree made here, on the next free option id, and the quest patch numbers anything it makes clear of the project's menus. For an NPC with no menu it makes its own.
+
+### Scripts
+
+Any NPC can have scenes of its own: "when this happens to me, and only when these hold, do these steps in order". It works the same way as a [quest scene](/azeroth-world-editor/guides/quest-scripting/), but the scene belongs to the NPC, so it needs no quest. On the **Scripts** tab, **Add scene** gives a scene with a **Name** (for you), a **Quest**, a trigger (**When**), conditions (**Only when**) and steps (**Then**). **Duplicate** copies a scene and **Remove scene** takes it out. An NPC can have 32 scenes. Scenes with the same trigger all run, in the order of the list.
+
+- **Quest**: **None**, one of the project's quests, or **Other…** to type any quest ID. The triggers **The quest is accepted** and **The quest is handed in**, the steps that give credit for an objective, complete the event objective or fail the quest, and a condition on "this quest" all need one; a scene that has such a part but no quest says **needs a quest** and is an error.
+- **A player picks an option of its talk window** waits for an option of the NPC's own gossip menu. It adds no option: choose one from the **Menu and option** list, which offers only options of this NPC's own, unshared menus. With no menu yet, **Give this NPC a gossip menu** takes you to the **Gossip** tab. On the **Gossip** tab, an option a scene waits for says **Runs the scene…** with a button to the **Scripts** tab, and cannot be removed.
+- The other triggers are the ones quest scenes have, except entering an area.
+
+An NPC the database already has can have scenes too. The database's own scripts on it are counted ("The database already runs 4 scripts on this NPC; they are not edited here") and are never changed or deleted: the scenes are written as new rows beside them. An NPC that runs another AI or a script of the game server's own is **locked**: its scenes show read-only and are not written, and the export warns. A gossip option that one of your scenes waits for is not treated as tied to a script, so it can still be edited like any other.
+
+The patch marks every row a scene writes with `AQC npc<entry> s<n>` in its comment, so a scene since removed has its rows found and deleted, and the revert patch deletes the rows the export wrote. **Put back as the database has it** drops the NPC's scenes from the project. Checks: a scene that needs a quest and has none, a talk-window option that is gone or belongs to a shared menu, an escort that is not one of the NPC's scenes, two scenes with one ID and more than 32 scenes are errors; a locked NPC's scenes, a quest that is in neither the project nor the database (the scene is still written), and a scene with no steps are warnings.
+
+In [the World](/azeroth-world-editor/guides/the-world/#the-right-click-menu), right-click an NPC and choose **Add script…**, or **Edit scripts…** when it has scenes; both open this tab.
 
 ### Visibility
 
