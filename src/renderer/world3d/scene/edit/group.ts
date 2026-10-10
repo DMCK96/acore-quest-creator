@@ -25,6 +25,22 @@ export function turnedAbout(start: At, centre: { x: number; y: number }, angle: 
   return { x: centre.x + dx * cos - dy * sin, y: centre.y + dx * sin + dy * cos, z: start.z };
 }
 
+/** How far apart two facings may be (radians) and still count as the same one */
+const SAME_FACING = 1e-4;
+
+/** The way a rotation faces across the ground: the turn of its X axis about Z, tilt ignored */
+function headingOf([x, y, z, w]: Quaternion): number {
+  return Math.atan2(2 * (w * z + x * y), 1 - 2 * (y * y + z * z));
+}
+
+/** The facing (radians) that every one of these rotations shares, or null when they differ or there are none */
+export function sharedHeading(rotations: Quaternion[]): number | null {
+  const [first, ...rest] = rotations.map(headingOf);
+  if (first === undefined) return null;
+  const apart = (a: number) => Math.abs(Math.atan2(Math.sin(a - first), Math.cos(a - first)));
+  return rest.every((h) => apart(h) < SAME_FACING) ? first : null;
+}
+
 /** A rotation turned about Z by an angle on top of what it was: the Z turn times the rotation */
 export function turnQuaternion(q: Quaternion, angle: number): Quaternion {
   const [qx, qy, qz, qw] = q;

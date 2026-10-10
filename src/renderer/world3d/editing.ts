@@ -6,7 +6,7 @@ import { Gizmo, placementOf, type GizmoChange, type GizmoMode, type GizmoTurns }
 import { legIndex, MIN_ROUTE_POINTS } from './scene/edit/route';
 import { afterRouteChange, EMPTY_SELECTION, type Selection } from './scene/edit/selection';
 import { FALLOFF_DEFAULT, falloffWeights, stepRadius, type Falloff } from './scene/edit/falloff';
-import { centreOf, movedBy, turnedAbout, turnQuaternion } from './scene/edit/group';
+import { centreOf, movedBy, sharedHeading, turnedAbout, turnQuaternion } from './scene/edit/group';
 
 /**
  * Editing in the 3D view: one gizmo on the middle of what is selected (NPCs, objects, points of
@@ -448,7 +448,9 @@ export class Editor {
     const centre = new THREE.Vector3(at.x, at.y, at.z);
     const single = spawns.length === 1 && points.length === 0 ? spawns[0]! : null;
     const turns: GizmoTurns = single?.kind === 'object' ? 'all' : spawns.length === 0 && this.#mode === 'move' ? 'none' : 'z';
-    const quaternion = single ? single.object.quaternion.clone() : new THREE.Quaternion();
+    // One thing's handles follow how it is turned; several do when they all face the same way, else they sit on the world axes
+    const heading = points.length === 0 ? sharedHeading(spawns.map((s) => s.object.quaternion.toArray() as [number, number, number, number])) : null;
+    const quaternion = single ? single.object.quaternion.clone() : new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 0, 1), heading ?? 0);
     const was = this.#attached;
     if (was && was.turns === turns && was.at.distanceTo(centre) < 1e-6 && was.quaternion.angleTo(quaternion) < 1e-6 && this.#gizmo.attached) return;
     this.#attached = { at: centre, quaternion, turns };

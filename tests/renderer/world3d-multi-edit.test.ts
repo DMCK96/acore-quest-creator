@@ -11,6 +11,7 @@ vi.mock('../../src/renderer/world3d/scene/edit/Gizmo', async (importActual) => {
     dragging = false;
     at: THREE.Vector3 | null = null;
     turns: string | null = null;
+    quaternion: THREE.Quaternion | null = null;
     mode = 'move';
     constructor(_camera: unknown, _dom: unknown, _scene: unknown, _ground: unknown, events: any) {
       this.events = events;
@@ -19,8 +20,9 @@ vi.mock('../../src/renderer/world3d/scene/edit/Gizmo', async (importActual) => {
     get attached() {
       return this.at !== null;
     }
-    attach(at: THREE.Vector3, _q: THREE.Quaternion, turns: string) {
+    attach(at: THREE.Vector3, q: THREE.Quaternion, turns: string) {
       this.at = at.clone();
+      this.quaternion = q.clone();
       this.turns = turns;
     }
     detach() {
@@ -50,9 +52,10 @@ const key = (code: string) => new KeyboardEvent('keydown', { code });
 
 function setup(opts: { routes?: Record<number, Route>; floor?: number | null; aboard?: number[]; answers?: Record<number, boolean | Promise<boolean>> } = {}) {
   const spawns = new Map<string, THREE.Object3D>();
-  const npc = (guid: number, x: number, y: number) => {
+  const npc = (guid: number, x: number, y: number, facing = 0) => {
     const o = new THREE.Object3D();
     o.position.set(x, y, 0);
+    o.quaternion.setFromAxisAngle(new THREE.Vector3(0, 0, 1), facing);
     o.userData.spawn = { kind: 'creature', guid, entry: 100 + guid, own: false };
     spawns.set(`creature:${guid}`, o);
     return o;
@@ -202,7 +205,7 @@ describe('moving and turning a selection in the 3D view', () => {
     expect(placed(t.gestures[0]!)).toEqual([[1, 0, 4, 1]]);
   });
 
-  it('leaves a spawn aboard a docked vessel on its deck: the continentâ€™s floor under the vessel is not its floor', async () => {
+  it('leaves a spawn aboard a docked vessel on its deck: the continent’s floor under the vessel is not its floor', async () => {
     const t = setup({ floor: -50, aboard: [2] });
     t.npc(1, 0, 0);
     t.npc(2, 10, 0);
@@ -226,6 +229,51 @@ describe('moving and turning a selection in the 3D view', () => {
     }
     expect(t.floorZ).not.toHaveBeenCalled();
     expect(placed(t.gestures[0]!)).toEqual([[1, 0, 4, 0]]);
+  });
+
+  describe('which way the handles face', () => {
+    const heading = (q: THREE.Quaternion) => {
+      const v = new THREE.Vector3(1, 0, 0).applyQuaternion(q);
+      return Math.atan2(v.y, v.x);
+    };
+    const both = [{ kind: 'creature' as const, guid: 1 }, { kind: 'creature' as const, guid: 2 }];
+
+    it('follow what a group all faces the same way, as they do one thing', () => {
+      const t = setup();
+      t.npc(1, 0, 0, 1);
+      t.npc(2, 10, 0, 1);
+      t.editor.setSelection(sel({ spawns: both }));
+      t.editor.update();
+      expect(heading(t.gizmo.quaternion)).toBeCloseTo(1, 6);
+    });
+
+    it('stay on the world axes when they face different ways', () => {
+      const t = setup();
+      t.npc(1, 0, 0, 1);
+      t.npc(2, 10, 0, 2);
+      t.editor.setSelection(sel({ spawns: both }));
+      t.editor.update();
+      expect(t.gizmo.quaternion.angleTo(new THREE.Quaternion())).toBeLessThan(1e-9);
+    });
+
+    it('stay on the world axes with route points among them, which face nowhere', () => {
+      const t = setup({ routes: { 1: line(7, [0, 5, 10]) } });
+      t.npc(1, 0, 0, 1);
+      t.editor.setSelection(sel({ spawns: [{ kind: 'creature', guid: 1 }], points: [{ guid: 1, index: 1 }] }));
+      t.editor.update();
+      expect(t.gizmo.quaternion.angleTo(new THREE.Quaternion())).toBeLessThan(1e-9);
+    });
+
+    it('are taken again when a turn leaves them facing a new way together', async () => {
+      const t = setup();
+      t.npc(1, 0, 0, 1);
+      t.npc(2, 10, 0, 1);
+      t.editor.setSelection(sel({ spawns: both }));
+      t.editor.setMode('rotate');
+      await t.drag(undefined, 0.5);
+      t.editor.update();
+      expect(heading(t.gizmo.quaternion)).toBeCloseTo(1.5, 6);
+    });
   });
 
   it('the editor keeps no history: Ctrl+Z and Ctrl+Y are left to the app when no path is drawn', () => {
