@@ -115,3 +115,21 @@ describe('review: other triggers compile', () => {
     expect(rows.some((r) => r.event_param1 === '60001')).toBe(true);
   });
 });
+
+describe('review: the menu a gossipOption scene hangs off', () => {
+  it('prefers the root of the project tree over the menu the template had', () => {
+    const own = scene('s1', { trigger: { kind: 'gossipOption', text: 'Mine', greeting: '' } });
+    const context = { ...EMPTY_SCRIPT_CONTEXT, creatures: [{ entry: '12000001', npcflag: '1', gossip_menu_id: '40', AIName: 'SmartAI', ScriptName: '' }] };
+    const gossip = { roots: new Map([[12000001, 77]]), options: new Map(), maxMenu: 77, maxText: 0 };
+    const out = compileNpcScenes({ npcs: [npcWith([own])], objectives: new Map(), context, taken: NONE, gossip });
+    expect(out.inserts.gossip_menu_option![0]).toMatchObject({ MenuID: '77' });
+  });
+});
+
+describe('review: an NPC adopted before its scene lock was recorded', () => {
+  it('is judged by the template it was read with', () => {
+    const old = { ...npcWith([scene('s1')]), origin: { kind: 'existing' as const, original: { creature_template: [{ entry: '12000001', AIName: 'ReactorAI', ScriptName: '' }] }, sharedLoot: 0, spawnCount: 1, locked: [] } };
+    expect(compileNpcScenes({ npcs: [old], objectives: new Map(), context: EMPTY_SCRIPT_CONTEXT, taken: NONE }).inserts).toEqual({});
+    expect(npcSceneIssues({ npc: old, label: 'NPC', knownQuest: () => true, locked: false }).map((i) => i.code)).toEqual(['NPC_SCENES_LOCKED']);
+  });
+});

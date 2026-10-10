@@ -2,7 +2,7 @@ import type { CustomNpc } from '../entities/model';
 import type { Issue } from '../validate/validate';
 import { describeTrigger } from './describe';
 import type { QuestScene } from './model';
-import { NPC_SCENE_LIMIT, needsQuest, type NpcScene } from './npc-scenes';
+import { NPC_SCENE_LIMIT, needsQuest, scenesLocked, type NpcScene } from './npc-scenes';
 import { sceneIssues } from './validate';
 
 /** The checks quest scenes have that still mean something for a scene an NPC owns */
@@ -36,7 +36,7 @@ export function npcSceneIssues(input: {
     issues.push({ severity, code, fieldId, message: `${label}: ${message}` });
   };
 
-  if (input.locked || (npc.origin.kind === 'existing' && npc.origin.locked.includes('scenes'))) {
+  if (input.locked || (npc.origin.kind === 'existing' && (npc.origin.locked.includes('scenes') || scenesLocked(npc.origin.original.creature_template?.[0])))) {
     add('warning', 'NPC_SCENES_LOCKED', 'it runs another AI or a script, so its scenes are not written.');
     return issues;
   }

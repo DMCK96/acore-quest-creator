@@ -25,7 +25,7 @@ describe('existing NPCs and scenes', () => {
     expect(optionOf(npcFromRows(100, rows([select('AQC npc1000 s1: x')]), counts)).kept).toBe(true);
   });
   it('records how many scripts the database runs and locks the scenes of an NPC that runs something else', () => {
-    const npc = npcFromRows(100, rows([]), { ...counts, databaseScripts: 4, scriptsLocked: true });
+    const npc = npcFromRows(100, { ...rows([]), creature_template: [{ ...creature, AIName: 'ReactorAI' }] }, { ...counts, databaseScripts: 4 });
     expect(npc.origin).toMatchObject({ kind: 'existing', databaseScripts: 4 });
     expect((npc.origin as { locked: string[] }).locked).toContain('scenes');
     expect(npcFromRows(100, rows([]), counts).scenes).toEqual([]);

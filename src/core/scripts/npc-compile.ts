@@ -32,7 +32,7 @@ export function compileNpcScenes(input: {
   const { npcs, objectives, context } = input;
   const rowOf = new Map(context.creatures.map((r) => [num(r.entry), r]));
   const writable = npcs.filter(
-    (n) => !scenesLocked(rowOf.get(n.entry)) && !(n.origin.kind === 'existing' && n.origin.locked.includes('scenes')),
+    (n) => !scenesLocked(rowOf.get(n.entry)) && !(n.origin.kind === 'existing' && (n.origin.locked.includes('scenes') || scenesLocked(n.origin.original.creature_template?.[0]))),
   );
   const entries = new Set(writable.map((n) => n.entry));
 

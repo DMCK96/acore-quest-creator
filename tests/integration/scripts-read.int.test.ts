@@ -35,8 +35,9 @@ async function read(entry: number): Promise<CustomNpc> {
 }
 
 describe('NPC scripts against the real database', () => {
-  it("finds no database script that starts with the tool's NPC tag", async () => {
-    expect(await db.selectByPrefix!('smart_scripts', 'comment', 'AQC npc')).toEqual([]);
+  it("finds only the tool's own scenes, fights and patrols under its NPC tag", async () => {
+    const rows = await db.selectByPrefix!('smart_scripts', 'comment', 'AQC npc');
+    for (const row of rows) expect(row.comment, `${row.entryorguid}/${row.id}`).toMatch(/^AQC npc\d+ (s\d+|fight|patrol)/);
   }, 60_000);
 
   it('compiles scenes on the NPCs with the most SmartAI rows without colliding with a database key', async (ctx) => {

@@ -119,3 +119,16 @@ describe('editing an existing entity', () => {
     expect(out.value.origin.locked).toContain('scenes');
   });
 });
+
+describe('counting the scripts the database runs on an NPC', () => {
+  it("leaves out the tool's own rows of any tag, and link rows that only continue another row", async () => {
+    const { api, db } = await setup();
+    const script = (id: string, comment: string, event = '1') => ({ entryorguid: '1423', source_type: '0', id, link: '0', event_type: event, comment });
+    db.insert('smart_scripts', script('0', ''));
+    db.insert('smart_scripts', script('1', 'AQC q60001 s1: a quest scene'));
+    db.insert('smart_scripts', script('2', 'AQC npc1423 fight: x'));
+    db.insert('smart_scripts', script('3', 'Linked', '61'));
+    const out: any = await api.readExistingEntity('npc', 1423);
+    expect(out.value.origin.databaseScripts).toBe(1);
+  });
+});

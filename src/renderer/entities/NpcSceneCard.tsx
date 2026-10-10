@@ -55,7 +55,8 @@ function Picker({
 function QuestField({ scene, quests, onChange }: { scene: NpcScene; quests: readonly { questId: number; title: string }[]; onChange(next: NpcScene): void }): React.JSX.Element {
   const known = scene.questId === 0 || quests.some((q) => q.questId === scene.questId);
   const [custom, setCustom] = useState(!known);
-  const value = custom ? OTHER : String(scene.questId);
+  // A quest that is no longer in the project is shown as an id to type, not as an option that is gone
+  const value = custom || !known ? OTHER : String(scene.questId);
   return (
     <>
       <SelectField
@@ -71,7 +72,7 @@ function QuestField({ scene, quests, onChange }: { scene: NpcScene; quests: read
           if (next !== OTHER) onChange({ ...scene, questId: Number(next) });
         }}
       />
-      {custom && <NumberField label="Quest ID" value={scene.questId} min={0} onChange={(questId) => onChange({ ...scene, questId: Math.max(0, Math.round(questId)) })} />}
+      {(custom || !known) && <NumberField label="Quest ID" value={scene.questId} min={0} onChange={(questId) => onChange({ ...scene, questId: Math.max(0, Math.round(questId)) })} />}
     </>
   );
 }

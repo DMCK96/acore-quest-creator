@@ -439,8 +439,8 @@ export function compileUnits(input: UnitInput): CompiledScripts {
         break;
       case 'gossipOption': {
         const creature = creatures.get(entryorguid);
-        // The menu the NPC has, or the root of the tree the project gives it
-        let menu = num(creature?.gossip_menu_id) || (input.gossip?.roots.get(entryorguid) ?? 0);
+        // The root of the tree the project gives it (it is what the patch writes), or the menu the NPC has
+        let menu = (input.gossip?.roots.get(entryorguid) ?? 0) || num(creature?.gossip_menu_id);
         if (menu === 0) {
           const existing = menuOf.get(entryorguid);
           if (existing !== undefined) menu = existing;

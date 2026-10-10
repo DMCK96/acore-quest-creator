@@ -1,5 +1,5 @@
 import type { CustomNpc } from '@core/entities/model';
-import { NPC_SCENE_LIMIT, blankNpcScene, nextNpcSceneId, type NpcScene } from '@core/scripts/npc-scenes';
+import { NPC_SCENE_LIMIT, blankNpcScene, nextNpcSceneId, scenesLocked, type NpcScene } from '@core/scripts/npc-scenes';
 import { NpcSceneCard } from './NpcSceneCard';
 
 /** The Scripts tab's body: the scenes the NPC owns, whatever the quest */
@@ -13,7 +13,8 @@ export function ScriptsTab({
   quests?: readonly { questId: number; title: string }[];
 }): React.JSX.Element {
   const scenes = npc.scenes;
-  const locked = npc.origin.kind === 'existing' && npc.origin.locked.includes('scenes');
+  // The lock is a snapshot: an NPC adopted before it was recorded is judged by the template it was read with
+  const locked = npc.origin.kind === 'existing' && (npc.origin.locked.includes('scenes') || scenesLocked(npc.origin.original.creature_template?.[0]));
   const databaseScripts = npc.origin.kind === 'existing' ? (npc.origin.databaseScripts ?? 0) : 0;
   const setScenes = (next: NpcScene[]): void => onChange({ ...npc, scenes: next });
   const full = scenes.length >= NPC_SCENE_LIMIT;

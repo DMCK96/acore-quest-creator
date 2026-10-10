@@ -10,7 +10,8 @@ export const scripts: MenuSection<SpawnSubject> = {
   items: ({ target, info }, context) => {
     if (target.kind !== 'npc') return [];
     const { has, count } = target.scenes;
-    const label = has ? 'Edit scripts…' : 'Add script…';
+    // A database NPC the project has not opened may already have scenes the tool wrote: they load when it opens
+    const label = has ? 'Edit scripts…' : count === null ? 'Add or edit scripts…' : 'Add script…';
     if (target.origin === 'existing' && !context.connected) return [item(label, { disabledReason: NEEDS_DATABASE })];
     const hint = has && count !== null && count > 0 ? `${count} scene${count === 1 ? '' : 's'}` : undefined;
     return [item(label, { action: { kind: 'editEntity', spawn: info, tab: 'scripts' }, ...(hint ? { hint } : {}) })];

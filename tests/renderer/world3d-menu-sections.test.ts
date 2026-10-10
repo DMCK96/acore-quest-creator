@@ -119,7 +119,7 @@ describe('the ground', () => {
 describe('a spawn', () => {
   it('a database NPC can be edited too; offline it needs the database', () => {
     const world = buildMenu(on(npc()), context()).find((g) => g.id === 'world')!;
-    expect(world.items.map((i) => i.label)).toEqual(['Edit NPC…', 'Make vendor…', 'Make trainer…', 'Add gossip menu…', 'Add script…', 'Copy', 'Duplicate', 'Copy coordinates', 'Respawn time…', 'Event…']);
+    expect(world.items.map((i) => i.label)).toEqual(['Edit NPC…', 'Make vendor…', 'Make trainer…', 'Add gossip menu…', 'Add or edit scripts…', 'Copy', 'Duplicate', 'Copy coordinates', 'Respawn time…', 'Event…']);
     expect(item(buildMenu(on(npc()), context({ connected: false })), 'Edit NPC…')!.disabledReason).toBe('Needs the world database');
     expect(item(buildMenu(on(hela), context({ connected: false })), 'Edit NPC…')!.action).toBeDefined();
   });
@@ -396,7 +396,7 @@ describe('the scripts section', () => {
     expect(item(buildMenu(on(hela, sceneStore(1)), context()), 'Add script…')).toBeUndefined();
   });
   it('needs the world database for a database NPC, not for a project one; not on objects', () => {
-    expect(item(buildMenu(on(npc()), context({ connected: false })), 'Add script…')!.disabledReason).toBe('Needs the world database');
+    expect(item(buildMenu(on(npc()), context({ connected: false })), 'Add or edit scripts…')!.disabledReason).toBe('Needs the world database');
     expect(item(buildMenu(on(hela), context({ connected: false })), 'Add script…')!.action).toBeDefined();
     expect(item(buildMenu(on(chest), context()), 'Add script…')).toBeUndefined();
   });

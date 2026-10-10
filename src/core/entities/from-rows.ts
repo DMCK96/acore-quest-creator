@@ -21,8 +21,6 @@ export interface ExistingCounts {
   sharedTexts?: Readonly<Record<number, number>>;
   /** How many of its SmartAI rows the database already runs (not the tool's own) */
   databaseScripts?: number;
-  /** The NPC runs another AI or a script, so scenes are not written for it */
-  scriptsLocked?: boolean;
   /** The scenes the tool wrote for it before, read back from its tagged rows. Used only when it is first taken into a project: `npcFromRows` never returns them */
   scenes?: readonly NpcScene[];
 }
@@ -182,7 +180,7 @@ export function npcFromRows(entry: number, rows: OriginalRows, counts: ExistingC
   if ((row.AIName ?? '') !== '' || (row.ScriptName ?? '') !== '') locked.push('fight');
   // A trainer other NPCs share is not ours to change, and one the editor cannot model is left as it is
   const { trainer, locked: trainerLocked } = trainerOf(rows);
-  if (counts.scriptsLocked || scenesLocked(row)) locked.push('scenes');
+  if (scenesLocked(row)) locked.push('scenes');
   if (trainerLocked || (trainer !== null && (counts.sharedTrainer ?? 0) > 0)) locked.push('trainer');
   return {
     ...newNpc(entry),

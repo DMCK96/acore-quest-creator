@@ -107,3 +107,18 @@ describe('the Scripts tab', () => {
     expect(screen.getByText(/already runs 1 script on this NPC/)).toBeInTheDocument();
   });
 });
+
+describe('the Scripts tab, after the fact', () => {
+  it('shows an NPC adopted before the lock was recorded read-only, from the template it was read with', () => {
+    const origin = existing({ original: { creature_template: [{ entry: '12000001', AIName: 'ReactorAI', ScriptName: '' }] } });
+    render(<Live start={npcWith([blank('s1', 'Hello')], { origin })} />);
+    expect(screen.getByText(/runs another AI or a script/)).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Add scene' })).toBeDisabled();
+  });
+
+  it('shows a quest that is no longer in the project as an id to type', () => {
+    render(<Live start={npcWith([{ ...blank('s1'), questId: 60001 }])} quests={[]} />);
+    expect(screen.getByRole('combobox', { name: 'Quest' })).toHaveValue('other');
+    expect(screen.getByRole('spinbutton', { name: 'Quest ID' })).toHaveValue(60001);
+  });
+});

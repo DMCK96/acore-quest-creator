@@ -9,6 +9,9 @@ import { npcRowOwner, npcSceneFromComment } from '../../core/scripts/tag';
 
 type Kind = 'npc' | 'object' | 'item';
 
+/** `SMART_EVENT_LINK`: a row that only continues the row before it, not a script of its own */
+const LINK_EVENT = 61;
+
 const num = (raw: string | null | undefined): number => {
   const n = Number(raw);
   return raw === null || raw === undefined || !Number.isFinite(n) ? 0 : n;
@@ -56,7 +59,7 @@ async function scriptsOf(db: WorldDb, entry: number): Promise<{ databaseScripts:
   const ours = (comment: string | null | undefined): boolean => npcRowOwner(comment, 'scene') === entry;
   const scenes = scripts.flatMap((r) => (ours(r.comment) ? [npcSceneFromComment(r.comment)] : [])).filter((s): s is NpcScene => s !== null);
   const idNumber = (scene: NpcScene): number => Number(scene.id.slice(1));
-  return { databaseScripts: scripts.filter((r) => !ours(r.comment) && npcRowOwner(r.comment, 'fight') !== entry && npcRowOwner(r.comment, 'patrol') !== entry).length, scenes: scenes.sort((a, b) => idNumber(a) - idNumber(b)) };
+  return { databaseScripts: scripts.filter((r) => !(r.comment ?? '').startsWith('AQC ') && Number(r.event_type) !== LINK_EVENT).length, scenes: scenes.sort((a, b) => idNumber(a) - idNumber(b)) };
 }
 
 /**
