@@ -1,14 +1,16 @@
 import { z } from 'zod';
+import { overlayFound, overlayView } from '../../../core/world/overlay-spawns';
 import { defineTool } from '../tool';
 
 const id = z.number().int();
+const PROJECT = " What the project changes is laid over the database: a result marked `source: 'project'` is the project's own (new, edited or moved, not yet applied), and it wins over the database's.";
 
 /** Searches and names in the connected world database, and what stands where in the world. */
 export const lookupTools = [
   defineTool({
     name: 'search_quests',
     title: 'Search quests',
-    description: 'Quests whose title contains the text, or whose id it is: id, title and level. Use it to see what already exists before writing something new.',
+    description: 'Quests whose title contains the text, or whose id it is: id, title and level. Use it to see what already exists before writing something new.' + PROJECT,
     input: { text: z.string().max(200) },
     write: false,
     run: ({ text }, ctx) => ctx.call('searchQuests', text),
@@ -16,7 +18,7 @@ export const lookupTools = [
   defineTool({
     name: 'search_entities',
     title: 'Search items, NPCs, objects, quests and spells',
-    description: 'Items, NPCs (creature), objects (gameobject), quests or spells whose name contains the text, or whose id it is.',
+    description: 'Items, NPCs (creature), objects (gameobject), quests or spells whose name contains the text, or whose id it is.' + PROJECT,
     input: { kind: z.enum(['item', 'creature', 'gameobject', 'quest', 'spell']), text: z.string().max(200) },
     write: false,
     run: ({ kind, text }, ctx) => ctx.call('searchEntities', kind, text),
@@ -24,7 +26,7 @@ export const lookupTools = [
   defineTool({
     name: 'lookup_names',
     title: 'Names of ids',
-    description: 'The names of ids of one kind (an item, NPC, object, quest, spell, faction, zone, map or skill), as an object from id to name.',
+    description: 'The names of ids of one kind (an item, NPC, object, quest, spell, faction, zone, map or skill), as an object from id to name; a project NPC, object or item is named as the project has it.',
     input: { kind: z.enum(['item', 'creature', 'gameobject', 'quest', 'spell', 'faction', 'zone', 'map', 'skill']), ids: z.array(id).max(500) },
     write: false,
     run: ({ kind, ids }, ctx) => ctx.call('lookupNames', kind, ids),
@@ -32,7 +34,7 @@ export const lookupTools = [
   defineTool({
     name: 'quests_of_npc',
     title: 'Quests an NPC starts and ends',
-    description: 'The quests an NPC (by creature entry) starts and the quests it ends.',
+    description: 'The quests an NPC (by creature entry) starts and the quests it ends, read from the project quests where it has them.' + PROJECT,
     input: { entry: id },
     write: false,
     run: ({ entry }, ctx) => ctx.call('questsOfNpc', entry),
@@ -73,18 +75,31 @@ export const lookupTools = [
     name: 'view_spawns',
     title: 'Spawns in an area',
     description:
-      'NPC and object spawns inside a box on one map. Coordinates are world yards (X north, Y west). Each kind is capped, so use a small box (a few hundred yards) around the place you care about.',
+      'NPC and object spawns inside a box on one map. Coordinates are world yards (X north, Y west). Each kind is capped, so use a small box (a few hundred yards) around the place you care about.' + PROJECT + ' Spawns the project moved carry `movedFrom` (where the database has them); deleted ones are left out; placed and new ones are included.',
     input: { map: id, minX: z.number(), maxX: z.number(), minY: z.number(), maxY: z.number() },
     write: false,
-    run: ({ map, minX, maxX, minY, maxY }, ctx) => ctx.call('viewSpawns', map, { minX, maxX, minY, maxY }),
+    run: async ({ map, minX, maxX, minY, maxY }, ctx) => {
+      const box = { minX, maxX, minY, maxY };
+      const [view, layer, entities] = await Promise.all([ctx.call('viewSpawns', map, box), ctx.call('worldLayer'), ctx.call('projectEntities')]);
+      if (!view.ok) return view;
+      if (!layer.ok) return layer;
+      if (!entities.ok) return entities;
+      return { ok: true, value: overlayView(view.value, layer.value, entities.value, map, box) };
+    },
   }),
   defineTool({
     name: 'find_spawns',
     title: 'Where an NPC or object stands',
-    description: 'Every spawn of one NPC (creature) or object (gameobject) entry, with its map and position, up to a few hundred.',
+    description: 'Every spawn of one NPC (creature) or object (gameobject) entry, with its map and position, up to a few hundred.' + PROJECT + ' A spawn the project moved carries `movedFrom` (where the database has it); deleted ones are left out; placed and new ones are included.',
     input: { kind: z.enum(['creature', 'gameobject']), entry: id },
     write: false,
-    run: ({ kind, entry }, ctx) => ctx.call('findSpawns', kind, entry),
+    run: async ({ kind, entry }, ctx) => {
+      const [found, layer, entities] = await Promise.all([ctx.call('findSpawns', kind, entry), ctx.call('worldLayer'), ctx.call('projectEntities')]);
+      if (!found.ok) return found;
+      if (!layer.ok) return layer;
+      if (!entities.ok) return entities;
+      return { ok: true, value: { spawns: overlayFound(found.value.spawns, layer.value, entities.value, kind, entry), capped: found.value.capped } };
+    },
   }),
   defineTool({
     name: 'ground_height',

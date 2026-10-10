@@ -15,6 +15,8 @@ export interface EntityHit {
   id: number;
   name: string;
   detail?: string;
+  /** 'project' for a new NPC, object or item the project holds and the database does not yet */
+  source?: 'project';
 }
 
 /** Where each kind lives, and the extra columns its `detail` is read from. */
