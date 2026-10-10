@@ -10,6 +10,7 @@ import { EditorTabs, type EditorTab } from '../EditorTabs';
 import { CopyStock } from '../CopyStock';
 import { LootList } from '../LootList';
 import { GossipTab } from '../GossipTab';
+import { ScriptsTab } from '../ScriptsTab';
 import { TrainerTab } from '../TrainerTab';
 import { VendorList } from '../VendorList';
 import { SpawnList } from '../SpawnList';
@@ -115,6 +116,7 @@ export function NpcEditor({
   });
   tabs.push({ id: 'trainer', label: 'Trainer', render: () => <TrainerTab npc={npc} onChange={onChange} allocateTrainer={allocateTrainer} /> });
   tabs.push({ id: 'gossip', label: 'Gossip', render: () => <GossipTab npc={npc} onChange={onChange} allocate={allocateGossip} onTab={onTab} /> });
+  tabs.push({ id: 'scripts', label: 'Scripts', render: () => <ScriptsTab npc={npc} onChange={onChange} onTab={onTab} quests={quests} /> });
   if (!existing) {
     tabs.push({
       id: 'placement',

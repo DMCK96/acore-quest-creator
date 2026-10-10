@@ -328,3 +328,15 @@ describe('the Gossip tab: removing and copying', () => {
     expect(screen.queryByRole('button', { name: 'Give this NPC a gossip menu' })).toBeNull();
   });
 });
+
+describe('the Gossip tab and scenes', () => {
+  it('shows which scene runs from an option, takes you to it, and does not let the option be removed', async () => {
+    const onTab = vi.fn();
+    const scene = { id: 's1', name: 'Thanks', questId: 0, trigger: { kind: 'gossipPicked' as const, menuId: 5, optionId: 0 }, gates: [], steps: [] };
+    render(<Live start={npcWith([menu(5)], { scenes: [scene] })} onTab={onTab} />);
+    expect(screen.getByText(/Runs the scene Thanks/)).toBeInTheDocument();
+    await userEvent.click(screen.getByRole('button', { name: 'Go to scripts' }));
+    expect(onTab).toHaveBeenCalledWith('scripts');
+    expect(within(options()[0]!).getByRole('button', { name: 'Remove' })).toBeDisabled();
+  });
+});

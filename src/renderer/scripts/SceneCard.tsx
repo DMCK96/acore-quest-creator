@@ -1,5 +1,5 @@
 import { describeTrigger } from '@core/scripts/describe';
-import { triggerOwners, type OwnerKind, type QuestScene, type SceneOwner } from '@core/scripts/model';
+import { triggerOwners, type OwnerKind, type QuestScene, type SceneOwner, type SceneTrigger } from '@core/scripts/model';
 import { CheckField, EntityField, NumberField, SelectField, TextField } from './fields';
 import { GateEditor } from './GateEditor';
 import { PositionInput } from './PositionInput';
@@ -76,7 +76,7 @@ export function SceneCard({
     // A trigger the new owner cannot have falls back to the first one it can.
     const trigger = triggerOwners(scene.trigger.kind).includes(owner.kind)
       ? scene.trigger
-      : defaultTrigger(triggersFor(owner.kind)[0]!, scenes);
+      : (defaultTrigger(triggersFor(owner.kind)[0]!, scenes) as SceneTrigger);
     onChange({ ...scene, owner, trigger });
   };
 
@@ -90,7 +90,7 @@ export function SceneCard({
       </div>
       <TextField label="Name (for you)" value={scene.name} onChange={(name) => onChange({ ...scene, name })} />
       <OwnerEditor idPrefix={idPrefix} owner={scene.owner} markerId={`area:${scene.id}`} onChange={setOwner} />
-      <TriggerEditor scene={scene} scenes={scenes} onChange={(trigger) => onChange({ ...scene, trigger })} />
+      <TriggerEditor scene={scene} scenes={scenes} onChange={(trigger) => onChange({ ...scene, trigger: trigger as SceneTrigger })} />
       <GateEditor idPrefix={idPrefix} gates={scene.gates} onChange={(gates) => onChange({ ...scene, gates })} />
       <StepEditor idPrefix={idPrefix} sceneId={scene.id} owner={scene.owner.kind} steps={scene.steps} onChange={(steps) => onChange({ ...scene, steps })} />
     </fieldset>

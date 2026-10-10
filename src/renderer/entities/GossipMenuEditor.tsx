@@ -66,6 +66,8 @@ export function GossipMenuEditor({
   const setOption = (i: number, option: GossipOption): void => onChange(setMenu({ ...menu, options: menu.options.map((o, j) => (j === i ? option : o)) }));
   const setVariant = (i: number, variant: TextVariant): void => onChange(setMenu({ ...menu, greeting: menu.greeting.map((v, j) => (j === i ? variant : v)) }));
   const others = tree.menus.filter((_, i) => i !== index);
+  /** The scene of the NPC that waits for this option, if any: the option cannot be removed while it does */
+  const sceneOf = (o: GossipOption) => npc.scenes.find((s) => s.trigger.kind === 'gossipPicked' && s.trigger.menuId === menu.menuId && s.trigger.optionId === o.optionId);
   // The ids the database gave this menu's options: a new option never takes one of them, though it was removed (conditions and scripts name them)
   const hadIds = npc.origin.kind === 'existing' ? (npc.origin.original.gossip_menu_option ?? []).filter((r) => Number(r.MenuID) === menu.menuId).map((r) => Number(r.OptionID)) : [];
 
@@ -129,7 +131,7 @@ export function GossipMenuEditor({
               <div className="scene-step__head">
                 <strong>Option {i + 1}</strong>
                 {!o.kept && (
-                  <button type="button" className="entry-card__btn entry-card__btn--danger" onClick={() => onChange(setMenu({ ...menu, options: menu.options.filter((_, j) => j !== i) }))}>
+                  <button type="button" className="entry-card__btn entry-card__btn--danger" disabled={sceneOf(o) !== undefined} onClick={() => onChange(setMenu({ ...menu, options: menu.options.filter((_, j) => j !== i) }))}>
                     Remove
                   </button>
                 )}
@@ -157,6 +159,14 @@ export function GossipMenuEditor({
                 </div>
               )}
               {o.kept && <p className="scene-hint">Kept as it is: the database ties it to a condition or a script.</p>}
+              {sceneOf(o) && (
+                <p className="scene-hint">
+                  Runs the scene {sceneOf(o)!.name.trim() || sceneOf(o)!.id}{' '}
+                  <button type="button" className="btn" onClick={() => onTab?.('scripts')}>
+                    Go to scripts
+                  </button>
+                </p>
+              )}
               <ServiceNote option={o} npc={npc} onTab={onTab} />
             </li>
           );
@@ -165,7 +175,7 @@ export function GossipMenuEditor({
       <button type="button" className="btn" onClick={() => onChange(setMenu({ ...menu, options: [...menu.options, { optionId: nextOptionId(menu, hadIds), icon: 0, text: '', action: { kind: 'close' }, kept: false }] }))}>
         Add option
       </button>
-      {index > 0 && !menu.options.some((o) => o.kept) && (
+      {index > 0 && !menu.options.some((o) => o.kept || sceneOf(o)) && (
         <button type="button" className="btn" onClick={() => onChange({ menus: tree.menus.filter((_, i) => i !== index) })}>
           Remove menu
         </button>
