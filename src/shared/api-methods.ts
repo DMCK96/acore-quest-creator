@@ -107,6 +107,14 @@ export const API_METHODS = [
   'wikiSearch',
   'wikiPage',
   'projectIssues',
+  'debugStatus',
+  'debugSetEnabled',
+  'debugEvents',
+  'debugSnapshot',
+  'debugType',
+  'captureScreenshot',
+  'debugRecord',
+  'debugAnswer',
 ] as const satisfies readonly (keyof Api)[];
 
 /** Fails to compile if `Api` gains or loses a method that this list does not follow. */
@@ -131,6 +139,11 @@ export const CONNECTED_CHANNEL = 'app:connected';
 export const EXTERNAL_CHANGE_CHANNEL = 'app:external-change';
 /** Main to window: `true` while an AI client's write is on its way (hold quest saves), `false` once it is done. */
 export const HOLD_EDITS_CHANNEL = 'app:hold-edits';
+
+/** Main to window: Debug mode was switched on (`true`) or off (`false`), so the window attaches or removes its recorders. */
+export const DEBUG_CHANGED_CHANNEL = 'app:debug-changed';
+/** Main to window: a question for the page (a focus snapshot or an element's rectangle), answered with `debugAnswer`. */
+export const DEBUG_REQUEST_CHANNEL = 'app:debug-request';
 
 /** Main tells the window the undo history after every step, undo, redo, save or clear. */
 export const HISTORY_CHANNEL = 'app:history';

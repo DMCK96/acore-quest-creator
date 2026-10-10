@@ -19,6 +19,7 @@ export type * from './history';
 export type * from './export';
 export type * from './project';
 export type * from './mcp';
+export type * from './debug';
 export type * from './lore';
 export type * from './authoring';
 export type * from './result';
