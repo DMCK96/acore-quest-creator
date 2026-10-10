@@ -92,3 +92,27 @@ describe('a model\'s gait', () => {
     expect(a.gait).toBe('stand');
   });
 });
+
+describe('a track with more entries than the model has sequences', () => {
+  // Malformed model data: the track names a sequence the model does not have
+  const track = (entries: number) => ({
+    trackType: 1,
+    loopIndex: 0xffff,
+    sequenceTimes: Array.from({ length: entries }, () => new Uint32Array([0, 1000])),
+    sequenceKeys: Array.from({ length: entries }, () => new Float32Array([0, 1])),
+  });
+
+  it('is registered for the sequences there are, instead of stopping the model from loading', async () => {
+    const THREE = await import('three');
+    const animator = new ModelAnimator(new Uint32Array(), [sequence(0, 0)], []);
+    expect(() => animator.registerTrack({ state: 'textureWeights', index: 0 }, track(3) as never, THREE.NumberKeyframeTrack)).not.toThrow();
+  });
+
+  it("gives the first sequence's clip its track, and the missing ones nothing", async () => {
+    const THREE = await import('three');
+    const animator = new ModelAnimator(new Uint32Array(), [sequence(0, 0)], []);
+    animator.registerTrack({ state: 'textureWeights', index: 0 }, track(3) as never, THREE.NumberKeyframeTrack);
+    const clip = animator.getSequence(new THREE.Object3D(), 0, 0).getClip();
+    expect(clip.tracks).toHaveLength(1);
+  });
+});
