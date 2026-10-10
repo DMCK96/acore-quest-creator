@@ -29,7 +29,7 @@ describe('an existing entity from its rows', () => {
     const scripted = { ...guardRows, creature_template: [{ ...guardRows.creature_template[0]!, AIName: 'SmartAI' }] };
     expect(npcFromRows(1423, scripted, counts).origin).toMatchObject({ locked: ['fight'] });
     const named = { ...guardRows, creature_template: [{ ...guardRows.creature_template[0]!, ScriptName: 'npc_guard' }] };
-    expect(npcFromRows(1423, named, counts).origin).toMatchObject({ locked: ['fight'] });
+    expect(npcFromRows(1423, named, counts).origin).toMatchObject({ locked: ['fight', 'scenes'] });
     const grouped = { ...guardRows, creature_loot_template: [{ ...guardRows.creature_loot_template[0]!, GroupId: '1' }] };
     expect(npcFromRows(1423, grouped, counts)).toMatchObject({ loot: [], origin: { locked: ['loot'] } });
   });
