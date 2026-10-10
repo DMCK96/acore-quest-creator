@@ -22,8 +22,8 @@ describe('the guides', () => {
   it.each(AUTHORING_MODELS)('%s guide names every choice its model allows (a style, a state, a rank), each in code font as a whole word', (model) => {
     const guide = guideOf(model);
     const named = new Set([...guide.matchAll(/`([^`]+)`/g)].map((m) => m[1]!));
-    // An NPC embeds a fight and patrols, whose choices their own guides explain
-    const embedded = new Set(['npc', 'object', 'item'].includes(model) ? [...choicesIn(jsonSchemaOf('fight')), ...choicesIn(jsonSchemaOf('patrol'))] : []);
+    // An NPC embeds a fight, patrols and scenes, whose choices their own guides explain
+    const embedded = new Set(['npc', 'object', 'item'].includes(model) ? [...choicesIn(jsonSchemaOf('fight')), ...choicesIn(jsonSchemaOf('patrol')), ...choicesIn(jsonSchemaOf('scene')), 'gossipPicked'] : []);
     const missing = choicesIn(jsonSchemaOf(model)).filter((choice) => !embedded.has(choice) && !named.has(choice));
     expect(missing).toEqual([]);
   });
