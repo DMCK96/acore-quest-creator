@@ -1,5 +1,7 @@
 import { MODELLED_ITEM_COLUMNS, itemFromRow } from './item-columns';
 import { seenByOf } from './visibility';
+import { scenesLocked, type NpcScene } from '../scripts/npc-scenes';
+import { npcRowOwner } from '../scripts/tag';
 import { npcEventsOf } from './spawn-events';
 import {
   NPC_TYPE_VALUE, OBJECT_TYPE_VALUE, RANK_VALUE, newItem, newNpc, newObject,
@@ -17,6 +19,12 @@ export interface ExistingCounts {
   sharedMenus?: Readonly<Record<number, number>>;
   /** For each text id, how many menus outside the NPC's own use it */
   sharedTexts?: Readonly<Record<number, number>>;
+  /** How many of its SmartAI rows the database already runs (not the tool's own) */
+  databaseScripts?: number;
+  /** The NPC runs another AI or a script, so scenes are not written for it */
+  scriptsLocked?: boolean;
+  /** The scenes the tool wrote for it before, read back from its tagged rows. Used only when it is first taken into a project: `npcFromRows` never returns them */
+  scenes?: readonly NpcScene[];
 }
 
 type Row = Record<string, string | null>;
@@ -29,7 +37,7 @@ const nameOf = <T extends Record<string, number>>(map: T, value: number, fallbac
   (Object.keys(map) as (keyof T)[]).find((k) => map[k] === value) ?? fallback;
 
 const origin = (rows: OriginalRows, counts: ExistingCounts, locked: EntityLock[]) =>
-  ({ kind: 'existing', original: rows, sharedLoot: counts.sharedLoot, spawnCount: counts.spawnCount, sharedTrainer: counts.sharedTrainer ?? 0, sharedMenus: counts.sharedMenus ?? {}, sharedTexts: counts.sharedTexts ?? {}, locked }) as const;
+  ({ kind: 'existing', original: rows, sharedLoot: counts.sharedLoot, spawnCount: counts.spawnCount, sharedTrainer: counts.sharedTrainer ?? 0, sharedMenus: counts.sharedMenus ?? {}, sharedTexts: counts.sharedTexts ?? {}, ...(counts.databaseScripts === undefined ? {} : { databaseScripts: counts.databaseScripts }), locked }) as const;
 
 /** The loot a plain list holds; lists with references or groups cannot be edited as one list, so none */
 function lootOf(rows: Row[] | undefined): { loot: LootRow[]; locked: boolean } {
@@ -85,7 +93,7 @@ function greetingOf(row: Row | undefined): TextVariant[] {
  * The menus an NPC opens with and everything its options open, read from the rows. A menu is locked when it is
  * not ours to change: others use it or its text, it has several text rows or a conditioned one, or its text is missing.
  */
-function gossipOf(rows: OriginalRows, counts: ExistingCounts): GossipTree | null {
+function gossipOf(entry: number, rows: OriginalRows, counts: ExistingCounts): GossipTree | null {
   const rootId = numberOf(rows.creature_template?.[0]?.gossip_menu_id);
   // Gossip that was never read (no key) is not ours to model
   if (rootId <= 0 || !Object.prototype.hasOwnProperty.call(rows, 'gossip_menu')) return null;
@@ -118,7 +126,8 @@ function gossipOf(rows: OriginalRows, counts: ExistingCounts): GossipTree | null
     const options = optionsOf(id).map((r): GossipOption => {
       const optionId = numberOf(r.OptionID);
       const tied = conditions.some((c) => numberOf(c.SourceTypeOrReferenceId) === 15 && numberOf(c.SourceGroup) === id && numberOf(c.SourceEntry) === optionId) ||
-        scripts.some((s) => numberOf(s.source_type) === 0 && numberOf(s.event_type) === 62 && numberOf(s.event_param1) === id && numberOf(s.event_param2) === optionId);
+        // A scene of our own hanging off the option does not freeze it; any other script does
+        scripts.some((s) => numberOf(s.source_type) === 0 && numberOf(s.event_type) === 62 && numberOf(s.event_param1) === id && numberOf(s.event_param2) === optionId && npcRowOwner(s.comment, 'scene') !== entry);
       const type = numberOf(r.OptionType);
       const npcFlag = numberOf(r.OptionNpcFlag);
       const next = numberOf(r.ActionMenuID);
@@ -173,6 +182,7 @@ export function npcFromRows(entry: number, rows: OriginalRows, counts: ExistingC
   if ((row.AIName ?? '') !== '' || (row.ScriptName ?? '') !== '') locked.push('fight');
   // A trainer other NPCs share is not ours to change, and one the editor cannot model is left as it is
   const { trainer, locked: trainerLocked } = trainerOf(rows);
+  if (counts.scriptsLocked || scenesLocked(row)) locked.push('scenes');
   if (trainerLocked || (trainer !== null && (counts.sharedTrainer ?? 0) > 0)) locked.push('trainer');
   return {
     ...newNpc(entry),
@@ -185,7 +195,7 @@ export function npcFromRows(entry: number, rows: OriginalRows, counts: ExistingC
     healthModifier: numberOf(row.HealthModifier, 1), damageModifier: numberOf(row.DamageModifier, 1),
     displayId: model ? numberOf(model.CreatureDisplayID) : numberOf(row.modelid1), scale: numberOf(model?.DisplayScale, 1),
     equipment: { mainHand: numberOf(gear?.ItemID1), offHand: numberOf(gear?.ItemID2), ranged: numberOf(gear?.ItemID3) },
-    loot, fight: null, spawns: [], vendor: vendorOf(rows.npc_vendor), trainer, gossipMenu: gossipOf(rows, counts),
+    loot, fight: null, spawns: [], vendor: vendorOf(rows.npc_vendor), trainer, gossipMenu: gossipOf(entry, rows, counts),
     origin: origin(rows, counts, locked),
   };
 }

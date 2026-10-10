@@ -97,4 +97,25 @@ describe('editing an existing entity', () => {
     db.update('creature_template', { entry: '1423' }, { maxlevel: '70' });
     expect(((await api.existingDrift()) as any).value).toEqual([{ kind: 'npc', entry: 1423 }]);
   });
+
+  it("counts the scripts the database runs on an NPC and takes back the scenes the tool wrote for it", async () => {
+    const { api, db } = await setup();
+    const scene = { id: 's1', name: 'Hello', questId: 0, trigger: { kind: 'talkedTo' }, gates: [], steps: [{ kind: 'emote', emote: 1, waitMs: 0 }] };
+    const script = (id: string, comment: string) => ({ entryorguid: '1423', source_type: '0', id, link: '0', event_type: '1', comment });
+    db.insert('smart_scripts', script('0', ''));
+    db.insert('smart_scripts', script('1', 'Old tweak'));
+    db.insert('smart_scripts', script('2', `AQC npc1423 s1: When a player talks #aqc=${JSON.stringify(scene)}`));
+    db.insert('smart_scripts', script('3', 'AQC npc1423 s1: emote'));
+    const out: any = await api.readExistingEntity('npc', 1423);
+    expect(out.value.origin.databaseScripts).toBe(2);
+    expect(out.value.scenes).toEqual([scene]);
+    expect(out.value.origin.original.smart_scripts ?? []).toEqual([]);
+  });
+
+  it('locks the scenes of an NPC that runs another AI', async () => {
+    const { api, db } = await setup();
+    db.update('creature_template', { entry: '1423' }, { AIName: 'ReactorAI' });
+    const out: any = await api.readExistingEntity('npc', 1423);
+    expect(out.value.origin.locked).toContain('scenes');
+  });
 });

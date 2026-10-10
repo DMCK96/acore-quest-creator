@@ -4,6 +4,8 @@ import { readOriginalRows } from '../../core/entities/existing';
 import type { OriginalRows } from '../../core/entities/model';
 import { rowsOrNone } from '../../core/links/context';
 import { objectMenus } from '../../core/db/object-menus';
+import type { NpcScene } from '../../core/scripts/npc-scenes';
+import { npcRowOwner, npcSceneFromComment } from '../../core/scripts/tag';
 
 type Kind = 'npc' | 'object' | 'item';
 
@@ -46,6 +48,18 @@ async function gossipUsers(db: WorldDb, rows: OriginalRows, entry: number): Prom
 }
 
 /**
+ * What runs on a creature already: its SmartAI rows that are not the tool's (counted, never edited or stored), and the
+ * scenes the tool wrote for it, read back from the data its trigger rows carry, in scene order
+ */
+async function scriptsOf(db: WorldDb, entry: number): Promise<{ databaseScripts: number; scenes: NpcScene[] }> {
+  const scripts = await rowsOrNone(db, 'smart_scripts', { source_type: '0', entryorguid: str(entry) });
+  const ours = (comment: string | null | undefined): boolean => npcRowOwner(comment, 'scene') === entry;
+  const scenes = scripts.flatMap((r) => (ours(r.comment) ? [npcSceneFromComment(r.comment)] : [])).filter((s): s is NpcScene => s !== null);
+  const idNumber = (scene: NpcScene): number => Number(scene.id.slice(1));
+  return { databaseScripts: scripts.filter((r) => !ours(r.comment) && npcRowOwner(r.comment, 'fight') !== entry && npcRowOwner(r.comment, 'patrol') !== entry).length, scenes: scenes.sort((a, b) => idNumber(a) - idNumber(b)) };
+}
+
+/**
  * The rows an existing NPC, object or item is made of, as the database has them now (see
  * `readOriginalRows`), with how many other entries share its loot and how many spawns it has; null
  * when it has none
@@ -58,6 +72,10 @@ export async function readExistingRows(
   sharedMenus: Record<number, number>;
   /** For each text of its gossip tree, how many menus outside the tree use it */
   sharedTexts: Record<number, number>;
+  /** How many of its SmartAI rows the database runs that are not the tool's own */
+  databaseScripts: number;
+  /** The scenes the tool wrote for it before, read back from its tagged trigger rows */
+  scenes: NpcScene[];
 } | null> {
   const rows = await readOriginalRows(db, kind, entry);
   if (!rows) return null;
@@ -70,7 +88,8 @@ export async function readExistingRows(
       trainerId !== null ? rowsOrNone(db, 'creature_default_trainer', { TrainerId: trainerId }) : Promise.resolve([]),
     ]);
     const { sharedMenus, sharedTexts } = await gossipUsers(db, rows, entry);
-    return { rows, sharedLoot: sharing.filter((r) => num(r.entry) !== entry).length, spawnCount, sharedTrainer: trainerUsers.filter((r) => num(r.CreatureId) !== entry).length, sharedMenus, sharedTexts };
+    const { databaseScripts, scenes } = await scriptsOf(db, entry);
+    return { rows, sharedLoot: sharing.filter((r) => num(r.entry) !== entry).length, spawnCount, sharedTrainer: trainerUsers.filter((r) => num(r.CreatureId) !== entry).length, sharedMenus, sharedTexts, databaseScripts, scenes };
   }
   if (kind === 'object') {
     const row = rows.gameobject_template?.[0] ?? {};
@@ -79,7 +98,7 @@ export async function readExistingRows(
       lootid > 0 ? rowsOrNone(db, 'gameobject_template', { type: '3', Data1: str(lootid) }) : Promise.resolve([]),
       spawnCountOf(db, 'gameobject', entry),
     ]);
-    return { rows, sharedLoot: sharing.filter((r) => num(r.entry) !== entry).length, spawnCount, sharedTrainer: 0, sharedMenus: {}, sharedTexts: {} };
+    return { rows, sharedLoot: sharing.filter((r) => num(r.entry) !== entry).length, spawnCount, sharedTrainer: 0, sharedMenus: {}, sharedTexts: {}, databaseScripts: 0, scenes: [] };
   }
-  return { rows, sharedLoot: 0, spawnCount: 0, sharedTrainer: 0, sharedMenus: {}, sharedTexts: {} };
+  return { rows, sharedLoot: 0, spawnCount: 0, sharedTrainer: 0, sharedMenus: {}, sharedTexts: {}, databaseScripts: 0, scenes: [] };
 }

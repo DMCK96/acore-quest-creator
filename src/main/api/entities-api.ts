@@ -140,8 +140,9 @@ export function createEntitiesApi(s: Services): EntitiesApi {
         const db = connected().db;
         const read = await readExistingRows(db, kind, entry);
         if (!read) throw fail('BAD_REQUEST', 'Not in the database any more');
-        const counts = { sharedLoot: read.sharedLoot, spawnCount: read.spawnCount, sharedTrainer: read.sharedTrainer, sharedMenus: read.sharedMenus, sharedTexts: read.sharedTexts };
-        return kind === 'npc' ? npcFromRows(entry, read.rows, counts) : kind === 'object' ? objectFromRows(entry, read.rows, counts) : itemFromRows(entry, read.rows);
+        const counts = { sharedLoot: read.sharedLoot, spawnCount: read.spawnCount, sharedTrainer: read.sharedTrainer, sharedMenus: read.sharedMenus, sharedTexts: read.sharedTexts, databaseScripts: read.databaseScripts };
+        // The scenes the tool wrote for it before come back only here, as it is first taken into a project: Put back as the database has it drops them
+        return kind === 'npc' ? { ...npcFromRows(entry, read.rows, counts), scenes: read.scenes } : kind === 'object' ? objectFromRows(entry, read.rows, counts) : itemFromRows(entry, read.rows);
       }),
 
     existingDrift: () =>
