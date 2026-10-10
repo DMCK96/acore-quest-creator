@@ -13,7 +13,8 @@ import {
 import type { ScriptContext } from './context';
 import type { ProjectGossip } from '../entities/gossip-tree';
 import { describeGate, describeStep } from './describe';
-import { triggerHasPlayer, type QuestScene, type SceneGate, type SceneStep } from './model';
+import { triggerHasPlayer, type QuestScene, type SceneGate, type SceneOwner, type SceneStep } from './model';
+import type { NpcTrigger } from './npc-scenes';
 import { createAllocator, emitTrigger, textComment, type Row, type SmartAction } from './rows';
 import { isOurs, sceneFromComment, sceneIdOf, sceneTag, triggerComment } from './tag';
 
@@ -118,27 +119,83 @@ interface SceneOutput {
   rows: { table: string; row: Row }[];
 }
 
+/** A scene as the shared compiler sees it: who it runs on, the quest it acts on, and how its rows are tagged. */
+export interface SceneUnit {
+  /** Unique among the units compiled together; also what a row's comment is matched to. */
+  key: string;
+  /** The key of another scene of the same owner (an escort a waypoint trigger names). */
+  siblingKey(sceneId: string): string;
+  id: string;
+  tag: string;
+  /** The trigger row's comment. */
+  header: string;
+  questId: number;
+  owner: SceneOwner;
+  trigger: NpcTrigger;
+  gates: readonly SceneGate[];
+  steps: readonly SceneStep[];
+}
+
+/** Which tagged rows belong to which unit, and what to say when a unit's stored data cannot be read. */
+export interface UnitScope {
+  /** The key of the unit a tagged row belongs to, or null when the row is not one of this compile's. */
+  keyOf(comment: string | null | undefined): string | null;
+  /** A trigger row whose scene data is there but cannot be read. */
+  unreadable(comment: string | null | undefined): boolean;
+  unreadableWarning(key: string): string;
+  /** Whether an old event 62 row of ours added an option of its own, which is then deleted with it. */
+  addedOption(comment: string | null | undefined): boolean;
+  objectives(questId: number): readonly number[];
+}
+
+interface UnitInput {
+  units: readonly SceneUnit[];
+  scope: UnitScope;
+  context: ScriptContext;
+  taken?: CompiledScripts;
+  gossip?: ProjectGossip;
+}
+
 export function compileScenes(input: CompileInput): CompiledScripts {
-  const { questId, scenes, objectives, context } = input;
+  const { questId, scenes, objectives } = input;
+  const units = scenes.map((scene): SceneUnit => ({
+    key: scene.id,
+    siblingKey: (id) => id,
+    id: scene.id,
+    tag: sceneTag(questId, scene.id),
+    header: triggerComment(questId, scene),
+    questId,
+    owner: scene.owner,
+    trigger: scene.trigger,
+    gates: scene.gates,
+    steps: scene.steps,
+  }));
+  const scope: UnitScope = {
+    keyOf: (comment) => sceneIdOf(comment, questId),
+    unreadable: (comment) => isOurs(comment, questId) && comment!.includes(DATA_MARKER) && sceneFromComment(comment) === null,
+    unreadableWarning: (key) => `Scene ${key} on this quest could not be read, so its rows are left as they are.`,
+    addedOption: () => true,
+    objectives: () => objectives,
+  };
+  return compileUnits({ units, scope, context: input.context, taken: input.taken, gossip: input.gossip });
+}
+
+export function compileUnits(input: UnitInput): CompiledScripts {
+  const { units, scope, context } = input;
   const out: CompiledScripts = { inserts: {}, deletes: {}, updates: [], flags: [], warnings: [] };
 
-  // --- Which tagged rows are this quest's to replace -------------------------------------------
+  // --- Which tagged rows are this compile's to replace -----------------------------------------
   const protectedScenes = new Set<string>();
   for (const row of context.smartScripts) {
-    if (!isOurs(row.comment, questId)) continue;
+    if (scope.keyOf(row.comment) === null) continue;
     if (num(row.source_type) > SOURCE.areatrigger || num(row.event_type) === EVENT.link) continue;
-    if (row.comment!.includes(DATA_MARKER) && sceneFromComment(row.comment) === null) {
-      const id = sceneIdOf(row.comment, questId);
-      if (id) protectedScenes.add(id);
-    }
+    if (scope.unreadable(row.comment)) protectedScenes.add(scope.keyOf(row.comment)!);
   }
-  for (const id of [...protectedScenes].sort()) {
-    out.warnings.push(`Scene ${id} on this quest could not be read, so its rows are left as they are.`);
-  }
-  // Only scene rows: fight rows (`AQC q<quest> fight<entry>`) belong to the fight compiler.
+  for (const key of [...protectedScenes].sort()) out.warnings.push(scope.unreadableWarning(key));
+  // Only scene rows: fight rows belong to the fight compiler.
   const ours = (comment: string | null | undefined): boolean => {
-    const id = sceneIdOf(comment, questId);
-    return id !== null && !protectedScenes.has(id);
+    const key = scope.keyOf(comment);
+    return key !== null && !protectedScenes.has(key);
   };
 
   // --- Deletes ----------------------------------------------------------------------------------
@@ -156,7 +213,7 @@ export function compileScenes(input: CompileInput): CompiledScripts {
 
   const previousArea = new Map<string, number>();
   for (const row of ownSmart) {
-    if (num(row.event_type) === EVENT.gossipSelect) {
+    if (num(row.event_type) === EVENT.gossipSelect && scope.addedOption(row.comment)) {
       addDelete('gossip_menu_option', { MenuID: row.event_param1 ?? '0', OptionID: row.event_param2 ?? '0' });
     }
     if (num(row.source_type) === SOURCE.areatrigger && num(row.event_type) !== EVENT.link) {
@@ -164,7 +221,7 @@ export function compileScenes(input: CompileInput): CompiledScripts {
       if (scene?.owner.kind === 'areatrigger' && scene.owner.area) {
         addDelete('areatrigger', { entry: row.entryorguid ?? '0' });
         addDelete('areatrigger_scripts', { entry: row.entryorguid ?? '0' });
-        previousArea.set(scene.id, num(row.entryorguid));
+        previousArea.set(scope.keyOf(row.comment)!, num(row.entryorguid));
       }
     }
   }
@@ -189,7 +246,7 @@ export function compileScenes(input: CompileInput): CompiledScripts {
   const previousPath = new Map<string, number>();
   for (const row of context.waypoints) {
     if (!ours(row.point_comment)) continue;
-    const id = sceneIdOf(row.point_comment, questId);
+    const id = scope.keyOf(row.point_comment);
     if (!id) continue;
     const entry = num(row.entry);
     previousPath.set(id, Math.min(previousPath.get(id) ?? entry, entry));
@@ -215,22 +272,22 @@ export function compileScenes(input: CompileInput): CompiledScripts {
   const pathOf = new Map<string, number>();
   const takenPaths = new Set<number>(previousPath.values());
   let nextPath = context.waypointsMax;
-  for (const scene of scenes) {
+  for (const scene of units) {
     if (!scene.steps.some((s) => s.kind === 'startEscort')) continue;
-    const previous = previousPath.get(scene.id);
+    const previous = previousPath.get(scene.key);
     if (previous !== undefined) {
-      pathOf.set(scene.id, previous);
+      pathOf.set(scene.key, previous);
       continue;
     }
     do nextPath += 1;
     while (takenPaths.has(nextPath));
     takenPaths.add(nextPath);
-    pathOf.set(scene.id, nextPath);
+    pathOf.set(scene.key, nextPath);
   }
   const takenAreas = new Set<number>(previousArea.values());
   let nextArea = context.areatriggerMax;
-  const areaOf = (scene: QuestScene): number => {
-    const previous = previousArea.get(scene.id);
+  const areaOf = (scene: SceneUnit): number => {
+    const previous = previousArea.get(scene.key);
     if (previous !== undefined) return previous;
     do nextArea += 1;
     while (takenAreas.has(nextArea));
@@ -247,8 +304,9 @@ export function compileScenes(input: CompileInput): CompiledScripts {
   };
 
   // --- One scene --------------------------------------------------------------------------------
-  const compileOne = (scene: QuestScene): void => {
-    const tag = sceneTag(questId, scene.id);
+  const compileOne = (scene: SceneUnit): void => {
+    const { tag, questId } = scene;
+    const objectives = scope.objectives(questId);
     const pending: SceneOutput['rows'] = [];
     const owner = scene.owner;
     let entryorguid: number;
@@ -313,7 +371,7 @@ export function compileScenes(input: CompileInput): CompiledScripts {
         case 'moveTo':
           return one(ACTION.moveToPos, [0], TARGET.position, { at: step.at });
         case 'startEscort': {
-          const path = pathOf.get(scene.id) ?? 0;
+          const path = pathOf.get(scene.key) ?? 0;
           step.points.forEach((p, i) =>
             pending.push({
               table: 'waypoints',
@@ -414,17 +472,21 @@ export function compileScenes(input: CompileInput): CompiledScripts {
         event = [EVENT.dataSet, scene.trigger.signal, 1];
         break;
       case 'waypointReached':
-        event = [EVENT.escortReached, scene.trigger.point, pathOf.get(scene.trigger.escortSceneId) ?? 0];
+        event = [EVENT.escortReached, scene.trigger.point, pathOf.get(scene.siblingKey(scene.trigger.escortSceneId)) ?? 0];
         break;
       case 'summoned':
         event = [EVENT.justSummoned];
+        break;
+      case 'gossipPicked':
+        // The option belongs to the NPC's gossip tree, which writes it: this only listens
+        event = [EVENT.gossipSelect, scene.trigger.menuId, scene.trigger.optionId];
         break;
     }
 
     const [eventType, ...eventParams] = event;
     const emitted = emitTrigger({
       alloc, entryorguid, source, eventType: eventType!, eventParams, actions,
-      header: triggerComment(questId, scene), tag, shape: source === SOURCE.areatrigger ? 'link' : 'list',
+      header: scene.header, tag, shape: source === SOURCE.areatrigger ? 'link' : 'list',
     });
     if (emitted === null) {
       out.warnings.push(`No free timed action list id for ${owner.kind} ${entryorguid}.`);
@@ -482,7 +544,7 @@ export function compileScenes(input: CompileInput): CompiledScripts {
     for (const { table, row } of pending) insert(table, row);
   };
 
-  for (const scene of scenes) compileOne(scene);
+  for (const scene of units) compileOne(scene);
   return out;
 }
 

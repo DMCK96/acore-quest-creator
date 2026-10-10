@@ -192,10 +192,10 @@ export function stepOwners(kind: StepKind): readonly OwnerKind[] {
   return STEP_OWNERS[kind];
 }
 
-const NO_PLAYER: ReadonlySet<TriggerKind> = new Set(['waypointReached', 'signal', 'summoned']);
+const NO_PLAYER: ReadonlySet<string> = new Set(['waypointReached', 'signal', 'summoned']);
 
 /** Whether a player sets this trigger off, so steps can act on them. A death's invoker is the killer. */
-export function triggerHasPlayer(trigger: SceneTrigger): boolean {
+export function triggerHasPlayer(trigger: SceneTrigger | { kind: 'gossipPicked' }): boolean {
   return !NO_PLAYER.has(trigger.kind);
 }
 
