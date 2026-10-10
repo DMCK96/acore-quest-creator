@@ -90,6 +90,16 @@
   gap: 0.5rem;
 }
 
+.settings-prefs__note {
+  margin: 0;
+  opacity: 0.8;
+}
+
+.settings-prefs__error {
+  margin: 0;
+  color: var(--danger, #e5736a);
+}
+
 .settings-mcp__note {
   margin: 0;
   opacity: 0.8;
