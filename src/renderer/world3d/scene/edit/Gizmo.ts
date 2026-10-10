@@ -62,6 +62,8 @@ export class Gizmo {
   readonly #proxy = new THREE.Object3D();
   readonly #ground: () => THREE.Object3D[];
   readonly #down = new THREE.Raycaster();
+  /** A move along the ground keeps the handles' height above it, for things the user lifted (set before each drag) */
+  keepHeight = false;
   #turns: GizmoTurns | null = null;
   #mode: GizmoMode = 'move';
   /** The spawn's whole rotation, which the proxy has only while rotating: it is turned about Z alone while moving */
@@ -158,7 +160,7 @@ export class Gizmo {
   #follow(axis: string | null): void {
     if (this.#controls.mode === 'translate' && axis !== 'Z') {
       const { x, y, z } = this.#start.position;
-      const clearance = Math.max(0, z - (this.groundAt(x, y, z) ?? z));
+      const clearance = this.keepHeight ? Math.max(0, z - (this.groundAt(x, y, z) ?? z)) : 0;
       const ground = this.groundAt(this.#proxy.position.x, this.#proxy.position.y, this.#proxy.position.z - clearance);
       if (ground !== null) this.#proxy.position.z = ground + clearance;
     }
